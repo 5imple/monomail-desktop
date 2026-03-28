@@ -1,0 +1,90 @@
+{
+  "hosting": {
+    "public": "out/renderer",
+    "headers": [
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/robots.txt",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
+          }
+        ]
+      },
+      {
+        "source": "/sitemap.xml",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
+          }
+        ]
+      },
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'self' *; script-src 'self' https://*.google.com https://*.amplitude.com https://www.googletagmanager.com http://unpkg.com/react-scan/dist/auto.global.js 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;img-src * data: blob: *;connect-src 'self' blob: *;object-src 'self' blob:;worker-src 'self' blob:;child-src 'self' blob:;frame-src 'self';"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate, private"
+          },
+          {
+            "key": "Pragma",
+            "value": "no-cache"
+          },
+          {
+            "key": "Expires",
+            "value": "0"
+          }
+        ]
+      }
+    ],
+
+    "rewrites": [
+      {
+        "source": "/",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/sign-in",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/onboarding",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/share/**",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/migration",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/assets/**",
+        "destination": null
+      }
+    ]
+  }
+}

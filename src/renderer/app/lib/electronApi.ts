@@ -1,0 +1,555 @@
+import { SplitCategoryPreferences } from '@/main/api/auth/types';
+import { ToastArgs } from '@/main/models/types/toastTypes';
+import {
+  INativeNotificationOptions,
+  ICustomNotificationOptions
+} from '@/main/services/notification/INotificationOptions';
+import { ValidRendererChannel } from '@/main/validChannels';
+import { AudioType } from '@/renderer/app/lib/soundManager';
+import { CommandType } from '@/renderer/app/types';
+import { BrowserWindowConstructorOptions } from 'electron';
+
+/**
+ * Check if the application is running in Electron.
+ */
+export const isElectron =
+  window && window.electronBridge && typeof window.electronBridge.on === 'function';
+
+/**
+ * Interface for the IpcRenderer API.
+ */
+interface IpcRenderer {
+  /**
+   * Listen for an event from the main process.
+   * @param {ValidRendererChannel} channel - The channel to listen to.
+   * @param {(...args: T[]) => void} callback - The callback to invoke when the event is received.
+   * @returns {() => void} A function to remove the listener.
+   */
+  on: <T = any>(channel: ValidRendererChannel, callback: (args: T) => void) => () => void;
+
+  /**
+   * Remove a listener for an event from the main process.
+   * @param {ValidRendererChannel} channel - The channel to remove the listener from.
+   * @param {(...args: T[]) => void} callback - The callback to remove.
+   */
+  off: <T = any>(channel: ValidRendererChannel, callback: (...args: T[]) => void) => void;
+
+  /**
+   * Set the ID token for authentication.
+   * @param {string | null} token - The ID token to set.
+   * @returns {Promise<void>}
+   */
+  setIdToken: (token: string | null) => Promise<void>;
+  /**
+   * Set the app offline
+   * @param {boolean} status - Offline status
+   * @returns {Promise<void>}
+   */
+  setOfflineStatus: (status: boolean) => Promise<void>;
+  /**
+   * Set the app alert sound
+   * @param {AudioType} audio - Audio type
+   * @returns {Promise<void>}
+   */
+  setAlertSound: (audio: AudioType) => Promise<void>;
+
+  setIsFullSizeWindowOnCreation: (value: boolean) => Promise<void>;
+  setStrictPubSub: (value: boolean) => Promise<void>;
+  /**
+   * Set the active uid for authentication.
+   * @param {string | null} token - The ID token to set.
+   * @returns {Promise<void>}
+   */
+  setActiveUid: (uid: string | null) => Promise<void>;
+
+  /**
+   * Open a new window with the specified route.
+   * @param {string} route - The route to load in the new window.
+   * @returns {Promise<void>}
+   */
+  openNewWindow: (
+    route: string,
+    options?: Partial<BrowserWindowConstructorOptions>,
+    uid?: string
+  ) => Promise<void>;
+
+  /**
+   * Close a window with the window Id
+   * @param {string} uid - The id of the window.
+   * @returns {Promise<void>}
+   */
+  closeWindow: (uid: string) => Promise<void>;
+
+  /**
+   * Start FCM token service.
+   * @param {string} uid - Active user uid
+   */
+  startNotificationService: (uid: string) => void;
+
+  /**
+   * Get notification preference for a specific account
+   * @param {string} uid - User ID
+   * @returns {Promise<string>}
+   */
+  getNotificationPreference: (uid: string) => Promise<string>;
+
+  /**
+   * Set notification preference for a specific account
+   * @param {string} uid - User ID
+   * @param {string} preference - Notification preference
+   * @returns {Promise<boolean>}
+   */
+  setNotificationPreference: (uid: string, preference: string) => Promise<boolean>;
+
+  /**
+   * Get all notification preferences
+   * @returns {Promise<Record<string, string>>}
+   */
+  getAllNotificationPreferences: () => Promise<Record<string, string>>;
+
+  /**
+   * Change Theme
+   */
+  changeAppearance: (appearance: 'light' | 'dark' | 'black' | 'pure-light' | 'system') => void;
+
+  /**
+   * Show a notification.
+   * @param {string} title - The title of the notification.
+   * @param {string} body - The body content of the notification.
+   * @param {Partial<INativeNotificationOptions<T>>} options - Optional additional options for the notification.
+   * @returns {Promise<void>}
+   */
+  showNativeNotification: <T = any>(
+    title: string,
+    body?: string,
+    options?: Partial<INativeNotificationOptions<T>>
+  ) => Promise<void>;
+
+  /**
+   * Show a custom notification.
+   * @param {string} title - The title of the notification.
+   * @param {string} body - The body content of the notification.
+   * @param {Partial<INativeNotificationOptions<T>>} options - Optional additional options for the notification.
+   * @returns {Promise<void>}
+   */
+  showCustomNotification: (
+    title: string,
+    body?: string,
+    options?: Partial<ICustomNotificationOptions>
+  ) => Promise<void>;
+
+  /**
+   * Close custom notification.
+   */
+  notificationClose: (id: string) => void;
+
+  /**
+   * Update & Install Application
+   */
+  downloadAndInstallUpdate: () => void;
+
+  /**
+   * Check update
+   */
+  checkForUpdate: () => void;
+
+  /**
+   * Trigger when custom notification is clicked.
+   */
+  notificationClicked: (id: string, data?: any) => void;
+
+  /**
+   * Main layout ready
+   */
+  mainLayoutReady: () => void;
+
+  openLogFolder: () => Promise<string>;
+
+  showToast: (args: ToastArgs) => void;
+  triggerCommand: (command: CommandType) => void;
+  getAutoStartEnabled: () => boolean;
+  toggleAutoStart: () => void;
+
+  /**
+   * Close a native notification by ID.
+   * @param {string} id - The ID of the native notification to close.
+   * @returns {Promise<boolean>} Whether the operation was successful.
+   */
+  closeNativeNotification: (id: string) => Promise<boolean>;
+
+  /**
+   * Set the badge count on the app icon
+   * @param {number} count - The count to display
+   * @returns {Promise<boolean>} Whether the operation was successful
+   */
+  setBadgeCount: (count: number) => Promise<boolean>;
+
+  /**
+   * Increment the badge count by the specified amount
+   * @param {number} [amount=1] - The amount to increment by
+   * @returns {Promise<number>} The new badge count
+   */
+  incrementBadge: (amount?: number) => Promise<number>;
+
+  /**
+   * Decrement the badge count by the specified amount
+   * @param {number} [amount=1] - The amount to decrement by
+   * @returns {Promise<number>} The new badge count
+   */
+  decrementBadge: (amount?: number) => Promise<number>;
+
+  /**
+   * Get the current badge count
+   * @returns {Promise<number>} The current badge count
+   */
+  getBadgeCount: () => Promise<number>;
+
+  /**
+   * Clear the badge count (set to 0)
+   * @returns {Promise<boolean>} Whether the operation was successful
+   */
+  clearBadge: () => Promise<boolean>;
+
+  setSplitCategoryPreferences: (
+    uid: string,
+    preferences: SplitCategoryPreferences
+  ) => Promise<void>;
+  getSplitCategoryPreferences: (uid: string) => Promise<SplitCategoryPreferences>;
+  updateSplitCategoryPreference: (
+    uid: string,
+    category: keyof SplitCategoryPreferences,
+    value: boolean
+  ) => Promise<void>;
+  getAllSplitCategoryPreferences: () => Promise<Record<string, SplitCategoryPreferences>>;
+}
+
+/**
+ * Implementation of the IpcRenderer API.
+ * @type {IpcRenderer}
+ */
+const electronApi: IpcRenderer = {
+  on: (channel, callback) => {
+    if (isElectron) {
+      return window.electronBridge.on(channel, callback);
+    } else {
+      console.warn(`Electron API 'on' is not available in web environment for channel: ${channel}`);
+      return () => {};
+    }
+  },
+  off: (channel, callback) => {
+    if (isElectron) {
+      window.electronBridge.off(channel, callback);
+    } else {
+      console.warn(
+        `Electron API 'off' is not available in web environment for channel: ${channel}`
+      );
+    }
+  },
+  setOfflineStatus: async (status) => {
+    if (isElectron) {
+      return window.electronBridge.setOfflineStatus(status);
+    } else {
+      console.warn(`Electron API 'setIdToken' is not available in web environment`);
+      return Promise.resolve();
+    }
+  },
+  setAlertSound: async (audio) => {
+    if (isElectron) {
+      return window.electronBridge.setAlertSound(audio);
+    } else {
+      console.warn(`Electron API 'setAlertSound' is not available in web environment`);
+      return Promise.resolve();
+    }
+  },
+  setIsFullSizeWindowOnCreation: async (value) => {
+    if (isElectron) {
+      return window.electronBridge.setIsFullSizeWindowOnCreation(value);
+    } else {
+      console.warn(
+        `Electron API 'setIsFullSizeWindowOnCreation' is not available in web environment`
+      );
+      return Promise.resolve();
+    }
+  },
+  setStrictPubSub: async (value) => {
+    if (isElectron) {
+      return window.electronBridge.setStrictPubSub(value);
+    } else {
+      console.warn(`Electron API 'setStrictPubSub' is not available in web environment`);
+      return Promise.resolve();
+    }
+  },
+  setIdToken: async (token) => {
+    if (isElectron) {
+      return window.electronBridge.setIdToken(token);
+    } else {
+      console.warn(`Electron API 'setIdToken' is not available in web environment`);
+      return Promise.resolve();
+    }
+  },
+  setActiveUid: async (uid) => {
+    if (isElectron) {
+      return window.electronBridge.setActiveUid(uid);
+    } else {
+      console.warn(`Electron API 'setActiveUid' is not available in web environment`);
+      return Promise.resolve();
+    }
+  },
+  openNewWindow: async (route, options, uid) => {
+    if (isElectron) {
+      return window.electronBridge.openNewWindow(route, options, uid);
+    } else {
+      console.warn(`Electron API 'openNewWindow' is not available in web environment`);
+      return Promise.resolve();
+    }
+  },
+  closeWindow: async (uid) => {
+    if (isElectron) {
+      return window.electronBridge.closeWindow(uid);
+    } else {
+      console.warn(`Electron API 'closeWindow' is not available in web environment`);
+      return Promise.resolve();
+    }
+  },
+  startNotificationService: (uid) => {
+    if (isElectron) {
+      return window.electronBridge.startNotificationService(uid);
+    } else {
+      console.warn(`Electron API 'startNotificationService' is not available in web environment`);
+    }
+  },
+  getNotificationPreference: async (uid) => {
+    if (isElectron) {
+      return await window.electronBridge.getNotificationPreference(uid);
+    } else {
+      console.warn(`Electron API 'getNotificationPreference' is not available in web environment`);
+      return 'INBOX'; // Default to INBOX in web environment
+    }
+  },
+  setNotificationPreference: async (uid, preference) => {
+    if (isElectron) {
+      return await window.electronBridge.setNotificationPreference(uid, preference);
+    } else {
+      console.warn(`Electron API 'setNotificationPreference' is not available in web environment`);
+      return false;
+    }
+  },
+  getAllNotificationPreferences: async () => {
+    if (isElectron) {
+      return await window.electronBridge.getAllNotificationPreferences();
+    } else {
+      console.warn(
+        `Electron API 'getAllNotificationPreferences' is not available in web environment`
+      );
+      return {};
+    }
+  },
+  changeAppearance: (appearance) => {
+    if (isElectron) {
+      return window.electronBridge.changeAppearance(appearance);
+    } else {
+      console.warn(`Electron API 'changeAppearance' is not available in web environment`);
+    }
+  },
+  showNativeNotification: async (title, body, options = {}) => {
+    if (isElectron) {
+      await window.electronBridge.showNativeNotification(title, body, options);
+    } else {
+      console.warn(`Electron API 'showNotification' is not available in web environment`);
+      // if ('Notification' in window) {
+      //   new Notification(title, {
+      //     body,
+      //     icon: options.icon,
+      //     silent: options.silent
+      //   });
+      // } else {
+      //   alert(`${title}\n\n${body}`);
+      // }
+    }
+  },
+  showCustomNotification: async (title, body, options = {}) => {
+    if (isElectron) {
+      await window.electronBridge.showCustomNotification(title, body, options);
+    } else {
+      console.warn(`Electron API 'showNotification' is not available in web environment`);
+      // if ('Notification' in window) {
+      //   new Notification(title, {
+      //     body,
+      //     icon: options.icon,
+      //     silent: options.silent
+      //   });
+      // } else {
+      //   alert(`${title}\n\n${body}`);
+      // }
+    }
+  },
+  notificationClicked: (id, data) => {
+    if (isElectron) {
+      return window.electronBridge.notificationClicked(id, data);
+    } else {
+      console.warn(`Electron API 'notificationClicked' is not available in web environment`);
+    }
+  },
+  notificationClose: (id) => {
+    if (isElectron) {
+      return window.electronBridge.notificationClose(id);
+    } else {
+      console.warn(`Electron API 'notificationClose' is not available in web environment`);
+    }
+  },
+  mainLayoutReady: () => {
+    if (isElectron) {
+      return window.electronBridge.mainLayoutReady();
+    } else {
+      console.warn(`Electron API 'mainLayoutReady' is not available in web environment`);
+      return;
+    }
+  },
+  openLogFolder: async () => {
+    if (isElectron) {
+      return await window.electronBridge.openLogFolder();
+    } else {
+      console.warn(`Electron API 'openLogFolder' is not available in web environment`);
+      return '';
+    }
+  },
+  showToast: (args) => {
+    if (isElectron) {
+      window.electronBridge.showToast(args);
+    } else {
+      console.warn(`Electron API 'showToast' is not available in web environment`);
+    }
+  },
+  downloadAndInstallUpdate: () => {
+    if (isElectron) {
+      window.electronBridge.downloadAndInstallUpdate();
+    } else {
+      console.warn(`Electron API 'downloadAndInstallUpdate' is not available in web environment`);
+    }
+  },
+  checkForUpdate: () => {
+    if (isElectron) {
+      window.electronBridge.checkForUpdate();
+    } else {
+      console.warn(`Electron API 'checkForUpdate' is not available in web environment`);
+    }
+  },
+  triggerCommand: (command) => {
+    if (isElectron) {
+      window.electronBridge.triggerCommand(command);
+    } else {
+      console.warn(`Electron API 'triggerCommand' is not available in web environment`);
+    }
+  },
+  getAutoStartEnabled: () => {
+    if (isElectron) {
+      return window.electronBridge.getAutoStartEnabled();
+    } else {
+      console.warn(`Electron API 'getAutoStartEnabled' is not available in web environment`);
+      return false;
+    }
+  },
+  toggleAutoStart: () => {
+    if (isElectron) {
+      window.electronBridge.toggleAutoStart();
+    } else {
+      console.warn(`Electron API 'toggleAutoStart' is not available in web environment`);
+    }
+  },
+  closeNativeNotification: async (id) => {
+    if (isElectron) {
+      return await window.electronBridge.removeNativeNotification(id);
+    } else {
+      console.warn(`Electron API 'closeNativeNotification' is not available in web environment`);
+      return false;
+    }
+  },
+
+  setBadgeCount: async (count) => {
+    if (isElectron) {
+      return await window.electronBridge.setBadgeCount(count);
+    } else {
+      console.warn(`Electron API 'setBadgeCount' is not available in web environment`);
+      return false;
+    }
+  },
+
+  incrementBadge: async (amount) => {
+    if (isElectron) {
+      return await window.electronBridge.incrementBadge(amount);
+    } else {
+      console.warn(`Electron API 'incrementBadge' is not available in web environment`);
+      return 0;
+    }
+  },
+
+  decrementBadge: async (amount) => {
+    if (isElectron) {
+      return await window.electronBridge.decrementBadge(amount);
+    } else {
+      console.warn(`Electron API 'decrementBadge' is not available in web environment`);
+      return 0;
+    }
+  },
+
+  getBadgeCount: async () => {
+    if (isElectron) {
+      return await window.electronBridge.getBadgeCount();
+    } else {
+      console.warn(`Electron API 'getBadgeCount' is not available in web environment`);
+      return 0;
+    }
+  },
+
+  clearBadge: async () => {
+    if (isElectron) {
+      return await window.electronBridge.clearBadge();
+    } else {
+      console.warn(`Electron API 'clearBadge' is not available in web environment`);
+      return false;
+    }
+  },
+
+  setSplitCategoryPreferences: async (uid, preferences) => {
+    if (isElectron) {
+      return await window.electronBridge.setSplitCategoryPreferences(uid, preferences);
+    } else {
+      console.warn(
+        `Electron API 'setSplitCategoryPreferences' is not available in web environment`
+      );
+    }
+  },
+
+  getSplitCategoryPreferences: async (uid) => {
+    if (isElectron) {
+      return await window.electronBridge.getSplitCategoryPreferences(uid);
+    } else {
+      console.warn(
+        `Electron API 'getSplitCategoryPreferences' is not available in web environment`
+      );
+    }
+  },
+
+  updateSplitCategoryPreference: async (uid, category, value) => {
+    if (isElectron) {
+      return await window.electronBridge.updateSplitCategoryPreference(uid, category, value);
+    } else {
+      console.warn(
+        `Electron API 'updateSplitCategoryPreference' is not available in web environment`
+      );
+    }
+  },
+
+  getAllSplitCategoryPreferences: async () => {
+    if (isElectron) {
+      return await window.electronBridge.getAllSplitCategoryPreferences();
+    } else {
+      console.warn(
+        `Electron API 'getAllSplitCategoryPreferences' is not available in web environment`
+      );
+      return {};
+    }
+  }
+};
+
+export default electronApi;

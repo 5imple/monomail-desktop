@@ -1,0 +1,3 @@
+provider: generic
+url: https://example.com/please-configure-your-update-server
+updaterCacheDirName: MailDesktop-updater

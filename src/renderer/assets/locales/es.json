@@ -1,0 +1,1623 @@
+{
+  "sidebar": {
+    "search": "Buscar",
+    "help_support": "Ayuda y soporte",
+    "release_note": "Notas de versión",
+    "view_full_release_note": "Ver notas de versión completas",
+    "follow_us_x": "Síguenos en X",
+    "join_discord": "Únete a nuestro Discord",
+    "terms_privacy": "Términos y privacidad",
+    "send_feedback": "Enviar comentarios",
+    "keyboard_shortcut": "Atajos de teclado",
+    "help_center": "Centro de ayuda",
+    "open_preferences": "Abrir preferencias",
+    "compose": "Redactar",
+    "mail": "Correo",
+    "add_bookmark": "Añadir marcador",
+    "bookmark": "Marcador",
+    "bookmarks": "Marcadores",
+    "labels": "Etiquetas",
+    "add_label": "Añadir etiqueta",
+    "edit": "Editar",
+    "remove": "Eliminar",
+    "categories": "Categorías",
+    "inboxes": "Bandejas de entrada",
+    "folders": "Etiquetas",
+    "no_labels": "Sin etiquetas",
+    "other": "Otros",
+    "change_space": "Cambiar espacio",
+    "space": "espacio",
+    "spaces_used": "espacios usados",
+    "nav": {
+      "important": "Importante",
+      "inbox": "Bandeja de entrada",
+      "star": "Destacados",
+      "sent": "Enviados",
+      "draft": "Borradores",
+      "done": "Completado",
+      "trash": "Papelera",
+      "spam": "Correo no deseado",
+      "all_inboxes": "Todas las bandejas",
+      "all_mail": "Todos los correos",
+      "category": {
+        "inbox": "Bandeja de entrada",
+        "social": "Social",
+        "promotions": "Promociones",
+        "updates": "Actualizaciones",
+        "forums": "Foros"
+      }
+    },
+    "close_sidebar": "Cerrar barra lateral",
+    "open_sidebar": "Abrir barra lateral",
+    "more": "Más",
+    "create_folder": "Crear Carpeta",
+    "create_folder_prompt": "Ingrese el nombre de la carpeta:"
+  },
+  "account_switcher": {
+    "switch_account": "Cambiar cuenta",
+    "add_another_account": "Añadir otra cuenta",
+    "log_out": "Cerrar sesión",
+    "account_requires_reconnecting": "La cuenta requiere reconexión"
+  },
+  "header": {
+    "pin": {
+      "add": "Añadir",
+      "remove": "Eliminar",
+      "remove_from_pin": "Desanclar",
+      "new_email": "Nuevo correo"
+    },
+    "display": {
+      "close_panel": "Cerrar panel",
+      "expand": "Expandir",
+      "shrink": "Reducir",
+      "reminder": "Recordatorio",
+      "label": "Etiqueta",
+      "done": "Hecho",
+      "star": "Destacar",
+      "unstar": "Quitar destacado",
+      "trash": "Papelera",
+      "untrash": "Restaurar",
+      "contacts": "Contactos",
+      "share_thread": "Compartir conversación",
+      "share_link": "Compartir enlace",
+      "send_to_slack": "Enviar a Slack",
+      "no_subject": "(Sin asunto)"
+    },
+    "list": {
+      "all_mail": "Todo el correo",
+      "unread": "No leídos",
+      "searched": "Resultados",
+      "no_inbox_selected": "Ninguna bandeja seleccionada",
+      "trash_alert": "Los mensajes que han estado en la papelera por más de 30 días se eliminarán automáticamente."
+    }
+  },
+  "command": {
+    "search": "Buscar",
+    "ai_search": "Buscar con IA",
+    "reminder": "Recordatorio",
+    "space": "Espacio",
+    "label": "Etiqueta",
+    "pin_contact": "Anclar contacto",
+    "compose_new_message": "Redactar nuevo mensaje",
+    "sidebar_favorite_add": "Añadir marcador",
+    "compose_reply_message": "Responder",
+    "compose_forward_message": "Reenviar",
+    "thread_mark_read": "Marcar como leído",
+    "thread_trash": "Mover a la papelera",
+    "thread_untrash": "Restaurar de la papelera",
+    "thread_mark_unread": "Marcar como no leído",
+    "thread_star": "Destacar",
+    "thread_unstar": "Quitar destacado",
+    "thread_done": "Completado",
+    "thread_undone": "No completado",
+    "thread_report_spam": "Marcar como spam",
+    "thread_select_all": "Seleccionar todas las conversaciones",
+    "thread_select_none": "Deseleccionar todas",
+    "thread_select_read": "Seleccionar leídas",
+    "thread_select_unread": "Seleccionar no leídas",
+    "thread_select_starred": "Seleccionar destacadas",
+    "thread_select_unstarred": "Seleccionar sin destacar",
+    "open_preferences": "Abrir preferencias",
+    "open_preferences_shortcut": "Abrir atajos",
+    "open_preferences_billing": "Abrir facturación",
+    "open_preferences_signature": "Abrir firma",
+    "open_preferences_template": "Abrir plantillas",
+    "open_preferences_general": "Abrir ajustes generales",
+    "open_preferences_notifications": "Abrir notificaciones",
+    "open_preferences_integration": "Añadir cuentas",
+    "open_preferences_compose": "Abrir ajustes de redacción",
+    "open_preferences_label": "Abrir ajustes de etiquetas",
+    "open_preferences_filter": "Abrir filtros",
+    "open_preferences_autopilot": "Abrir IA Autopilot",
+    "open_preferences_account": "Abrir ajustes de cuenta",
+    "open_preferences_inbox": "Abrir ajustes de bandeja",
+    "open_preferences_profile": "Abrir perfil",
+    "open_preferences_system": "Abrir sistema",
+    "open_preferences_appearance": "Abrir apariencia",
+    "open_preferences_keyboard": "Abrir atajos de teclado",
+    "open_email_settings": "Abrir ajustes de correo",
+    "open_ai_settings": "Abrir ajustes de IA",
+    "open_display_settings": "Abrir ajustes de visualización",
+    "reset_all_settings": "Restablecer todos los ajustes",
+    "export_settings": "Exportar ajustes",
+    "import_settings": "Importar ajustes",
+    "open_feedback": "Abrir comentarios",
+    "goto_important": "Ir a Importante",
+    "goto_done": "Ir a Completado",
+    "goto_starred": "Ir a Destacados",
+    "goto_sent": "Ir a Enviados",
+    "goto_drafts": "Ir a Borradores",
+    "open_log_folder": "Abrir carpeta de registros",
+    "toggle_theme_light": "Cambiar a tema claro",
+    "toggle_theme_pure_light": "Cambiar a tema claro puro",
+    "toggle_theme_dark": "Cambiar a tema oscuro",
+    "toggle_theme_black": "Cambiar a tema negro",
+    "toggle_theme_system": "Cambiar a tema del sistema",
+    "toggle_density_compact": "Cambiar a densidad compacta",
+    "toggle_density_cozy": "Cambiar a densidad cómoda",
+    "discard_draft": "Descartar borrador"
+  },
+  "settings": {
+    "title": "Preferencias",
+    "description": "Administra tus preferencias de cuenta y correo.",
+    "general": {
+      "title": "General",
+      "description": "Administra tus preferencias de cuenta y correo.",
+      "theme": {
+        "title": "Tema",
+        "description": "Selecciona entre claro, claro puro, oscuro, negro o sistema.",
+        "light": "Claro",
+        "pure_light": "Claro Puro",
+        "dark": "Oscuro",
+        "black": "Negro",
+        "system": "Sistema"
+      },
+      "density": {
+        "title": "Densidad",
+        "description": "Ajusta el espaciado de correos e interfaz.",
+        "compact": "Compacta",
+        "cozy": "Cómoda"
+      }
+    },
+    "system": {
+      "title": "Sistema",
+      "description": "Configura preferencias del sistema.",
+      "save_success": "Preferencias de sistema actualizadas",
+      "save_error": "No se pudieron actualizar las preferencias de sistema",
+      "open_at_login": {
+        "title": "Abrir al iniciar sesión",
+        "description": "Abre la aplicación automáticamente al iniciar tu equipo."
+      },
+      "cache": {
+        "info": "Restablecer la caché borrará todos los correos locales y se descargarán de nuevo cuando accedas.",
+        "description": "Gestiona la caché local de correos",
+        "reset_button": "Restablecer caché de correo",
+        "reset_confirm_title": "Restablecer caché de correo",
+        "reset_confirm_description": "Esto eliminará todas las conversaciones y datos locales. Tus correos permanecerán en el servidor. ¿Continuar?",
+        "reset_confirm": "Sí, restablecer caché",
+        "resetting": "Restableciendo...",
+        "reset_success": "Caché restablecida correctamente",
+        "reset_error": "No se pudo restablecer la caché",
+        "reset_error_no_user": "No hay usuario conectado"
+      }
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "description": "Configura cómo recibes notificaciones.",
+      "email_notifications": "Notificaciones por correo",
+      "alert_sound": {
+        "title": "Sonido de alerta",
+        "description": "Selecciona un sonido.",
+        "options": {
+          "off": "Desactivado",
+          "mono": "Mono",
+          "shuffle": "Aleatorio",
+          "ping": "Ping",
+          "swipe": "Swipe",
+          "ripple": "Ripple"
+        }
+      },
+      "watch_notification": {
+        "title": "Notificación de seguimiento",
+        "description": "Elige qué correos generan notificaciones.",
+        "account": "Cuenta",
+        "options": {
+          "inbox": "Todos los correos",
+          "important": "Correos importantes",
+          "primary": "Correos principales",
+          "off": "Ninguno"
+        }
+      },
+      "marketing_emails": {
+        "title": "Correos de marketing",
+        "description": "Recibir novedades y actualizaciones."
+      },
+      "security_emails": {
+        "title": "Correos de seguridad",
+        "description": "Recibir avisos de seguridad."
+      }
+    },
+    "shortcut": {
+      "title": "Atajos",
+      "description": "Gestiona los atajos de teclado para navegar."
+    },
+    "email": {
+      "title": "Correo"
+    },
+    "account": {
+      "title": "Acento",
+      "description": "Gestiona los colores de acento."
+    },
+    "filter": {
+      "title": "Filtros",
+      "description": "Organiza automáticamente tu bandeja de entrada con filtros",
+      "add_ai_filter": "Añadir nuevo filtro con IA",
+      "gmail": {
+        "title": "Filtros de Gmail",
+        "description": "Gestiona tus filtros de Gmail directamente en la configuración de Gmail",
+        "open": "Abrir filtros de Gmail"
+      },
+      "dialog": {
+        "title_add": "Añadir nuevo filtro IA",
+        "title_edit": "Editar filtro IA",
+        "save": "Guardar",
+        "cancel": "Cancelar"
+      },
+      "ai": {
+        "title": "Filtros de IA",
+        "description": "Crea filtros inteligentes para organizar automáticamente tus correos usando IA. Los filtros se ejecutan en los nuevos correos y aplican carpetas.",
+        "no_filters": "Aún no tienes filtros con IA. Haz clic en \"Añadir filtro con IA\" para crear uno.",
+        "select_account": "Por favor, selecciona una cuenta",
+        "condition_prompt": "Condición",
+        "built_in": "Predefinido",
+        "use_template": "Usar plantilla",
+        "actions": "Acciones",
+        "add_label": "Añadir etiqueta:",
+        "mark_as_done": "Marcar como hecho",
+        "move_to_trash": "Mover a la papelera",
+        "name_placeholder": "Introduce el nombre del filtro...",
+        "prompt_placeholder": "Introduce la condición...",
+        "condition": {
+          "if": "Si",
+          "description": "el contenido del correo coincide con esta condición:"
+        },
+        "action": {
+          "then": "Entonces",
+          "apply": "aplicar",
+          "select_label": "Seleccionar etiqueta",
+          "and": "y",
+          "keep_in_inbox": "Mantener en la bandeja de entrada",
+          "mark_as_done": "Marcar como hecho",
+          "move_to_trash": "Mover a la papelera"
+        }
+      }
+    },
+    "integration": {
+      "title": "Cuentas",
+      "description": "Administra tus cuentas vinculadas.",
+      "primary_account": "Cuenta principal",
+      "disconnect": "Desconectar",
+      "reconnect": "Reconectar",
+      "upgrade_plan": "Actualizar Plan",
+      "no_accounts": "Sin cuentas",
+      "add_account": "Añadir cuenta"
+    },
+    "compose": {
+      "title": "Redacción",
+      "description": "Personaliza la redacción de correos.",
+      "undo_send": {
+        "title": "Deshacer envío",
+        "description": "Ventana para cancelar un envío.",
+        "options": {
+          "5": "5 segundos",
+          "10": "10 segundos",
+          "15": "15 segundos",
+          "20": "20 segundos",
+          "30": "30 segundos"
+        }
+      },
+      "fullscreen": {
+        "title": "Redacción a pantalla completa",
+        "description": "Abrir siempre la ventana de redacción en pantalla completa."
+      }
+    },
+    "label": {
+      "title": "Etiquetas",
+      "description": "Organiza y categoriza correos usando etiquetas.",
+      "add_label": "Añadir nueva etiqueta",
+      "no_labels": "No se encontraron etiquetas",
+      "label_name": "Nombre de la etiqueta"
+    },
+    "profile": {
+      "title": "Perfil",
+      "description": "Actualiza tu información personal.",
+      "display_name": "Nombre visible",
+      "change_photo": "Cambiar foto",
+      "update_profile": "Actualizar perfil",
+      "language": "Idioma",
+      "your_name": "Tu nombre",
+      "primary_account": {
+        "tooltip": "Cuenta para iniciar sesión en Mono",
+        "title": "Cuenta principal"
+      },
+      "delete_account": {
+        "title": "Eliminar cuenta",
+        "description": "Eliminar permanentemente tu cuenta de Mono y datos asociados. Los correos en Google no se eliminarán.",
+        "button": "Eliminar cuenta Mono"
+      }
+    },
+    "billing": {
+      "title": "Facturación",
+      "trial_notice": {
+        "message": "7 días de prueba gratis"
+      },
+      "description": "Gestiona tu suscripción y métodos de pago.",
+      "upgrade_required": "Actualiza a un plan de pago para usar esta función",
+      "upgrade_required_pro": "Actualiza a un plan Pro para usar esta función",
+      "ai_features_locked": "Las funciones de IA requieren una suscripción activa. Actualiza para desbloquear el autopiloto, perfiles de tono y filtros de IA.",
+      "beta_notice": {
+        "message": "Únete a nuestra comunidad de Discord",
+        "discount_suffix": "¡y obtén 1 mes gratis!"
+      },
+      "student_discount": {
+        "message": "Los estudiantes obtienen 40% de descuento en todos los planes.",
+        "contact_link": "Contáctanos",
+        "suffix": "con tu email estudiantil para verificación."
+      },
+      "plan": {
+        "current_plan": "Plan actual"
+      },
+      "renewal_info": {
+        "ends": "Este plan finaliza el {{date}}.",
+        "renews": "Se renovará automáticamente el {{date}}.",
+        "trial_ends": "El período de prueba finaliza el {{date}}."
+      },
+      "payment_details": {
+        "title": "Detalles de pago",
+        "payment_method": "Método de pago",
+        "change_payment_method": "Cambiar método de pago",
+        "manage_subscription": "Administrar suscripción",
+        "manage_subscription_description": "Consulta tu historial de facturación y gestiona tu suscripción",
+        "customer_portal": "Centro de clientes",
+        "none": "No hay suscripción activa",
+        "no_payment_method": "Sin método de pago"
+      }
+    },
+    "signature": {
+      "title": "Firma",
+      "add_signature": "Añadir firma",
+      "edit_signature": "Editar firma",
+      "description": "Gestiona tu firma.",
+      "default_signature": "Firma predeterminada",
+      "default_signature_description": "\"Enviado con Mono\" aparecerá en tus correos",
+      "inclusion_settings": "Configuración de firma",
+      "include_in_new_messages": "Nuevos mensajes",
+      "include_in_new_messages_description": "Añadir firma a nuevos correos",
+      "include_in_replies": "Respuestas",
+      "include_in_replies_description": "Añadir firma en respuestas",
+      "include_in_forwards": "Reenvíos",
+      "include_in_forwards_description": "Añadir firma en reenvíos",
+      "content": "Contenido",
+      "icon": "Icono",
+      "default": "Predeterminado",
+      "signature_content": "Contenido de la firma",
+      "signature_name": "Nombre",
+      "signature_name_placeholder": "Nombre de la firma",
+      "signature_content_placeholder": "Escribe tu firma...",
+      "make_default": "Usar como predeterminada",
+      "no_content": "Sin contenido",
+      "signatures_title": "Tus firmas",
+      "signatures_description": "Crea y gestiona firmas",
+      "settings_tab": "Ajustes",
+      "signatures_tab": "Firmas",
+      "signature_updated": "Firma actualizada",
+      "signature_added": "Firma añadida",
+      "signature_deleted": "Firma eliminada",
+      "signature_save_error": "Error al guardar firma",
+      "signature_delete_error": "Error al eliminar firma",
+      "default_signature_set": "Firma predeterminada actualizada",
+      "default_signature_error": "No se pudo establecer la firma predeterminada",
+      "no_signatures": "Aún no tienes firmas",
+      "remove_signature": "Eliminar firma",
+      "set_as_default": "Establecer como predeterminada",
+      "default_for_accounts": "Predeterminada para estas cuentas",
+      "current_account": "Cuenta actual",
+      "multiple_defaults": "Predeterminada para {{count}} cuentas"
+    },
+    "template": {
+      "title": "Plantillas",
+      "description": "Gestiona plantillas para respuestas rápidas.",
+      "add_template": "Añadir plantilla",
+      "edit_template": "Editar plantilla",
+      "remove_template": "Eliminar",
+      "template_name": "Nombre",
+      "template_shortcut": "Acceso rápido",
+      "template_command": "Comando",
+      "include_subject": "Asunto",
+      "subject": "Asunto",
+      "icon": "Icono",
+      "body": "Contenido",
+      "no_templates": "Aún no tienes plantillas. Crea una para empezar.",
+      "no_subject": "Sin asunto",
+      "no_body": "Sin contenido",
+      "template_added": "Plantilla añadida",
+      "template_updated": "Plantilla actualizada",
+      "template_deleted": "Plantilla eliminada",
+      "template_save_error": "Error al guardar plantilla",
+      "template_delete_error": "Error al eliminar plantilla",
+      "name_required": "El nombre es obligatorio",
+      "save_changes": "Guardar cambios",
+      "save": "Guardar"
+    },
+    "display": {
+      "title": "Visualización",
+      "description": "Personaliza tus preferencias de visualización",
+      "inbox": {
+        "title": "Bandeja",
+        "description": "Elige secciones y categorías.",
+        "inbox": "Bandeja de entrada",
+        "inbox_description": "Mostrar pestaña Bandeja de entrada.",
+        "starred": "Destacados",
+        "starred_description": "Mostrar mensajes destacados.",
+        "draft": "Borradores",
+        "draft_description": "Mostrar borradores.",
+        "sent": "Enviados",
+        "sent_description": "Mostrar enviados.",
+        "all": "Todo el correo",
+        "all_description": "Mostrar todo el correo.",
+        "social": "Social",
+        "social_description": "Mostrar categoría Social.",
+        "promotions": "Promociones",
+        "promotions_description": "Mostrar Promociones.",
+        "updates": "Actualizaciones",
+        "updates_description": "Mostrar Actualizaciones.",
+        "forums": "Foros",
+        "forums_description": "Mostrar Foros.",
+        "done": "Completado",
+        "done_description": "Mostrar completados.",
+        "trash": "Papelera",
+        "trash_description": "Mostrar Papelera.",
+        "spam": "Spam",
+        "spam_description": "Mostrar Spam.",
+
+        "category": {
+          "enable_splitting": "Activar División de Categorías",
+          "title": "Categorías de Bandeja",
+          "enable_splitting_description": "Elige qué categorías de correo incluir en tu bandeja de entrada",
+          "individual_settings_description": "Selecciona qué categorías mostrar en tu bandeja de entrada",
+          "promotions": "Promociones",
+          "promotions_description": "Incluir correos promocionales y contenido de marketing en tu bandeja",
+          "social": "Social",
+          "social_description": "Incluir notificaciones de redes sociales y actualizaciones en tu bandeja",
+          "updates": "Actualizaciones",
+          "updates_description": "Incluir actualizaciones del sistema y notificaciones en tu bandeja",
+          "forums": "Foros",
+          "forums_description": "Incluir discusiones de foros y publicaciones de comunidad en tu bandeja"
+        }
+      },
+      "threadlist": {
+        "title": "Visualización de Conversaciones",
+        "description": "Configura qué información mostrar en los elementos de la lista de conversaciones",
+        "display_options": "Opciones de Visualización",
+        "display_options_description": "Elige qué elementos mostrar en cada elemento de la lista de conversaciones",
+        "show_avatar": "Mostrar Avatar del Destinatario",
+        "show_avatar_description": "Mostrar el avatar del destinatario en los elementos de la lista de conversaciones",
+        "show_snippet": "Mostrar Fragmento",
+        "show_snippet_description": "Mostrar fragmento/texto de vista previa del correo en los elementos de la lista de conversaciones",
+        "show_labels": "Mostrar Etiquetas",
+        "show_labels_description": "Mostrar etiquetas de correo en los elementos de la lista de conversaciones",
+        "show_attachments": "Mostrar Adjuntos",
+        "show_attachments_description": "Mostrar fila de vista previa de adjuntos en los elementos de la lista de conversaciones"
+      }
+    },
+    "ai": {
+      "title": "AI",
+      "description": "Configura cómo el asistente de AI te ayuda con tareas de correo",
+      "autopilot": {
+        "title": "Autopilot",
+        "enable": "Activar Autopilot",
+        "enable_description": "La IA generará borradores de respuesta basados en el contenido del correo y tu estilo de comunicación",
+        "description": "Configura cómo Autopilot te ayuda a responder más rápido con borradores generados por IA"
+      },
+      "voiceprofiles": {
+        "title": "Perfiles de tono",
+        "description": "Guarda tu estilo de escritura para generar respuestas más personalizadas con IA",
+        "save": {
+          "title": "Activar perfiles de tono",
+          "description": "Tu estilo de escritura se usará para personalizar los borradores sugeridos por la IA y las respuestas de Autopilot"
+        },
+        "content": {
+          "title": "Contenido del perfil de tono",
+          "description": "Introduce un texto que represente tu estilo de escritura",
+          "placeholder": "Escribe un texto que refleje tu estilo (por ejemplo, un correo anterior o mensaje)..."
+        },
+        "validation": {
+          "max_length": "El contenido del perfil de tono no puede superar los 1.000 caracteres",
+          "required": "Debes introducir contenido si activas el perfil de tono"
+        },
+        "select_account": "Seleccionar cuenta",
+        "no_account": "Por favor, selecciona una cuenta",
+        "loading": "Cargando...",
+        "save_changes": "Guardar cambios"
+      },
+      "notifications": {
+        "preferences_updated": "Preferencias de AI actualizadas",
+        "update_error": "Error al actualizar preferencias",
+        "profile_saved": "Perfil de tono guardado",
+        "save_error": "Error al guardar el perfil de tono"
+      }
+    },
+    "team": {
+      "title": "Cuenta",
+      "description": "Gestiona los ajustes de equipo"
+    },
+    "others": {
+      "title": "Otros"
+    },
+    "buttons": {
+      "update": "Actualizar preferencia",
+      "save_changes": "Guardar cambios",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "remove": "Eliminar",
+      "edit": "Editar"
+    },
+    "footer": {
+      "terms": "Términos",
+      "privacy": "Privacidad",
+      "version": "Versión"
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "title": "Bienvenido a Mono Mail",
+      "description": "Mono Mail es el correo electrónico de nueva generación para profesionales.",
+      "button": "Empezar"
+    },
+    "ai_filters": {
+      "title": "Organizamos todo por ti",
+      "description": "Nuestra IA clasificará automáticamente tus correos en cada cuenta conectada — como reuniones, actualizaciones o boletines — para que puedas concentrarte.",
+      "continue": "Continuar",
+      "connected_accounts": "Cuentas conectadas",
+      "connect_another": "Conectar otra cuenta a {{spaceName}}",
+      "preview_label": "La IA está categorizando los correos automáticamente",
+      "tooltip_title": "La IA detectará automáticamente patrones similares",
+      "tooltip_examples_heading": "Ejemplos de correos:"
+    },
+    "add_accounts": {
+      "back": "Atrás",
+      "title": "Conectar más cuentas de correo",
+      "description": "Agrega las cuentas de correo que deseas organizar en este espacio. Siempre podrás añadir más cuentas más adelante.",
+      "connected_accounts": "Cuentas conectadas",
+      "status": "Conectado y listo para organizar",
+      "active": "Activo",
+      "primary_account": "Cuenta principal",
+      "connect_prompt": "Conecta al menos una cuenta",
+      "connect_hint": "Necesitas conectar al menos una cuenta para continuar",
+      "connect_another": "Conectar otra cuenta",
+      "continue": "Finalizar configuración",
+      "choose_provider": "Seleccionar proveedor de correo",
+      "choose_provider_description": "Selecciona tu proveedor para comenzar",
+      "section_other": "Otros proveedores",
+      "help_title": "¿Necesitas ayuda?",
+      "help_description": "Admitimos la mayoría de proveedores. Si no ves el tuyo, intenta con 'Otro IMAP' o contacta con soporte. También puedes omitir este paso y añadir cuentas después.",
+      "setting_up": "Configurando"
+    },
+    "pin_contacts": {
+      "title": "Fija tus contactos importantes",
+      "description": "Selecciona 3 contactos con los que sueles comunicarte. Aparecerán arriba en tu bandeja de entrada para acceso rápido.",
+      "search_placeholder": "Buscar contactos...",
+      "continue": "Continuar",
+      "no_contacts": "No se encontraron contactos.",
+      "no_contacts_search": "No hay resultados que coincidan.",
+      "quick_tip": {
+        "title": "Consejo: fija los contactos frecuentes",
+        "description": "Los contactos fijados siempre aparecerán arriba"
+      },
+      "selected_count": "{{count}} de {{max}} seleccionados"
+    },
+    "space_templates": {
+      "title": "Crea tu espacio",
+      "description": "Los espacios agrupan varias cuentas en una sola vista enfocada — ideal para trabajo, proyectos paralelos o uso personal.",
+      "customize_name": "Ponle un nombre a tu espacio:",
+      "create_space": "Crear espacio",
+      "continue": "Continuar",
+      "what_you_organize": "Organizarás cosas como:",
+      "back": "Atrás",
+      "space_name": "Nombre del espacio",
+      "enter_space_name": "Introduce un nombre...",
+      "using_template": "Usando plantilla {{name}}",
+      "select_template": "Seleccionar plantilla",
+      "select_template_description": "Elige la que mejor se ajuste a tus necesidades",
+      "templates": {
+        "work": {
+          "name": "Trabajo",
+          "description": "Correos profesionales y proyectos laborales",
+          "examples": [
+            "Actualizaciones de equipo",
+            "Correos de clientes",
+            "Notificaciones de proyectos"
+          ]
+        },
+        "personal": {
+          "name": "Personal",
+          "description": "Vida personal, amigos y familia",
+          "examples": ["Mensajes familiares", "Finanzas personales", "Salud"]
+        },
+        "development": {
+          "name": "Desarrollo",
+          "description": "Revisiones de código, GitHub y actualizaciones técnicas",
+          "examples": ["Notificaciones de GitHub", "Revisiones de código", "Boletines técnicos"]
+        },
+        "learning": {
+          "name": "Estudios",
+          "description": "Cursos, tutoriales y desarrollo de habilidades",
+          "examples": ["Actualizaciones de cursos", "Material de estudio", "Certificaciones"]
+        },
+        "designer": {
+          "name": "Diseño",
+          "description": "Proyectos de diseño, comentarios de clientes y recursos",
+          "examples": ["Actualizaciones de Figma", "Revisión de diseño", "Solicitudes de recursos"]
+        },
+        "marketing": {
+          "name": "Marketing",
+          "description": "Campañas, contactos y métricas de crecimiento",
+          "examples": [
+            "Feedback de boletines",
+            "Resultados de campañas",
+            "Respuestas de lanzamiento"
+          ]
+        },
+        "admin": {
+          "name": "Administración",
+          "description": "Operaciones, facturación y herramientas internas",
+          "examples": ["Facturas de herramientas", "Cambios de políticas", "Solicitudes de acceso"]
+        },
+        "newsletters": {
+          "name": "Boletines",
+          "description": "Suscripciones y boletines informativos",
+          "examples": ["Resumen de Substack", "Actualizaciones de blogs", "Artículos guardados"]
+        }
+      }
+    },
+    "subscribe": {
+      "title": "Suscríbete a las novedades",
+      "description": "Mono mejora constantemente. Suscríbete para conocer los cambios.",
+      "subscribe_changelog": "Suscribirse al registro de cambios",
+      "subscribe_changelog_description": "Correo semanal sobre nuevas funciones y mejoras",
+      "follow_x": "Síguenos en X",
+      "follow_x_description": "Mantente al tanto de funciones y buenas prácticas",
+      "button": "Continuar",
+      "join_discord": "Únete a Discord",
+      "join_discord_description": "Recibe ayuda, haz preguntas y conoce a otros usuarios de Mono"
+    },
+    "connect_gmail": {
+      "title": "Conecta con Gmail",
+      "description": "Integra Gmail para mejorar tu experiencia con el correo.",
+      "button": "Iniciar sesión con Google"
+    },
+    "demographic": {
+      "title": "Cuéntanos sobre ti",
+      "description": "Nos ayuda a personalizar tu experiencia en Mono Mail.",
+      "role": "¿Cuál es tu rol?",
+      "role_placeholder": "Selecciona tu profesión o rol",
+      "role_custom_placeholder": "Ej.: Investigador de IA, Emprendedor",
+      "email_usage": "¿Cómo usas principalmente tu correo?",
+      "email_usage_placeholder": "Selecciona tu uso principal",
+      "email_usage_custom_placeholder": "Ej.: Comunicaciones con clientes",
+      "discovery": "¿Dónde nos conociste?",
+      "discovery_placeholder": "¿Cómo nos encontraste?",
+      "discovery_custom_placeholder": "Ej.: Hacker News, Reddit, Amigo",
+      "button": "Continuar"
+    },
+    "appearance": {
+      "title": "Elige tu estilo",
+      "description": "Puedes cambiar el tema en cualquier momento desde el menú o configuración.",
+      "button": "Continuar",
+      "theme_selection": {
+        "title": "Selecciona un tema",
+        "description": "Elige entre modo claro u oscuro",
+        "light": {
+          "label": "Tema claro",
+          "description": "Interfaz limpia y luminosa"
+        },
+        "dark": {
+          "label": "Tema oscuro",
+          "description": "Más cómodo para ambientes con poca luz"
+        }
+      }
+    },
+    "command_trigger": {
+      "title": "Descubre el menú de comandos",
+      "description": "Realiza cualquier acción rápidamente escribiéndola en el menú de comandos.",
+      "shortcut_hint": "Abre el menú de comandos con:",
+      "button": "Continuar"
+    },
+    "command": {
+      "title": "Descubre el menú de comandos",
+      "description": "Realiza cualquier acción rápidamente escribiéndola en el menú de comandos.",
+      "button": "Continuar"
+    },
+    "final": {
+      "title": "¡Todo listo!",
+      "description": "Explora la app y descubre todo lo que puedes hacer.",
+      "features": {
+        "feedback": {
+          "title": "Enviar comentarios",
+          "description": "Pulsa para enviar comentarios al instante"
+        },
+        "compose": {
+          "title": "Escribir mensajes",
+          "description": "Pulsa para redactar tu primer correo"
+        },
+        "keyboard_shortcuts": {
+          "title": "Atajos de teclado",
+          "description": "Pulsa para descubrir todos los comandos"
+        }
+      },
+      "button": "Continuar"
+    }
+  },
+  "command_palette": {
+    "no_result": "Sin resultados.",
+    "enter": "Enter",
+    "placeholder": "Escribe un comando o busca...",
+    "header": {
+      "search": "Buscar",
+      "operators": "Operadores",
+      "commands": "Comandos",
+      "contacts": "Contactos",
+      "suggestions": "Sugerencias",
+      "icons": "Íconos",
+      "save_bookmark": "Guardar marcador",
+      "space_options": "Opciones del espacio",
+      "create_new_space": "Crear nuevo espacio",
+      "labels": "Etiquetas",
+      "create_labels": "Crear etiquetas"
+    },
+    "bookmark": {
+      "icon": {
+        "placeholder": ""
+      },
+      "name": {
+        "placeholder": "Introduce el nombre del marcador...",
+        "set_icon": "Asignar icono para:",
+        "save_as": "Guardar \"{{query}}\" como \"{{name}}\"",
+        "set_icon_for": "Asignar icono a \"{{name}}\""
+      },
+      "account": {
+        "placeholder": "Elige una cuenta...",
+        "title": "Asignar marcador a"
+      }
+    },
+    "label": {
+      "placeholder": "Buscar etiquetas...",
+      "no_labels_found": "No se encontraron etiquetas.",
+      "create_in_accounts": "Crear en {{count}} cuenta",
+      "create_in_accounts_plural": "Crear en {{count}} cuentas",
+      "will_affect_conversations": "Afectará a {{count}} conversación",
+      "will_affect_conversations_plural": "Afectará a {{count}} conversaciones en {{accountCount}} cuenta",
+      "will_affect_conversations_plural_accounts": "Afectará a {{count}} conversaciones en {{accountCount}} cuentas",
+      "description": "Mensajes con cierta etiqueta"
+    },
+    "pin": {
+      "placeholder": "Escribe nombres o correos...",
+      "pin": "Anclar",
+      "contacts": "contactos",
+      "email": "correo",
+      "emails": "correos"
+    },
+    "reminder": {
+      "placeholder": "Type 'Tomorrow', '5 pm', or 'Next Monday'..."
+    },
+    "search": {
+      "query_search": "Búsqueda: {{query}}",
+      "save_bookmark": "Guardar marcador: {{query}}",
+      "placeholder": "Escribe una búsqueda o presiona Tab para buscar con IA",
+      "from": { "description": "Remitente" },
+      "to": { "description": "Destinatario" },
+      "subject": { "description": "Palabras en el asunto" },
+      "label": { "description": "Mensajes con etiqueta" },
+      "filename": { "description": "Adjuntos con nombre o tipo" },
+      "in": { "description": "Mensajes en ubicación" },
+      "is": { "description": "Estado del mensaje" },
+      "cc": { "description": "Destinatarios en CC" },
+      "bcc": { "description": "Destinatarios en BCC" },
+      "after": { "description": "Mensajes después de fecha" },
+      "before": { "description": "Mensajes antes de fecha" },
+      "older_than": { "description": "Más antiguos que período" },
+      "newer_than": { "description": "Más recientes que período" },
+      "deliveredto": { "description": "Buscar por entregado a" },
+      "category": {
+        "description": "Mensajes en categoría",
+        "inbox": { "description": "Buscar en Bandeja de entrada" }
+      },
+      "size": { "description": "Tamaño mayor que" },
+      "larger": { "description": "Tamaño mayor que" },
+      "smaller": { "description": "Tamaño menor que" },
+      "OR": { "description": "Coincidencia múltiple" },
+      "-": { "description": "Excluir mensajes" },
+      "AROUND": { "description": "Palabras cercanas" },
+      "has:attachment": { "description": "Con adjunto" },
+      "has:documents": { "description": "Con Docs" },
+      "has:spreadsheet": { "description": "Con Sheets" },
+      "has:presentation": { "description": "Con Slides" },
+      "has:drive": { "description": "Con Drive" },
+      "has:document": { "description": "Con documento" },
+      "has:youtube": { "description": "Con YouTube" },
+      "list": { "description": "De lista de correo" },
+      "in:anywhere": { "description": "En cualquier etiqueta" },
+      "in:inbox": { "description": "En bandeja" },
+      "is:starred": { "description": "Marcados" },
+      "is:snoozed": { "description": "Pospuestos" },
+      "is:unread": { "description": "No leídos" },
+      "is:read": { "description": "Leídos" },
+      "exact": { "description": "Coincidencia exacta" },
+      "+": { "description": "Palabra exacta" },
+      "rfc822msgid": { "description": "Por ID de mensaje" },
+      "has:userlabels": { "description": "Mensajes que tienen etiquetas de usuario" },
+      "has:nouserlabels": { "description": "Mensajes que no tienen etiquetas de usuario" },
+      "is:muted": { "description": "Silenciados" }
+    },
+    "space": {
+      "selection": {
+        "placeholder": "Introduce o selecciona el nombre del espacio",
+        "existing_heading": "Espacios existentes",
+        "create_space": "Crear espacio \"{{name}}\"",
+        "accounts_count": "{{count}} cuenta",
+        "accounts_count_plural": "{{count}} cuentas"
+      },
+      "options": {
+        "placeholder": "Editar opciones del espacio",
+        "heading": "Opciones del espacio",
+        "manage_accounts": "Gestionar cuentas",
+        "change_name": "Cambiar nombre del espacio",
+        "change_icon": "Cambiar icono del espacio",
+        "change_color": "Cambiar color del espacio",
+        "delete_space": "Eliminar espacio",
+        "delete_confirmation": "¿Seguro que quieres eliminar \"{{name}}\"?",
+        "edit_space": "Editar espacio \"{{name}}\""
+      },
+      "name": {
+        "placeholder": "Introduce el nombre del espacio",
+        "saving": "Guardando...",
+        "change_name_to": "Cambiar nombre a \"{{name}}\""
+      },
+      "icon": {
+        "placeholder": "Buscar iconos",
+        "select_icon_for": "Seleccionar icono para \"{{name}}\""
+      },
+      "color": {
+        "placeholder": "Introduce un color o selecciona uno",
+        "select_color_for": "Seleccionar color para \"{{name}}\""
+      },
+      "accounts": {
+        "placeholder": "Buscar cuentas",
+        "save_changes": "Guardar cambios de cuentas",
+        "back_to_options": "Volver a opciones"
+      },
+      "success": {
+        "space_deleted": "Espacio eliminado correctamente",
+        "space_name_updated": "Nombre del espacio actualizado",
+        "space_icon_updated": "Icono del espacio actualizado",
+        "space_color_updated": "Color del espacio actualizado",
+        "accounts_updated": "Cuentas actualizadas correctamente"
+      },
+      "error": {
+        "enter_space_name": "Introduce un nombre para el espacio",
+        "select_account": "Selecciona al menos una cuenta",
+        "update_space": "Error al actualizar el espacio",
+        "create_space": "Error al crear el espacio",
+        "delete_space": "Error al eliminar el espacio",
+        "update_accounts": "Error al actualizar las cuentas"
+      }
+    }
+  },
+  "dialog": {
+    "account_select": {
+      "title": "Elige una cuenta Mono para iniciar",
+      "description": "está conectada a la siguiente cuenta Mono",
+      "create_new": "Crear nueva cuenta",
+      "requires_sign_in": "Requiere iniciar sesión",
+      "trouble_signing_in": "¿Problemas? Escríbenos a"
+    },
+    "attachment_preview": {
+      "not_supported": "Tipo de archivo no admitido",
+      "error_downloading": "Error al descargar",
+      "previous_page": "Anterior",
+      "next_page": "Siguiente",
+      "download": "Descargar"
+    },
+    "delete_member": {
+      "title": "¿Eliminar cuenta Mono?",
+      "description": "Eliminar permanentemente tu cuenta y datos.",
+      "cancel": "Cancelar",
+      "confirm_delete": "Eliminar permanentemente"
+    },
+    "draft_discard": {
+      "title": "¿Descartar borrador?",
+      "description": "El borrador se eliminará.",
+      "keep_draft": "Mantener borrador",
+      "delete": "Eliminar",
+      "cancel": "Cancelar"
+    },
+    "draft_save": {
+      "title": "¿Guardar como borrador?",
+      "description": "El mensaje no se ha enviado.",
+      "save_changes": "Guardar",
+      "dont_save": "No guardar",
+      "cancel": "Cancelar"
+    },
+    "link_share": {
+      "title": "Compartir",
+      "owner": "Propietario",
+      "editor": "Editor",
+      "viewer": "Lector",
+      "remove_access": "Eliminar acceso",
+      "anyone_with_link": "Cualquiera con el enlace",
+      "visible_for": "Visible para",
+      "publish": "Publicar",
+      "private": "Privado",
+      "public": "Público",
+      "workspace": "Espacio de trabajo",
+      "copy_link": "Copiar enlace",
+      "copied": "Copiado",
+      "published": "Compartido",
+      "not_published": "No compartido",
+      "error_permission": "Error: se requiere permiso"
+    },
+    "release_note": {
+      "meet_the_new": "Descubre el nuevo",
+      "learn_more": "Más información",
+      "try_now": "Probar ahora"
+    },
+    "send_feedback": {
+      "title": "Enviar comentarios",
+      "description": "Tu opinión mejora la experiencia.",
+      "attachments": "Adjuntar capturas, archivos...",
+      "invalid_file": "Archivo no válido",
+      "select_category": "Selecciona categoría",
+      "category": {
+        "bugs_issues": "Errores",
+        "feature_requests": "Solicitudes",
+        "ui": "Interfaz",
+        "performance": "Rendimiento",
+        "documentation": "Documentación"
+      },
+      "placeholder": "¿Cómo puede mejorar Mono para ti{{name}}? Si es un error, describe cómo ocurrió."
+    },
+    "plan": {
+      "title": "Elige tu plan",
+      "description": "Selecciona el plan que se ajuste a ti",
+      "billing_cycle": {
+        "title": "Ciclo de facturación",
+        "monthly": "Mensual",
+        "annually": "Anual",
+        "save_percent": "Ahorra hasta {{percent}}%"
+      },
+      "features": {
+        "title": "Funciones clave",
+        "included": "Incluido",
+        "not_included": "No incluido"
+      },
+      "current_plan": "Plan actual",
+      "select_plan": "Elegir plan",
+      "change_plan": "Cambiar plan",
+      "upgrade": "Mejorar",
+      "downgrade": "Reducir",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar",
+      "processing": "Procesando...",
+      "error": "Ocurrió un error",
+      "popular": "Popular",
+      "per_month": "al mes",
+      "billed": "facturado",
+      "all_plans": "Todos los planes",
+      "everything_in_plus": "Todo en Plus +",
+      "canceled_subscription": "Suscripción cancelada. Activa hasta",
+      "end_of_billing_period": "fin del ciclo",
+      "reactivate": "Reactivar"
+    }
+  },
+  "layout": {
+    "gmail_status_invalid": "Gmail está limitando solicitudes.",
+    "not_found": {
+      "title": "Vaya, algo salió mal...",
+      "relaunch": "Reiniciar"
+    },
+    "migration": {
+      "title": "Migración de servidor en curso",
+      "description": "Mejoramos nuestros servidores.",
+      "estimated_time": "Tiempo estimado:",
+      "until": "hasta que vuelva en línea",
+      "complete": "¡Migración completada! Puedes actualizar.",
+      "overdue": "Tarda más de lo previsto",
+      "check_back": "Vuelve en unos minutos.",
+      "check_status": "Ver estado",
+      "refresh": "Actualizar página",
+      "try_again": "Intentar de nuevo",
+      "auto_refresh": "La página se actualizará al finalizar.",
+      "expected_completion": "Finalizará a las {{time}}"
+    },
+    "link_share": {
+      "not_found": {
+        "title": "Archivo no encontrado"
+      }
+    },
+    "sign_in": {
+      "sign_in_with_google": "Iniciar con Google",
+      "agreement": "Al hacer clic en \"Iniciar con Google\", aceptas los",
+      "legal": "Términos legales",
+      "and": "y",
+      "privacy": "Política de privacidad"
+    }
+  },
+  "thread_list": {
+    "up_to_date": "Todo está al día",
+    "beta_limited": "Versión beta limitada a 60 días",
+    "try_again": "Intentar de nuevo",
+    "selected_count": "{{count}} seleccionados",
+    "toolbar": {
+      "done": "Hecho",
+      "star": "Destacar",
+      "unstar": "Quitar destacado",
+      "read": "Leer",
+      "unread": "No leído",
+      "undone:": "No hecho",
+      "trash": "Papelera",
+      "label": "Etiqueta",
+      "share": "Compartir",
+      "clear_selection": "Borrar selección"
+    }
+  },
+  "message_card": {
+    "reply": "Responder",
+    "forward": "Reenviar",
+    "reply_to": "Responder a",
+    "to": "Para",
+    "cc": "Cc",
+    "bcc": "Bcc",
+    "recipients": "Destinatarios",
+    "no_recipient": "Sin destinatario",
+    "share_link": "Compartir enlace",
+    "send_to_slack": "Enviar a Slack",
+    "privacy_protection_one": "Eliminado {{count}} imagen de seguimiento para proteger tu privacidad",
+    "privacy_protection_other": "Eliminado {{count}} imágenes de seguimiento para proteger tu privacidad"
+  },
+  "tooltip": {
+    "discard_draft": "Descartar borrador",
+    "show_quoted": "Mostrar cita",
+    "close": "Cerrar",
+    "minimize": "Minimizar",
+    "maximize": "Maximizar",
+    "discard": "Descartar",
+    "visit": "Visitar",
+    "upgrade_plan": "Mejorar plan",
+    "contact": "Contacto",
+    "calendar": "Calendario",
+    "help_support": "Ayuda y soporte",
+    "open_preferences": "Abrir preferencias"
+  },
+  "compose_card": {
+    "subject_generation": {
+      "tooltip": "Generar asunto con IA",
+      "generating": "Generando asunto...",
+      "success": "Asunto generado correctamente",
+      "error": "Error al generar asunto",
+      "no_content_error": "Por favor, escribe el contenido del correo",
+      "no_account_error": "No hay cuenta activa"
+    },
+    "ai": {
+      "describe_edit": "Describe cómo editar el texto",
+      "outline_note": "Esquematiza tu correo"
+    },
+    "footer": {
+      "send_now": "Enviar ahora",
+      "use_template": "Usar plantilla",
+      "use_tracker": "Usar tracker",
+      "mono_ai": "Mono IA",
+      "add_attachment": "Adjuntar",
+      "send_disabled": {
+        "no_recipients": "Añade destinatarios para enviar",
+        "no_sender": "Selecciona una cuenta de envío",
+        "saving_draft": "Guardando borrador..."
+      }
+    }
+  },
+  "contact_card": {
+    "new_email": "Nuevo correo",
+    "copy": "Copiar",
+    "search_for": "Buscar",
+    "remove": "Eliminar",
+    "search": "Buscar",
+    "pin": "Anclar"
+  },
+  "recipient_card": {
+    "new_email": "Nuevo correo",
+    "copy": "Copiar"
+  },
+  "text_editor": {
+    "signature_growth": "Esta firma nos ayuda a crecer. Mejora tu plan para quitarla.",
+    "placeholder": {
+      "recipients": "Destinatarios",
+      "subject": "Asunto",
+      "bcc": "Bcc",
+      "cc": "Cc",
+      "heading": "Título",
+      "write_something": "Escribe o usa \"/\" para comandos, o \"⌘+J\" para IA…",
+      "list": "Lista",
+      "blockquoate": "Cita vacía"
+    }
+  },
+  "extension": {
+    "contact": {
+      "title": "Contactos",
+      "no_subject": "(Sin asunto)",
+      "latest_conversations": "Últimas conversaciones",
+      "no_selected_conversation": "Sin conversación seleccionada",
+      "load_more": "Cargar más"
+    },
+    "calendar": {
+      "today": "Hoy",
+      "create_event": "Crear evento",
+      "no_event_this_date": "Sin eventos esta fecha."
+    }
+  },
+  "colors": {
+    "blue": "Azul",
+    "green": "Verde",
+    "red": "Rojo",
+    "yellow": "Amarillo",
+    "purple": "Morado",
+    "orange": "Naranja",
+    "pink": "Rosa",
+    "gray": "Gris",
+    "silver": "Plata"
+  },
+  "icons": {
+    "home": "Inicio",
+    "briefcase": "Portafolio",
+    "building": "Edificio",
+    "userGroup": "Grupo",
+    "star": "Estrella",
+    "heart": "Corazón",
+    "bell": "Campana",
+    "calendar": "Calendario",
+    "envelope": "Sobre",
+    "fileText": "Documento",
+    "folder": "Etiqueta",
+    "globe": "Globo",
+    "cog": "Engranaje",
+    "bolt": "Rayo",
+    "cloud": "Nube",
+    "gift": "Regalo",
+    "music": "Música",
+    "book": "Libro",
+    "shoppingCart": "Carrito"
+  },
+  "filter": {
+    "filter": "Filtrar",
+    "applied_filters": "Filtros aplicados",
+    "active_filters": "Filtros activos",
+    "available_filters": "Filtros disponibles",
+    "clear_category": "Limpiar categoría",
+    "clear_all": "Limpiar filtros",
+    "clear": "Limpiar",
+    "search_placeholder": "Buscar correos...",
+    "showing_results": "Mostrando {{count}} de {{total}} conversaciones",
+    "more": "más",
+    "enter_email": "Introduce correo",
+    "enter_label": "Introduce etiqueta",
+    "or_logic": "O",
+    "any_match": "Cualquiera",
+
+    "read_status": "Estado de lectura",
+    "read_status_options": "Opciones de lectura",
+    "read": "Leído",
+    "unread": "No leído",
+
+    "attachment": "Adjunto",
+    "attachment_options": "Opciones de adjunto",
+    "has_attachment": "Con adjunto",
+    "no_attachment": "Sin adjunto",
+
+    "from": "De",
+    "from_options": "Opciones de remitente",
+
+    "to": "Para",
+    "to_options": "Opciones de destinatario",
+
+    "cc": "CC",
+    "cc_options": "Opciones de CC",
+
+    "bcc": "BCC",
+    "bcc_options": "Opciones de BCC",
+
+    "subject": "Asunto",
+    "subject_options": "Opciones de asunto",
+
+    "calendar": "Evento de calendario",
+    "calendar_options": "Opciones de calendario",
+    "has_calendar": "Con evento",
+    "no_calendar": "Sin evento",
+
+    "label": "Etiqueta",
+    "label_options": "Opciones de etiqueta",
+
+    "date": "Fecha",
+    "date_options": "Opciones de fecha",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "this_week": "Esta semana",
+    "this_month": "Este mes",
+
+    "contains": "Contiene",
+    "does_not_contain": "No contiene",
+    "is": "Es",
+    "is_not": "No es",
+    "has": "Tiene",
+    "does_not_have": "No tiene"
+  },
+  "toast": {
+    "clipboard_copy": "Copiado al portapapeles",
+    "reminder_set": "Recordatorio establecido",
+    "space": {
+      "delete_success": "Espacio eliminado",
+      "name_updated": "Nombre actualizado",
+      "icon_updated": "Icono actualizado",
+      "color_updated": "Color actualizado",
+      "accounts_updated": "Cuentas actualizadas"
+    },
+    "feedback": {
+      "success": "Gracias por tus comentarios"
+    },
+    "link_share": {
+      "sign_in_success": "Sesión iniciada correctamente"
+    },
+    "display": {
+      "label_added": "{{name}} etiqueta añadida"
+    },
+    "preferences": {
+      "updated": "Preferencias actualizadas",
+      "integration": {
+        "account_added": "Cuenta añadida",
+        "scopes_updated": "Permisos actualizados",
+        "account_disconnected": "{{email}} desconectada"
+      },
+      "label": {
+        "removed": "Etiqueta eliminada correctamente",
+        "updated": "Etiqueta actualizada correctamente",
+        "created": "Etiqueta creada correctamente"
+      },
+      "signature": {
+        "created": "Firma creada",
+        "updated": "Firma actualizada",
+        "deleted": "Firma eliminada"
+      }
+    },
+    "compose": {
+      "sending": "Enviando...",
+      "sent": "Mensaje enviado",
+      "cancel": "Cancelar",
+      "sending_delay": "El correo se enviará en {{delay}}s",
+      "error": "No se pudo enviar",
+      "canceled": "Envío cancelado"
+    },
+    "thread": {
+      "mark_read": "Marcando la conversación como leída...",
+      "mark_reads": "Marcando {{count}} conversaciones como leídas...",
+      "marked_read": "Conversación marcada como leída",
+      "marked_reads": "{{count}} conversaciones marcadas como leídas",
+      "mark_read_error": "Error al marcar como leída",
+
+      "mark_unread": "Marcando la conversación como no leída...",
+      "marked_unread": "Conversación marcada como no leída",
+      "mark_unread_error": "Error al marcar como no leída",
+
+      "star": "Marcando la conversación con estrella...",
+      "starred": "Conversación marcada con estrella",
+      "star_error": "Error al marcar con estrella",
+
+      "unstar": "Quitando estrella de la conversación...",
+      "unstarred": "Estrella eliminada de la conversación",
+      "unstar_error": "Error al quitar la estrella",
+
+      "trash": "Moviendo la conversación a la papelera...",
+      "trashed": "Conversación movida a la papelera",
+      "trash_error": "Error al mover a la papelera",
+
+      "untrash": "Restaurando la conversación...",
+      "untrashed": "Conversación restaurada",
+      "untrash_error": "Error al restaurar la conversación",
+
+      "done": "Marcando la conversación como hecha...",
+      "done_success": "Conversación marcada como hecha",
+      "done_error": "Error al marcar como hecha",
+
+      "undone": "Marcando la conversación como pendiente...",
+      "undone_success": "Conversación marcada como pendiente",
+      "undone_error": "Error al marcar como pendiente",
+
+      "spam": "Marcando la conversación como spam...",
+      "spammed": "Conversación marcada como spam",
+      "spam_error": "Error al marcar como spam"
+    },
+    "info": {
+      "sync_limited_365_days": "Sincronización limitada a 365 días",
+      "sync_limited_365_days_description": "Actualiza a Plus o Pro para acceder a tu historial completo de correo"
+    },
+    "error": {
+      "send_mail": "Error al enviar correo",
+      "save_draft": "No se pudo guardar borrador",
+      "account_expired": "La autenticación de la cuenta ha expirado. Por favor, reconecta tu cuenta.",
+      "transfer_draft": "No se pudo transferir borrador",
+      "no_email_to_save": "Sin correo para guardar",
+      "file_too_large": "Archivo demasiado grande. Máx 25 MB",
+      "file_upload_server": "Error del servidor al subir",
+      "file_upload_network": "Error de red al subir",
+      "attachment_preview": "Error al previsualizar adjunto",
+      "attachment_download": "Error al descargar adjunto",
+      "delete_account": "Error al eliminar cuenta",
+      "permission_required": "Permiso requerido",
+      "feedback_send": "Error al enviar comentarios",
+      "feedback_invalid_attachment": "Elimina archivos no válidos",
+      "sign_in": "Error al iniciar sesión",
+      "fetch_thread": "Error al obtener conversación",
+      "save_settings": "No se pudieron guardar ajustes",
+      "ai_settings": "Error al actualizar IA",
+      "preference_update": "Error al actualizar preferencias",
+      "ai_filter_save": "No se pudo guardar filtro IA",
+      "ai_filter_invalid": "El filtro no puede activarse sin etiquetas de salida",
+      "unlink_account": "No se pudo desvincular cuenta",
+      "profile_update": "Error al actualizar perfil",
+      "signature_update": "Error al actualizar firma",
+      "system_save": "No se pudieron actualizar ajustes de sistema",
+      "template_save": "No se pudo guardar plantilla",
+      "template_delete": "No se pudo eliminar plantilla",
+      "signature_save": "No se pudo guardar firma",
+      "signature_delete": "No se pudo eliminar firma",
+      "cache_reset": "No se pudo restablecer caché",
+      "account_data_load": "No se pudieron cargar datos",
+      "auth_error": "Error de autenticación",
+      "sync_account": "Fallo de sincronización. Intenta luego.",
+      "undo_action": "No se pudo deshacer",
+      "image_upload": "Error al subir imagen",
+      "pin_email": "No se pudo anclar correo",
+      "pin_emails": "No se pudo anclar correos",
+      "unpin_email": "No se pudo desanclar correo",
+      "pin_order": "No se pudo actualizar orden",
+      "space_pin": "No se pudo anclar espacio",
+      "space_unpin": "No se pudo desanclar espacio",
+      "space_reorder": "No se pudo reordenar",
+      "space_update": "No se pudo actualizar espacio",
+      "space_create": "No se pudo crear espacio",
+      "space_delete": "No se pudo eliminar espacio",
+      "sidebar_add_item": "No se pudo agregar elemento de barra lateral",
+      "sidebar_remove_item": "No se pudo eliminar elemento de barra lateral",
+      "sidebar_reorder": "No se pudo reordenar elementos de barra lateral",
+      "sidebar_create_folder": "No se pudo crear carpeta",
+      "sidebar_move_item": "No se pudo mover elemento a carpeta",
+      "ai_filter_create": "No se pudo crear filtro IA",
+      "ai_filter_update": "No se pudo actualizar filtro IA",
+      "ai_filter_delete": "No se pudo eliminar filtro IA",
+      "ai_filter_status": "No se pudo actualizar estado del filtro",
+      "ai_settings_load": "No se pudieron cargar ajustes IA",
+      "auth": "Fallo de autenticación",
+      "account_load": "No se pudieron cargar datos de cuenta",
+      "rsvp_update": "No se pudo actualizar RSVP",
+      "sync_failed": "Sincronización falló para {{account}}.",
+      "no_label_found": "No se encontraron etiquetas",
+      "selected_label_not_exist": "La etiqueta seleccionada no existe",
+      "filter_save": "No se pudo guardar filtro IA"
+    }
+  },
+  "offline": {
+    "working_offline": "Trabajando sin conexión",
+    "pending_operations": "pendientes",
+    "back_online_sync": "¡Conectado! Sincronizando {{count}} operaciones...",
+    "syncing_operations": "Sincronizando {{count}} operaciones...",
+    "sync_success": "{{successCount}} operaciones sincronizadas exitosamente{{failedCount}}",
+    "sync_failed": "{{count}} operaciones fallaron al sincronizar",
+    "upgrade_for_offline": "Actualiza a Plus o Pro para Acceso Sin Conexión",
+    "pro_features_description": "Los usuarios Plus y Pro pueden trabajar sin conexión y sincronizar cambios al reconectarse."
+  },
+  "plan_selection": {
+    "title": "Elige tu plan",
+    "description": "Selecciona el plan que se adapte a ti",
+    "billing_cycle": {
+      "title": "Ciclo de facturación",
+      "monthly": "Mensual",
+      "annually": "Anual",
+      "save_percent": "Ahorra hasta {{percent}}%"
+    },
+    "features": {
+      "title": "Funciones clave",
+      "included": "Incluido",
+      "not_included": "No incluido"
+    },
+    "current_plan": "Plan actual",
+    "select_plan": "Elegir plan",
+    "change_plan": "Cambiar plan",
+    "upgrade": "Mejorar",
+    "downgrade": "Reducir",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "processing": "Procesando...",
+    "error": "Ocurrió un error",
+    "popular": "Popular",
+    "per_month": "al mes",
+    "billed": "facturado",
+    "one_time": "pago único",
+    "lifetime_access": "acceso de por vida",
+    "all_plans": "Todos los planes",
+    "everything_in_plus": "Todo en Plus +",
+    "canceled_subscription": "Suscripción cancelada. Activa hasta",
+    "end_of_billing_period": "fin del ciclo",
+    "reactivate": "Reactivar",
+    "annually": "Anual",
+    "monthly": "Mensual",
+    "space_limit": "Límite de {{count}} espacios",
+    "space_limit_reached": "Límite de Espacios Alcanzado",
+    "space_limit_reached_message": "Has alcanzado el límite de tu plan de {{count}} espacios. Actualiza para crear más espacios.",
+    "upgrade_to_create_spaces": "Actualizar para Crear Más Espacios",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "description": "Para individuos que quieren mejor correo",
+        "features": {
+          "accounts": "3 cuentas de correo",
+          "single_account": "2 cuentas de correo",
+          "essential_features": "Funciones esenciales de correo",
+          "spaces": "2 espacios",
+          "history": "Historial 365 días"
+        }
+      },
+      "basic": {
+        "name": "Básico",
+        "description": "Para individuos que quieren mejor correo",
+        "features": {
+          "accounts": "3 cuentas de correo",
+          "spaces": "2 espacios",
+          "history": "Historial 365 días"
+        }
+      },
+      "plus": {
+        "name": "Plus",
+        "description": "Para usuarios avanzados, sin IA",
+        "features": {
+          "accounts": "Cuentas de correo ilimitadas",
+          "spaces": "Espacios ilimitados",
+          "history": "Historial ilimitado",
+          "tracker": "Lecturas de correo"
+        }
+      },
+      "plus_onetime": {
+        "name": "Lifetime",
+        "description": "Todas las funciones Plus con un solo pago",
+        "features": {
+          "lifetime_access": "Acceso de por vida - sin tarifas recurrentes"
+        }
+      },
+      "pro": {
+        "name": "Pro",
+        "description": "Para equipos pequeños",
+        "features": {
+          "ai": "Filtros y borradores IA",
+          "offline": "Soporte sin conexión",
+          "support": "Soporte prioritario"
+        }
+      }
+    }
+  },
+  "nps": {
+    "score_question": "Del 0 al 10, ¿qué tan probable es que nos recomiendes?",
+    "not_likely": "Nada probable",
+    "extremely_likely": "Muy probable",
+    "promoter": "Promotor",
+    "passive": "Pasivo",
+    "detractor": "Detractor",
+    "selected_score": "Puntuación: {{score}} ({{category}})",
+    "comment_label": "Cuéntanos más",
+    "comment_placeholder": "¿Cuál es la principal razón de tu puntuación?",
+    "submit": "Enviar opinión",
+    "optional": "Opcional",
+    "event_type": {
+      "subscription_renewal": {
+        "title": "¿Cómo fue la renovación?",
+        "description": "Ayúdanos a mejorar el proceso de renovación {{name}}."
+      },
+      "feature_usage": {
+        "title": "Califica esta función",
+        "description": "¿Qué tan probable es que recomiendes esta función a otros {{name}}?"
+      },
+      "support_interaction": {
+        "title": "Califica tu experiencia con soporte",
+        "description": "¿Qué tan satisfecho estás con nuestro equipo de soporte {{name}}?"
+      },
+      "onboarding_complete": {
+        "title": "¿Cómo fue tu inicio?",
+        "description": "Ayúdanos a mejorar la experiencia inicial {{name}}."
+      },
+      "general_feedback": {
+        "title": "Califica tu experiencia general",
+        "description": "¿Recomendarías nuestro producto a otras personas {{name}}?"
+      },
+      "product_update": {
+        "title": "Califica esta actualización",
+        "description": "¿Qué te han parecido nuestras últimas novedades {{name}}?"
+      },
+      "cancellation_flow": {
+        "title": "Ayúdanos a mejorar",
+        "description": "Antes de irte, cuéntanos cómo fue tu experiencia {{name}}."
+      }
+    }
+  },
+  "tooltips": {
+    "account_status": {
+      "too_many_accounts": "Demasiadas cuentas conectadas - mejora el plan o la cuenta será desactivada",
+      "too_many_requests": "Demasiadas solicitudes - inténtalo más tarde",
+      "authentication_expired": "La autenticación de la cuenta ha expirado - por favor reconecta",
+      "missing_gmail_permissions": "Faltan permisos de Gmail - por favor reconecta para conceder acceso",
+      "requires_reconnecting": "La cuenta requiere reconexión"
+    }
+  },
+  "subscription": {
+    "checking_status": "Verificando estado de suscripción...",
+    "choose_plan": "Elige tu Plan",
+    "description": "Mono Mail requiere una suscripción activa para usar.",
+    "log_out": "Cerrar Sesión",
+    "description_additional": "Elige un plan que se adapte a tus necesidades y comienza a transformar tu bandeja de entrada con gestión de correo con IA hoy.",
+    "existing_subscriber": "¿Ya tienes una suscripción o experimentas problemas?",
+    "student_discount": "Contáctanos para obtener 40% de descuento estudiantil",
+    "quick_actions": "Acciones Rápidas",
+    "start_free_trial": "Comenzar Prueba Gratis",
+    "view_all_plans": "Ver Todos los Planes y Precios",
+    "learn_more": "Conocer Más Sobre las Funciones",
+    "need_help": "¿Necesitas Ayuda?",
+    "contact_support": "Contactar Soporte",
+    "support_description_1": "¿Preguntas sobre facturación o funciones?",
+    "support_description_2": "Nuestro equipo está aquí para ayudarte a elegir el plan correcto.",
+    "why_choose_mono": "¿Por qué Elegir Mono Mail?",
+    "feature_ai": {
+      "title": "Con IA",
+      "description": "Redacción y filtrado inteligente de correos"
+    },
+    "feature_secure": {
+      "title": "Seguro",
+      "description": "Seguridad de nivel empresarial"
+    },
+    "feature_fast": {
+      "title": "Rápido",
+      "description": "Gestión de correo ultrarrápida"
+    }
+  },
+  "alerts": {
+    "subscription_needed_june_10_title": "Estamos cerrando el período beta.",
+    "subscription_needed_june_10": "¡Gracias por participar! Necesitas una suscripción antes del 10 de junio para continuar usando todas las funciones."
+  },
+  "status": {
+    "gmail_degraded": "El servicio de Gmail está experimentando problemas",
+    "gmail_unauthorized": "Se requiere autenticación de Gmail",
+    "gmail_quota_exceeded": "Se ha excedido la cuota de la API de Gmail",
+    "gcp_incident": "Google Cloud Platform está experimentando problemas",
+    "gcp_check_failed": "No se puede verificar el estado de GCP",
+    "server_degraded": "Nuestros servidores están experimentando problemas",
+    "checking": "Verificando estado del servicio...",
+    "operational": "Todos los sistemas operativos",
+    "degraded": "Algunos servicios están degradados",
+    "outage": "Se detectó una interrupción del servicio"
+  },
+  "update_notification": {
+    "electron": {
+      "title": "¡Nueva versión disponible!",
+      "description": "Actualiza Mono ahora para una experiencia mejorada.",
+      "button": "Reiniciar y actualizar"
+    },
+    "pwa": {
+      "title": "¡Actualización de la app lista!",
+      "description": "Actualiza la app para obtener las últimas funciones y mejoras.",
+      "button": "Actualizar app"
+    }
+  }
+}

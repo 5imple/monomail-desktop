@@ -1,0 +1,241 @@
+/* Mono theme for Tippy.js with card background, border, shadow-xl and rounded-lg */
+.tippy-box[data-theme~='mono'] {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04); /* shadow-xl */
+}
+
+/* Dark variant for Mono theme */
+.tippy-box[data-theme~='mono'].dark {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.3),
+    0 10px 10px -5px rgba(0, 0, 0, 0.2); /* enhanced shadow for dark mode */
+}
+
+/* Animation */
+.tippy-box[data-theme~='mono'][data-animation='fade'][data-state='hidden'] {
+  opacity: 0;
+}
+
+/* Base arrow positioning */
+.tippy-box[data-theme~='mono'] .tippy-arrow {
+  width: 16px;
+  height: 16px;
+  position: absolute;
+}
+
+/* Top placement - position the arrow container */
+.tippy-box[data-theme~='mono'][data-placement^='top'] .tippy-arrow {
+  bottom: -16px; /* Positioned outside the tooltip */
+  left: 0;
+}
+
+/* Bottom placement - position the arrow container */
+.tippy-box[data-theme~='mono'][data-placement^='bottom'] .tippy-arrow {
+  top: -16px; /* Positioned outside the tooltip */
+  left: 0;
+}
+
+/* Left placement - position the arrow container */
+.tippy-box[data-theme~='mono'][data-placement^='left'] .tippy-arrow {
+  right: -16px; /* Positioned outside the tooltip */
+  top: 0;
+}
+
+/* Right placement - position the arrow container */
+.tippy-box[data-theme~='mono'][data-placement^='right'] .tippy-arrow {
+  left: -16px; /* Positioned outside the tooltip */
+  top: 0;
+}
+
+/* Arrow borders (outer triangle) */
+.tippy-box[data-theme~='mono'] .tippy-arrow::before {
+  content: '';
+  position: absolute;
+  border-style: solid;
+}
+
+/* Arrow background (inner triangle) */
+.tippy-box[data-theme~='mono'] .tippy-arrow::after {
+  content: '';
+  position: absolute;
+  border-style: solid;
+}
+
+/* Top placement arrow details */
+.tippy-box[data-theme~='mono'][data-placement^='top'] .tippy-arrow::before {
+  top: -0.5px;
+  left: 0;
+  border-width: 8px 8px 0;
+  border-top-color: hsl(var(--border));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'][data-placement^='top'] .tippy-arrow::after {
+  top: -1px;
+  left: 1px;
+  border-width: 7px 7px 0;
+  border-top-color: hsl(var(--card));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Dark variant arrow styles - Top placement */
+.tippy-box[data-theme~='mono'].dark[data-placement^='top'] .tippy-arrow::before {
+  top: -0.5px;
+  left: 0;
+  border-width: 8px 8px 0;
+  border-top-color: hsl(var(--border));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'].dark[data-placement^='top'] .tippy-arrow::after {
+  top: -1px;
+  left: 1px;
+  border-width: 7px 7px 0;
+  border-top-color: hsl(var(--card));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Bottom placement arrow details */
+.tippy-box[data-theme~='mono'][data-placement^='bottom'] .tippy-arrow::before {
+  bottom: -0.5px;
+  left: 0;
+  border-width: 0 8px 8px;
+  border-bottom-color: hsl(var(--border));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-top-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'][data-placement^='bottom'] .tippy-arrow::after {
+  bottom: -1px;
+  left: 1px;
+  border-width: 0 7px 7px;
+  border-bottom-color: hsl(var(--card));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-top-color: transparent;
+}
+
+/* Left placement arrow details */
+.tippy-box[data-theme~='mono'][data-placement^='left'] .tippy-arrow::before {
+  left: -0.5px;
+  top: 0;
+  border-width: 8px 0 8px 8px;
+  border-left-color: hsl(var(--border));
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'][data-placement^='left'] .tippy-arrow::after {
+  left: -1px;
+  top: 1px;
+  border-width: 7px 0 7px 7px;
+  border-left-color: hsl(var(--card));
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Right placement arrow details */
+.tippy-box[data-theme~='mono'][data-placement^='right'] .tippy-arrow::before {
+  right: -0.5px;
+  top: 0;
+  border-width: 8px 8px 8px 0;
+  border-right-color: hsl(var(--border));
+  border-top-color: transparent;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'][data-placement^='right'] .tippy-arrow::after {
+  right: -1px;
+  top: 1px;
+  border-width: 7px 7px 7px 0;
+  border-right-color: hsl(var(--card));
+  border-top-color: transparent;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Dark variant arrow styles - Bottom placement */
+.tippy-box[data-theme~='mono'].dark[data-placement^='bottom'] .tippy-arrow::before {
+  bottom: -0.5px;
+  left: 0;
+  border-width: 0 8px 8px;
+  border-bottom-color: hsl(var(--border));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-top-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'].dark[data-placement^='bottom'] .tippy-arrow::after {
+  bottom: -1px;
+  left: 1px;
+  border-width: 0 7px 7px;
+  border-bottom-color: hsl(var(--card));
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-top-color: transparent;
+}
+
+/* Dark variant arrow styles - Left placement */
+.tippy-box[data-theme~='mono'].dark[data-placement^='left'] .tippy-arrow::before {
+  left: -0.5px;
+  top: 0;
+  border-width: 8px 0 8px 8px;
+  border-left-color: hsl(var(--border));
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'].dark[data-placement^='left'] .tippy-arrow::after {
+  left: -1px;
+  top: 1px;
+  border-width: 7px 0 7px 7px;
+  border-left-color: hsl(var(--card));
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Dark variant arrow styles - Right placement */
+.tippy-box[data-theme~='mono'].dark[data-placement^='right'] .tippy-arrow::before {
+  right: -0.5px;
+  top: 0;
+  border-width: 8px 8px 8px 0;
+  border-right-color: hsl(var(--border));
+  border-top-color: transparent;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.tippy-box[data-theme~='mono'].dark[data-placement^='right'] .tippy-arrow::after {
+  right: -1px;
+  top: 1px;
+  border-width: 7px 7px 7px 0;
+  border-right-color: hsl(var(--card));
+  border-top-color: transparent;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+}

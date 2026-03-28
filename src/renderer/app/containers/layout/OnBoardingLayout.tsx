@@ -1,0 +1,458 @@
+import { Progress } from '@/renderer/app/components/ui/progress';
+import BaseHeader from '@/renderer/app/containers/header/BaseHeader';
+import OnBoardingAddAccounts from '@/renderer/app/containers/onboarding/OnBoardingAddAccounts';
+import OnBoardingAIFilters from '@/renderer/app/containers/onboarding/OnBoardingAIFilters';
+import OnBoardingAppearance from '@/renderer/app/containers/onboarding/OnBoardingAppearance';
+import OnBoardingCommand from '@/renderer/app/containers/onboarding/OnBoardingCommand';
+import { default as OnBoardingCommandTrigger } from '@/renderer/app/containers/onboarding/OnBoardingCommandTrigger';
+import OnBoardingFinal from '@/renderer/app/containers/onboarding/OnBoardingFinal';
+import OnBoardingPinContacts from '@/renderer/app/containers/onboarding/OnBoardingPinContacts';
+import OnBoardingSpaceTemplates from '@/renderer/app/containers/onboarding/OnBoardingSpaceTemplates';
+import OnBoardingSubscribe from '@/renderer/app/containers/onboarding/OnBoardingSubscribe';
+import OnBoardingWelcome from '@/renderer/app/containers/onboarding/OnBoardingWelcome';
+import { useAuth } from '@/renderer/app/context/AuthContext';
+import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
+import { cn } from '@/renderer/app/lib/utils';
+import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
+import { animated, useTransition } from '@react-spring/web';
+import { FC, useState, useEffect, useMemo, useCallback } from 'react';
+import { Navigate } from 'react-router-dom';
+import confetti from 'canvas-confetti';
+import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
+import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
+import { AIFilter, useAIFilters } from '@/renderer/app/store/filter/useAIFilters';
+import { AI_FILTER_TEMPLATES } from '@/renderer/app/containers/onboarding/aiFilterExamples';
+import { v4 as uuidv4 } from 'uuid';
+import { useTheme } from '@/renderer/app/components/ThemeProvider';
+
+interface OnBoardingLayoutProps {}
+
+export interface SelectedSpace {
+  name: string;
+  icon: string;
+  color: string;
+  templateId: string;
+}
+
+// Define which steps allow back navigation
+const STEPS_ALLOWING_BACK = [
+  'appearance',
+  'space',
+  'ai_filter',
+  'add_accounts',
+  'pin_contacts',
+  'command_trigger',
+  'command_example'
+];
+
+const OnBoardingLayout: FC = () => {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completed, setCompleted] = useState(false);
+  const { currentTheme } = useTheme();
+  const [isCreatingSpace, setIsCreatingSpace] = useState(false);
+  const [activeTheme, setActiveTheme] = useState<'light' | 'dark'>(
+    currentTheme === 'black' || currentTheme === 'dark' ? 'dark' : 'light'
+  );
+  const { contactArray } = useContactAtom();
+  const { accounts } = useAuth();
+  const [selectedSpace, setSelectedSpace] = useState<SelectedSpace | null>(null);
+  const { trackEvent } = useUserTrackingData();
+  const { spaces, createSpace, loadSpaces, switchSpace } = useSpaceAtom();
+  const { getLabelsForAccount, loadLabels, createLabel, labelsMapByAccount } = useLabelAtom();
+  const { createAIFiltersBatch } = useAIFilters();
+
+  const goToNextStep = () => {
+    if (currentStep < steps.length - 1) {
+      setCurrentStep((prev) => {
+        const nextStep = prev + 1;
+        trackEvent('onboarding_progress', {
+          step_name: steps[nextStep].name,
+          step_number: nextStep + 1,
+          completion_percentage: ((nextStep + 1) / steps.length) * 100
+        });
+        return nextStep;
+      });
+    } else {
+      trackEvent('onboarding_completed', { total_steps: steps.length });
+      setCompleted(true);
+    }
+  };
+
+  const goToPreviousStep = () => {
+    if (currentStep > 0 && canGoBack()) {
+      setCurrentStep((prev) => {
+        const previousStep = prev - 1;
+        trackEvent('onboarding_back_navigation', {
+          from_step: steps[prev].name,
+          to_step: steps[previousStep].name,
+          step_number: previousStep + 1
+        });
+        return previousStep;
+      });
+    }
+  };
+
+  const canGoBack = (): boolean => {
+    const currentStepName = steps[currentStep]?.name;
+    return STEPS_ALLOWING_BACK.includes(currentStepName) && !isCreatingSpace;
+  };
+
+  // Confetti function
+  const triggerConfetti = () => {
+    const duration = 3000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+    function randomInRange(min: number, max: number) {
+      return Math.random() * (max - min) + min;
+    }
+
+    const interval: any = setInterval(function () {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        return clearInterval(interval);
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+
+      // since particles fall down, start a bit higher than random
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+      });
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+      });
+    }, 250);
+  };
+
+  // Utility: Create AI filters for all accounts after space creation
+  const createAIFiltersForAccounts = useCallback(
+    async (spaceTemplateId: string, accounts: any[]) => {
+      if (!spaceTemplateId || !accounts?.length) return;
+
+      const filterTemplates =
+        AI_FILTER_TEMPLATES[spaceTemplateId as keyof typeof AI_FILTER_TEMPLATES] ||
+        AI_FILTER_TEMPLATES.work;
+
+      // Process each account
+      for (const account of accounts) {
+        const accountId = account.uid;
+        const filtersToCreate: AIFilter[] = [];
+
+        // Prepare all filters for this account
+        for (const filterTemplate of filterTemplates) {
+          const outputLabelIds: string[] = [];
+
+          // Create/find all labels first
+          for (const labelName of filterTemplate.outputLabels) {
+            const existingLabel = getLabelsForAccount(accountId).find(
+              (l) => l.name.toLowerCase() === labelName.toLowerCase()
+            );
+
+            let labelId = existingLabel?.id;
+            if (!labelId) {
+              try {
+                const color = filterTemplate.color
+                  ? {
+                      backgroundColor: filterTemplate.color.background,
+                      textColor: filterTemplate.color.text
+                    }
+                  : undefined;
+                const newLabel = await createLabel(labelName, accountId, color);
+                labelId = newLabel?.id;
+              } catch (e) {
+                console.error(`Failed to create label '${labelName}' for account ${accountId}:`, e);
+              }
+            }
+            if (labelId) outputLabelIds.push(labelId);
+          }
+
+          // Add to batch if we have valid labels
+          if (outputLabelIds.length > 0) {
+            filtersToCreate.push({
+              id: uuidv4(),
+              name: filterTemplate.name,
+              prompt: filterTemplate.prompt,
+              outputLabels: outputLabelIds,
+              markAsDone: filterTemplate.markAsDone,
+              moveToTrash: filterTemplate.moveToTrash,
+              isActive: true
+            });
+          }
+        }
+
+        // Create all filters for this account at once
+        if (filtersToCreate.length > 0) {
+          try {
+            await createAIFiltersBatch(accountId, filtersToCreate);
+          } catch (e) {
+            console.error(`Failed to create AI filters for account ${accountId}:`, e);
+          }
+        }
+      }
+    },
+    [getLabelsForAccount, createLabel, createAIFiltersBatch]
+  );
+
+  // Function to create the space with selected data
+  const handleCreateSpace = useCallback(async () => {
+    if (!selectedSpace || isCreatingSpace) return;
+
+    setIsCreatingSpace(true);
+
+    try {
+      const spaceData = {
+        id: '', // Will be generated by the API
+        name: selectedSpace.name,
+        icon: selectedSpace.icon,
+        color: selectedSpace.color,
+        accountUids: accounts.map((account) => account.uid),
+        activeAccountUids: accounts.map((account) => account.uid),
+        pinnedEmails: []
+      };
+
+      // Create the space using the createSpace function
+      const newSpace = await createSpace(spaceData);
+      switchSpace(newSpace.id);
+      await loadSpaces(newSpace.id);
+
+      trackEvent('onboarding_space_created', {
+        space_name: selectedSpace.name,
+        space_icon: selectedSpace.icon,
+        space_template: selectedSpace.templateId,
+        account_count: accounts.length
+      });
+
+      // --- AI FILTER CREATION LOGIC ---
+      createAIFiltersForAccounts(selectedSpace.templateId, accounts);
+      // --- END AI FILTER CREATION LOGIC ---
+
+      console.log('Space created successfully:', newSpace);
+    } catch (error) {
+      console.error('Failed to create space during onboarding:', error);
+
+      trackEvent('onboarding_space_creation_failed', {
+        space_name: selectedSpace.name,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+
+      // You might want to show an error message to the user here
+      // For now, we'll continue with the flow
+    } finally {
+      goToNextStep();
+      setIsCreatingSpace(false);
+    }
+  }, [
+    selectedSpace,
+    accounts,
+    isCreatingSpace,
+    trackEvent,
+    switchSpace,
+    loadSpaces,
+    labelsMapByAccount,
+    getLabelsForAccount,
+    createSpace,
+    createAIFiltersForAccounts
+  ]);
+
+  // Determine if we should skip space and account steps
+  const shouldSkipSpaceSteps = useMemo(
+    () => spaces.length > 0 && !selectedSpace,
+    [spaces, selectedSpace]
+  );
+
+  const steps = useMemo(() => {
+    const baseSteps = [
+      {
+        name: 'welcome',
+        component: (onContinue: () => void, onBack?: () => void) => (
+          <OnBoardingWelcome onContinue={onContinue} />
+        )
+      },
+      {
+        name: 'appearance',
+        component: (onContinue: () => void, onBack?: () => void) => (
+          <OnBoardingAppearance
+            activeTheme={activeTheme}
+            onContinue={onContinue}
+            onThemeChange={setActiveTheme}
+          />
+        )
+      }
+    ];
+    // Conditionally add space and add_accounts steps
+    if (!shouldSkipSpaceSteps) {
+      baseSteps.push(
+        {
+          name: 'space',
+          component: (onContinue: () => void, onBack?: () => void) => (
+            <OnBoardingSpaceTemplates
+              onContinue={(
+                id: string,
+                spaceName: string,
+                spaceIcon: string,
+                spaceColor: string
+              ) => {
+                // Extract template ID from the space selection
+                setSelectedSpace({
+                  name: spaceName,
+                  icon: spaceIcon,
+                  color: spaceColor,
+                  templateId: id
+                });
+                onContinue();
+              }}
+              onBack={onBack}
+            />
+          )
+        },
+        {
+          name: 'ai_filter',
+          component: (onContinue: () => void, onBack?: () => void) => (
+            <OnBoardingAIFilters
+              selectedSpace={selectedSpace}
+              accounts={accounts}
+              onContinue={onContinue}
+              onBack={onBack}
+            />
+          )
+        },
+        {
+          name: 'add_accounts',
+          component: (onContinue: () => void, onBack?: () => void) => (
+            <OnBoardingAddAccounts
+              selectedSpace={selectedSpace!}
+              accounts={accounts}
+              onContinue={handleCreateSpace}
+              onAddAccount={() => {
+                // Handle adding new account
+                console.log('Add account clicked');
+              }}
+              onRemoveAccount={() => {
+                //
+              }}
+              onBack={onBack}
+              onSkip={handleCreateSpace}
+              isCreatingSpace={isCreatingSpace}
+            />
+          )
+        }
+      );
+    }
+    // Conditionally include pin_contacts step only if contacts exist
+    if (contactArray.length > 0) {
+      baseSteps.push({
+        name: 'pin_contacts',
+        component: (onContinue: () => void, onBack?: () => void) => (
+          <OnBoardingPinContacts onContinue={onContinue} />
+        )
+      });
+    }
+
+    // Add remaining steps
+    baseSteps.push(
+      {
+        name: 'command_trigger',
+        component: (onContinue: () => void, onBack?: () => void) => (
+          <OnBoardingCommandTrigger onContinue={onContinue} />
+        )
+      },
+      {
+        name: 'command_example',
+        component: (onContinue: () => void, onBack?: () => void) => (
+          <OnBoardingCommand onContinue={onContinue} />
+        )
+      },
+      {
+        name: 'subscribe',
+        component: (onContinue: () => void, onBack?: () => void) => (
+          <OnBoardingSubscribe onContinue={onContinue} />
+        )
+      },
+      {
+        name: 'final',
+        component: (onContinue: () => void, onBack?: () => void) => (
+          <OnBoardingFinal onContinue={onContinue} />
+        )
+      }
+    );
+
+    return baseSteps;
+  }, [
+    shouldSkipSpaceSteps,
+    selectedSpace,
+    accounts,
+    contactArray,
+    isCreatingSpace,
+    labelsMapByAccount,
+    getLabelsForAccount,
+    createAIFiltersForAccounts,
+    handleCreateSpace
+  ]);
+
+  const transitions = useTransition(currentStep, {
+    from: { opacity: 0, transform: 'translateY(30%) scale(0.9)' },
+    enter: { opacity: 1, transform: 'translateY(0%) scale(1)' },
+    leave: { opacity: 0, transform: 'translateY(-30%) scale(0.5)' },
+    config: { tension: 200, friction: 20 }
+  });
+
+  // Trigger confetti when reaching the final step
+  useEffect(() => {
+    if (steps[currentStep]?.name === 'final') {
+      // Delay confetti slightly to let the animation settle
+      const timer = setTimeout(() => {
+        triggerConfetti();
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [currentStep]);
+
+  if (completed) {
+    return <Navigate replace to="/" />;
+  }
+
+  return (
+    <div className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-gradient-to-tr from-background/90 to-background/80 backdrop-blur-lg">
+      <div className={cn('absolute bottom-0 left-0 right-0 top-0')}>
+        <div
+          className={cn(
+            'appearance-wipe absolute bottom-0 left-0 right-0 top-0 h-full w-full will-change-auto',
+            'bg-[#1a1a1a]',
+            activeTheme === 'dark' ? 'appearance-wipe-active' : ''
+          )}
+        />
+      </div>
+      <BaseHeader />
+
+      {transitions((style, index) => (
+        <animated.div
+          key={index}
+          style={style}
+          className="will-change-opacity absolute w-full will-change-auto will-change-transform"
+        >
+          {steps[index].component(goToNextStep, goToPreviousStep)}
+        </animated.div>
+      ))}
+
+      <div className={cn('absolute bottom-8 w-80')}>
+        <Progress
+          className={cn(
+            'h-1 transition-opacity duration-1000',
+            currentStep > 0 && currentStep != 1 ? 'opacity-100' : 'opacity-0'
+          )}
+          value={((currentStep + 1) / steps.length) * 100}
+        />
+      </div>
+    </div>
+  );
+};
+
+export default OnBoardingLayout;

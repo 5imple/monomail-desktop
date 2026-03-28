@@ -1,0 +1,125 @@
+name: publish-mac@prod
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-and-deploy:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Apple Certificate for Code Signing
+        run: |
+          echo "${{ secrets.CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
+          security create-keychain -p actions temp.keychain
+          security import certificate.p12 -k temp.keychain -P ${{ secrets.CERTIFICATE_PASSWORD }} -T /usr/bin/codesign
+          security list-keychains -d user -s temp.keychain
+          security unlock-keychain -p actions temp.keychain
+        env:
+          CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+
+      - name: Set Environment Variables for Notarization
+        run: |
+          echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
+          echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" >> $GITHUB_ENV
+          echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+
+          # Set environment variables for Electron Builder code signing
+      - name: Set environment for code signing
+        run: |
+          echo "CSC_LINK=certificate.p12" >> $GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=${{ secrets.CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Create .env file
+        run: |
+          echo "MONO_ENV_FIREBASE_API_KEY=${{ secrets.PROD_FIREBASE_API_KEY }}" >> .env
+          echo "MONO_ENV_FIREBASE_AUTH_DOMAIN=${{ secrets.PROD_FIREBASE_AUTH_DOMAIN }}" >> .env
+          echo "MONO_ENV_FIREBASE_PROJECT_ID=${{ secrets.PROD_FIREBASE_PROJECT_ID }}" >> .env
+          echo "MONO_ENV_FIREBASE_STORAGE_BUCKET=${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}" >> .env
+          echo "MONO_ENV_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.PROD_FIREBASE_MESSAGING_SENDER_ID }}" >> .env
+          echo "MONO_ENV_FIREBASE_APP_ID=${{ secrets.PROD_FIREBASE_APP_ID }}" >> .env
+          echo "MONO_ENV_FIREBASE_MEASUREMENT_ID=${{ secrets.PROD_FIREBASE_MEASUREMENT_ID }}" >> .env
+          echo "MONO_ENV_HOMEPAGE_DOMAIN=${{ secrets.PROD_HOMEPAGE_DOMAIN }}" >> .env
+          echo "MONO_ENV_API_URL=${{ secrets.PROD_API_URL }}" >> .env
+          echo "MONO_ENV_APP_VERSION=${{ secrets.PROD_APP_VERSION }}" >> .env
+          echo "MONO_ENV_MIXPANEL_TOKEN=${{ secrets.PROD_MIXPANEL_TOKEN }}" >> .env
+          echo "MONO_ENV_PROTOCOL=${{ secrets.PROD_PROTOCOL }}" >> .env
+          echo "MONO_ENV_PADDLE_CLIENT_KEY=${{ secrets.PROD_PADDLE_CLIENT_KEY }}" >> .env
+
+      # Extract the version from the Git tag
+      - name: Get tag version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}  # Get the tag without the 'refs/tags/' prefix
+          VERSION_NO_V=${VERSION#v}         # Remove the leading 'v'
+          echo "VERSION_NO_V=$VERSION_NO_V" >> $GITHUB_ENV
+
+      - name: Install Google Cloud SDK
+        run: |
+          brew install google-cloud-sdk
+          gcloud version
+
+      - name: Authenticate Google Cloud SDK
+        run: |
+          echo "${{ secrets.PROD_GOOGLE_APPLICATION_CREDENTIALS_BASE64 }}" | base64 --decode > $HOME/google-application-credentials.json
+          gcloud auth activate-service-account --key-file=$HOME/google-application-credentials.json
+          gcloud config set project ${{ secrets.PROD_FIREBASE_PROJECT_ID }}
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Set Firebase CLI Project
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS=$HOME/google-application-credentials.json
+          firebase use --add ${{ secrets.PROD_FIREBASE_PROJECT_ID }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build the Electron app
+        run: npm run build:mac:prod
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      # Assuming the dmg file is generated in the dist directory
+      - name: Upload .dmg and .yml files to Firebase Storage
+        run: |
+          # Upload Artifacts
+          gsutil cp "./dist/Mono Mail-${{ env.VERSION_NO_V }}-universal.dmg" "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal.dmg"
+          gsutil cp "./dist/Mono Mail-${{ env.VERSION_NO_V }}-universal.dmg.blockmap" "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal.dmg.blockmap"
+          gsutil cp "./dist/Mono Mail-${{ env.VERSION_NO_V }}-universal-mac.zip" "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal-mac.zip"
+          gsutil cp "./dist/Mono Mail-${{ env.VERSION_NO_V }}-universal-mac.zip.blockmap" "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal-mac.zip.blockmap"
+          gsutil cp "./dist/latest-mac.yml" "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/latest-mac.yml"
+
+          # Make the files publicly accessible
+          gsutil acl ch -u AllUsers:R "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal.dmg"
+          gsutil acl ch -u AllUsers:R "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal-mac.zip"
+          gsutil acl ch -u AllUsers:R "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal.dmg.blockmap"
+          gsutil acl ch -u AllUsers:R "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/Mono Mail-${{ env.VERSION_NO_V }}-universal-mac.zip.blockmap"
+          gsutil acl ch -u AllUsers:R "gs://${{ secrets.PROD_FIREBASE_STORAGE_BUCKET }}/releases/latest-mac.yml"
+
+      - name: Deploy Firebase Hosting
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS=$HOME/google-application-credentials.json
+          firebase deploy --only hosting
+
+      - name: Remove credentials file
+        if: success() || failure()
+        run: |
+          rm $HOME/google-application-credentials.json

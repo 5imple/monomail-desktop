@@ -1,0 +1,94 @@
+import { AudioType } from '@/renderer/app/lib/soundManager';
+
+// Supported languages type and definition
+export type SupportedLanguage = 'en' | 'ko' | 'ja' | 'zh' | 'es' | 'fr' | 'de';
+
+export const supportedLanguages: Set<SupportedLanguage> = new Set(['en', 'ko', 'ja', 'es']);
+
+export type NotificationType = 'PRIMARY' | 'INBOX' | 'OFF';
+
+export type SplitCategoryPreferences = {
+  showUpdates: boolean;
+  showSocial: boolean;
+  showPromotions: boolean;
+  showForums: boolean;
+};
+
+export type ThreadListDisplayPreferences = {
+  showAvatar: boolean;
+  showSnippet: boolean;
+  showLabels: boolean;
+  showAttachments: boolean;
+};
+// User preference interface
+export interface UserPreference {
+  language: SupportedLanguage;
+  appearance: {
+    theme: 'light' | 'dark' | 'black' | 'pure-light' | 'system';
+    density: 'compact' | 'cozy'; // 1: compact, 2: cozy
+  };
+  compose: {
+    cancelWindow: number;
+    fullscreen: boolean;
+  };
+  account: {
+    accentColor: Record<string, string>;
+  };
+  signature: {
+    includeInReplies: boolean;
+    includeInForwards: boolean;
+    includeInNewMessages: boolean;
+  };
+  display: {
+    inbox: {
+      category: Record<string, SplitCategoryPreferences>;
+    };
+    threadList: ThreadListDisplayPreferences;
+  };
+  notification: {
+    alertSound: AudioType;
+    watchNotification: Record<string, NotificationType>;
+    marketingEmails: boolean;
+    securityEmails: boolean;
+  };
+  system: {
+    openAtLogin: boolean;
+  };
+}
+
+// User account interface
+export interface MonoAccount {
+  uid: string;
+  displayName: string;
+  provider: 'google' | 'microsoft';
+  email: string;
+  profileImageUrl: string;
+  primary: boolean;
+  scopes: string[];
+  isExpired: boolean;
+}
+
+// Mono user interface
+export interface MonoMember {
+  uid: string;
+  displayName: string;
+  email: string;
+  primaryUid: string;
+  memberName: string;
+  profileImageUrl: string;
+  timezone: string;
+  demographics: {
+    role: string;
+    emailUsage: string;
+    discoverySource: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Response type with modified structure
+export type GetMonoAccountResponse = {
+  member?: MonoMember;
+  accounts: MonoAccount[];
+  relatedMembers: Array<MonoMember>;
+};

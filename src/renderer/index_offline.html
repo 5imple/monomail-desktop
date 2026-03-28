@@ -1,0 +1,164 @@
+<html>
+  <head>
+    <style>
+      /* Tailwind-inspired design tokens from your CSS */
+      :root {
+        --background: 0 0% 99%;
+        --foreground: 240 10% 0%;
+        --muted: 240 4.8% 95.9%;
+        --muted-foreground: 240 3.8% 65.1%;
+
+        --sans-serif-font:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+          sans-serif, ui-sans-serif, system-ui;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: 30 0% 10%;
+          --foreground: 0 0% 98%;
+          --muted: 30 0% 12%;
+          --muted-foreground: 240 5% 64.9%;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+        user-select: none;
+        -webkit-font-smoothing: antialiased;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        font-family: var(--sans-serif-font);
+        font-size: 14px;
+        font-weight: 500;
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
+      }
+
+      .no-drag {
+        -webkit-app-region: no-drag;
+      }
+
+      .drag {
+        -webkit-app-region: drag;
+      }
+
+      header {
+        position: absolute;
+        left: 0;
+        top: 0;
+        right: 0;
+        height: 64px;
+        -webkit-app-region: drag;
+      }
+
+      .flex {
+        display: flex;
+      }
+
+      .flex-col {
+        flex-direction: column;
+      }
+
+      .items-center {
+        align-items: center;
+      }
+
+      .justify-center {
+        justify-content: center;
+      }
+
+      .absolute {
+        position: absolute;
+      }
+
+      .bottom-0 {
+        bottom: 0;
+      }
+
+      .left-0 {
+        left: 0;
+      }
+
+      .right-0 {
+        right: 0;
+      }
+
+      .top-0 {
+        top: 0;
+      }
+
+      .text-md {
+        font-size: 1rem;
+        line-height: 1.5rem;
+      }
+
+      .text-muted-foreground {
+        color: hsl(var(--muted-foreground));
+      }
+
+      .reload-button {
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        background-color: hsl(var(--foreground));
+        color: hsl(var(--background));
+        border: none;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+        font-weight: 550;
+        transition: opacity 0.2s;
+      }
+
+      .reload-button:hover {
+        opacity: 0.8;
+      }
+
+      /* Ensure scrollbars don't appear */
+      ::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body class="no-drag h-screen">
+    <!-- Header placeholder - you would need to replace with BaseHeader equivalent -->
+    <header class="drag"></header>
+
+    <div class="absolute bottom-0 left-0 right-0 top-0 flex flex-col items-center justify-center">
+      <div class="text-md">You're offline</div>
+      <div class="text-md text-muted-foreground">
+        Try checking your connection or reconnecting to Wi-Fi
+      </div>
+      <button onclick="tryReload()" class="reload-button no-drag">Reload</button>
+    </div>
+
+    <script>
+      function tryReload() {
+        const params = new URLSearchParams(window.location.search);
+        const appURL = params.get('appUrl');
+        window.location = appURL;
+      }
+
+      // Automatically try to reload when network returns.
+      window.addEventListener('online', tryReload);
+
+      // Set up OS-specific things.
+      document.addEventListener('DOMContentLoaded', () => {
+        const isWindows = /(win64)|(wow64)|(windows)/i.test(navigator.userAgent);
+        if (isWindows) {
+          document.body.classList.add('windows');
+        }
+
+        // Automatically try to reload once after a short delay
+
+        tryReload();
+      });
+    </script>
+  </body>
+</html>

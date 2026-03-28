@@ -1,0 +1,354 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+import { systemManager } from '@/main/services/mangers/system/SystemManager';
+import { windowManager } from '@/main/services/mangers/window/WindowManager';
+import { darkBackgroundColor, lightBackgroundColor } from '@/main/utils/contants';
+import { CommandType } from '@/renderer/app/types';
+import { is } from '@electron-toolkit/utils';
+import log from 'electron-log';
+import {
+  app,
+  BrowserWindow,
+  BrowserWindowConstructorOptions,
+  dialog,
+  globalShortcut,
+  nativeTheme,
+  screen,
+  shell
+} from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
+
+export interface IAppWindowOptions {
+  route?: string;
+  options?: Partial<BrowserWindowConstructorOptions>;
+  commands?: Array<CommandType>;
+  messages?: Array<{ channel: string; args: any[] }>;
+  isOffline?: boolean;
+  fullSizeOnCreation?: boolean;
+}
+
+// Function to smoothly resize a window to a target size
+function smoothResizeToTarget(
+  window: BrowserWindow,
+  targetBounds: Electron.Rectangle,
+  step = 10,
+  interval = 16
+) {
+  const currentBounds = window.getBounds();
+
+  const dx = (targetBounds.width - currentBounds.width) / step;
+  const dy = (targetBounds.height - currentBounds.height) / step;
+  const dxPos = (targetBounds.x - currentBounds.x) / step;
+  const dyPos = (targetBounds.y - currentBounds.y) / step;
+
+  let currentStep = 0;
+
+  const intervalId = setInterval(() => {
+    currentStep += 1;
+
+    if (currentStep > step) {
+      clearInterval(intervalId);
+      window.setBounds(targetBounds); // Ensure it snaps to the final size
+      return;
+    }
+
+    window.setBounds({
+      width: Math.round(currentBounds.width + dx * currentStep),
+      height: Math.round(currentBounds.height + dy * currentStep),
+      x: Math.round(currentBounds.x + dxPos * currentStep),
+      y: Math.round(currentBounds.y + dyPos * currentStep)
+    });
+  }, interval);
+}
+
+class AppWindow extends BrowserWindow {
+  private commands: Array<CommandType> = [];
+  private messages: Array<{ channel: string; args: any[] }> = [];
+  private route: string;
+  private isOffline: boolean;
+  private isFirstShow: boolean = true;
+  private fullSizeOnCreation: boolean;
+  private saveBoundsTimeout: NodeJS.Timeout | null = null;
+
+  constructor({
+    route = '/',
+    commands = [],
+    messages = [],
+    options,
+    isOffline = false,
+    fullSizeOnCreation = false
+  }: IAppWindowOptions) {
+    // Get saved window bounds from SystemManager
+    const savedBounds = systemManager.getWindowBounds();
+
+    // Validate saved bounds to ensure they're reasonable
+    const defaultWidth = 1400;
+    const defaultHeight = 900;
+    const minWidth = 680;
+    const minHeight = 580;
+
+    let windowWidth = defaultWidth;
+    let windowHeight = defaultHeight;
+    let windowX: number | undefined;
+    let windowY: number | undefined;
+
+    if (savedBounds) {
+      // Ensure width and height are within reasonable bounds
+      windowWidth = Math.max(savedBounds.width, minWidth);
+      windowHeight = Math.max(savedBounds.height, minHeight);
+
+      // Only set position if both x and y are defined and reasonable
+      if (savedBounds.x !== undefined && savedBounds.y !== undefined) {
+        const displayBounds = screen.getPrimaryDisplay().bounds;
+        // Ensure window is at least partially visible on screen
+        if (
+          savedBounds.x >= -windowWidth + 100 &&
+          savedBounds.x < displayBounds.width - 100 &&
+          savedBounds.y >= -windowHeight + 100 &&
+          savedBounds.y < displayBounds.height - 100
+        ) {
+          windowX = savedBounds.x;
+          windowY = savedBounds.y;
+        }
+      }
+    }
+
+    const windowOptions: BrowserWindowConstructorOptions = {
+      width: windowWidth,
+      height: windowHeight,
+      x: windowX,
+      y: windowY,
+      minWidth,
+      minHeight,
+      show: false,
+      autoHideMenuBar: true,
+      titleBarStyle: 'hidden',
+      webPreferences: {
+        preload: path.join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        nodeIntegration: false
+      },
+      // backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackgroundColor : lightBackgroundColor,
+      vibrancy: 'fullscreen-ui',
+      visualEffectState: 'followWindow',
+      trafficLightPosition: { x: 12, y: 16 },
+      ...options
+    };
+
+    super(windowOptions);
+
+    this.route = route;
+    this.isOffline = isOffline;
+    this.fullSizeOnCreation = fullSizeOnCreation;
+
+    this.on('ready-to-show', () => {
+      this.show();
+      if (app.dock) app.dock.show();
+    });
+
+    this.on('show', () => {
+      // Only apply full size animation when showing for the first time
+      if (this.isFirstShow && this.fullSizeOnCreation) {
+        this.maximizeWithAnimation();
+        this.isFirstShow = false;
+      }
+    });
+
+    // Try loading from remote first, with fallback to local
+    this.loadContent();
+
+    // Register global shortcuts for Cmd+W (hide) and Cmd+Q (quit)
+    this.on('focus', () => {
+      this.webContents.send('renderer:native:focus');
+      globalShortcut.register('CommandOrControl+W', () => {
+        const mainWindow = windowManager.getMainAppWindow();
+        if (mainWindow && this.id === mainWindow.id) {
+          this.hide(); // Hide the window on Cmd+W
+        } else {
+          this.close(); // Close other windows
+        }
+      });
+      globalShortcut.register('CommandOrControl+Q', () => {
+        systemManager.setMainLayoutReady(false);
+        windowManager.closeAll();
+      });
+    });
+
+    this.on('blur', () => {
+      this.webContents.send('renderer:native:blur');
+      globalShortcut.unregister('CommandOrControl+W');
+      globalShortcut.unregister('CommandOrControl+Q');
+    });
+
+    this.on('closed', () => {
+      globalShortcut.unregister('CommandOrControl+W');
+      globalShortcut.unregister('CommandOrControl+Q');
+    });
+
+    // Save window bounds when resized or moved (throttled to avoid excessive writes)
+    this.on('resize', () => {
+      this.throttleSaveBounds();
+    });
+
+    this.on('move', () => {
+      this.throttleSaveBounds();
+    });
+
+    this.on('close', (event) => {
+      const mainWindow = windowManager.getMainAppWindow();
+      if (mainWindow && this.id === mainWindow.id) {
+        if (!systemManager.getIsQuitting()) {
+          event.preventDefault(); // Prevent the window from closing
+          this.hide(); // Hide the window instead
+        } else {
+          windowManager.closeAppWindow(this.id);
+        }
+      } else {
+        windowManager.closeAppWindow(this.id);
+      }
+    });
+
+    if (commands || messages) {
+      if (systemManager.getMainLayoutReady()) {
+        for (const command of commands) {
+          this.webContents.send('renderer:command:trigger', command);
+        }
+        for (const message of messages) {
+          this.webContents.send(message.channel, ...message.args);
+        }
+      } else {
+        this.commands.push(...commands);
+        this.messages.push(...messages);
+      }
+    }
+    this.webContents.setBackgroundThrottling(false);
+
+    this.webContents.setWindowOpenHandler(({ url, features }) => {
+      if (
+        url.includes(import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN) ||
+        url.includes(import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN)
+      ) {
+        shell.openExternal(url);
+      } else {
+        shell.openExternal(url);
+      }
+
+      return { action: 'deny' };
+    });
+  }
+
+  // Method to maximize the window with a smooth animation
+  private maximizeWithAnimation(): void {
+    // Get the screen size for the display containing the window
+    const { bounds } = screen.getDisplayMatching(this.getBounds());
+
+    // Create target bounds for full-screen size (keeping some margin if needed)
+    const targetBounds = {
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height
+    };
+
+    // Apply smooth resize animation
+    smoothResizeToTarget(this, targetBounds);
+  }
+
+  // Main method to handle content loading with fallback
+  private loadContent(): void {
+    // Always try to load from remote first (unless explicitly offline mode)
+    if (!this.isOffline) {
+      this.loadRemoteURL(this.route);
+
+      // Set up error handler for failed remote loading
+      this.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+        // If remote loading fails, try loading from local
+        log.error(`Failed to load remote content: ${errorDescription}. Trying local fallback...`);
+        this.loadLocalContent();
+      });
+    } else {
+      // If offline mode is explicitly set, go straight to local content
+      this.loadLocalContent();
+    }
+  }
+
+  // Helper method to load remote URL based on environment
+  private loadRemoteURL(route: string): void {
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      this.loadURL(process.env['ELECTRON_RENDERER_URL'] + route);
+    } else {
+      this.loadURL(`https://${import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN}${route}`);
+    }
+  }
+
+  // Helper method to load content from local filesystem
+  private loadLocalContent(route: string = '/'): void {
+    const localPath = path.join(__dirname, '../renderer', 'index_offline.html');
+
+    // Use Electron's loadFile method with proper options for query parameters
+    this.loadFile(localPath, {
+      query: {
+        appUrl: `https://${import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN}${route}`
+      }
+    });
+  }
+
+  private throttleSaveBounds() {
+    if (!this.isDestroyed()) {
+      // Clear existing timeout
+      if (this.saveBoundsTimeout) {
+        clearTimeout(this.saveBoundsTimeout);
+      }
+
+      // Set new timeout to save bounds after 500ms of inactivity
+      this.saveBoundsTimeout = setTimeout(() => {
+        if (!this.isDestroyed()) {
+          const bounds = this.getBounds();
+          systemManager.saveWindowBounds(bounds);
+        }
+        this.saveBoundsTimeout = null;
+      }, 500);
+    }
+  }
+
+  public dispose() {
+    // Clear any pending save timeout
+    if (this.saveBoundsTimeout) {
+      clearTimeout(this.saveBoundsTimeout);
+      this.saveBoundsTimeout = null;
+    }
+    this.destroy();
+  }
+
+  public triggerCommand(command: CommandType) {
+    this.show();
+    this.webContents.send('renderer:command:trigger', command);
+  }
+
+  public triggerMessage(message: { channel: string; args: any[] }) {
+    this.show();
+    this.webContents.send(message.channel, ...message.args);
+  }
+
+  public triggerCommandQueue() {
+    this.show();
+    while (this.commands.length > 0) {
+      const command = this.commands.shift();
+      if (command) {
+        this.triggerCommand(command);
+      }
+    }
+  }
+  public triggerMessageQueue() {
+    this.show();
+    while (this.messages.length > 0) {
+      const message = this.messages.shift();
+      if (message) {
+        this.triggerMessage(message);
+      }
+    }
+  }
+}
+
+export default AppWindow;

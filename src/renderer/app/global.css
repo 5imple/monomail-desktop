@@ -1,0 +1,230 @@
+.reset-selection {
+  * {
+    user-select: auto !important;
+    /* cursor: auto; */
+  }
+}
+
+.mono-content-reset {
+  * {
+    display: revert;
+    box-sizing: unset;
+    user-select: auto !important;
+    word-break: break-word;
+    cursor: auto;
+  }
+  p {
+    margin: 1em 0;
+  }
+  a,
+  button {
+    cursor: pointer;
+    color: inherit;
+  }
+
+  ol,
+  ul,
+  menu {
+    list-style: revert;
+    margin: revert;
+    padding: revert;
+  }
+  table {
+    border-collapse: inherit;
+    box-sizing: border-box;
+    text-indent: initial;
+    unicode-bidi: isolate;
+    border-spacing: 0;
+    border: none;
+    /* background-color: transparent !important; */
+    margin: '';
+    border-color: hsl(var(--border));
+  }
+  tbody,
+  tr,
+  td,
+  th {
+    /* background-color: unset !important; */
+  }
+
+  .container {
+    all: revert;
+  }
+  img {
+    object-fit: contain;
+  }
+  /* img {
+    width: revert-layer;
+    height: revert-layer;
+  } */
+}
+
+.mono-content {
+  /* background-color: transparent; */
+  /* background-color: white; */
+  /* color: black; */
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+  /* color: hsl(var(--foreground)); */
+}
+
+@property --wipe-position {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 100%;
+}
+
+.wipe {
+  --wipe-position: 100%;
+  --gradient-length: 30%;
+  -webkit-mask-image: linear-gradient(
+    to left,
+    transparent var(--wipe-position),
+    black calc(var(--wipe-position) + var(--gradient-length)),
+    black
+  );
+
+  transition: --wipe-position 2000ms cubic-bezier(0, 0.55, 0.45, 1);
+}
+
+.wipe-active {
+  --wipe-position: calc(-1 * var(--gradient-length));
+}
+
+.appearance-wipe {
+  --wipe-position: 100%;
+  --gradient-length: 30%;
+  -webkit-mask-image: linear-gradient(
+    to top left,
+    transparent var(--wipe-position),
+    black calc(var(--wipe-position) + var(--gradient-length)),
+    black
+  );
+
+  transition: --wipe-position 700ms cubic-bezier(0, 0.55, 0.45, 1);
+}
+
+.appearance-wipe-active {
+  --wipe-position: calc(-1 * var(--gradient-length));
+}
+
+/* Base styles for dark mode emails - force text to be light */
+.dark-mode-email {
+  color-scheme: dark !important;
+  color: #c9cccf !important;
+}
+
+/* Force default text color on all standard text elements */
+.dark-mode-email p,
+.dark-mode-email div,
+.dark-mode-email span,
+.dark-mode-email h1,
+.dark-mode-email h2,
+.dark-mode-email h3,
+.dark-mode-email h4,
+.dark-mode-email h5,
+.dark-mode-email h6,
+.dark-mode-email td,
+.dark-mode-email th,
+.dark-mode-email li,
+.dark-mode-email font {
+  color: #c9cccf !important;
+}
+/* Ensure dark mode for print sections if they exist */
+@media print {
+  .dark-mode-email {
+    color: #000 !important;
+    background: #fff !important;
+  }
+}
+
+/* Ensure images display properly */
+.mono-signature img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+}
+
+/* Preserve Outlook-specific formatting */
+[data-outlook-element='true'] {
+  /* Outlook uses MSO- prefixed styles, we'll keep them intact */
+}
+
+/* Preserve Gmail-specific formatting */
+[data-gmail-element='true'] {
+  /* Gmail uses specific classes, we'll keep them intact */
+}
+
+/* Preserve Apple Mail-specific formatting */
+[data-apple-mail-element='true'] {
+  /* Apple Mail uses specific classes, we'll keep them intact */
+}
+
+/* Preserve font size and family */
+.mono-signature [style*='font-size'],
+.mono-signature [style*='font-family'] {
+  /* Keep original font styling */
+}
+
+/* Preserve exact spacing */
+.mono-signature [data-preserve-linebreak='true'] {
+  display: block !important;
+}
+
+.mono-signature [data-preserve-block='true'] {
+  display: block !important;
+}
+
+.mono-signature [data-preserve-para='true'] {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Ensure line breaks are preserved in email content */
+.reset-selection br[data-preserve-linebreak='true'] {
+  display: block !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.reset-selection p {
+  margin: 1em 0 !important;
+  line-height: 1.5 !important;
+}
+
+/* Ensure hard breaks are properly displayed */
+.reset-selection br {
+  display: block !important;
+  line-height: 1.5 !important;
+}
+
+.keyboard-focused {
+  position: relative;
+  z-index: 10;
+}
+
+.keyboard-focused::after {
+  /* content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 1px solid red;
+  z-index: 11;
+  pointer-events: none; */
+}
+
+[data-nav-area].area-focused {
+  /* border: 1px dashed rgba(var(--primary-rgb), 0.3); */
+}
+
+.scale-to-fit {
+  transform-origin: top left;
+  /* transition: transform 0.2s ease; */
+}
+
+.scale-to-fit.scaled {
+  transform: scale(var(--scale-factor, 1));
+}
