@@ -5,6 +5,7 @@
   "main": "./out/main/index.js",
   "author": "Open source contributors",
   "homepage": "https://github.com/erickim20/monomail-desktop",
+  "license": "MIT",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",

@@ -29,4 +29,4 @@ Packaging and code signing are configured for your own `appId`, updater URL, and
 
 ## License
 
-Add a `LICENSE` file for your fork if you distribute the app.
+This project is licensed under the [MIT License](LICENSE).
