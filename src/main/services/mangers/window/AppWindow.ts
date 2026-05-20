@@ -224,14 +224,25 @@ class AppWindow extends BrowserWindow {
     }
     this.webContents.setBackgroundThrottling(false);
 
-    this.webContents.setWindowOpenHandler(({ url, features }) => {
-      if (
-        url.includes(import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN) ||
-        url.includes(import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN)
-      ) {
-        shell.openExternal(url);
-      } else {
-        shell.openExternal(url);
+    this.webContents.setWindowOpenHandler(({ url }) => {
+      // Restrict shell.openExternal to safe URL schemes. Without this guard,
+      // a sender-controlled anchor (every email anchor gets target="_blank"
+      // via setAnchorAttributes) can hand a URL like `file:///Applications/
+      // Calculator.app`, `smb://attacker/payload.exe`, or `vbscript:` to the
+      // OS — that's a 1-click RCE from a crafted email message.
+      const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+      try {
+        const parsed = new URL(url);
+        if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+          log.warn(
+            `Blocked window-open with disallowed protocol: ${parsed.protocol} (url=${parsed.host || '<no-host>'})`
+          );
+          return { action: 'deny' };
+        }
+        shell.openExternal(parsed.toString());
+      } catch {
+        // Malformed URL — refuse rather than guess.
+        log.warn('Blocked window-open with un-parseable URL');
       }
 
       return { action: 'deny' };

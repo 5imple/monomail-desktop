@@ -1,26 +1,52 @@
 /**
- * Highlight search terms in thread list text (subject or snippet)
- * @param {string} text - The text to highlight
+ * Escape HTML metacharacters so untrusted input can't introduce markup
+ * when the result is later mounted via dangerouslySetInnerHTML.
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Highlight search terms in thread list text (subject or snippet).
+ *
+ * The result is mounted via dangerouslySetInnerHTML in ThreadListItem /
+ * ThreadListCozyItem / ThreadListDenseItem / DisplayPanelHeader, so input
+ * MUST be HTML-escaped before any markup is injected — otherwise a sender
+ * can deliver `<img src=x onerror=…>` as a subject and execute script on
+ * every recipient (XSS → renderer compromise → token exfiltration).
+ *
+ * @param {string} text - The plain-text subject or snippet (untrusted)
  * @param {string} searchQuery - The search query string
- * @returns {string} - HTML with highlighted search terms
+ * @returns {string} - Escaped HTML with highlight spans around matches
  */
 export function highlightThreadText(text: string, searchQuery: string): string {
-  if (!searchQuery || !text) return text;
+  if (!text) return '';
+
+  // Always escape first — the return value is treated as HTML by callers.
+  const escapedText = escapeHtml(text);
+
+  if (!searchQuery) return escapedText;
 
   // Extract search terms from the query
   const searchTerms = extractSearchTerms(searchQuery);
-  let highlightedText = text;
+  let highlightedText = escapedText;
 
   for (const term of searchTerms) {
     if (term.length < 2) continue; // Skip very short terms
 
-    // Escape special regex characters in the search term
-    const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Escape the search term as HTML too, then as a regex literal — the
+    // highlight spans wrap matches of the *escaped* form because that's
+    // what's in highlightedText now.
+    const escapedHtmlTerm = escapeHtml(term);
+    const escapedRegexTerm = escapedHtmlTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    // Create a case-insensitive regex
-    const regex = new RegExp(`(${escapedTerm})`, 'gi');
+    const regex = new RegExp(`(${escapedRegexTerm})`, 'gi');
 
-    // Replace with highlighted version - using specific class for thread list
     highlightedText = highlightedText.replace(
       regex,
       '<span class="bg-amber-300 dark:bg-yellow-80 text-black rounded-sm select-text">$1</span>'

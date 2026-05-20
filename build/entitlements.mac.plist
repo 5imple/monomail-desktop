@@ -2,24 +2,39 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <!--
+      Hardened Runtime entitlements. Removed:
+        - cs.allow-unsigned-executable-memory : defeated the entire purpose
+          of hardened runtime (let injected code execute unsigned pages).
+        - cs.allow-dyld-environment-variables : let DYLD_INSERT_LIBRARIES
+          hijack the process at launch.
+        - files.home-dir.read-write : broader than the file-picker entitlement
+          below and not required for normal mail-client behavior.
+      Added:
+        - network.client : explicit outbound network entitlement. Previously
+          the app worked only because app-sandbox is disabled — declaring
+          this entitlement makes the requirement explicit and is required
+          for future re-sandboxing.
+    -->
+
+    <!-- V8 needs JIT. -->
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-    <true/>
-    <!-- Disable sandboxing for general access -->
+
+    <!-- Sandboxing disabled (legacy choice; revisit). -->
     <key>com.apple.security.app-sandbox</key>
     <false/>
 
-    <!-- Permissions for file access -->
+    <!-- Outbound network for mail / Firebase / analytics. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- File access for attachments + downloads. -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
     <key>com.apple.security.files.bookmarks.app-scope</key>
-    <true/>
-    <key>com.apple.security.files.home-dir.read-write</key>
     <true/>
   </dict>
 </plist>
