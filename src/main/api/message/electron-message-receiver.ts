@@ -76,7 +76,6 @@ function readCredentials(): any | null {
   if (legacy) {
     log.info('readCredentials: migrating legacy plaintext credentials → encrypted');
     writeCredentials(legacy);
-    // @ts-expect-error electron-store types disallow `delete` of non-optional keys
     store.delete('credentials');
     return legacy;
   }
@@ -88,7 +87,6 @@ function writeCredentials(value: any): void {
     if (safeStorage.isEncryptionAvailable()) {
       const enc = safeStorage.encryptString(JSON.stringify(value)).toString('base64');
       store.set('credentialsEnc', enc);
-      // @ts-expect-error electron-store types disallow `delete` of non-optional keys
       store.delete('credentials');
       return;
     }
