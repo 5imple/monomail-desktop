@@ -95,12 +95,15 @@ export function registerAppEventHandlers() {
         "form-action 'self'"
       ].join('; ');
 
+      // Note: previously this also set X-Frame-Options: DENY. Combined with
+      // `frame-src 'self'` in CSP it produced a contradictory policy and
+      // blocked legitimate iframe-based email rendering (a common
+      // sandboxing pattern). CSP is authoritative; XFO is no longer set.
       callback({
         responseHeaders: {
           ...details.responseHeaders,
           'Access-Control-Allow-Headers': ['*'],
-          'Content-Security-Policy': [csp],
-          'X-Frame-Options': ['DENY']
+          'Content-Security-Policy': [csp]
         }
       });
     });
@@ -151,20 +154,37 @@ export function registerAppEventHandlers() {
     systemManager.setIsQuitting(true);
     event.preventDefault();
 
-    try {
-      if (authManager.getIdToken() && systemManager.getStrictPubSub()) {
-        await mailApi.stopAllCloudPubSub();
+    // Race cleanup against a short timeout. Without this, a stalled
+    // network call (e.g. mailApi.stopAllCloudPubSub against an unreachable
+    // server) blocks shutdown indefinitely — the user can only escape via
+    // force-quit. Five seconds is plenty for an HTTP round-trip; if it
+    // takes longer, we accept a slightly dirty shutdown.
+    const SHUTDOWN_TIMEOUT_MS = 5000;
+    const cleanup = (async () => {
+      try {
+        if (authManager.getIdToken() && systemManager.getStrictPubSub()) {
+          await mailApi.stopAllCloudPubSub();
+        }
+        const cancellationToken = updateManager.getCancellationToken();
+        if (cancellationToken) {
+          cancellationToken.cancel();
+        }
+      } catch (error) {
+        log.error('Error during cleanup:', error);
       }
+    })();
 
-      const cancellationToken = updateManager.getCancellationToken();
-      if (cancellationToken) {
-        cancellationToken.cancel();
-      }
-    } catch (error) {
-      log.error('Error during cleanup:', error);
-    } finally {
-      app.quit(); // Call app.quit() after cleanup
-    }
+    await Promise.race([
+      cleanup,
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          log.warn(`before-quit cleanup exceeded ${SHUTDOWN_TIMEOUT_MS}ms — quitting anyway`);
+          resolve();
+        }, SHUTDOWN_TIMEOUT_MS)
+      )
+    ]);
+
+    app.quit();
   });
 
   app.on('open-url', async (event, url) => {

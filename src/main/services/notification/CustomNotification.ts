@@ -46,19 +46,38 @@ class CustomNotification extends EventEmitter {
       window.show();
     });
 
-    const filepath = path.join(
-      __dirname,
-      `../renderer/notification.html?type=${options.type}&id=${options.id}&data=${options.data}&from=${options.from}`
-    );
-    window.loadURL(`file://${filepath}`);
+    // Build the notification URL with each option encoded individually.
+    // FCM-controlled values (data, from, type) come from push payloads —
+    // ultimately from sender-controlled content — so they were a script
+    // injection vector when concatenated raw into a `file://` URL. The
+    // notification window is sandbox:false, so any script that loads from
+    // `file://` has elevated privileges.
+    const filepath = path.join(__dirname, '../renderer/notification.html');
+    const params = new URLSearchParams({
+      type: String(options.type ?? ''),
+      id: String(options.id ?? ''),
+      data: String(options.data ?? ''),
+      from: String(options.from ?? '')
+    });
+    window.loadURL(`file://${filepath}?${params.toString()}`);
 
     window.on('closed', () => {
       this.window = null;
     });
 
     window.webContents.setWindowOpenHandler((details) => {
-      shell.openExternal(details.url);
-
+      // Same hardening as AppWindow.setWindowOpenHandler — only allow safe
+      // schemes through to shell.openExternal so a malicious notification
+      // body can't launch `file://` / `smb://` / `vbscript:` URLs.
+      const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+      try {
+        const parsed = new URL(details.url);
+        if (ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+          shell.openExternal(parsed.toString());
+        }
+      } catch {
+        // ignore unparseable URLs
+      }
       return { action: 'deny' };
     });
 

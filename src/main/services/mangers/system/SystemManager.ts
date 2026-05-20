@@ -241,14 +241,12 @@ class SystemManager {
     const isFirstRun = this.settingsStore.get('firstRun');
 
     if (isFirstRun) {
-      // Only on first run, set login items according to default
-      // if (app.isPackaged) {
-      app.setLoginItemSettings({
-        openAtLogin: true,
-        openAsHidden: true
-      });
-      log.info('First run: Auto-start initialized to true');
-      // }
+      // First-run default is off. Silently enrolling the app in
+      // launch-at-login is hostile-by-default behavior on macOS/Windows
+      // and is increasingly flagged by users and security software. The
+      // user can opt in from Settings via toggleAutoStart().
+      this.settingsStore.set('autoStartEnabled', false);
+      log.info('First run: auto-start defaults to OFF (user can opt in)');
 
       // Mark first run complete
       this.settingsStore.set('firstRun', false);
@@ -298,12 +296,42 @@ class SystemManager {
   }
 
   async checkNetworkConnectivity(): Promise<boolean> {
+    // Prefer Electron's built-in net status. The previous implementation
+    // pinged https://www.google.com on every connectivity probe — a
+    // metadata leak from a privacy-focused mail client to Google, and a
+    // false signal anyway (google.com is reachable from many networks
+    // where the user's mail backend is not).
     try {
-      // Simple network check
-      await fetch('https://www.google.com', { mode: 'no-cors', cache: 'no-store' });
+      const { net } = await import('electron');
+      if (typeof net.isOnline === 'function' && !net.isOnline()) {
+        this.isOffline = true;
+        return false;
+      }
+    } catch {
+      // Fall through to the fetch probe below if net.isOnline is unavailable.
+    }
+
+    // Fallback: probe our own API origin. If the env isn't set, accept
+    // the optimistic answer rather than leaking traffic to a third party.
+    const apiUrl = import.meta.env.MONO_ENV_API_URL as string | undefined;
+    if (!apiUrl) {
       this.isOffline = false;
       return true;
-    } catch (e) {
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch(apiUrl, {
+        method: 'HEAD',
+        cache: 'no-store',
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      // Any HTTP response — even 4xx — means the network is up enough to
+      // talk to our backend.
+      this.isOffline = !res;
+      return !!res;
+    } catch {
       this.isOffline = true;
       return false;
     }

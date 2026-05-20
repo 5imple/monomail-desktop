@@ -33,7 +33,23 @@ export class UpdateManager {
         ? 'beta'
         : 'latest';
 
-    const firebaseBucketBaseUrl = `https://storage.googleapis.com/${import.meta.env.MONO_ENV_FIREBASE_STORAGE_BUCKET}/releases/`;
+    // Refuse to configure an update feed without an explicit bucket. The
+    // previous code would silently fall back to
+    // `https://storage.googleapis.com//releases/` if the env var was empty,
+    // which `electron-updater` would treat as a valid feed — anything that
+    // 200s on that path is then trusted to install. Failing closed is the
+    // only safe default for an auto-updater.
+    const bucket = import.meta.env.MONO_ENV_FIREBASE_STORAGE_BUCKET;
+    if (!bucket || typeof bucket !== 'string' || !bucket.trim()) {
+      log.error(
+        '[UpdateManager] MONO_ENV_FIREBASE_STORAGE_BUCKET is not set — refusing to configure auto-updater. ' +
+          'Updates are disabled in this build. Set the env var at build time.'
+      );
+      this.setupListeners();
+      return;
+    }
+
+    const firebaseBucketBaseUrl = `https://storage.googleapis.com/${bucket}/releases/`;
 
     this.autoUpdater.channel = channel;
     this.autoUpdater.setFeedURL({

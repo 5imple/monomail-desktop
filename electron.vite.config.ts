@@ -237,7 +237,12 @@ export default defineConfig({
           enabled: false // Disable in dev to avoid 500 errors
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          // Precache hashed static assets only — never HTML. If `*.html` is
+          // precached, a sign-in from a different user on the same browser
+          // can momentarily see the previous user's UI shell from cache
+          // before the auth gate fires. HTML is handled at runtime via the
+          // NetworkFirst rule below.
+          globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
           cleanupOutdatedCaches: true,
           // clientsClaim: true,
           // skipWaiting: false,

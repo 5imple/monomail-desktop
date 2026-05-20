@@ -1,3 +1,7 @@
+# Dev-only updater feed override. Used by electron-updater when
+# `forceDevUpdateConfig = true` (set in UpdateManager during dev runs).
+# Mirrors electron-builder.yml so a dev build never falls back to an
+# attacker-controllable placeholder URL.
 provider: generic
-url: https://example.com/please-configure-your-update-server
+url: https://storage.googleapis.com/${env.MONO_ENV_FIREBASE_STORAGE_BUCKET}/releases/
 updaterCacheDirName: MailDesktop-updater
