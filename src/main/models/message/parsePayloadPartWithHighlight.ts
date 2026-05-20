@@ -1,6 +1,27 @@
+import DOMPurify from 'dompurify';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { transformEmailForDarkMode } from '@/main/models/message/transformEmailForDarkMode';
 import { parsePayloadPart } from '@/main/models/message/utils';
+
+/**
+ * Sanitize a single email-history HTML fragment.
+ *
+ * parsePayloadPart's light-mode branch returns history fragments built from
+ * arbitrary email DOM (`element.outerHTML`) and they get mounted directly via
+ * dangerouslySetInnerHTML in MessageCard. Without sanitization, a quoted
+ * message containing `<script>` or `<img onerror=...>` runs script when the
+ * user clicks "show quoted" — XSS → renderer compromise. The dark-mode
+ * branch already sanitizes via transformEmailForDarkMode; this brings the
+ * light-mode branch up to parity.
+ */
+function sanitizeHistoryFragment(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ['target', 'data-open-modal', 'bgColor', 'color', 'borderColor', 'align'],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'meta', 'base'],
+    FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus']
+  });
+}
 
 // Cache for parsed content
 const parsedContentCache = new Map<string, { content: string; history: string[] }>();
@@ -174,9 +195,13 @@ export function parsePayloadPartWithHighlight(
     content: isDarkMode
       ? transformEmailForDarkMode(rawParsedContent.content, true)
       : rawParsedContent.content,
+    // Always sanitize history fragments. The dark-mode helper already runs
+    // them through DOMPurify; the light-mode branch previously returned raw
+    // outerHTML which is an XSS sink when later mounted via
+    // dangerouslySetInnerHTML in MessageCard.
     history: isDarkMode
       ? rawParsedContent.history.map((history) => transformEmailForDarkMode(history, true))
-      : rawParsedContent.history,
+      : rawParsedContent.history.map((history) => sanitizeHistoryFragment(history)),
     trackingImagesRemoved: rawParsedContent.trackingImagesRemoved,
     trackingDomains: rawParsedContent.trackingDomains
   };
