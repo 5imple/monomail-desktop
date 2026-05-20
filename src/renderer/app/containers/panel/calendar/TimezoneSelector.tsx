@@ -131,7 +131,7 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
                       onSelect={() => handleTimezoneSelect(timezone.id)}
                       className={cn(
                         'flex items-center py-2',
-                        selectedTimeZone === timezone.id && 'bg-accent'
+                        selectedTimeZone === timezone.id && 'bg-accent/10 text-accent'
                       )}
                     >
                       <div className="flex items-center gap-4">
@@ -160,7 +160,7 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
                         onSelect={() => handleTimezoneSelect(userTimeZone)}
                         className={cn(
                           'flex items-center py-2',
-                          selectedTimeZone === userTimeZone && 'bg-accent'
+                          selectedTimeZone === userTimeZone && 'bg-accent/10 text-accent'
                         )}
                       >
                         <div className="flex items-center gap-4">

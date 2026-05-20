@@ -3,6 +3,7 @@ import { UserPreference } from '@/main/api/auth/types';
 import { Button, buttonVariants } from '@/renderer/app/components/ui/button';
 import { Form, FormControl, FormField, FormItem } from '@/renderer/app/components/ui/form';
 import { Switch } from '@/renderer/app/components/ui/switch';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
@@ -199,17 +200,11 @@ export function DisplayInboxForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <div className="mb-4 flex items-start">
-          <div>
-            <h3 className="text-lg font-medium">{t('settings.display.inbox.title')}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t('settings.display.inbox.description')}
-            </p>
-          </div>
-
-          <div className="ml-auto flex gap-2">
-            {/* Account selector */}
-            {accountUids.length > 0 && (
+        <SettingsPageHeader
+          title={t('settings.display.inbox.title')}
+          description={t('settings.display.inbox.description')}
+          action={
+            accountUids.length > 0 ? (
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                 <SelectTrigger variant={'secondary'} className="w-[220px]">
                   <SelectValue
@@ -225,9 +220,9 @@ export function DisplayInboxForm() {
                   ))}
                 </SelectContent>
               </Select>
-            )}
-          </div>
-        </div>
+            ) : undefined
+          }
+        />
         <div>
           <div className="space-y-4">
             {/* Master toggle for category splitting */}

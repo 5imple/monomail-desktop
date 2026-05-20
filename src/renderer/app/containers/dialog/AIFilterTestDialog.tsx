@@ -547,7 +547,7 @@ const AIFilterTestDialog: FC<AIFilterTestDialogProps> = ({
 
           {flowState === 'teaching' && (
             <DialogFooter>
-              <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700">
+              <Button onClick={handleSave} className="w-full">
                 Save
               </Button>
             </DialogFooter>

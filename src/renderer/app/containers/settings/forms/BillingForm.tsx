@@ -3,6 +3,7 @@ import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Switch } from '@/renderer/app/components/ui/switch';
 import PlanSelectionDialog from '@/renderer/app/containers/dialog/PlanSelectionDialog';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { usePlanDetails } from '@/renderer/app/lib/planDetails'; // Updated import
 import { cn } from '@/renderer/app/lib/utils';
@@ -108,22 +109,18 @@ export function BillingForm() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center">
-        <div>
-          <h3 className="text-lg font-medium">{t('settings.billing.title')}</h3>
-          <p className="text-sm text-muted-foreground">{t('settings.billing.description')}</p>
-        </div>
-        {/* {currentPlan && ( */}
-        <div className="ml-auto flex items-center gap-2">
+    <div className="space-y-8">
+      <SettingsPageHeader
+        title={t('settings.billing.title')}
+        description={t('settings.billing.description')}
+        action={
           <PlanSelectionDialog>
             <Button variant={'secondary'}>
               {t('plan_selection.all_plans')} <MonoIcon type={'ChevronRight'} />
             </Button>
           </PlanSelectionDialog>
-        </div>
-        {/* )} */}
-      </div>
+        }
+      />
 
       <div className="flex flex-col space-y-2">
         {/* Render different content based on whether there's an active subscription or one-time purchase */}

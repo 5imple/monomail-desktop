@@ -296,7 +296,7 @@ export const AttachmentCard = memo(function AttachmentCard({
 
   // TODO: animation memoize this
   return (
-    <div className="no-drag relative mt-1 min-w-[320px] space-y-4 rounded-lg border bg-card p-3 shadow-lg duration-500 ease-bouncy-in-out animate-in fade-in-0 slide-in-from-top-8">
+    <div className="no-drag relative mt-1 min-w-[320px] space-y-4 rounded-lg border border-border/60 bg-card p-3 shadow-sm duration-500 ease-bouncy-in-out animate-in fade-in-0 slide-in-from-top-8">
       {
         <div>
           <div className="mb-2 flex items-center justify-between">

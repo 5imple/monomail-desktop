@@ -55,17 +55,22 @@ export function SidebarNav({
   ...props
 }: SidebarNavProps) {
   return (
-    <nav className={cn('flex flex-col space-x-0 space-y-1', className)} {...props}>
+    <nav className={cn('flex flex-col space-x-0 space-y-0.5', className)} {...props}>
       {items.map((item, index) => {
         if (item.type === 'label') {
+          // Newton section label: mono uppercase tracked, subtle muted tone.
           return (
-            <Label className="block px-2 pb-1 pt-5" key={index}>
+            <Label
+              className="block px-2 pb-1 pt-5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground"
+              key={index}
+            >
               {item.title}
             </Label>
           );
         } else if (item.type === 'separator') {
           return <Separator key={index} />;
         } else if (item.type === 'item' && item.id) {
+          const isActive = activeItem === item.id;
           return (
             <Button
               key={item.id}
@@ -73,13 +78,24 @@ export function SidebarNav({
               variant={'ghost'}
               sizeVariant={'sm'}
               className={cn(
-                activeItem === item.id
+                'relative justify-start',
+                isActive
                   ? 'bg-muted-low text-foreground hover:bg-muted-low hover:text-foreground'
-                  : 'hover:bg-muted-low/60',
-                'justify-start'
+                  : 'hover:bg-muted-low/60'
               )}
             >
-              {item.icon && <MonoIcon type={item.icon} className="mr-2 text-foreground/80" />}
+              {/* Newton red leading bar marks the active item — matches the
+                  unread-thread treatment so the whole app reads as one
+                  consistent system. */}
+              {isActive && (
+                <span className="absolute inset-y-1 left-0 w-[2px] rounded-r bg-accent" />
+              )}
+              {item.icon && (
+                <MonoIcon
+                  type={item.icon}
+                  className={cn('mr-2', isActive ? 'text-foreground' : 'text-foreground/70')}
+                />
+              )}
               {item.title}
               {item.badge && (
                 <Badge sizeVariant={'xs'} className="ml-auto rounded-sm">
@@ -280,7 +296,7 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
     <>
       <div className="space-y-6">
         <div className="flex flex-row space-y-0">
-          <aside className="w-[240px] shrink-0 bg-muted p-3 dark:bg-card">
+          <aside className="w-[240px] shrink-0 border-r border-border/60 bg-muted/40 p-3 dark:bg-card">
             <SidebarNav
               className="w-full"
               items={sidebarNavItems}
@@ -288,12 +304,10 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
               onItemClick={setActiveItem}
             />
           </aside>
-          <div className="flex-1 shadow-md">
-            <div className="">
-              <ScrollArea className="h-[720px] w-full" viewportClassName="p-8">
-                {renderPage()}
-              </ScrollArea>
-            </div>
+          <div className="flex-1">
+            <ScrollArea className="h-[720px] w-full" viewportClassName="p-8">
+              {renderPage()}
+            </ScrollArea>
           </div>
         </div>
       </div>

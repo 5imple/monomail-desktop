@@ -246,7 +246,7 @@ export const ContactCard = memo(function ContactCard({
   return (
     <div
       className={cn(
-        'no-drag relative flex h-full min-w-[320px] flex-col overflow-hidden rounded-lg border bg-card shadow-lg transition-all'
+        'no-drag relative flex h-full min-w-[320px] flex-col overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm transition-all'
       )}
     >
       {/* <div className="my flex items-center justify-between p-2">

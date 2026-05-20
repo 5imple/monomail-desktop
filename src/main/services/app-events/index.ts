@@ -6,9 +6,11 @@ import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { protocols } from '@/main/utils/contants';
-import { app, BrowserWindow, powerSaveBlocker, session } from 'electron';
+import { app, BrowserWindow, net, powerSaveBlocker, protocol, session } from 'electron';
 import log from 'electron-log';
+import * as fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 export function registerAppEventHandlers() {
   app.whenReady().then(() => {
@@ -25,6 +27,39 @@ export function registerAppEventHandlers() {
     });
   });
   app.on('ready', () => {
+    // Serve the bundled renderer over a custom scheme so it has a stable
+    // origin (file:// resolves `<base href="/">` to filesystem root, which
+    // breaks every asset URL). Pages requested via this scheme are served
+    // from `out/renderer/`; unknown SPA routes (anything without a file
+    // extension that does not exist on disk) fall back to `index.html`.
+    const rendererDir = path.join(__dirname, '../renderer');
+    protocol.handle('monomail-app', async (request) => {
+      try {
+        const requestURL = new URL(request.url);
+        let pathname = decodeURIComponent(requestURL.pathname);
+        if (pathname === '' || pathname === '/') {
+          pathname = '/index.html';
+        }
+        let filePath = path.join(rendererDir, pathname);
+        // Guard against directory traversal — the resolved path must stay
+        // inside the renderer dir.
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(path.resolve(rendererDir))) {
+          return new Response('Forbidden', { status: 403 });
+        }
+        if (!fs.existsSync(resolved) && !path.extname(pathname)) {
+          // SPA-style fallback: unknown route → serve the SPA shell.
+          filePath = path.join(rendererDir, 'index.html');
+        } else {
+          filePath = resolved;
+        }
+        return await net.fetch(pathToFileURL(filePath).toString());
+      } catch (err) {
+        log.error('[protocol:monomail-app] handler error:', err);
+        return new Response('Not found', { status: 404 });
+      }
+    });
+
     registerIpcHandlers();
     // windowManager.createAppWindow();
 
@@ -55,6 +90,13 @@ export function registerAppEventHandlers() {
       const authDomain = import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN;
       const homepage = import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN;
       const apiOrigin = import.meta.env.MONO_ENV_API_URL;
+      const backendOrigin = (import.meta.env.MONO_ENV_BACKEND_URL || '').trim();
+      const publicDomain = (import.meta.env.MONO_ENV_PUBLIC_DOMAIN || '').trim();
+      // Derive a wss:// origin from backendOrigin so the Phase B WebSocket
+      // push channel works without a separate env var.
+      const backendWs = backendOrigin
+        ? backendOrigin.replace(/^https?:\/\//, 'wss://').replace(/^http:/, 'ws:')
+        : '';
       const connectAllow = [
         "'self'",
         'blob:',
@@ -62,29 +104,37 @@ export function registerAppEventHandlers() {
         authDomain ? `https://${authDomain}` : '',
         homepage ? `https://${homepage}` : '',
         apiOrigin || '',
+        backendOrigin,
+        backendWs,
+        publicDomain,
+        // ---- Pending Phase B removal: still required by Firebase Auth +
+        // FCM SDKs while they're loaded. Drop these once auth + push are
+        // migrated to the on-prem backend.
         'https://*.googleapis.com',
         'https://*.firebaseio.com',
         'https://*.firebasedatabase.app',
-        'https://*.cloudfunctions.net',
-        'https://storage.googleapis.com',
         'https://fcm.googleapis.com',
+        'wss://*.firebaseio.com',
+        'wss://*.googleapis.com',
+        // ----
         'https://*.amplitude.com',
         'https://api.mixpanel.com',
-        'https://*.paddle.com',
-        'wss://*.firebaseio.com',
-        'wss://*.googleapis.com'
+        'https://*.paddle.com'
       ]
         .filter(Boolean)
         .join(' ');
 
       const csp = [
         "default-src 'self'",
-        "script-src 'self' https://www.googletagmanager.com https://*.amplitude.com 'unsafe-inline'",
+        // `googletagmanager.com` removed alongside Firebase Analytics. Kept
+        // amplitude inline-loaded variant.
+        "script-src 'self' https://*.amplitude.com 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com data:",
         // email images are sender-controlled hosts — keep open but stripped
-        // schemes (no `*` for protocol).
-        'img-src https: http: data: blob:',
+        // schemes (no `*` for protocol). `'self'` covers the custom
+        // `monomail-app://` scheme used for the bundled standalone build.
+        "img-src 'self' https: http: data: blob:",
         'media-src https: blob:',
         `connect-src ${connectAllow}`,
         "object-src 'self' blob:",

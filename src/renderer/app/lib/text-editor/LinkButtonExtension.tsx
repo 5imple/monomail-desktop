@@ -61,7 +61,7 @@ export const LinkButtonExtension = Extension.create({
                             '&nbsp;'.repeat(match.length)
                           );
                           button.className =
-                            'link-button text-blue-600 underline focus:outline-none focus-visible:ring-2 text-start';
+                            'link-button text-accent underline underline-offset-2 focus:outline-none focus-visible:ring-2 text-start';
 
                           // Store position data and href as attributes
                           button.setAttribute('data-href', href);
@@ -97,7 +97,7 @@ export const LinkButtonExtension = Extension.create({
                           fallback.innerHTML = text.replace(/ +/g, (match) =>
                             '&nbsp;'.repeat(match.length)
                           );
-                          fallback.className = 'text-blue-600 underline';
+                          fallback.className = 'text-accent underline underline-offset-2';
                           return fallback;
                         }
                       },

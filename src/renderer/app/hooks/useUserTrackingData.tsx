@@ -1,7 +1,5 @@
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { analytics } from '@/renderer/app/lib/firebase';
 import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
-import { logEvent } from 'firebase/analytics';
 import mixpanel from 'mixpanel-browser';
 import * as amplitude from '@amplitude/analytics-browser';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
@@ -35,13 +33,7 @@ export const useUserTrackingData = () => {
     const eventPayload = { ...userData, ...eventData };
 
     if (!isDevelopment()) {
-      // Track in Mixpanel
       mixpanel.track(eventName, eventPayload);
-
-      // Track in Firebase
-      logEvent(analytics, eventName, eventPayload);
-
-      // Track in Amplitude
       amplitude.track(eventName, eventPayload);
     }
   };

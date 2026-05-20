@@ -1,20 +1,15 @@
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useTranslation } from 'react-i18next';
 import { ProfileForm } from '../forms/ProfileForm';
 
 export default function SettingsProfilePage() {
   const { t } = useTranslation();
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">{t('settings.profile.title')}</h3>
-        <p className="text-sm text-muted-foreground">{t('settings.profile.description')}</p>
-      </div>
-      {/* <div>
-        <h3 className="text-lg font-medium">Profile</h3>
-        <p className="text-sm text-muted-foreground">
-          This is how others will see you on the site.
-        </p>
-      </div> */}
+    <div className="space-y-8">
+      <SettingsPageHeader
+        title={t('settings.profile.title')}
+        description={t('settings.profile.description')}
+      />
       <ProfileForm />
     </div>
   );

@@ -28,6 +28,29 @@ interface ImportMetaEnv {
   readonly MONO_ENV_BRAND_EMAIL_DOMAIN: string;
   readonly MONO_ENV_SOCIAL_X_URL: string;
   readonly MONO_ENV_DISCORD_INVITE_URL: string;
+
+  /**
+   * Origin of the on-prem backend (e.g. https://api.example.com). Used for
+   * endpoints that used to live on Firebase Cloud Functions: NPS, billing,
+   * etc. Defaults to MONO_ENV_API_URL when unset, since most deployments
+   * will collocate the legacy "/api/v1" surface and the previously-Functions
+   * routes behind the same origin.
+   */
+  readonly MONO_ENV_BACKEND_URL: string;
+
+  /**
+   * URL of the electron-updater feed (e.g. https://updates.example.com/mac/).
+   * Should serve `latest-mac.yml` + the .zip/.dmg artifacts. Replaces the
+   * previous Firebase Storage layout.
+   */
+  readonly MONO_ENV_UPDATE_FEED_URL: string;
+
+  /**
+   * Public-facing domain used in share links and public URLs (e.g.
+   * https://example.com). Previously derived from MONO_ENV_FIREBASE_AUTH_DOMAIN;
+   * split out so Firebase can be removed without changing the share UX.
+   */
+  readonly MONO_ENV_PUBLIC_DOMAIN: string;
 }
 
 interface ImportMeta {

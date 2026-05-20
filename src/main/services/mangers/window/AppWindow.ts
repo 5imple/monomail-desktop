@@ -147,6 +147,18 @@ class AppWindow extends BrowserWindow {
       if (app.dock) app.dock.show();
     });
 
+    // Diagnostic taps for renderer/process failures. These are quiet during
+    // normal operation but make blank-screen / silent-crash regressions
+    // immediately visible in main.log instead of needing a devtools probe.
+    this.webContents.on('render-process-gone', (_event, details) => {
+      log.error(
+        `[AppWindow] render-process-gone reason=${details.reason} exitCode=${details.exitCode}`
+      );
+    });
+    this.webContents.on('preload-error', (_e, preloadPath, err) => {
+      log.error(`[AppWindow] preload-error path=${preloadPath} err=${err.message}`);
+    });
+
     this.on('show', () => {
       // Only apply full size animation when showing for the first time
       if (this.isFirstShow && this.fullSizeOnCreation) {
@@ -272,24 +284,79 @@ class AppWindow extends BrowserWindow {
     if (!this.isOffline) {
       this.loadRemoteURL(this.route);
 
-      // Set up error handler for failed remote loading
-      this.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-        // If remote loading fails, try loading from local
-        log.error(`Failed to load remote content: ${errorDescription}. Trying local fallback...`);
-        this.loadLocalContent();
-      });
+      // Set up error handler for failed remote loading. Only retry once —
+      // otherwise loadLocalContent's index_offline.html autoreloads to
+      // appUrl which fails again and we infinite-loop into a blank screen.
+      // Also: only fire on TOP-frame failures (validatedURL = the URL we
+      // tried to load), not on subresource failures.
+      let alreadyFellBack = false;
+      this.webContents.on(
+        'did-fail-load',
+        (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+          if (!isMainFrame || alreadyFellBack) return;
+          alreadyFellBack = true;
+          log.error(
+            `Failed to load (${errorCode}) ${validatedURL}: ${errorDescription}. ` +
+              `Falling back to bundled local renderer.`
+          );
+          this.loadLocalRenderer();
+        }
+      );
     } else {
-      // If offline mode is explicitly set, go straight to local content
-      this.loadLocalContent();
+      this.loadLocalRenderer();
     }
+  }
+
+  /**
+   * Load the bundled React renderer from disk (no Firebase Hosting fetch).
+   * This is used both as the success path for standalone builds with no
+   * real auth domain configured, AND as the fallback when the remote
+   * load fails.
+   */
+  private loadLocalRenderer(route: string = '/'): void {
+    // Load through our custom `monomail-app://` scheme rather than file://.
+    // file:// loading breaks because the bundled `index.html` has
+    // `<base href="/">` which resolves relative URLs to filesystem root.
+    // Routing through a custom-protocol origin gives us a stable base for
+    // `./assets/...` lookups and avoids file:// CORS quirks for ES-module
+    // scripts with `crossorigin`/`integrity` attributes.
+    const cleanRoute = route.startsWith('/') ? route : '/' + route;
+    const target = `monomail-app://app${cleanRoute}`;
+    log.info(`[AppWindow] Loading local renderer from ${target}`);
+    this.loadURL(target);
   }
 
   // Helper method to load remote URL based on environment
   private loadRemoteURL(route: string): void {
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.loadURL(process.env['ELECTRON_RENDERER_URL'] + route);
+      return;
+    }
+
+    // Standalone-build path. The original architecture loads the renderer
+    // from `https://${MONO_ENV_FIREBASE_AUTH_DOMAIN}` (Firebase Hosting),
+    // which requires a deployed web frontend. When that env var is unset
+    // or points at an unreachable host, the load fails → did-fail-load
+    // falls back to index_offline.html → auto-reload loops → blank
+    // screen. For a self-contained .app the bundled `index.html` already
+    // contains everything the renderer needs, so prefer the local bundle
+    // whenever the auth domain isn't a real reachable host.
+    const authDomain = import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN;
+    const isRealAuthDomain =
+      typeof authDomain === 'string' &&
+      authDomain.length > 0 &&
+      authDomain !== 'localhost' &&
+      !authDomain.startsWith('stub') &&
+      authDomain.includes('.');
+
+    if (isRealAuthDomain) {
+      log.info(`[AppWindow] Loading remote URL https://${authDomain}${route}`);
+      this.loadURL(`https://${authDomain}${route}`);
     } else {
-      this.loadURL(`https://${import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN}${route}`);
+      log.info(
+        `[AppWindow] No real auth domain ("${authDomain}") — loading bundled renderer locally`
+      );
+      this.loadLocalRenderer(route);
     }
   }
 

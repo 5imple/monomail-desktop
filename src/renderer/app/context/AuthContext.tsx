@@ -15,7 +15,7 @@ import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import AccountSelectDialog from '@/renderer/app/containers/dialog/AccountSelectDialog';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
-import { analytics, auth } from '@/renderer/app/lib/firebase';
+import { auth } from '@/renderer/app/lib/firebase';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
 import { getCachedBillingInfo, useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
 import { useAutopilotSettings } from '@/renderer/app/store/ai/useAutopilotSettings';
@@ -35,7 +35,6 @@ import {
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 import * as amplitude from '@amplitude/analytics-browser';
-import { logEvent } from 'firebase/analytics';
 import { onAuthStateChanged, signInWithCustomToken, User } from 'firebase/auth';
 import mixpanel from 'mixpanel-browser';
 import React, {
@@ -650,7 +649,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             app_version: import.meta.env.MONO_ENV_APP_VERSION,
             connected_accounts: accounts.length
           });
-          logEvent(analytics, 'login', { user_id: member.uid });
         }
 
         if (relatedMembers.length > 0) {

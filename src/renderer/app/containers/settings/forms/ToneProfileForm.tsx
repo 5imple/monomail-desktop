@@ -22,6 +22,7 @@ import {
   SelectValue
 } from '@/renderer/app/components/ui/select';
 import { Textarea } from '@/renderer/app/components/ui/textarea';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { ToneSelectionDialog } from '@/renderer/app/containers/dialog/ToneSelectionDialog';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
@@ -153,16 +154,12 @@ export function ToneProfileForm() {
     <Form {...form}>
       <BillingBanner type="pro" />
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="space-y-6">
-          <div className="flex items-start">
-            <div>
-              <h3 className="text-lg font-medium">{t('settings.ai.voiceprofiles.title')}</h3>
-              <p className="text-sm text-muted-foreground">
-                {t('settings.ai.voiceprofiles.description')}
-              </p>
-            </div>
-            <div className="ml-auto">
-              {accountUids.length > 0 && (
+        <div className="space-y-8">
+          <SettingsPageHeader
+            title={t('settings.ai.voiceprofiles.title')}
+            description={t('settings.ai.voiceprofiles.description')}
+            action={
+              accountUids.length > 0 ? (
                 <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                   <SelectTrigger variant="secondary">
                     <SelectValue placeholder="Select Account" />
@@ -175,9 +172,9 @@ export function ToneProfileForm() {
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </div>
-          </div>
+              ) : undefined
+            }
+          />
 
           {!selectedAccountId ? (
             <div className="space-y-6 text-center">

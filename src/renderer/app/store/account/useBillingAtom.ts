@@ -5,6 +5,7 @@ import {
 } from '@/renderer/app/lib/cache/networkFirstCache';
 import { atom, useAtom } from 'jotai';
 import { useState } from 'react';
+import { backendUrl } from '@/renderer/app/lib/backendUrl';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 
 export type SubscriptionStatus =
@@ -212,16 +213,13 @@ export function useBillingAtom() {
         },
         async () => {
           // Use the payment-info API endpoint
-          const response = await fetch(
-            `https://us-central1-${import.meta.env.MONO_ENV_FIREBASE_PROJECT_ID}.cloudfunctions.net/payment/payment-info`,
-            {
-              method: 'GET',
-              headers: {
-                Authorization: `Bearer ${idToken}`,
-                'Content-Type': 'application/json'
-              }
+          const response = await fetch(`${backendUrl()}/payment/payment-info`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
             }
-          );
+          });
 
           // Handle HTTP errors
           if (!response.ok) {

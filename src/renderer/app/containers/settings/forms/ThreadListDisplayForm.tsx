@@ -4,6 +4,7 @@ import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Form, FormControl, FormField, FormItem } from '@/renderer/app/components/ui/form';
 import { Switch } from '@/renderer/app/components/ui/switch';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
@@ -157,14 +158,10 @@ export function ThreadListDisplayForm() {
   return (
     <Form {...threadListForm}>
       <form onSubmit={threadListForm.handleSubmit(onThreadListSubmit)} className="space-y-8">
-        <div className="mb-4 flex items-start">
-          <div>
-            <h3 className="text-lg font-medium">{t('settings.display.threadlist.title')}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t('settings.display.threadlist.description')}
-            </p>
-          </div>
-        </div>
+        <SettingsPageHeader
+          title={t('settings.display.threadlist.title')}
+          description={t('settings.display.threadlist.description')}
+        />
 
         <div className="space-y-4">
           <div className="space-y-0.5">

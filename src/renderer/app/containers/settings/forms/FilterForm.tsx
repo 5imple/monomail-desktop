@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/componen
 import AIFilterEditDialog from '@/renderer/app/containers/dialog/AIFilterEditDialog';
 import AIFilterTestDialog from '@/renderer/app/containers/dialog/AIFilterTestDialog';
 import FilterExamplesDialog from '@/renderer/app/containers/settings/forms/filter/FilterExamplesDialog';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
 import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
@@ -216,57 +217,51 @@ export const FilterForm = () => {
   return (
     <>
       <BillingBanner type="pro" />
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div className="space-y-4">
-          <div className="mb-4 flex items-start">
-            <div>
-              {/* <h3 className="text-lg font-medium">{t('settings.filter.title') || 'Filters'}</h3> */}
-              <h3 className="text-lg font-medium">
-                {t('settings.filter.ai.title') || 'AI Filters'}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {t('settings.filter.description') || 'Manage your email filters and rules'}
-              </p>
-            </div>
-
-            <div className="ml-auto flex gap-2">
-              {accountUids.length > 0 && (
-                <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                  <SelectTrigger variant={'secondary'} className="">
-                    <SelectValue
-                      placeholder="Select Account"
-                      className={cn(buttonVariants({ variant: 'secondary' }))}
-                    />
-                  </SelectTrigger>
-                  <SelectContent className="dark">
-                    {accountUids.map((accountId) => (
-                      <SelectItem key={accountId} value={accountId}>
-                        {accountEmailMap[accountId]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="secondary" type="button">
-                    <MonoIcon type="Plus" className="mr-2" />
-                    {t('settings.filter.add_ai_filter') || 'Add AI Filter'}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleAddAIFilter}>
-                    <MonoIcon type="Plus" className="mr-2 h-4 w-4" />
-                    {t('settings.filter.add_ai_filter') || 'Empty AI Filter'}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowTemplates(true)}>
-                    <MonoIcon type="FileText" className="mr-2 h-4 w-4" />
-                    {t('settings.filter.ai.use_template') || 'Use Template'}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
+          <SettingsPageHeader
+            title={t('settings.filter.ai.title') || 'AI Filters'}
+            description={t('settings.filter.description') || 'Manage your email filters and rules'}
+            action={
+              <div className="flex gap-2">
+                {accountUids.length > 0 && (
+                  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                    <SelectTrigger variant={'secondary'} className="">
+                      <SelectValue
+                        placeholder="Select Account"
+                        className={cn(buttonVariants({ variant: 'secondary' }))}
+                      />
+                    </SelectTrigger>
+                    <SelectContent className="dark">
+                      {accountUids.map((accountId) => (
+                        <SelectItem key={accountId} value={accountId}>
+                          {accountEmailMap[accountId]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="secondary" type="button">
+                      <MonoIcon type="Plus" className="mr-2" />
+                      {t('settings.filter.add_ai_filter') || 'Add AI Filter'}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleAddAIFilter}>
+                      <MonoIcon type="Plus" className="mr-2 h-4 w-4" />
+                      {t('settings.filter.add_ai_filter') || 'Empty AI Filter'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowTemplates(true)}>
+                      <MonoIcon type="FileText" className="mr-2 h-4 w-4" />
+                      {t('settings.filter.ai.use_template') || 'Use Template'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            }
+          />
           {!selectedAccountId ? (
             <div className="space-y-6 text-center">
               <span className="mt-10 text-sm text-muted-foreground">Please select an account</span>

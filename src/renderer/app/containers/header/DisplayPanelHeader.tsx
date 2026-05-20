@@ -233,11 +233,11 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     );
 
     return (
-      <div className="drag relative">
+      <div className="drag relative border-b border-border/40">
         <div ref={ref} className="w-full">
           <div
             ref={headerContainerRef}
-            className={cn('flex p-2')}
+            className={cn('flex items-center gap-2 px-4 py-2 sm:px-6')}
             data-focusable-area="display-header"
           >
             <div
@@ -526,15 +526,32 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
               )}
             </div>
           </div>
-          <div
-            className="no-drag w-full cursor-auto select-text break-words px-5 pb-3 text-lg font-medium"
-            dangerouslySetInnerHTML={{
-              __html:
-                !highlightedContent.subject || highlightedContent.subject === ''
-                  ? '(No subject)'
-                  : highlightedContent.subject
-            }}
-          ></div>
+          {/* Newton-style reader subject block:
+              - Tiny mono "READING" / "IN TRASH" scope label above (only
+                renders when there's a thread to read).
+              - Hero subject at 22–26px tracking-tight, calm + editorial.
+              - Generous bottom padding so the divider underneath has
+                breathing room before the message stack begins. */}
+          {thread && (
+            <div className="no-drag w-full px-6 pb-4 sm:px-8">
+              <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                {thread.labelIds.includes('TRASH')
+                  ? 'In trash'
+                  : thread.labelIds.includes('UNREAD')
+                    ? 'Reading'
+                    : 'Read'}
+              </p>
+              <h2
+                className="cursor-auto select-text break-words text-[22px] font-medium tracking-tight text-foreground sm:text-[26px]"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    !highlightedContent.subject || highlightedContent.subject === ''
+                      ? '(No subject)'
+                      : highlightedContent.subject
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );

@@ -121,7 +121,7 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
   return (
     <>
       <div className={cn('group', className)}>
-        <Card className={cn('shadow-xl', cardClassName)}>
+        <Card className={cn('border-border/60 shadow-md', cardClassName)}>
           <CardHeader
             className="px-4 py-2"
             onClick={(e) => {
