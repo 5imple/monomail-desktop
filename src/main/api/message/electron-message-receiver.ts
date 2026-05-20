@@ -1,4 +1,4 @@
-import { ipcMain, net, powerMonitor, WebContents, app } from 'electron';
+import { ipcMain, net, powerMonitor, safeStorage, WebContents, app } from 'electron';
 import log from 'electron-log';
 import Store from 'electron-store';
 
@@ -40,10 +40,66 @@ export const electronPushReceiver: ElectronPushReceiver = {
 };
 
 interface StoreSchema {
+  /** Legacy plaintext credentials field — only present for migration. */
   credentials?: any; // Adjust 'any' to the specific type if known
+  /** Encrypted blob produced by safeStorage.encryptString. Base64. */
+  credentialsEnc?: string;
   appID?: string;
 }
 const store = new Store<StoreSchema>();
+
+/**
+ * FCM credentials include `acg.securityToken` and `authSecret` — anyone
+ * with these can impersonate the device for push delivery. Persisting
+ * them as plaintext JSON in `userData/config.json` (which is the default
+ * `electron-store` behavior) means any process running as the same user
+ * could read them. Wrap with safeStorage (OS keychain on macOS, DPAPI on
+ * Windows, libsecret on Linux).
+ *
+ * On read, fall back to the legacy plaintext field once so existing users
+ * migrate transparently; the plaintext is then deleted.
+ */
+function readCredentials(): any | null {
+  try {
+    const enc = store.get('credentialsEnc');
+    if (enc && safeStorage.isEncryptionAvailable()) {
+      const plain = safeStorage.decryptString(Buffer.from(enc, 'base64'));
+      return JSON.parse(plain);
+    }
+  } catch (e) {
+    log.error('readCredentials: decrypt failed', (e as Error).message);
+  }
+
+  // Legacy fallback — read the unencrypted blob, re-write encrypted, then
+  // wipe the plaintext so subsequent reads use the secure path.
+  const legacy = store.get('credentials');
+  if (legacy) {
+    log.info('readCredentials: migrating legacy plaintext credentials → encrypted');
+    writeCredentials(legacy);
+    // @ts-expect-error electron-store types disallow `delete` of non-optional keys
+    store.delete('credentials');
+    return legacy;
+  }
+  return null;
+}
+
+function writeCredentials(value: any): void {
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      const enc = safeStorage.encryptString(JSON.stringify(value)).toString('base64');
+      store.set('credentialsEnc', enc);
+      // @ts-expect-error electron-store types disallow `delete` of non-optional keys
+      store.delete('credentials');
+      return;
+    }
+  } catch (e) {
+    log.error('writeCredentials: encrypt failed', (e as Error).message);
+  }
+  // Encryption unavailable (e.g. linux without libsecret) — fall back to
+  // the legacy unencrypted slot rather than dropping the data on the floor.
+  log.warn('writeCredentials: safeStorage unavailable, storing plaintext');
+  store.set('credentials', value);
+}
 
 let client: FcmClient | null = null;
 let retryIntervalId: NodeJS.Timeout | null = null;
@@ -290,7 +346,7 @@ export async function setup(): Promise<void> {
   ipcMain.handle(
     FCM_START_SERVICE,
     async (_, appID: string, projectID: string, apiKey: string, vapidKey: string, uid: string) => {
-      let credentials = store.get('credentials') as any;
+      let credentials = readCredentials();
 
       const authSecret = generateFcmAuthSecret();
       const ecdh = createFcmECDH();
@@ -336,7 +392,7 @@ export async function setup(): Promise<void> {
         const credentialsStringify = { ...credentials };
         credentialsStringify.acg.id = credentialsStringify.acg.id.toString();
         credentialsStringify.acg.securityToken = credentialsStringify.acg.securityToken.toString();
-        store.set('credentials', credentialsStringify);
+        writeCredentials(credentialsStringify);
         store.set('appID', appID);
 
         ipcMain.emit(FCM_TOKEN_UPDATED, _, uid, credentials.token);

@@ -27,7 +27,14 @@ const AuthGuard: React.FC<AuthGuardProps> = ({
   const { spaces, isLoadingSpaces } = useSpaceAtom();
   const { sidebarCollapsed } = useSidebarAtom();
 
-  if (isLoading || (isLoggedIn && isLoadingSpaces)) {
+  // Treat "logged in but token not yet ready" as still loading. AuthContext
+  // sets isLoggedIn=true from cached auth before the fresh idToken settles
+  // — without this gate, child components mount and fire tokenless API
+  // requests (401s) AND a freshly signed-out user could briefly see the
+  // previous session's UI shell before the redirect fires.
+  const tokenReady = !isLoggedIn || !!idToken;
+
+  if (isLoading || (isLoggedIn && isLoadingSpaces) || !tokenReady) {
     return (
       <div className="no-drag h-screen bg-gradient-to-tr from-background/90 to-background/80 backdrop-blur-lg">
         <div className="h-full flex-col items-center justify-center">

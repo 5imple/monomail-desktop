@@ -11,9 +11,13 @@ precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 // Runtime caching strategies
-// Main app routes - Network First with aggressive timeout
+// Main app routes - Network First (GET only).
+// Previously the matcher was `request.mode === 'navigate'` with no method
+// filter, which matched non-GET navigations (e.g. OAuth callback POSTs)
+// and would serve a previous user's HTML from cache on slow networks.
+// Restricting to GET avoids that footgun.
 registerRoute(
-  ({ request }) => request.mode === 'navigate',
+  ({ request }) => request.method === 'GET' && request.mode === 'navigate',
   new NetworkFirst({
     cacheName: 'app-pages-cache',
     networkTimeoutSeconds: 2,
@@ -26,9 +30,9 @@ registerRoute(
   })
 );
 
-// HTML files - Network First with short timeout
+// HTML files - Network First with short timeout (GET only).
 registerRoute(
-  /\.html$/,
+  ({ url, request }) => request.method === 'GET' && /\.html$/.test(url.pathname),
   new NetworkFirst({
     cacheName: 'html-cache',
     networkTimeoutSeconds: 2,
@@ -102,6 +106,24 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     // Force the waiting service worker to become the active service worker
     self.skipWaiting();
+  }
+  // On sign-out the renderer posts CLEAR_AUTH_CACHES so we drop the
+  // runtime caches that hold HTML / static-resource entries for the
+  // previous session. Workbox's cleanupOutdatedCaches() only cleans
+  // precache buckets; runtime caches survived sign-outs and could serve
+  // the previous user's UI shell on next sign-in.
+  if (event.data && event.data.type === 'CLEAR_AUTH_CACHES') {
+    event.waitUntil(
+      caches.keys().then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) =>
+              ['app-pages-cache', 'html-cache', 'static-resources'].includes(k)
+            )
+            .map((k) => caches.delete(k))
+        )
+      )
+    );
   }
 });
 

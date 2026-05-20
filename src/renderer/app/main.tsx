@@ -7,7 +7,11 @@ import InternetConnection from '@/renderer/app/middlewares/InternetConnection';
 import '@/renderer/app/tippy.css';
 import '@/renderer/assets/locales';
 import '@/renderer/global.css';
-import '@/renderer/utils/reactScan';
+// react-scan is a dev tool that instruments React internals. It must not
+// ship to production — gate the side-effecting import behind DEV mode.
+if (import.meta.env.DEV) {
+  import('@/renderer/utils/reactScan');
+}
 import i18next from 'i18next';
 import mixpanel from 'mixpanel-browser';
 import ReactDOM from 'react-dom/client';
@@ -31,7 +35,10 @@ if (!isDevelopment()) {
     debug: isDevelopment(),
     track_pageview: true,
     persistence: 'localStorage',
-    ignore_dnt: true
+    // Honor Do-Not-Track. The previous `ignore_dnt: true` overrode the
+    // user's browser-level opt-out, which is hostile-by-default for a
+    // mail client.
+    ignore_dnt: false
   });
   initializeAmplitude();
 }

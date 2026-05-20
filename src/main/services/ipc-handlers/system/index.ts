@@ -6,13 +6,46 @@ import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { openLogFolder } from '@/main/utils/helpers';
 import { AudioType } from '@/renderer/app/lib/soundManager';
 import { CommandType } from '@/renderer/app/types';
-import {
-  app,
-  BrowserWindow,
+import { app, BrowserWindow, BrowserWindowConstructorOptions, ipcMain, nativeTheme } from 'electron';
+
+/**
+ * Whitelisted subset of BrowserWindowConstructorOptions that the renderer
+ * is allowed to influence. Anything that affects security boundaries
+ * (`webPreferences`, `preload`, `nodeIntegration`, `webSecurity`, etc.)
+ * is intentionally absent — those must only be set by main.
+ */
+type SafeWindowOptions = Pick<
   BrowserWindowConstructorOptions,
-  ipcMain,
-  nativeTheme
-} from 'electron';
+  'width' | 'height' | 'minWidth' | 'minHeight' | 'x' | 'y' | 'show' | 'title' | 'parent'
+>;
+
+function pickSafeWindowOptions(input: unknown): SafeWindowOptions | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const src = input as Record<string, unknown>;
+  const out: SafeWindowOptions = {};
+  if (typeof src.width === 'number' && src.width > 0 && src.width < 8192) out.width = src.width;
+  if (typeof src.height === 'number' && src.height > 0 && src.height < 8192)
+    out.height = src.height;
+  if (typeof src.minWidth === 'number') out.minWidth = src.minWidth;
+  if (typeof src.minHeight === 'number') out.minHeight = src.minHeight;
+  if (typeof src.x === 'number') out.x = src.x;
+  if (typeof src.y === 'number') out.y = src.y;
+  if (typeof src.show === 'boolean') out.show = src.show;
+  if (typeof src.title === 'string' && src.title.length < 256) out.title = src.title;
+  return out;
+}
+
+function isSafeRoute(route: unknown): route is string {
+  if (typeof route !== 'string') return false;
+  if (route.length > 2048) return false;
+  // Must be an in-app path. Reject schemes (`http:`, `file:`, `javascript:`,
+  // protocol-relative `//evil`, and `..` traversal).
+  if (/^\s*[a-zA-Z][a-zA-Z0-9+.-]*:/.test(route)) return false;
+  if (route.startsWith('//')) return false;
+  if (route.includes('..')) return false;
+  // Allow only `/foo/bar?x=y#frag` shape.
+  return /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/?#-]*$/.test(route);
+}
 
 export function registerSystemHandlers() {
   ipcMain.handle('main:system:set-offline-status', (_, status: boolean) => {
@@ -60,7 +93,15 @@ export function registerSystemHandlers() {
 
   ipcMain.handle(
     'main:window:open',
-    (_, route: string = '/', options?: Partial<BrowserWindowConstructorOptions>) => {
+    (_, rawRoute: unknown = '/', rawOptions?: unknown) => {
+      // Validate the route is an in-app path. A renderer compromise could
+      // otherwise pass `route = 'https://attacker.com'` and have main load
+      // an arbitrary remote page with elevated privileges.
+      const route = isSafeRoute(rawRoute) ? rawRoute : '/';
+      // Strip everything except a known-safe subset of options. The
+      // previous spread allowed the renderer to override `webPreferences`,
+      // `preload`, etc.
+      const options = pickSafeWindowOptions(rawOptions);
       windowManager.createAppWindow({ route, options });
     }
   );
@@ -127,12 +168,16 @@ export function registerSystemHandlers() {
 
   // Set a specific badge count
   ipcMain.handle('main:badge:set-count', (_, count: number) => {
-    if (typeof count !== 'number' || count < 0) {
+    if (typeof count !== 'number' || count < 0 || !Number.isFinite(count)) {
       return false;
     }
 
+    // Cap at a sane upper bound — without this, a renderer can pass 1e9
+    // and the macOS dock will dutifully render "1000000000".
+    const safeCount = Math.min(Math.floor(count), 9999);
+
     try {
-      app.setBadgeCount(count);
+      app.setBadgeCount(safeCount);
       return true;
     } catch (error) {
       console.error('Failed to set badge count:', error);

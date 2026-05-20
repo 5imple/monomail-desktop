@@ -176,7 +176,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.19",
     "electron": "^32.2.7",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^3.6.1",
@@ -230,12 +230,6 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://example.com/please-configure-your-update-server/releases"
-      }
-    ],
     "dmg": {
       "background": "build/dmg/background.png",
       "window": {

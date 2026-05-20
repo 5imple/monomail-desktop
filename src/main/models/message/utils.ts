@@ -218,6 +218,13 @@ function wrapCssRules(cssText: string, wrapper: string): string {
 
 function setAnchorAttributes(anchor: HTMLAnchorElement) {
   anchor.setAttribute('target', '_blank');
+  // rel=noopener prevents the opened page from accessing window.opener;
+  // rel=noreferrer also strips the Referer header. Without these, every
+  // email anchor gives the destination page a handle back into the
+  // renderer (window.opener) — even though Electron typically opens
+  // these via shell.openExternal, we belt-and-suspender it for the
+  // browser-deployable build path.
+  anchor.setAttribute('rel', 'noopener noreferrer');
   anchor.setAttribute('data-open-modal', 'true');
   anchor.classList.add('text-blue-600', 'underline');
 }

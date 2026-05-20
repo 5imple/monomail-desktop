@@ -38,9 +38,28 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
-npmRebuild: false
+# Universal mac builds (arm64+x64) need per-arch native modules. With
+# `npmRebuild: false`, electron-builder skipped @electron/rebuild — and
+# `postinstall` only rebuilds for the runner's current arch (arm64 since
+# macos-latest is Apple Silicon). x64 users got arm64 .node files and
+# crashed on launch. Re-enabling npmRebuild fixes this; electron-builder
+# rebuilds for both arches before merging into the universal binary.
+npmRebuild: true
+# Auto-update feed. The runtime UpdateManager.configureUpdater() calls
+# setFeedURL with the same URL based on MONO_ENV_FIREBASE_STORAGE_BUCKET,
+# so the two must stay in sync. The previous placeholder
+# `https://example.com/please-configure-your-update-server` was a foot-gun:
+# if a regression ever skipped setFeedURL, the updater would attempt to
+# resolve that host (or any future attacker who registers it) as authoritative.
+#
+# `${env.MONO_ENV_FIREBASE_STORAGE_BUCKET}` is interpolated by electron-builder
+# at build time. If the env var is unset, the build fails loudly instead of
+# silently shipping a broken/insecure updater config.
+#
+# TODO: add `publisherName` once Developer ID cert CN is known so
+# electron-updater verifies the new binary was signed by us, not just notarized.
 publish:
   provider: generic
-  url: https://example.com/please-configure-your-update-server
+  url: https://storage.googleapis.com/${env.MONO_ENV_FIREBASE_STORAGE_BUCKET}/releases/
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

@@ -107,7 +107,14 @@ class ApiClient {
       ...rest
     } = options;
 
-    const requestKey = `${method}:${url}:${JSON.stringify(body || {})}`;
+    const accountUid = uid || this.activeUid;
+    const token = idToken || this.idToken;
+
+    // Include the account uid in the dedup key — without it, concurrent
+    // requests across accounts (e.g. multi-account mailbox sync) would
+    // share the same pending promise and the second account would receive
+    // the first account's response data.
+    const requestKey = `${accountUid ?? '_'}:${method}:${url}:${JSON.stringify(body || {})}`;
 
     // Check if we're offline (browser only)
     if (isBrowser && !isOnline()) {
@@ -125,9 +132,6 @@ class ApiClient {
       }
       return this.pendingRequests.get(requestKey);
     }
-
-    const accountUid = uid || this.activeUid;
-    const token = idToken || this.idToken;
     // Prepare request config
     const config: RequestInit = {
       method,
@@ -163,12 +167,28 @@ class ApiClient {
 
     // Create a promise for the request with retries
     const makeRequest = async (attempt: number = 0): Promise<T> => {
+      // Per-attempt AbortController gives us a hard timeout. Without it
+      // a stalled connection (server up, no response) hangs forever and
+      // can deadlock app shutdown (before-quit awaits pubsub stop, which
+      // awaits this fetch).
+      const REQUEST_TIMEOUT_MS = 30_000;
+      const ctrl = new AbortController();
+      const timeoutId = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+      // Merge our signal with any caller-supplied signal so explicit cancels
+      // still work. If a caller provided one, listen to it and abort ours.
+      const callerSignal = (config as RequestInit).signal;
+      if (callerSignal) {
+        if (callerSignal.aborted) ctrl.abort();
+        else callerSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+      }
+      const attemptConfig: RequestInit = { ...config, signal: ctrl.signal };
+
       try {
         if (isElectron) {
           // log.info(`[ApiClient] ${method} ${url} (attempt ${attempt + 1}/${retries + 1})`);
         }
 
-        const response = await fetch(`${this.baseURL}${url}`, config);
+        const response = await fetch(`${this.baseURL}${url}`, attemptConfig);
 
         if (response.status === 204) {
           return {} as T;
@@ -206,6 +226,10 @@ class ApiClient {
         return data;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        const isTimeout = error instanceof Error && error.name === 'AbortError';
+        if (isTimeout) {
+          log.warn(`[ApiClient] Request aborted (timeout or caller cancel) ${method} ${url}`);
+        }
 
         if (isElectron) {
           log.error(`[ApiClient] Request failed (${method} ${url}): ${errorMessage}`);
@@ -236,17 +260,19 @@ class ApiClient {
 
         // If we've exhausted retries or it's not a network error
         return Promise.reject(error);
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
-    // Create the request promise
+    // Create the request promise and register it for dedup. The previous
+    // code commented out the `.set` line which silently broke dedup —
+    // identical concurrent requests all hit the network.
     const requestPromise = makeRequest().finally(() => {
       // Remove from pending requests when done
       this.pendingRequests.delete(requestKey);
     });
-
-    // Store the promise for potential reuse
-    // this.pendingRequests.set(requestKey, requestPromise);
+    this.pendingRequests.set(requestKey, requestPromise);
 
     return requestPromise;
   }
