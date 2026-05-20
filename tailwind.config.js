@@ -22,6 +22,29 @@ module.exports = {
         xxs: '300px', // min-width
         xs: '540px' // min-width
       },
+      fontFamily: {
+        // Inter for body + headings (Newton's primary typeface).
+        sans: [
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif'
+        ],
+        // IBM Plex Mono for tracked uppercase labels (FROM/TO/SUBJECT,
+        // date dividers, kbd badges, file sizes, version info, timestamps).
+        // Components opt in via the `font-mono` utility.
+        mono: [
+          'IBM Plex Mono',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Consolas',
+          'Liberation Mono',
+          'monospace'
+        ]
+      },
       transitionTimingFunction: {
         'bouncy-in-out': 'cubic-bezier(.47,1.14,.41,1)'
       },
