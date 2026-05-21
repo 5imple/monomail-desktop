@@ -11,7 +11,7 @@ import { Label } from '@/renderer/app/components/ui/label';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import SettingsAccountPage from '@/renderer/app/containers/settings/account/SettingsAccountPage';
-import SettingsBillingPage from '@/renderer/app/containers/settings/billing/SettingsBillingPage';
+// SettingsBillingPage import removed — payment-free build.
 import SettingsComposePage from '@/renderer/app/containers/settings/compose/SettingsComposePage';
 import { LabelForm } from '@/renderer/app/containers/settings/forms/LabelForm';
 import SettingsGeneralPage from '@/renderer/app/containers/settings/general/SettingsGeneralPage';
@@ -232,12 +232,7 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
       id: 'profile',
       icon: 'UserIcon'
     },
-    {
-      type: 'item',
-      title: t('settings.billing.title'),
-      id: 'billing',
-      icon: 'CreditCard'
-    },
+    // Billing tab removed — payment-free build.
     {
       type: 'item',
       title: t('settings.system.title'),
@@ -283,8 +278,7 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
         return <SettingsFilterPage />;
       case 'label':
         return <LabelForm />;
-      case 'billing':
-        return <SettingsBillingPage />;
+      // 'billing' case removed — payment-free build.
       case 'system':
         return <SettingsSystemPage />;
       default:

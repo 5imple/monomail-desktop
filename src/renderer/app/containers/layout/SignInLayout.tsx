@@ -182,11 +182,7 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
       return <Navigate to={'/onboarding'} />;
     }
 
-    // Check subscription status after onboarding
-    if (!hasActiveSubscription()) {
-      return <Navigate to={'/subscription'} />;
-    }
-
+    // Payment removed — go straight to inbox after onboarding.
     return <Navigate to={'/'} />;
   }
 

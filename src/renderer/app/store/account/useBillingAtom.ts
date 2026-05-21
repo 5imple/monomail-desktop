@@ -123,78 +123,14 @@ export function useBillingAtom() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check if user has an active subscription
-  const hasActiveSubscription = (): boolean => {
-    if (billingInfo.hasOneTimePurchase) {
-      return true;
-    }
-
-    if (!billingInfo.subscription) {
-      return false;
-    }
-
-    const { status, endsAt } = billingInfo.subscription;
-
-    // Active statuses that are immediately valid
-    const activeStatuses: SubscriptionStatus[] = ['on_trial', 'active'];
-    if (activeStatuses.includes(status)) {
-      return true;
-    }
-
-    // For canceled subscriptions, check if we're still within the access period
-    if (status === 'cancelled' && endsAt) {
-      const currentDate = new Date();
-      const endDate = new Date(endsAt);
-      return currentDate < endDate;
-    }
-
-    return false;
-  };
-
-  // Determine user's current plan
-  const getUserPlan = (): UserPlan => {
-    // Check for active subscription first
-    if (billingInfo.subscription && hasActiveSubscription()) {
-      const { productId } = billingInfo.subscription;
-      const isDevEnvironment = import.meta.env.MONO_ENV_APP_VERSION.includes('dev');
-      const productIds = isDevEnvironment ? PLAN_PRODUCT_IDS.sandbox : PLAN_PRODUCT_IDS.production;
-
-      switch (productId) {
-        case productIds.plus:
-          return 'plus';
-        case productIds.pro:
-          return 'pro';
-        default:
-          return 'free';
-      }
-    }
-
-    // Check for one-time purchase
-    if (billingInfo.hasOneTimePurchase && billingInfo.order) {
-      const { productId } = billingInfo.order;
-      const isDevEnvironment = import.meta.env.MONO_ENV_APP_VERSION.includes('dev');
-      const productIds = isDevEnvironment ? PLAN_PRODUCT_IDS.sandbox : PLAN_PRODUCT_IDS.production;
-
-      // Check if the order's productId matches the one-time purchase plan
-      if (productId === productIds.plus_onetime) {
-        return 'plus_onetime';
-      }
-
-      // For other one-time purchase products, determine the appropriate plan
-      switch (productId) {
-        case productIds.plus:
-          return 'plus_onetime'; // One-time purchase of plus plan
-        case productIds.pro:
-          return 'pro'; // One-time purchase of pro plan (if supported)
-        default:
-          return 'plus_onetime'; // Default fallback for one-time purchases
-      }
-    }
-
-    return 'free';
-  };
-
-  const hasProAccess = getUserPlan() === 'pro';
+  // Payment removed — every gate now passes unconditionally so the app
+  // runs without subscription / one-time-purchase plumbing. The atom
+  // and underlying API are kept inert so removing the upgrade prompts
+  // is a separate, smaller change. To re-enable billing, restore the
+  // real logic from git history.
+  const hasActiveSubscription = (): boolean => true;
+  const getUserPlan = (): UserPlan => 'pro';
+  const hasProAccess = true;
 
   const fetchSubscription = async (idToken: string): Promise<LemonSqueezySubscription | null> => {
     setLoading(true);
