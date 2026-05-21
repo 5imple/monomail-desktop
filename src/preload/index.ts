@@ -25,6 +25,9 @@ const api = {
     ipcRenderer.removeListener(channel, callback);
   },
   setIdToken: (token: string | null) => ipcRenderer.invoke('main:auth:set-id-token', token),
+  getAuthState: () => ipcRenderer.invoke('main:auth:get-state'),
+  signOutMain: () => ipcRenderer.invoke('main:auth:sign-out'),
+  refreshToken: () => ipcRenderer.invoke('main:auth:refresh'),
   setAlertSound: (audio: AudioType) => ipcRenderer.invoke('main:system:set-alert-sound', audio),
   setIsFullSizeWindowOnCreation: (value: boolean) =>
     ipcRenderer.invoke('main:system:set-window-fullsize-on-creation', value),

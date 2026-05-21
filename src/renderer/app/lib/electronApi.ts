@@ -35,11 +35,40 @@ interface IpcRenderer {
   off: <T = any>(channel: ValidRendererChannel, callback: (...args: T[]) => void) => void;
 
   /**
-   * Set the ID token for authentication.
-   * @param {string | null} token - The ID token to set.
-   * @returns {Promise<void>}
+   * @deprecated Pre-Phase-B the renderer pushed Firebase ID tokens into
+   * main here. Now tokens live in main (loaded from the OAuth deep-link),
+   * and this becomes a no-op in the bridge.
    */
   setIdToken: (token: string | null) => Promise<void>;
+
+  /**
+   * Read the current auth state from main. Returns null when signed out.
+   */
+  getAuthState: () => Promise<
+    | {
+        accessToken: string;
+        expiresAt: number;
+        member: {
+          uid: string;
+          email: string;
+          displayName?: string;
+          photoURL?: string;
+        } | null;
+      }
+    | null
+  >;
+
+  /**
+   * Clear tokens in main + tear down the WebSocket push channel.
+   */
+  signOutMain: () => Promise<void>;
+
+  /**
+   * Force a refresh round-trip. Returns { ok, accessToken?, expiresAt?, error? }.
+   */
+  refreshToken: () => Promise<
+    { ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }
+  >;
   /**
    * Set the app offline
    * @param {boolean} status - Offline status
@@ -286,6 +315,24 @@ const electronApi: IpcRenderer = {
       console.warn(`Electron API 'setIdToken' is not available in web environment`);
       return Promise.resolve();
     }
+  },
+  getAuthState: async () => {
+    if (isElectron) {
+      return window.electronBridge.getAuthState();
+    }
+    return null;
+  },
+  signOutMain: async () => {
+    if (isElectron) {
+      return window.electronBridge.signOutMain();
+    }
+    return Promise.resolve();
+  },
+  refreshToken: async () => {
+    if (isElectron) {
+      return window.electronBridge.refreshToken();
+    }
+    return { ok: false, error: 'Not in Electron' };
   },
   setActiveUid: async (uid) => {
     if (isElectron) {
