@@ -467,6 +467,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
   const fetchData = useCallback(
     async (user: User, retryCount = 0, maxRetries = 3) => {
+      let confirmedIdToken: string | null = null;
+
       try {
         setAuthState((prev) => ({ ...prev, isLoading: true }));
 
@@ -501,44 +503,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Payment-free build — no cached billing info to hydrate.
-        // Get fresh token BEFORE updating API client to avoid expired token issues
+        // Get the current token from main memory/safeStorage. Tokens are never
+        // read from renderer IndexedDB.
         let idToken: string;
-        let shouldUseCachedToken = false;
-
-        // Check if we should force refresh due to stale token
-        const isTokenStale = await authCache.isTokenStale();
-        const forceRefresh = isTokenStale || !cachedData?.idToken;
 
         try {
-          if (forceRefresh) {
-            console.log('Cached token is stale or missing, forcing fresh Firebase token...');
-          } else {
-            console.log('Attempting to get fresh Firebase token...');
-          }
-          idToken = await user.getIdToken(forceRefresh);
-          console.log('Successfully obtained fresh Firebase token');
+          idToken = await user.getIdToken(false);
+          confirmedIdToken = idToken;
+          console.log('Successfully obtained auth token from main');
         } catch (error) {
-          console.warn('Failed to get fresh Firebase token:', error);
-
-          if (cachedData?.idToken) {
-            const tokenAge = Date.now() - cachedData.timestamp;
-            const tokenAgeMinutes = Math.round(tokenAge / (60 * 1000));
-
-            console.log(
-              `Falling back to cached auth token due to Firebase network error (token age: ${tokenAgeMinutes} minutes)`
-            );
-
-            if (tokenAgeMinutes > 45) {
-              console.warn('⚠️  Using potentially expired cached token - API calls may fail');
-            }
-
-            // Note: This is a fallback for network issues only
-            // The cached token might still be expired, but it's better than no token
-            idToken = cachedData.idToken;
-            shouldUseCachedToken = true;
-          } else {
-            throw error;
-          }
+          console.warn('Failed to get auth token from main:', error);
+          throw error;
         }
 
         // Only update API client after we have confirmed token (fresh or fallback)
@@ -590,7 +565,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         // Cache the successful auth data with fresh token
         await authCache.saveAuthData({
-          idToken, // Fresh token from Firebase
           accounts,
           member,
           preference: null, // Will be updated below
@@ -671,7 +645,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         // Update cache with fresh token and preference
         await authCache.saveAuthData({
-          idToken, // This is now guaranteed to be fresh (or best available fallback)
           accounts,
           member,
           preference,
@@ -742,8 +715,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return;
         }
 
-        // If we have cached credentials, use them
-        if (await authCache.hasCachedCredentials()) {
+        // If we still have a current token, cached non-secret account data can
+        // hydrate the UI while the network is down.
+        if (confirmedIdToken && (await authCache.hasCachedCredentials())) {
           const cachedData = await authCache.getCachedData();
           if (cachedData) {
             const needSelectAccount =
@@ -752,7 +726,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               ...prev,
               isLoggedIn: !needSelectAccount,
               user: user,
-              idToken: cachedData.idToken,
+              idToken: confirmedIdToken,
               accounts: needSelectAccount ? [] : cachedData.accounts,
               member: cachedData.member,
               preference: cachedData.preference || defaultPreference,
@@ -793,39 +767,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
+  const clearLocalAuthState = useCallback(async () => {
+    await authCache.clearCache();
+    await clearSpaceCache();
+    await clearLabelsCache();
+    apiClient.setApiClientIdToken(null);
+    apiClient.setApiActiveUid(null);
+    await electronApi.setIdToken(null);
+    await electronApi.setActiveUid(null);
+    // Payment-free build — no billing state to reset.
+
+    setAuthState({
+      isLoggedIn: false,
+      user: null,
+      accounts: [],
+      member: null,
+      preference: defaultPreference,
+      isLoading: false,
+      idToken: null,
+      needSelectAccount: false,
+      relatedMembers: []
+    });
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
-      Promise.all(
+      await Promise.allSettled(
         accounts.map(async (account) => {
-          mailApi.stopCloudPubSub(account.uid);
+          await mailApi.stopCloudPubSub(account.uid);
         })
       );
 
       await auth.signOut();
-      await authCache.clearCache();
-      await clearSpaceCache();
-      await clearLabelsCache();
-      electronApi.setIdToken(null);
-      // Payment-free build — no billing state to reset.
-
-      setAuthState({
-        isLoggedIn: false,
-        user: null,
-        accounts: [],
-        member: null,
-        preference: defaultPreference,
-        isLoading: false,
-        idToken: null,
-        needSelectAccount: false,
-        relatedMembers: []
-      });
+      await clearLocalAuthState();
     } catch (error) {
       console.error('An error occurred during sign-out.', error);
       toast.error(
         'An error occurred during sign-out: ' + (error instanceof Error ? error.message : '')
       );
+      await clearLocalAuthState();
     }
-  }, [accounts]);
+  }, [accounts, clearLocalAuthState]);
 
   const updateAccounts = useCallback(async () => {
     try {
@@ -955,6 +937,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAuthState((prev) => ({ ...prev, isLoading: true }));
       if (user) {
         await fetchData(user);
+      } else {
+        await clearLocalAuthState();
       }
       setAuthState((prev) => ({ ...prev, isLoading: false }));
     });

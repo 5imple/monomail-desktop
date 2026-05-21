@@ -51,10 +51,7 @@ const getMessageUnsubscribe = (uid: string, id: string, signal?: AbortSignal) =>
  * @returns {Promise<void>} The thread details.
  */
 const postMessageUnsubscribe = (uid: string, id: string, signal?: AbortSignal) => {
-  return apiClient.post<void>(`/gmail/messages/${id}/unsubscribe`, {
-    uid,
-    signal
-  });
+  return apiClient.post<void>(`/gmail/messages/${id}/unsubscribe`, {}, { uid, signal });
 };
 
 /**

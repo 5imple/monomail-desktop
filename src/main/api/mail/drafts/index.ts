@@ -39,7 +39,7 @@ const updateDraft = (uid: string, draftData: IMonoDraft, signal?: AbortSignal) =
 };
 
 const deleteDraft = async (uid: string, draftId: string, signal?: AbortSignal) => {
-  return await apiClient.patch<void>(`/mail/drafts/${draftId}/delete`, { signal, uid });
+  return await apiClient.patch<void>(`/mail/drafts/${draftId}/delete`, {}, { signal, uid });
 };
 
 export default { getDrafts, createDraft, getDraftById, updateDraft, deleteDraft };

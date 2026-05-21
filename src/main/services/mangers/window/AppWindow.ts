@@ -62,6 +62,60 @@ function smoothResizeToTarget(
   }, interval);
 }
 
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+function toOrigin(value: string | undefined): string | null {
+  const trimmed = (value || '').trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = trimmed.includes('://') ? trimmed : `https://${trimmed}`;
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getTrustedRendererOrigins(): Set<string> {
+  const origins = new Set<string>();
+
+  if (is.dev) {
+    const devRendererOrigin = toOrigin(process.env['ELECTRON_RENDERER_URL']);
+    if (devRendererOrigin) origins.add(devRendererOrigin);
+  }
+
+  const authOrigin = toOrigin(import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN);
+  if (authOrigin) origins.add(authOrigin);
+
+  return origins;
+}
+
+function isTrustedRendererUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.href === 'about:blank') return true;
+    if (parsed.protocol === 'monomail-app:' && parsed.hostname === 'app') return true;
+    return getTrustedRendererOrigins().has(parsed.origin);
+  } catch {
+    return false;
+  }
+}
+
+function openExternalIfAllowed(rawUrl: string): void {
+  try {
+    const parsed = new URL(rawUrl);
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+      log.warn(
+        `Blocked external navigation with disallowed protocol: ${parsed.protocol} (url=${parsed.host || '<no-host>'})`
+      );
+      return;
+    }
+    shell.openExternal(parsed.toString());
+  } catch {
+    log.warn('Blocked external navigation with un-parseable URL');
+  }
+}
+
 class AppWindow extends BrowserWindow {
   private commands: Array<CommandType> = [];
   private messages: Array<{ channel: string; args: any[] }> = [];
@@ -167,6 +221,8 @@ class AppWindow extends BrowserWindow {
       }
     });
 
+    this.installNavigationGuards();
+
     // Try loading from remote first, with fallback to local
     this.loadContent();
 
@@ -242,22 +298,31 @@ class AppWindow extends BrowserWindow {
       // via setAnchorAttributes) can hand a URL like `file:///Applications/
       // Calculator.app`, `smb://attacker/payload.exe`, or `vbscript:` to the
       // OS — that's a 1-click RCE from a crafted email message.
-      const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
-      try {
-        const parsed = new URL(url);
-        if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
-          log.warn(
-            `Blocked window-open with disallowed protocol: ${parsed.protocol} (url=${parsed.host || '<no-host>'})`
-          );
-          return { action: 'deny' };
-        }
-        shell.openExternal(parsed.toString());
-      } catch {
-        // Malformed URL — refuse rather than guess.
-        log.warn('Blocked window-open with un-parseable URL');
-      }
+      openExternalIfAllowed(url);
 
       return { action: 'deny' };
+    });
+  }
+
+  private installNavigationGuards(): void {
+    const guardTopLevelNavigation = (
+      event: Electron.Event,
+      url: string,
+      isMainFrame: boolean = true
+    ) => {
+      if (!isMainFrame || isTrustedRendererUrl(url)) return;
+
+      event.preventDefault();
+      log.warn('[AppWindow] Blocked top-level navigation outside trusted renderer origins');
+      openExternalIfAllowed(url);
+    };
+
+    this.webContents.on('will-navigate', (event, url) => {
+      guardTopLevelNavigation(event, url);
+    });
+
+    this.webContents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
+      guardTopLevelNavigation(event, url, isMainFrame);
     });
   }
 

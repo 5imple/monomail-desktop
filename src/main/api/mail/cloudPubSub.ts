@@ -27,9 +27,7 @@ const stopCloudPubSub = (uid: string, signal?: AbortSignal) => {
 };
 
 const stopAllCloudPubSub = (signal?: AbortSignal) => {
-  return apiClient.post<void>(`/mail/stop/all`, {
-    signal
-  });
+  return apiClient.post<void>(`/mail/stop/all`, {}, { signal });
 };
 
 export default { watchCloudPubSub, stopCloudPubSub, stopAllCloudPubSub };

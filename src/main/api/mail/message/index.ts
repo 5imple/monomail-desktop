@@ -13,7 +13,7 @@ const getMessageUnsubscribe = async (uid: string, id: string, signal?: AbortSign
 };
 
 const postMessageUnsubscribe = async (uid: string, id: string, signal?: AbortSignal) => {
-  return await apiClient.post<void>(`/mail/messages/${id}/unsubscribe`, { uid, signal });
+  return await apiClient.post<void>(`/mail/messages/${id}/unsubscribe`, {}, { uid, signal });
 };
 
 const modifyMessage = async (

@@ -1,5 +1,4 @@
 import { isValidRendererChannel, ValidRendererChannel } from '@/main/validChannels';
-import { electronAPI } from '@electron-toolkit/preload';
 import { BrowserWindowConstructorOptions, contextBridge, ipcRenderer } from 'electron';
 
 import { ToastArgs } from '@/main/models/types/toastTypes';
@@ -9,7 +8,6 @@ import { CommandType } from '@/renderer/app/types';
 import { SplitCategoryPreferences } from '@/main/api/auth/types';
 // Custom APIs for renderer
 const api = {
-  ...electronAPI.ipcRenderer,
   on: (channel: ValidRendererChannel, callback: (...args: any[]) => void) => {
     if (isValidRendererChannel(channel)) {
       const subscription = (_event: Electron.IpcRendererEvent, ...args: any[]) => callback(...args);

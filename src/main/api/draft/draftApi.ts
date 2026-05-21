@@ -87,10 +87,7 @@ const sendDraft = (
   signal?: AbortSignal
 ) => {
   const url = withTracking ? `/mail/drafts/${draftId}/send?t=true` : `/mail/drafts/${draftId}/send`;
-  return apiClient.post<SendDraftResponse>(url, {
-    uid,
-    signal
-  });
+  return apiClient.post<SendDraftResponse>(url, {}, { uid, signal });
 };
 
 /**
@@ -100,10 +97,7 @@ const sendDraft = (
  * @returns {Promise<SendDraftResponse>} The updated draft response.
  */
 const sendDraftLazy = (uid: string, draftId: string, signal?: AbortSignal) => {
-  return apiClient.post<SendDraftResponse>(`/mail/drafts/${draftId}/send/lazy`, {
-    uid,
-    signal
-  });
+  return apiClient.post<SendDraftResponse>(`/mail/drafts/${draftId}/send/lazy`, {}, { uid, signal });
 };
 
 /**

@@ -22,7 +22,7 @@ const getGoogleContact = (signal?: AbortSignal) => {
 };
 
 const createMonoContact = (data: Contact, signal?: AbortSignal) => {
-  return apiClient.post(`/mono/contact`, { ...data, signal });
+  return apiClient.post(`/mono/contact`, data, { signal });
 };
 
 const deleteMonoContact = (id: string, signal?: AbortSignal) => {
@@ -43,7 +43,7 @@ const getPinnedEmails = (signal?: AbortSignal) => {
 
 // Add a Pinned Email
 const addPinnedEmail = (pinnedEmail: string, signal?: AbortSignal) => {
-  return apiClient.post(`/mono/pin`, { pinnedEmail, signal });
+  return apiClient.post(`/mono/pin`, { pinnedEmail }, { signal });
 };
 
 // Remove a Pinned Email

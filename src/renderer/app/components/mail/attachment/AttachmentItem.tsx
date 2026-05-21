@@ -1,4 +1,3 @@
-import { apiClient } from '@/main/api/apiClient';
 import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoAttachment } from '@/main/models/types';
@@ -57,7 +56,6 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
       // Fetch the Blob data from the API
       let response: Blob | null = null;
       if (source === 'message') {
-        apiClient.setApiClientIdToken(accountId);
         response = await mailApi.getAttachmentDownload(
           accountId,
           itemId,

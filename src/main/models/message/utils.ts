@@ -94,7 +94,8 @@ export function parsePayloadPart(message: MonoMessage) {
   }
   parsePayload(message.payload);
 
-  plainTextBody = `<div class="p-6 min-h-6">${plainTextBody}</div>`;
+  const escapedPlainTextBody = escapeHtml(plainTextBody);
+  plainTextBody = `<div class="p-6 min-h-6" style="white-space: pre-wrap;">${escapedPlainTextBody}</div>`;
 
   return {
     history: emailHistory,
@@ -102,6 +103,25 @@ export function parsePayloadPart(message: MonoMessage) {
     trackingImagesRemoved,
     trackingDomains: [...new Set(trackingDomains)] // Remove duplicates
   };
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
 }
 
 function removeSpecificStyles(element: Element) {

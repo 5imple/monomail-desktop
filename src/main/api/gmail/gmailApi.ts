@@ -52,9 +52,7 @@ const stopCloudPubSub = (uid: string, signal?: AbortSignal) => {
  * @returns {Promise<{ historyId: string, expiration: string }>} The response from the API with historyId and expiration.
  */
 const stopAllCloudPubSub = (signal?: AbortSignal) => {
-  return apiClient.post<void>(`/gmail/stop/all`, {
-    signal
-  });
+  return apiClient.post<void>(`/gmail/stop/all`, {}, { signal });
 };
 
 export default {

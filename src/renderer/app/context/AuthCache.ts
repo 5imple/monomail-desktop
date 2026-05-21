@@ -2,7 +2,6 @@ import { MonoAccount, MonoMember, UserPreference } from '@/main/api/auth/types';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 
 interface CachedAuthData {
-  idToken: string | null;
   accounts: MonoAccount[];
   member: MonoMember | null;
   preference: UserPreference | null;
@@ -17,7 +16,7 @@ interface CachedAuthData {
 export class AuthCache {
   private static INSTANCE: AuthCache;
   private readonly CACHE_KEY = 'cache:auth:data';
-  private readonly TOKEN_EXPIRY_MS = 55 * 60 * 1000; // 55 minutes (Firebase tokens last 1 hour)
+  private readonly CACHE_EXPIRY_MS = 55 * 60 * 1000;
 
   private constructor() {
     // Private constructor for singleton pattern
@@ -34,7 +33,6 @@ export class AuthCache {
    * Save authentication data to cache
    */
   public async saveAuthData(data: {
-    idToken: string | null;
     accounts: MonoAccount[];
     member: MonoMember | null;
     preference: UserPreference | null;
@@ -42,7 +40,9 @@ export class AuthCache {
   }): Promise<void> {
     try {
       const cacheData: CachedAuthData = {
-        ...data,
+        accounts: data.accounts,
+        member: data.member,
+        preference: data.preference,
         relatedMembers: data.relatedMembers || [],
         timestamp: Date.now()
       };
@@ -60,10 +60,18 @@ export class AuthCache {
     try {
       const cacheData = await monoLocalStorageDb.getItem<CachedAuthData>(this.CACHE_KEY);
       if (cacheData) {
+        const { idToken: _discardedToken, ...safeCacheData } = cacheData as CachedAuthData & {
+          idToken?: unknown;
+        };
+
+        if (_discardedToken !== undefined) {
+          await monoLocalStorageDb.setItem(this.CACHE_KEY, safeCacheData);
+        }
+
         // Ensure backward compatibility for cache entries that might not have relatedMembers
         return {
-          ...cacheData,
-          relatedMembers: cacheData.relatedMembers || []
+          ...safeCacheData,
+          relatedMembers: safeCacheData.relatedMembers || []
         };
       }
       return null;
@@ -85,30 +93,15 @@ export class AuthCache {
   }
 
   /**
-   * Check if we have valid cached credentials
+   * Check if we have usable non-secret cached auth data.
    */
   public async hasCachedCredentials(): Promise<boolean> {
     const cache = await this.getCachedData();
     return (
       cache !== null &&
       cache.accounts.length > 0 &&
-      !!cache.idToken &&
-      Date.now() - cache.timestamp < this.TOKEN_EXPIRY_MS
+      Date.now() - cache.timestamp < this.CACHE_EXPIRY_MS
     );
-  }
-
-  /**
-   * Check if cached token is getting stale and should be refreshed immediately
-   * Returns true if token is older than 30 minutes (should refresh proactively)
-   */
-  public async isTokenStale(): Promise<boolean> {
-    const cache = await this.getCachedData();
-    if (!cache || !cache.idToken) {
-      return true; // No token means definitely stale
-    }
-
-    const TOKEN_STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
-    return Date.now() - cache.timestamp > TOKEN_STALE_THRESHOLD;
   }
 
   /**

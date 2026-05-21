@@ -40,10 +40,11 @@ const IntegrationFormSchema = z.object({
 type IntegrationFormValues = z.infer<typeof IntegrationFormSchema>;
 
 export function IntegrationForm() {
-  const { member, accounts, idToken, updateAccounts } = useAuth();
+  const { member, accounts, updateAccounts } = useAuth();
   const getUserPlan = () => 'pro';
   const { openDialog } = useDialogs();
   const { t } = useTranslation();
+  const addAccountUrl = `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?client=web-electron`;
   const form = useForm<IntegrationFormValues>({
     resolver: zodResolver(IntegrationFormSchema),
     defaultValues: {
@@ -200,7 +201,7 @@ export function IntegrationForm() {
                                     <>{t('settings.integration.upgrade_plan')}</>
                                   ) : (
                                     <a
-                                      href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?memberToken=${idToken}`}
+                                      href={addAccountUrl}
                                       target="_blank"
                                       rel="noreferrer"
                                     >
@@ -251,7 +252,7 @@ export function IntegrationForm() {
           ) : (
             <Button type="button" variant="secondary" className="mt-2" asChild>
               <a
-                href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?memberToken=${idToken}&client=web-electron`}
+                href={addAccountUrl}
                 target="_blank"
                 rel="noreferrer"
               >

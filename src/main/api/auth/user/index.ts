@@ -70,7 +70,7 @@ const deleteUser = (signal?: AbortSignal) => {
 const unlinkAccountFromUser = (accountUid: string, signal?: AbortSignal) => {
   const params = new URLSearchParams();
   params.append('uid', accountUid);
-  return apiClient.post(`/mono/user/unlink?${params.toString()}`, { signal });
+  return apiClient.post(`/mono/user/unlink?${params.toString()}`, {}, { signal });
 };
 
 /**

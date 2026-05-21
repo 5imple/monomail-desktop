@@ -86,9 +86,10 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
   onBack,
   isCreatingSpace = false
 }) => {
-  const { member, accounts, idToken } = useAuth();
+  const { member, accounts } = useAuth();
   const { t } = useTranslation();
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
+  const addAccountUrl = `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?client=web-electron`;
 
   const leftTrail = useTrail(5, {
     from: { opacity: 0, transform: 'translateY(40px)' },
@@ -202,7 +203,7 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
 
     return (
       <a
-        href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?memberToken=${idToken}`}
+        href={addAccountUrl}
         target="_blank"
         rel="noreferrer"
       >
@@ -314,7 +315,7 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
                         asChild
                       >
                         <a
-                          href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?memberToken=${idToken}`}
+                          href={addAccountUrl}
                           target="_blank"
                           rel="noreferrer"
                         >
