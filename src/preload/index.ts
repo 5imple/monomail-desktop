@@ -27,6 +27,8 @@ const api = {
   getAuthState: () => ipcRenderer.invoke('main:auth:get-state'),
   signOutMain: () => ipcRenderer.invoke('main:auth:sign-out'),
   refreshToken: () => ipcRenderer.invoke('main:auth:refresh'),
+  devSignIn: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
+    ipcRenderer.invoke('main:auth:dev-sign-in', args),
   setAlertSound: (audio: AudioType) => ipcRenderer.invoke('main:system:set-alert-sound', audio),
   setIsFullSizeWindowOnCreation: (value: boolean) =>
     ipcRenderer.invoke('main:system:set-window-fullsize-on-creation', value),

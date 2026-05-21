@@ -70,6 +70,16 @@ interface IpcRenderer {
     { ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }
   >;
   /**
+   * Dev-only: hand pre-parsed tokens straight to main's TokenManager. Used
+   * by SignInLayout when the configured homepage is localhost — bypasses
+   * the OS protocol handler (unreliable in `npm run dev`).
+   */
+  devSignIn: (args: {
+    accessToken: string;
+    refreshToken: string;
+    expiresInSec?: number;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /**
    * Set the app offline
    * @param {boolean} status - Offline status
    * @returns {Promise<void>}
@@ -331,6 +341,12 @@ const electronApi: IpcRenderer = {
   refreshToken: async () => {
     if (isElectron) {
       return window.electronBridge.refreshToken();
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  devSignIn: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.devSignIn(args);
     }
     return { ok: false, error: 'Not in Electron' };
   },

@@ -38,7 +38,7 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [subscriptionChecked, setSubscriptionChecked] = useState(false);
 
-  const handleSignIn = useCallback(() => {
+  const handleSignIn = useCallback(async () => {
     const rawBaseUrl = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
     if (!rawBaseUrl) {
       toast.error(
@@ -58,7 +58,55 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
       return;
     }
     const client = isElectron ? 'web-electron' : 'web';
-    window.open(`${baseUrl.replace(/\/$/, '')}/sign-in?client=${client}`);
+    const signInUrl = `${baseUrl.replace(/\/$/, '')}/sign-in?client=${client}`;
+
+    // Dev shortcut: when pointed at localhost, fetch the mock backend's
+    // sign-in HTML directly, pull access + refresh tokens out of the
+    // `mono-desktop://signIn?…` link, and hand them straight to main via
+    // the `dev-sign-in` IPC. Bypasses the system-browser hop + macOS
+    // Launch Services protocol handler (both unreliable in `npm run dev`
+    // because Electron is the generic node_modules binary, not a
+    // registered .app). The IPC funnels into the same `tokenManager.
+    // saveTokens` call as the production deep-link path, so downstream
+    // events (`renderer:auth:token-changed` etc.) fire identically.
+    // Production never enters this branch — the regex below is the gate.
+    const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(baseUrl);
+    if (isLocalDev) {
+      try {
+        const res = await fetch(signInUrl);
+        if (res.ok) {
+          const html = await res.text();
+          const linkMatch = html.match(/mono-desktop:\/\/signIn\?([^"'\s]+)/);
+          if (linkMatch) {
+            const params = new URLSearchParams(linkMatch[1]);
+            const accessToken = params.get('token');
+            const refreshToken = params.get('refresh_token');
+            const expiresInRaw = params.get('expires_in');
+            if (accessToken && refreshToken) {
+              const result = await electronApi.devSignIn({
+                accessToken,
+                refreshToken,
+                expiresInSec: expiresInRaw ? Number(expiresInRaw) : undefined
+              });
+              if (result.ok) return;
+              console.warn('[dev sign-in] devSignIn IPC failed:', result.error);
+            } else {
+              console.warn('[dev sign-in] mock HTML missing token or refresh_token');
+            }
+          } else {
+            console.warn(
+              '[dev sign-in] mock response missing mono-desktop://signIn link, falling back'
+            );
+          }
+        } else {
+          console.warn(`[dev sign-in] mock returned ${res.status}, falling back to browser`);
+        }
+      } catch (err) {
+        console.warn('[dev sign-in] direct fetch failed, falling back to browser:', err);
+      }
+    }
+
+    window.open(signInUrl);
   }, []);
   const [searchParams] = useSearchParams();
   const tokenParams = searchParams.get('token');

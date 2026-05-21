@@ -46,6 +46,43 @@ export function registerAuthHandlers() {
     }
   });
 
+  // Dev-only bypass for the OS protocol handler. In packaged builds, the
+  // sign-in tokens land via `mono-desktop://signIn?token=…` which Electron
+  // receives through `app.on('open-url')` and routes through
+  // `handleDeepLinkingUrl`. In `npm run dev`, the Electron binary isn't a
+  // registered macOS .app, so the protocol handoff is unreliable. This
+  // channel lets the renderer hand pre-parsed tokens (typically scraped
+  // from the local mock backend's sign-in HTML) straight to TokenManager
+  // — same `saveTokens` call, same downstream events. Production never
+  // hits this because SignInLayout only invokes it when the configured
+  // homepage points at localhost.
+  ipcMain.handle(
+    'main:auth:dev-sign-in',
+    async (
+      _,
+      args: { accessToken: string; refreshToken: string; expiresInSec?: number }
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const { accessToken, refreshToken, expiresInSec } = args ?? ({} as typeof args);
+      if (
+        typeof accessToken !== 'string' ||
+        accessToken.length < 32 ||
+        accessToken.length > 8192 ||
+        accessToken.split('.').length !== 3
+      ) {
+        return { ok: false, error: 'access token is missing or malformed' };
+      }
+      if (typeof refreshToken !== 'string' || refreshToken.length < 16) {
+        return { ok: false, error: 'refresh_token missing or too short' };
+      }
+      const expSec =
+        typeof expiresInSec === 'number' && Number.isFinite(expiresInSec) && expiresInSec > 0
+          ? expiresInSec
+          : 3600;
+      tokenManager.saveTokens({ accessToken, refreshToken, expiresInSec: expSec });
+      return { ok: true };
+    }
+  );
+
   // Bridge TokenManager events → renderer.
   tokenManager.on('token-changed', () => {
     apiClient.setApiClientIdToken(tokenManager.getAccessToken());
