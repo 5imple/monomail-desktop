@@ -368,12 +368,7 @@ const OnBoardingLayout: FC = () => {
           <OnBoardingCommand onContinue={onContinue} />
         )
       },
-      {
-        name: 'subscribe',
-        component: (onContinue: () => void, onBack?: () => void) => (
-          <OnBoardingSubscribe onContinue={onContinue} />
-        )
-      },
+      // 'subscribe' step removed — payment-free build.
       {
         name: 'final',
         component: (onContinue: () => void, onBack?: () => void) => (
