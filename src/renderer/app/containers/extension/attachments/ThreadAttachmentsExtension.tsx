@@ -198,9 +198,14 @@ export function ThreadAttachmentsExtension({}: ThreadAttachmentsExtensionProps) 
 
   return (
     <div className={cn('no-drag relative flex h-full min-w-[320px] flex-col transition-all')}>
-      <div className="drag my flex items-center justify-between p-2">
-        <div className="text-md ml-2 font-semibold">
-          {t('extension.attachments.title', 'Attachments')}
+      <div className="drag flex items-center justify-between border-b border-border/40 px-4 py-3">
+        <div>
+          <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {t('extension.attachments.scope', 'In thread')}
+          </p>
+          <h3 className="text-[15px] font-medium tracking-tight text-foreground">
+            {t('extension.attachments.title', 'Attachments')}
+          </h3>
         </div>
       </div>
 
@@ -262,18 +267,23 @@ export function ThreadAttachmentsExtension({}: ThreadAttachmentsExtensionProps) 
                     accountId={thread.accountId || accounts[0]?.uid}
                     attachment={attachment}
                   />
-                  <div
+                  <button
+                    type="button"
                     className={cn(
-                      'mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground hover:text-foreground',
-                      selectedThreads.includes(threadId) && 'font-medium text-foreground'
+                      'mt-1.5 cursor-pointer truncate text-left transition-colors',
+                      selectedThreads.includes(threadId) && 'text-foreground'
                     )}
                     onClick={() => handleThreadSelection(threadId)}
                   >
-                    <div className="p-1">
-                      {thread.subject || t('extension.attachments.no_subject', 'No subject')}
-                      <div className="">{formatListDate(thread.timestamp)}</div>
+                    <div className="px-1">
+                      <div className="truncate text-[11px] font-medium tracking-tight text-foreground/80 hover:text-foreground">
+                        {thread.subject || t('extension.attachments.no_subject', 'No subject')}
+                      </div>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.08em] tabular-nums text-muted-foreground">
+                        {formatListDate(thread.timestamp)}
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 </div>
               );
             })}

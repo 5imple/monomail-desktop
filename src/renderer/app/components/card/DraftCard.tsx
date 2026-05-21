@@ -131,15 +131,22 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
           >
             {/* Use draftMessage instead of item */}
             <div className="flex items-center gap-4 text-sm">
-              <div className="w-full">
+              <div className="w-full min-w-0">
+                <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  {draftMessage.isAiGenerated ? (
+                    <>
+                      <MonoIcon
+                        className="mr-1 inline-block h-3 w-3 -translate-y-[1px] text-accent"
+                        type={'Sparkles'}
+                      />
+                      AI draft
+                    </>
+                  ) : (
+                    'Draft'
+                  )}
+                </p>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="line-clamp-1 font-semibold">
-                    <Badge sizeVariant={'xs'} variant={'destructive'} className="mr-2 rounded-sm">
-                      {draftMessage.isAiGenerated && (
-                        <MonoIcon className="mr-1 h-3 w-3" type={'Sparkles'} />
-                      )}
-                      Draft
-                    </Badge>
+                  <div className="line-clamp-1 text-[14px] font-medium tracking-tight text-foreground">
                     {draftMessage.subject.length > 0 ? draftMessage.subject : '(No subject)'}
                   </div>
                   {draftMessage.timestamp && (

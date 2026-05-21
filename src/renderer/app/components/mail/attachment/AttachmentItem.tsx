@@ -93,7 +93,10 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
   };
 
   const formatFileSize = (size: number) => {
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   };
 
   return (
@@ -101,16 +104,20 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
       variant={'secondary'}
       sizeVariant={size}
       onClick={preview ? handlePreview : downloadAttachment}
-      className={cn('flex w-fit items-center justify-center gap-2 rounded-md border p-3 shadow-sm')}
+      className={cn(
+        'group flex w-fit items-center gap-2 rounded-md border border-border/60 bg-card px-3 py-2 shadow-sm transition-colors hover:border-accent/40 hover:bg-accent/5'
+      )}
       disabled={isDownloading || disabled}
       tabIndex={tabIndex}
     >
-      {isDownloading ? <Loader className="mr-1" /> : getAttachmentIcon(attachment.mimeType)}
-      <div className="flex flex-1 items-center text-sm">
-        <div className="max-w-64 overflow-hidden text-ellipsis">
-          <span className="whitespace-nowrap">{attachment.fileName}</span>
-        </div>
-        <span className="ml-2 mt-0.5 text-xs text-muted-foreground">
+      <span className="shrink-0 text-muted-foreground transition-colors group-hover:text-accent">
+        {isDownloading ? <Loader /> : getAttachmentIcon(attachment.mimeType)}
+      </span>
+      <div className="flex items-center gap-2">
+        <span className="max-w-64 truncate whitespace-nowrap text-[13px] font-medium tracking-tight text-foreground">
+          {attachment.fileName}
+        </span>
+        <span className="font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
           {formatFileSize(attachment.size)}
         </span>
         {children}
