@@ -1,20 +1,25 @@
 import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
+import electronApi from '@/renderer/app/lib/electronApi';
+import { useAuth } from '@/renderer/app/context/AuthContext';
+import type {
+  ScheduleRecord,
+  SnoozeRecord,
+  ThreadSnapshot,
+  DraftSnapshot
+} from '@/main/api/queue/types';
 import { atomWithStorage } from 'jotai/utils';
-import { useAtom } from 'jotai';
-import { useCallback, useMemo } from 'react';
+import { getDefaultStore, useAtom } from 'jotai';
+import { useCallback, useEffect, useMemo } from 'react';
 
 /**
- * Piece 1 of P8 — Later Queue (client-only build).
+ * P8 Later Queue — IPC-backed (Phase B, pieces 1 + 4 wired together).
  *
- * Tracks snoozed threads + scheduled drafts in a Jotai atom persisted to
- * IndexedDB. The state only fires while the app is open — there's no
- * backend integration yet (pieces 4 + 6 deferred pending backend
- * contract). When backend ships, this atom becomes the local mirror of
- * server state instead of the source of truth.
- *
- * Shape is intentionally minimal: just enough metadata to render the
- * QueueRow (sender/recipient name, subject, snippet, snooze/send time)
- * without re-fetching the underlying thread or draft.
+ * The atom is now a local cache mirroring server state. Writes go
+ * through main-process IPC (`electronApi.queue*`), which speaks HTTP
+ * to `/api/v1/mail/{snooze,schedule}`. Push events fire from the server
+ * to `renderer:queue:event` and update the cache. IndexedDB still
+ * persists the cache so the queue renders instantly on app reopen,
+ * with a server hydrate behind it.
  */
 
 export interface SnoozedItem {
@@ -55,72 +60,237 @@ export const queueAtom = atomWithStorage<QueueState>(
   createIndexedDBStorage<QueueState>({ defaultValue: QUEUE_DEFAULT })
 );
 
+// ---- mapping: server record → cache item ---------------------------------
+
+function snoozeRecordToItem(r: SnoozeRecord): SnoozedItem {
+  return {
+    id: r.snoozeId,
+    threadId: r.threadId,
+    accountId: r.accountId,
+    sender: r.threadSnapshot.from,
+    subject: r.threadSnapshot.subject,
+    snippet: r.threadSnapshot.snippet,
+    snoozeUntil: r.snoozeUntil,
+    isStarred: r.threadSnapshot.isStarred,
+    createdAt: r.createdAt
+  };
+}
+
+function scheduleRecordToItem(r: ScheduleRecord): ScheduledItem {
+  return {
+    id: r.scheduleId,
+    draftId: r.draftId,
+    accountId: r.accountId,
+    recipients: r.draftSnapshot.recipients,
+    subject: r.draftSnapshot.subject,
+    bodySnippet: r.draftSnapshot.bodySnippet,
+    scheduledFor: r.sendAt,
+    attachmentCount: r.draftSnapshot.attachmentCount,
+    isReply: r.draftSnapshot.isReply,
+    createdAt: r.createdAt
+  };
+}
+
+// ---- push subscription (module singleton) --------------------------------
+
+interface QueueEvent {
+  type: string;
+  snoozeId?: string;
+  scheduleId?: string;
+  threadId?: string;
+  accountId?: string;
+  snoozeUntil?: string;
+  sendAt?: string;
+  messageId?: string;
+}
+
+let pushSubscribed = false;
+
+function ensurePushSubscribed() {
+  if (pushSubscribed) return;
+  if (!electronApi || typeof electronApi.on !== 'function') return;
+  pushSubscribed = true;
+  electronApi.on<QueueEvent>('renderer:queue:event', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const store = getDefaultStore();
+    const prev = store.get(queueAtom);
+    switch (data.type) {
+      case 'THREAD_UNSNOOZED': {
+        if (!data.snoozeId) return;
+        const { [data.snoozeId]: _removed, ...rest } = prev.snoozed;
+        store.set(queueAtom, { ...prev, snoozed: rest });
+        return;
+      }
+      case 'SCHEDULED_SENT': {
+        if (!data.scheduleId) return;
+        const { [data.scheduleId]: _removed, ...rest } = prev.scheduled;
+        store.set(queueAtom, { ...prev, scheduled: rest });
+        return;
+      }
+      case 'SNOOZE_RESCHEDULED': {
+        if (!data.snoozeId || !data.snoozeUntil) return;
+        const item = prev.snoozed[data.snoozeId];
+        if (!item) return;
+        store.set(queueAtom, {
+          ...prev,
+          snoozed: {
+            ...prev.snoozed,
+            [data.snoozeId]: { ...item, snoozeUntil: data.snoozeUntil }
+          }
+        });
+        return;
+      }
+      case 'SCHEDULE_RESCHEDULED': {
+        if (!data.scheduleId || !data.sendAt) return;
+        const item = prev.scheduled[data.scheduleId];
+        if (!item) return;
+        store.set(queueAtom, {
+          ...prev,
+          scheduled: {
+            ...prev.scheduled,
+            [data.scheduleId]: { ...item, scheduledFor: data.sendAt }
+          }
+        });
+        return;
+      }
+    }
+  });
+}
+
+// ---- hook -----------------------------------------------------------------
+
 export function useQueueAtom() {
   const [state, setState] = useAtom(queueAtom);
+  const { accounts } = useAuth();
+  const primaryAccountId = accounts[0]?.uid ?? '';
+
+  // Subscribe to push events once (idempotent across consumers).
+  useEffect(() => {
+    ensurePushSubscribed();
+  }, []);
+
+  // Hydrate from server once we have an account.
+  useEffect(() => {
+    if (!primaryAccountId) return;
+    let cancelled = false;
+    (async () => {
+      const [snoozeRes, schedRes] = await Promise.all([
+        electronApi.queueListSnoozed(primaryAccountId),
+        electronApi.queueListScheduled(primaryAccountId)
+      ]);
+      if (cancelled) return;
+      setState((prev) => ({
+        snoozed: snoozeRes.ok
+          ? Object.fromEntries(
+              snoozeRes.data.items.map((r) => [r.snoozeId, snoozeRecordToItem(r)])
+            )
+          : prev.snoozed,
+        scheduled: schedRes.ok
+          ? Object.fromEntries(
+              schedRes.data.items.map((r) => [r.scheduleId, scheduleRecordToItem(r)])
+            )
+          : prev.scheduled
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryAccountId, setState]);
 
   const snoozedItems = useMemo(() => Object.values(state.snoozed), [state.snoozed]);
   const scheduledItems = useMemo(() => Object.values(state.scheduled), [state.scheduled]);
 
   const snoozeThread = useCallback(
-    (item: Omit<SnoozedItem, 'createdAt'>) => {
-      const stamped: SnoozedItem = { ...item, createdAt: new Date().toISOString() };
-      setState((prev) => ({ ...prev, snoozed: { ...prev.snoozed, [item.id]: stamped } }));
+    async (req: {
+      threadId: string;
+      accountId: string;
+      snoozeUntil: string;
+      threadSnapshot?: ThreadSnapshot;
+    }) => {
+      const res = await electronApi.queueSnooze(req);
+      if (!res.ok) return { ok: false as const, error: res.error };
+      const item = snoozeRecordToItem(res.data);
+      setState((prev) => ({ ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }));
+      return { ok: true as const, item };
     },
     [setState]
   );
 
   const unsnooze = useCallback(
-    (itemId: string) => {
+    async (snoozeId: string) => {
+      // Optimistic — drop from cache immediately. Server-side delete is
+      // best-effort; if it fails the next hydrate will restore the row.
       setState((prev) => {
-        const { [itemId]: _, ...rest } = prev.snoozed;
+        const { [snoozeId]: _removed, ...rest } = prev.snoozed;
         return { ...prev, snoozed: rest };
       });
+      const res = await electronApi.queueUnsnooze(snoozeId);
+      return res.ok ? { ok: true as const } : { ok: false as const, error: res.error };
     },
     [setState]
   );
 
   const rescheduleSnooze = useCallback(
-    (itemId: string, snoozeUntil: string) => {
-      setState((prev) => {
-        const existing = prev.snoozed[itemId];
-        if (!existing) return prev;
-        return {
-          ...prev,
-          snoozed: { ...prev.snoozed, [itemId]: { ...existing, snoozeUntil } }
-        };
-      });
+    async (snoozeId: string, snoozeUntil: string) => {
+      const res = await electronApi.queueRescheduleSnooze({ snoozeId, snoozeUntil });
+      if (!res.ok) return { ok: false as const, error: res.error };
+      const item = snoozeRecordToItem(res.data);
+      setState((prev) => ({ ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }));
+      return { ok: true as const };
     },
     [setState]
   );
 
   const scheduleDraft = useCallback(
-    (item: Omit<ScheduledItem, 'createdAt'>) => {
-      const stamped: ScheduledItem = { ...item, createdAt: new Date().toISOString() };
-      setState((prev) => ({ ...prev, scheduled: { ...prev.scheduled, [item.id]: stamped } }));
+    async (req: {
+      draftId: string;
+      accountId: string;
+      sendAt: string;
+      draftSnapshot?: DraftSnapshot;
+    }) => {
+      const res = await electronApi.queueSchedule(req);
+      if (!res.ok) return { ok: false as const, error: res.error };
+      const item = scheduleRecordToItem(res.data);
+      setState((prev) => ({ ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }));
+      return { ok: true as const, item };
     },
     [setState]
   );
 
   const cancelSchedule = useCallback(
-    (itemId: string) => {
+    async (scheduleId: string) => {
       setState((prev) => {
-        const { [itemId]: _, ...rest } = prev.scheduled;
+        const { [scheduleId]: _removed, ...rest } = prev.scheduled;
         return { ...prev, scheduled: rest };
       });
+      const res = await electronApi.queueCancelSchedule(scheduleId);
+      return res.ok ? { ok: true as const } : { ok: false as const, error: res.error };
     },
     [setState]
   );
 
   const rescheduleSend = useCallback(
-    (itemId: string, scheduledFor: string) => {
+    async (scheduleId: string, sendAt: string) => {
+      const res = await electronApi.queueRescheduleSend({ scheduleId, sendAt });
+      if (!res.ok) return { ok: false as const, error: res.error };
+      const item = scheduleRecordToItem(res.data);
+      setState((prev) => ({
+        ...prev,
+        scheduled: { ...prev.scheduled, [item.id]: item }
+      }));
+      return { ok: true as const };
+    },
+    [setState]
+  );
+
+  const sendScheduledNow = useCallback(
+    async (scheduleId: string) => {
       setState((prev) => {
-        const existing = prev.scheduled[itemId];
-        if (!existing) return prev;
-        return {
-          ...prev,
-          scheduled: { ...prev.scheduled, [itemId]: { ...existing, scheduledFor } }
-        };
+        const { [scheduleId]: _removed, ...rest } = prev.scheduled;
+        return { ...prev, scheduled: rest };
       });
+      const res = await electronApi.queueSendNow(scheduleId);
+      return res.ok ? { ok: true as const } : { ok: false as const, error: res.error };
     },
     [setState]
   );
@@ -133,6 +303,8 @@ export function useQueueAtom() {
     rescheduleSnooze,
     scheduleDraft,
     cancelSchedule,
-    rescheduleSend
+    rescheduleSend,
+    sendScheduledNow,
+    primaryAccountId
   };
 }

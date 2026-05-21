@@ -1,5 +1,6 @@
 import { FC, useMemo, useState } from 'react';
 import { Inbox, Send } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/renderer/app/lib/utils';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import type { ScheduledItem, SnoozedItem } from '@/renderer/app/store/queue/useQueueAtom';
@@ -121,7 +122,8 @@ const QueueContainer: FC = () => {
     unsnooze,
     rescheduleSnooze,
     cancelSchedule,
-    rescheduleSend
+    rescheduleSend,
+    sendScheduledNow
   } = useQueueAtom();
 
   const [activeTab, setActiveTab] = useState<LaterQueueTab>('snoozed');
@@ -174,11 +176,18 @@ const QueueContainer: FC = () => {
           presets={presets}
           reschedulingItemId={reschedulingItemId}
           onOpenRescheduleFor={setReschedulingItemId}
-          onBringBackNow={unsnooze}
-          onCancelSnooze={unsnooze}
-          onRescheduleSnooze={(id, until) => {
-            rescheduleSnooze(id, until);
+          onBringBackNow={async (id) => {
+            const res = await unsnooze(id);
+            if (!res.ok) toast.error(`Couldn't bring back: ${res.error}`);
+          }}
+          onCancelSnooze={async (id) => {
+            const res = await unsnooze(id);
+            if (!res.ok) toast.error(`Couldn't cancel snooze: ${res.error}`);
+          }}
+          onRescheduleSnooze={async (id, until) => {
+            const res = await rescheduleSnooze(id, until);
             setReschedulingItemId(null);
+            if (!res.ok) toast.error(`Couldn't reschedule: ${res.error}`);
           }}
         />
       ) : (
@@ -188,11 +197,21 @@ const QueueContainer: FC = () => {
           presets={presets}
           reschedulingItemId={reschedulingItemId}
           onOpenRescheduleFor={setReschedulingItemId}
-          onSendNow={cancelSchedule}
-          onCancelSchedule={cancelSchedule}
-          onRescheduleSend={(id, when) => {
-            rescheduleSend(id, when);
+          onSendNow={async (id) => {
+            // Actually fire the send via the dedicated endpoint — the
+            // mock backend will broadcast SCHEDULED_SENT which clears
+            // the cache too, but we drop it optimistically on success.
+            const res = await sendScheduledNow(id);
+            if (!res.ok) toast.error(`Couldn't send now: ${res.error}`);
+          }}
+          onCancelSchedule={async (id) => {
+            const res = await cancelSchedule(id);
+            if (!res.ok) toast.error(`Couldn't cancel: ${res.error}`);
+          }}
+          onRescheduleSend={async (id, when) => {
+            const res = await rescheduleSend(id, when);
             setReschedulingItemId(null);
+            if (!res.ok) toast.error(`Couldn't reschedule: ${res.error}`);
           }}
         />
       )}

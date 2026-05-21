@@ -393,31 +393,42 @@ export default ComposeCardFooter;
  */
 function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: boolean }) {
   const [open, setOpen] = useState(false);
-  const { scheduleDraft } = useQueueAtom();
+  const { scheduleDraft, primaryAccountId } = useQueueAtom();
   const { setActiveLayout } = useGlobalAtom();
+  const { getUidFromEmail } = useAuth();
   const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
 
   const handlePickPreset = useCallback(
-    (preset: { id: string; label: string; scheduledFor: string | null }) => {
+    async (preset: { id: string; label: string; scheduledFor: string | null }) => {
       if (!preset.scheduledFor) return;
+      const accountId = getUidFromEmail(draft.from) || primaryAccountId;
+      if (!accountId) {
+        toast.error('Could not determine sending account');
+        return;
+      }
       const bodyPlain = (draft.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      scheduleDraft({
-        id: `sched-${draft.id}-${Date.now()}`,
+      const res = await scheduleDraft({
         draftId: draft.id,
-        accountId: '',
-        recipients: draft.to.map((email) => ({ id: email, name: email, email })),
-        subject: draft.subject || '(no subject)',
-        bodySnippet: bodyPlain.slice(0, 160),
-        scheduledFor: preset.scheduledFor,
-        attachmentCount: Object.keys(draft.attachments || {}).length,
-        isReply: false
+        accountId,
+        sendAt: preset.scheduledFor,
+        draftSnapshot: {
+          subject: draft.subject || '(no subject)',
+          bodySnippet: bodyPlain.slice(0, 160),
+          recipients: draft.to.map((email) => ({ id: email, name: email, email })),
+          attachmentCount: Object.keys(draft.attachments || {}).length,
+          isReply: false
+        }
       });
       setOpen(false);
+      if (!res.ok) {
+        toast.error(`Couldn't schedule send: ${res.error}`);
+        return;
+      }
       // Surface the queue so the user sees their entry land.
       setActiveLayout('LATER');
       toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
     },
-    [draft, scheduleDraft, setActiveLayout]
+    [draft, scheduleDraft, setActiveLayout, getUidFromEmail, primaryAccountId]
   );
 
   return (

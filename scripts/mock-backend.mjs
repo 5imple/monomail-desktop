@@ -69,6 +69,52 @@ const STUB_PREFERENCE = {
   notifications: {}
 };
 
+// ---------- P8 Later Queue ---------------------------------------------------
+// In-memory storage of snoozed threads + scheduled drafts. Server is the
+// source of truth in production; here it's a Map per type. Connected
+// WebSocket clients (`wsClients`) receive THREAD_UNSNOOZED /
+// SCHEDULED_SENT broadcasts when items fire on the queue tick (every 30s).
+
+/** @type {Map<string, any>} */
+const snoozes = new Map();
+/** @type {Map<string, any>} */
+const schedules = new Map();
+/** @type {Set<import('ws').WebSocket>} */
+const wsClients = new Set();
+
+const QUEUE_MAX_PER_ACCOUNT = 50;
+const QUEUE_MIN_FUTURE_MS = 60_000;
+const QUEUE_TICK_MS = Number(process.env.MOCK_QUEUE_TICK_MS || 30_000);
+
+function isPlausibleIsoFuture(s) {
+  if (typeof s !== 'string' || s.length === 0) return false;
+  const t = Date.parse(s);
+  if (Number.isNaN(t)) return false;
+  return t - Date.now() >= QUEUE_MIN_FUTURE_MS;
+}
+
+function countByAccount(map, accountId) {
+  let n = 0;
+  for (const v of map.values()) if (v.accountId === accountId) n++;
+  return n;
+}
+
+function broadcastQueueEvent(eventType, payload) {
+  const frame = {
+    data: { type: eventType, ...payload }
+  };
+  const json = JSON.stringify(frame);
+  for (const ws of wsClients) {
+    if (ws.readyState === ws.OPEN) {
+      try {
+        ws.send(json);
+      } catch (e) {
+        console.warn('[push] broadcast failed:', e.message);
+      }
+    }
+  }
+}
+
 // ---------- token helpers ---------------------------------------------------
 
 function base64url(buf) {
@@ -294,6 +340,169 @@ const server = createServer(async (req, res) => {
       return send(res, 200, {});
     }
 
+    // ---------- P8 Later Queue endpoints ----------------------------------
+
+    // POST /mail/snooze — create snooze
+    if (method === 'POST' && apiPath === '/mail/snooze') {
+      const body = await readJson(req).catch(() => ({}));
+      const { threadId, accountId, snoozeUntil } = body;
+      if (!threadId || !accountId) {
+        return send(res, 400, { error: 'threadId and accountId required' });
+      }
+      if (!isPlausibleIsoFuture(snoozeUntil)) {
+        return send(res, 400, { error: 'snoozeUntil must be ISO8601 and ≥ 60s in the future' });
+      }
+      if (countByAccount(snoozes, accountId) >= QUEUE_MAX_PER_ACCOUNT) {
+        return send(res, 402, { error: `quota exceeded (max ${QUEUE_MAX_PER_ACCOUNT})` });
+      }
+      // Reject duplicate active snooze for the same thread.
+      for (const v of snoozes.values()) {
+        if (v.threadId === threadId && v.accountId === accountId) {
+          return send(res, 409, { error: 'thread already snoozed', snoozeId: v.snoozeId });
+        }
+      }
+      const snoozeId = `snz-${randomBytes(6).toString('hex')}`;
+      const record = {
+        snoozeId,
+        threadId,
+        accountId,
+        snoozeUntil,
+        createdAt: new Date().toISOString(),
+        // The thread snapshot is stubbed in dev — real backend pulls it
+        // from the actual thread row.
+        threadSnapshot: body.threadSnapshot ?? {
+          subject: 'Mock thread',
+          snippet: 'Mock snippet — real backend would populate this from the thread row.',
+          from: { id: 'mock-sender', name: 'Mock Sender', email: 'mock@example.com' },
+          isStarred: false
+        }
+      };
+      snoozes.set(snoozeId, record);
+      return send(res, 201, record);
+    }
+
+    // GET /mail/snooze — list snoozes for an account
+    if (method === 'GET' && apiPath === '/mail/snooze') {
+      const accountId = url.searchParams.get('accountId');
+      const items = [];
+      for (const v of snoozes.values()) {
+        if (!accountId || v.accountId === accountId) items.push(v);
+      }
+      return send(res, 200, { items });
+    }
+
+    // DELETE /mail/snooze/:id — unsnooze now
+    {
+      const m = apiPath.match(/^\/mail\/snooze\/([^/]+)$/);
+      if (m && method === 'DELETE') {
+        const id = m[1];
+        if (!snoozes.has(id)) return send(res, 404, { error: 'snooze not found' });
+        snoozes.delete(id);
+        // Notify clients so any open inbox view can refresh.
+        broadcastQueueEvent('THREAD_UNSNOOZED', {
+          snoozeId: id,
+          threadId: (snoozes.get(id) ?? {}).threadId,
+          accountId: (snoozes.get(id) ?? {}).accountId
+        });
+        return send(res, 200, { ok: true });
+      }
+      if (m && method === 'PATCH') {
+        const id = m[1];
+        if (!snoozes.has(id)) return send(res, 404, { error: 'snooze not found' });
+        const body = await readJson(req).catch(() => ({}));
+        if (!isPlausibleIsoFuture(body.snoozeUntil)) {
+          return send(res, 400, { error: 'snoozeUntil must be ISO8601 and ≥ 60s in the future' });
+        }
+        const updated = { ...snoozes.get(id), snoozeUntil: body.snoozeUntil };
+        snoozes.set(id, updated);
+        broadcastQueueEvent('SNOOZE_RESCHEDULED', {
+          snoozeId: id,
+          snoozeUntil: body.snoozeUntil
+        });
+        return send(res, 200, updated);
+      }
+    }
+
+    // POST /mail/schedule — schedule a draft
+    if (method === 'POST' && apiPath === '/mail/schedule') {
+      const body = await readJson(req).catch(() => ({}));
+      const { draftId, sendAt, accountId } = body;
+      if (!draftId || !accountId) {
+        return send(res, 400, { error: 'draftId and accountId required' });
+      }
+      if (!isPlausibleIsoFuture(sendAt)) {
+        return send(res, 400, { error: 'sendAt must be ISO8601 and ≥ 60s in the future' });
+      }
+      if (countByAccount(schedules, accountId) >= QUEUE_MAX_PER_ACCOUNT) {
+        return send(res, 402, { error: `quota exceeded (max ${QUEUE_MAX_PER_ACCOUNT})` });
+      }
+      const scheduleId = `sch-${randomBytes(6).toString('hex')}`;
+      const record = {
+        scheduleId,
+        draftId,
+        accountId,
+        sendAt,
+        createdAt: new Date().toISOString(),
+        draftSnapshot: body.draftSnapshot ?? {
+          subject: 'Mock scheduled draft',
+          bodySnippet: 'Mock body — real backend would populate from the draft row.',
+          recipients: [],
+          attachmentCount: 0,
+          isReply: false
+        }
+      };
+      schedules.set(scheduleId, record);
+      return send(res, 201, record);
+    }
+
+    // GET /mail/schedule — list scheduled drafts
+    if (method === 'GET' && apiPath === '/mail/schedule') {
+      const accountId = url.searchParams.get('accountId');
+      const items = [];
+      for (const v of schedules.values()) {
+        if (!accountId || v.accountId === accountId) items.push(v);
+      }
+      return send(res, 200, { items });
+    }
+
+    // /mail/schedule/:id and /mail/schedule/:id/send-now
+    {
+      const sendNowMatch = apiPath.match(/^\/mail\/schedule\/([^/]+)\/send-now$/);
+      if (sendNowMatch && method === 'POST') {
+        const id = sendNowMatch[1];
+        const record = schedules.get(id);
+        if (!record) return send(res, 404, { error: 'schedule not found' });
+        schedules.delete(id);
+        const messageId = `msg-${randomBytes(6).toString('hex')}`;
+        broadcastQueueEvent('SCHEDULED_SENT', {
+          scheduleId: id,
+          draftId: record.draftId,
+          accountId: record.accountId,
+          messageId
+        });
+        return send(res, 200, { ok: true, messageId });
+      }
+      const m = apiPath.match(/^\/mail\/schedule\/([^/]+)$/);
+      if (m && method === 'DELETE') {
+        const id = m[1];
+        if (!schedules.has(id)) return send(res, 404, { error: 'schedule not found' });
+        schedules.delete(id);
+        return send(res, 200, { ok: true });
+      }
+      if (m && method === 'PATCH') {
+        const id = m[1];
+        if (!schedules.has(id)) return send(res, 404, { error: 'schedule not found' });
+        const body = await readJson(req).catch(() => ({}));
+        if (!isPlausibleIsoFuture(body.sendAt)) {
+          return send(res, 400, { error: 'sendAt must be ISO8601 and ≥ 60s in the future' });
+        }
+        const updated = { ...schedules.get(id), sendAt: body.sendAt };
+        schedules.set(id, updated);
+        broadcastQueueEvent('SCHEDULE_RESCHEDULED', { scheduleId: id, sendAt: body.sendAt });
+        return send(res, 200, updated);
+      }
+    }
+
     // Everything else: pretend it's fine but log loudly so we know what
     // else the client wants.
     console.warn(`[mock] unstubbed ${method} ${path} → returning empty 200`);
@@ -316,6 +525,7 @@ wss.on('connection', (ws, req) => {
     return;
   }
   console.log(`[push] client connected (token=${token.slice(0, 16)}…)`);
+  wsClients.add(ws);
 
   // Send a welcome control frame (no `data` → client treats as control,
   // doesn't forward to renderer).
@@ -351,10 +561,45 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', (code, reason) => {
     clearInterval(interval);
+    wsClients.delete(ws);
     console.log(`[push] client closed code=${code} reason=${reason?.toString() || ''}`);
   });
   ws.on('error', (err) => console.warn('[push] error:', err.message));
 });
+
+// ---------- P8 piece 6: queue fire-time tick --------------------------------
+// Iterates snoozes + schedules every QUEUE_TICK_MS. For any item whose
+// time has passed, fires the corresponding push event to all connected
+// clients and removes it from the map. Real backend would also actually
+// send the email for SCHEDULED_SENT.
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, record] of snoozes) {
+    if (Date.parse(record.snoozeUntil) <= now) {
+      snoozes.delete(id);
+      broadcastQueueEvent('THREAD_UNSNOOZED', {
+        snoozeId: id,
+        threadId: record.threadId,
+        accountId: record.accountId
+      });
+      console.log(`[queue] fired THREAD_UNSNOOZED for ${id}`);
+    }
+  }
+  for (const [id, record] of schedules) {
+    if (Date.parse(record.sendAt) <= now) {
+      schedules.delete(id);
+      const messageId = `msg-${randomBytes(6).toString('hex')}`;
+      broadcastQueueEvent('SCHEDULED_SENT', {
+        scheduleId: id,
+        draftId: record.draftId,
+        accountId: record.accountId,
+        messageId
+      });
+      console.log(`[queue] fired SCHEDULED_SENT for ${id} (msg=${messageId})`);
+    }
+  }
+}, QUEUE_TICK_MS);
 
 // ---------- Boot ------------------------------------------------------------
 

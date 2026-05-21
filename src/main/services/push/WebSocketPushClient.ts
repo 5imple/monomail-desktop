@@ -153,6 +153,25 @@ class WebSocketPushClient {
     // the renderer. Anything without a `data` object is treated as control
     // traffic.
     if (!('data' in (frame as Record<string, unknown>))) return;
+
+    const data = (frame as { data?: Record<string, unknown> }).data;
+    const eventType = typeof data?.type === 'string' ? data.type : '';
+
+    // P8 Later Queue events route directly to a dedicated renderer
+    // channel — they don't drive native notifications and shouldn't be
+    // parsed as mail. Skip handlePushFrame so MESSAGE_ADDED-style
+    // post-processing doesn't run.
+    if (
+      eventType === 'THREAD_UNSNOOZED' ||
+      eventType === 'SCHEDULED_SENT' ||
+      eventType === 'SNOOZE_RESCHEDULED' ||
+      eventType === 'SCHEDULE_RESCHEDULED'
+    ) {
+      const w = windowManager.getMainAppWindow();
+      if (w) w.webContents.send('renderer:queue:event', data);
+      return;
+    }
+
     // Drive native notifications first (so they fire even if the window
     // isn't created yet), then forward to the renderer to update the
     // thread list / message store.

@@ -29,6 +29,21 @@ const api = {
   refreshToken: () => ipcRenderer.invoke('main:auth:refresh'),
   devSignIn: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
     ipcRenderer.invoke('main:auth:dev-sign-in', args),
+  // ---------- P8 Later Queue ----------
+  queueSnooze: (req: any) => ipcRenderer.invoke('main:queue:snooze', req),
+  queueListSnoozed: (accountId: string) =>
+    ipcRenderer.invoke('main:queue:list-snoozed', accountId),
+  queueUnsnooze: (snoozeId: string) => ipcRenderer.invoke('main:queue:unsnooze', snoozeId),
+  queueRescheduleSnooze: (args: { snoozeId: string; snoozeUntil: string }) =>
+    ipcRenderer.invoke('main:queue:reschedule-snooze', args),
+  queueSchedule: (req: any) => ipcRenderer.invoke('main:queue:schedule', req),
+  queueListScheduled: (accountId: string) =>
+    ipcRenderer.invoke('main:queue:list-scheduled', accountId),
+  queueCancelSchedule: (scheduleId: string) =>
+    ipcRenderer.invoke('main:queue:cancel-schedule', scheduleId),
+  queueRescheduleSend: (args: { scheduleId: string; sendAt: string }) =>
+    ipcRenderer.invoke('main:queue:reschedule-send', args),
+  queueSendNow: (scheduleId: string) => ipcRenderer.invoke('main:queue:send-now', scheduleId),
   setAlertSound: (audio: AudioType) => ipcRenderer.invoke('main:system:set-alert-sound', audio),
   setIsFullSizeWindowOnCreation: (value: boolean) =>
     ipcRenderer.invoke('main:system:set-window-fullsize-on-creation', value),
