@@ -13,7 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/componen
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
 import { NodeViewWrapper } from '@tiptap/react';
 import { useEffect, useState } from 'react';
@@ -29,7 +29,6 @@ const SignatureSwitcher = ({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { signatures, getDefaultSignature, getSignatureById } = useSignatureAtom();
-  const { billingInfo } = useBillingAtom();
   const { getUidFromEmail, preference } = useAuth();
 
   const [signatureValue, setSignatureValue] = useState<string>();

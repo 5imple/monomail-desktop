@@ -37,7 +37,7 @@ import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
 import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
@@ -81,7 +81,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
   const { signatures, getSignatureById } = useSignatureAtom();
-  const { billingInfo, getUserPlan, hasProAccess } = useBillingAtom();
+  // Payment-free build — every plan gate evaluates as pro.
+  const hasProAccess = true;
   const { contactArray } = useContactAtom();
   const { openDialog } = useDialogs();
   const { updateDraft, sendDraft, removeDraft } = useDraftAtom();
@@ -96,9 +97,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [usedAiDraft, setUsedAiDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isGeneratingSubject, setIsGeneratingSubject] = useState(false);
-  const [trackingEnabled, setTrackingEnabled] = useState(
-    getUserPlan() === 'pro' || getUserPlan() === 'plus' || getUserPlan() === 'plus_onetime'
-  );
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
 
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);

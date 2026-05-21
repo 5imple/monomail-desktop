@@ -1,14 +1,9 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 import electronApi from '@/renderer/app/lib/electronApi';
-import {
-  getCachedBillingInfo,
-  type IMonoBillingInfo,
-  type SubscriptionStatus,
-  type UserPlan
-} from '@/renderer/app/store/account/useBillingAtom';
+// Billing imports removed — payment-free build, hasProAccess always true.
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 interface OfflineAction {
@@ -39,92 +34,15 @@ OfflineContext.displayName = 'OfflineContext';
 
 const OFFLINE_QUEUE_KEY = 'offline_actions_queue';
 
-// Plan product IDs for different environments
-const PLAN_PRODUCT_IDS = {
-  sandbox: {
-    plus: '467649',
-    pro: '467672'
-  },
-  production: {
-    plus: '500803',
-    pro: '500804'
-  }
-};
-
-// Utility functions to determine user plan and subscription status from cached billing info
-const getUserPlanFromCache = (billingInfo: IMonoBillingInfo | null): UserPlan => {
-  if (
-    !billingInfo?.subscription ||
-    (billingInfo.subscription.status !== 'active' && billingInfo.subscription.status !== 'on_trial')
-  ) {
-    return 'free';
-  }
-
-  const { productId } = billingInfo.subscription;
-  const isDevEnvironment = import.meta.env.MONO_ENV_APP_VERSION.includes('dev');
-  const productIds = isDevEnvironment ? PLAN_PRODUCT_IDS.sandbox : PLAN_PRODUCT_IDS.production;
-
-  switch (productId) {
-    case productIds.plus:
-      return 'plus';
-    case productIds.pro:
-      return 'pro';
-    default:
-      return 'free';
-  }
-};
-
-const hasActiveSubscriptionFromCache = (billingInfo: IMonoBillingInfo | null): boolean => {
-  if (!billingInfo?.subscription) {
-    return false;
-  }
-
-  const { status, endsAt } = billingInfo.subscription;
-
-  // Active statuses that are immediately valid
-  const activeStatuses: SubscriptionStatus[] = ['on_trial', 'active'];
-  if (activeStatuses.includes(status)) {
-    return true;
-  }
-
-  // For canceled subscriptions, check if we're still within the access period
-  if (status === 'cancelled' && endsAt) {
-    const currentDate = new Date();
-    const endDate = new Date(endsAt);
-    return currentDate < endDate;
-  }
-
-  return false;
-};
-
 export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [queuedActionsCount, setQueuedActionsCount] = useState(0);
-  const [cachedBillingInfo, setCachedBillingInfo] = useState<IMonoBillingInfo | null>(null);
   const { updateThreadsState } = useThreadOperationAtom();
 
-  // Load cached billing info on mount
-  useEffect(() => {
-    const loadCachedBillingInfo = async () => {
-      try {
-        const billingInfo = await getCachedBillingInfo();
-        setCachedBillingInfo(billingInfo);
-      } catch (error) {
-        console.warn('Failed to load cached billing info:', error);
-        setCachedBillingInfo(null);
-      }
-    };
-    loadCachedBillingInfo();
-  }, []);
-
-  // Check if user has Pro access using cached billing info
-  const hasProAccess = useMemo(() => {
-    const userPlan = getUserPlanFromCache(cachedBillingInfo);
-    const hasActiveSub = hasActiveSubscriptionFromCache(cachedBillingInfo);
-    return userPlan === 'pro' && hasActiveSub;
-  }, [cachedBillingInfo]);
+  // Payment-free build — offline actions always available.
+  const hasProAccess = true;
 
   // Load queued actions count on mount, but only for Pro users
   useEffect(() => {
@@ -257,15 +175,9 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsOnline(true);
       setIsOfflineMode(false);
 
-      // Refresh cached billing info when coming back online
-      try {
-        const billingInfo = await getCachedBillingInfo();
-        setCachedBillingInfo(billingInfo);
-      } catch (error) {
-        console.warn('Failed to refresh cached billing info on reconnect:', error);
-      }
+      // Payment-free build — no billing info to refresh on reconnect.
 
-      // Auto-sync when coming back online, but only for Pro users
+      // Auto-sync when coming back online (always allowed).
       if (hasProAccess) {
         setTimeout(() => {
           syncQueuedActions();

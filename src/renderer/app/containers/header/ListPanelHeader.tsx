@@ -21,7 +21,7 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useDefaultNav, useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 
@@ -45,7 +45,8 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     const { fetchThreadsHandler, resetThreadsArray, loadingStatus } = useThreadList();
     const { aggregatedSyncState } = useSyncHistory();
     const { updateDraft } = useDraftAtom();
-    const { getUserPlan, loading: billingLoading } = useBillingAtom();
+    const getUserPlan = () => 'pro';
+    const billingLoading = false;
     const { openDialog } = useDialogs();
     const { labelsMapByAccount } = useLabelAtom();
 

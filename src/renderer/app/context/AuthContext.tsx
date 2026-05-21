@@ -17,7 +17,7 @@ import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { auth } from '@/renderer/app/lib/monoAuth';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
-import { getCachedBillingInfo, useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom + getCachedBillingInfo removed — payment-free build.
 import { useAutopilotSettings } from '@/renderer/app/store/ai/useAutopilotSettings';
 import { useBookmarkAtom } from '@/renderer/app/store/bookmark/useBookmarkAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
@@ -252,7 +252,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { setSignatures } = useSignatureAtom();
   const { updateDraft, resetDrafts } = useDraftAtom();
   const { resetThreadsMap } = useThreadOperationAtom();
-  const { fetchSubscription, resetBillingInfo, setBillingInfo } = useBillingAtom();
+  // Payment-free build — billing state functions are no-ops below.
   const { loadShared, loadSharedForAllAccounts } = useSharedAtom();
   const { loadLabels, loadCachedLabels } = useLabelAtom();
   const { loadAutopilotSettings } = useAutopilotSettings();
@@ -374,12 +374,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [fetchAndSetTrackingHistories]);
 
   const fetchBilling = useCallback(
-    async (token: string) => {
-      // Try to get from cache first
-      // Then fetch fresh data
-      fetchSubscription(token);
+    async (_token: string) => {
+      // Payment-free build — no subscription to fetch. Kept as a no-op
+      // so call sites (post-sign-in hydration) don't need editing.
     },
-    [fetchSubscription]
+    []
   );
 
   const fetchTemplates = useCallback(async () => {
@@ -501,12 +500,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        const cachedBillingInfo = await getCachedBillingInfo();
-
-        if (cachedBillingInfo) {
-          // Set cached billing info immediately
-          setBillingInfo(cachedBillingInfo);
-        }
+        // Payment-free build — no cached billing info to hydrate.
         // Get fresh token BEFORE updating API client to avoid expired token issues
         let idToken: string;
         let shouldUseCachedToken = false;
@@ -812,7 +806,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await clearSpaceCache();
       await clearLabelsCache();
       electronApi.setIdToken(null);
-      resetBillingInfo();
+      // Payment-free build — no billing state to reset.
 
       setAuthState({
         isLoggedIn: false,
@@ -831,7 +825,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         'An error occurred during sign-out: ' + (error instanceof Error ? error.message : '')
       );
     }
-  }, [accounts, resetBillingInfo]);
+  }, [accounts]);
 
   const updateAccounts = useCallback(async () => {
     try {

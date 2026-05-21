@@ -13,7 +13,7 @@ import {
 } from '@/renderer/app/components/ui/select';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 
 import React, { useCallback, useRef, useState, useMemo } from 'react';
@@ -53,7 +53,8 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   onFromChange
 }) => {
   const { t } = useTranslation();
-  const { hasProAccess, getUserPlan } = useBillingAtom();
+  // Payment-free build — all plan gates always pass.
+  const hasProAccess = true;
   const { accounts, getUidFromEmail, getAccountByUid } = useAuth();
   const { openDialog } = useDialogs();
   const [from, setFrom] = useState(draft.from);
@@ -100,12 +101,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
         return;
       }
 
-      if (getUserPlan() !== 'plus' && getUserPlan() !== 'plus_onetime' && getUserPlan() !== 'pro') {
-        // Open billing page if user doesn't have pro access
-        openDialog('preference', { defaultPage: 'billing' });
-        return;
-      }
-
+      // Payment-free build — tracking is always available.
       onTrackingChange(checked);
     },
     [isCurrentAccountExpired, openDialog, hasProAccess, onTrackingChange]
@@ -262,14 +258,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
                   size="sm"
                   checked={trackingEnabled}
                   onCheckedChange={handleTrackingToggle}
-                  disabled={
-                    isCurrentAccountExpired ||
-                    !(
-                      getUserPlan() === 'plus' ||
-                      getUserPlan() === 'plus_onetime' ||
-                      getUserPlan() === 'pro'
-                    )
-                  }
+                  disabled={isCurrentAccountExpired}
                 />
                 <MonoIcon
                   type="CheckCheck"
@@ -277,13 +266,9 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
                     'h-4 w-4',
                     isCurrentAccountExpired
                       ? 'text-muted-foreground/50'
-                      : getUserPlan() === 'plus' ||
-                          getUserPlan() === 'plus_onetime' ||
-                          getUserPlan() === 'pro'
-                        ? trackingEnabled
-                          ? 'text-accent'
-                          : 'text-muted-foreground'
-                        : 'text-muted-foreground/50'
+                      : trackingEnabled
+                        ? 'text-accent'
+                        : 'text-muted-foreground'
                   )}
                 />
               </TooltipTrigger>

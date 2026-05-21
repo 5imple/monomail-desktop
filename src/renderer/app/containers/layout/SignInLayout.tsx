@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 
 interface SignInLayoutProps {}
 
@@ -31,7 +31,9 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
   const { signIn, isLoading, signOut, isLoggedIn, preference, member, idToken } = useAuth();
   const { loading } = useGlobalAtom();
   const { spaces } = useSpaceAtom();
-  const { hasActiveSubscription, fetchSubscription } = useBillingAtom();
+  // Payment-free build — subscription check is a constant true.
+  const hasActiveSubscription = () => true;
+  const fetchSubscription = async (_token: string) => undefined;
   const [devToken, setDevToken] = useState<string>('');
   const navigate = useNavigate();
   const [updateAvailable, setUpdateAvailable] = useState(false);

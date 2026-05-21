@@ -27,7 +27,7 @@ import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import {
   closestCenter,
   defaultDropAnimationSideEffects,
@@ -85,7 +85,7 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
   const { getAccountNavState, toggleAccountOpen, toggleBookmarksOpen, toggleLabelsOpen } =
     useSidebarAtom();
   const { threadsMap } = useThreadAtom();
-  const { getUserPlan } = useBillingAtom();
+  const getUserPlan = () => 'pro';
 
   // Keyboard navigation integration
   const containerRef = useRef<HTMLDivElement>(null);

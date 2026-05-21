@@ -1,10 +1,9 @@
 import { Switch } from '@/renderer/app/components/ui/switch';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
-import { TooltipPortal } from '@radix-ui/react-tooltip';
 import { forwardRef } from 'react';
-import { useTranslation } from 'react-i18next';
-import { isDevelopment } from '@/renderer/app/lib/accessManagement';
+
+// Payment-free build — BillingSwitch is a transparent wrapper around the
+// base Switch. The `requiresPlan` prop is accepted (for API compat with
+// the three settings forms that import it) but no longer gates anything.
 
 interface BillingSwitchProps {
   checked: boolean;
@@ -16,42 +15,17 @@ interface BillingSwitchProps {
 }
 
 export const BillingSwitch = forwardRef<React.ElementRef<typeof Switch>, BillingSwitchProps>(
-  (
-    { checked, onCheckedChange, disabled = false, requiresPlan = true, className, size, ...props },
-    ref
-  ) => {
-    const { getUserPlan } = useBillingAtom();
-    const { t } = useTranslation();
-
-    const hasActivePlan = getUserPlan() === 'pro';
-    const isDisabled = disabled || (requiresPlan && !hasActivePlan);
-    const showTooltip = requiresPlan && !hasActivePlan;
-
-    const switchElement = (
-      <Switch
-        ref={ref}
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={isDisabled}
-        className={className}
-        size={size}
-        {...props}
-      />
-    );
-
-    if (showTooltip) {
-      return (
-        <Tooltip>
-          <TooltipTrigger>{switchElement}</TooltipTrigger>
-          <TooltipPortal>
-            <TooltipContent>{t('settings.billing.upgrade_required')}</TooltipContent>
-          </TooltipPortal>
-        </Tooltip>
-      );
-    }
-
-    return switchElement;
-  }
+  ({ checked, onCheckedChange, disabled = false, className, size, ...props }, ref) => (
+    <Switch
+      ref={ref}
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      disabled={disabled}
+      className={className}
+      size={size}
+      {...props}
+    />
+  )
 );
 
 BillingSwitch.displayName = 'BillingSwitch';

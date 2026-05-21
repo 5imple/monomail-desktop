@@ -7,7 +7,8 @@ import { FC, useEffect, useRef, useState } from 'react';
 import aiApi from '@/main/api/ai';
 import { useTransition, animated } from '@react-spring/web';
 import { useTranslation } from 'react-i18next';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build, every consumer treats
+// hasProAccess as true.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import { useAuth } from '@/renderer/app/context/AuthContext';
@@ -23,7 +24,7 @@ interface AIComposeCardProps {
 
 const AIComposeCard: FC<AIComposeCardProps> = ({ onSave, onClose, uid, draft }) => {
   const { t } = useTranslation();
-  const { hasProAccess } = useBillingAtom();
+  const hasProAccess = true;
   const { openDialog } = useDialogs();
   const { getAccountByUid } = useAuth();
   const [input, setInput] = useState('');

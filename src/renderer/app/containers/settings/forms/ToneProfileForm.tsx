@@ -26,7 +26,7 @@ import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsP
 import { ToneSelectionDialog } from '@/renderer/app/containers/dialog/ToneSelectionDialog';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useAutopilotSettings } from '@/renderer/app/store/ai/useAutopilotSettings';
 
 type ToneProfileFormValues = {
@@ -47,7 +47,7 @@ export function ToneProfileForm() {
   const { accounts } = useAuth();
   const { loadAutopilotSettings, isLoading, updateAllSettingsForAccount, autopilotSettings } =
     useAutopilotSettings();
-  const { hasProAccess } = useBillingAtom();
+  const hasProAccess = true;
 
   const { t } = useTranslation();
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0].uid ?? '');

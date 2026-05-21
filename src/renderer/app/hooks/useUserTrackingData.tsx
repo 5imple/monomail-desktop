@@ -1,12 +1,11 @@
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// Payment-free build — billingInfo no longer carried.
 import mixpanel from 'mixpanel-browser';
 import * as amplitude from '@amplitude/analytics-browser';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 
 export const useUserTrackingData = () => {
   const { member } = useAuth();
-  const { billingInfo } = useBillingAtom();
 
   // Function to track events
   const trackEvent = (eventName: string, eventData: Record<string, any> = {}): void => {
@@ -17,8 +16,8 @@ export const useUserTrackingData = () => {
       email: member.email ?? 'unknown',
       name: member.displayName ?? 'unknown',
       member_name: member?.memberName ?? 'unknown',
-      subscription: billingInfo.subscription?.productName ?? '',
-      subscriptionVariant: billingInfo.subscription?.variantName ?? ''
+      subscription: '',
+      subscriptionVariant: ''
     };
 
     if (member.demographics) {

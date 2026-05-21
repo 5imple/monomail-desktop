@@ -25,7 +25,7 @@ import FilterExamplesDialog from '@/renderer/app/containers/settings/forms/filte
 import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { AIFilter, useAIFilters } from '@/renderer/app/store/filter/useAIFilters';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { TooltipPortal } from '@radix-ui/react-tooltip';
@@ -52,7 +52,7 @@ export const FilterForm = () => {
 
   const { getLabelsForAccount, labelsMapByAccount } = useLabelAtom();
   const { getAccountByUid, accounts } = useAuth();
-  const { getUserPlan } = useBillingAtom();
+  const getUserPlan = () => 'pro';
   const { t } = useTranslation();
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0].uid ?? '');
 

@@ -5,7 +5,7 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom import removed — payment-free build.
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { cn } from '@/renderer/app/lib/utils';

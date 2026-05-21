@@ -13,7 +13,7 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { ValidLabel, validLabels } from '@/renderer/app/lib/db/thread';
 import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 
@@ -67,7 +67,7 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
   const { t } = useTranslation();
   const { globalSearchQuery, setGmailStatusInvalid } = useGlobalAtom();
   const { isWindowFocused } = useWindowFocus();
-  const { getUserPlan } = useBillingAtom();
+  // Payment-free build — userPlan is constant.
   const workerRef = useRef<Worker | null>(null);
   const activeRequests = useRef<
     Map<
@@ -507,7 +507,7 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
       });
 
       const cachedToken = tokenCache[uid]?.[query] || '';
-      const userPlan = getUserPlan();
+      const userPlan = 'pro';
 
       // Get category preferences for this specific account
       const categoryPreferences = preference.display.inbox.category?.[uid] || {
@@ -548,8 +548,7 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
       tokenCache,
       globalSearchQueryRef,
       updateTokenCache,
-      abortSync,
-      getUserPlan
+      abortSync
     ]
   );
 
