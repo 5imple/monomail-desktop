@@ -7,7 +7,7 @@ import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { protocols } from '@/main/utils/contants';
-import { app, BrowserWindow, net, powerSaveBlocker, protocol, session } from 'electron';
+import { app, BrowserWindow, nativeImage, net, powerSaveBlocker, protocol, session } from 'electron';
 import log from 'electron-log';
 import * as fs from 'fs';
 import path from 'path';
@@ -26,6 +26,24 @@ export function registerAppEventHandlers() {
         app.setAsDefaultProtocolClient(protocol);
       }
     });
+
+    // Set the dock icon in dev mode. In packaged builds, electron-builder
+    // bakes the icon into the .app bundle (see electron-builder.yml); in
+    // dev mode we're running Electron's stock executable, which would
+    // otherwise show the default atom icon in the macOS dock.
+    if (process.platform === 'darwin' && app.dock && !app.isPackaged) {
+      try {
+        const dockIconPath = path.join(app.getAppPath(), 'resources/dev/dev-512.png');
+        const dockIcon = nativeImage.createFromPath(dockIconPath);
+        if (!dockIcon.isEmpty()) {
+          app.dock.setIcon(dockIcon);
+        } else {
+          log.warn('[dock] Dev icon image is empty:', dockIconPath);
+        }
+      } catch (err) {
+        log.warn('[dock] Failed to set dev dock icon:', err);
+      }
+    }
   });
   app.on('ready', () => {
     // Serve the bundled renderer over a custom scheme so it has a stable

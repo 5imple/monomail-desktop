@@ -179,7 +179,10 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
 
         <div className="flex h-screen flex-col items-center justify-between p-16 transition-colors">
           <div></div>
-          <div className="flex flex-col items-center gap-8">
+          {/* Newton entrance: fade + subtle lift on first paint so the
+              sign-in surface doesn't pop in. Honors prefers-reduced-motion
+              automatically via tailwindcss-animate. */}
+          <div className="flex flex-col items-center gap-8 duration-500 animate-in fade-in-0 slide-in-from-bottom-2">
             <MonoLogo className="h-24" />
             <Button variant={'secondary'} disabled={isLoading} onClick={handleSignIn}>
               {isLoading ? (

@@ -13,7 +13,7 @@ const NotFoundLayout: FC<NotFoundLayoutProps> = ({}) => {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center">
+    <div className="flex h-screen items-center justify-center duration-500 animate-in fade-in-0">
       <BaseHeader />
       <div className="text-center">
         <MonoIcon className="mx-auto mb-2 h-4 w-4 text-destructive" type={'AlertCircle'} />

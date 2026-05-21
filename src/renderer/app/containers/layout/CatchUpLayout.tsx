@@ -18,7 +18,7 @@ const CatchUpLayout: FC<CatchUpLayoutProps> = () => {
   useEffect(() => {}, [id, member]);
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col duration-500 animate-in fade-in-0">
       <div className="bg-card">
         <CatchUpHeader />
       </div>

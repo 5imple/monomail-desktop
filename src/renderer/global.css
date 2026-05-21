@@ -3,17 +3,18 @@
 @tailwind utilities;
 
 /*
- * Newton aesthetic applied via the existing CSS variable layer.
+ * Newton aesthetic — token foundation aligned to the emailClientv1 baseline.
  *
- * The original monomail theme used a saturated blue (`215 99% 44%`) for
- * `--accent`. That token is referenced everywhere (Radix focus rings,
- * primary buttons, active states, links), so re-tinting it propagates
- * Newton's red primary across the whole app with no per-component edits.
+ * `--accent` is intentionally NEUTRAL (stone-100), matching the source's
+ * shadcn token semantics. The brand pops are applied component-level:
+ *   - Lime (`--chart-1`) for sidebar active states ("Newton green")
+ *   - Red (hardcoded `bg-red-500`) for the compose button only
+ *   - Rose (`--destructive`) for destructive actions, distinct from accent
+ *   - Stone-500 for focus rings (neutral, editorial feel)
  *
- * Neutrals shifted from a cool blue-grey (240°) to warm stone (24–60°)
- * to match Newton's editorial / calm tone. Inter + IBM Plex Mono are
- * loaded so kbd badges, mono labels, and timestamps render in Newton's
- * tracked-uppercase style.
+ * Neutrals are warm stone (24–60°) to match Newton's calm editorial tone.
+ * Inter + IBM Plex Mono are loaded so kbd badges, mono labels, and
+ * timestamps render in Newton's tracked-uppercase style.
  */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -41,23 +42,40 @@
   --muted-low: 20 6% 90%;
   --muted-foreground: 25 6% 45%; /* stone-500 */
 
-  /* Newton primary = red-500. Was 215° blue. This single change repaints
-     every Radix focus ring, active button, link, and inbox row hover. */
-  --accent: 0 72% 51%;
-  --accent-foreground: 60 9% 98%;
+  /* Accent is neutral (stone-100) per the emailClientv1 baseline.
+     Brand pops (lime active, red compose) are applied component-level. */
+  --accent: 20 6% 96%;
+  --accent-foreground: 24 10% 10%;
 
   /* Newton secondary = amber-500 (for snooze / urgent / scheduled chips).
      Components that want this opt-in via hsl(var(--secondary-accent)). */
   --secondary-accent: 38 92% 50%;
   --secondary-accent-foreground: 24 10% 10%;
 
-  --destructive: 0 72% 51%;
+  --destructive: 347 77% 50%; /* rose-600 — distinct from accent */
   --destructive-foreground: 60 9% 98%;
 
   --border: 20 6% 90%; /* stone-200 */
   --input: 20 6% 90%;
-  --ring: 0 72% 51%;
+  --ring: 25 6% 45%; /* stone-500 — neutral focus, editorial */
   --radius: 0.5rem;
+
+  /* Newton brand pops (consumed component-level — sidebar active, etc.) */
+  --chart-1: 85 85% 35%; /* lime-600 — Newton active-state green */
+  --chart-2: 175 84% 32%; /* teal-600 */
+  --chart-3: 193 70% 27%; /* cyan-800 */
+  --chart-4: 48 96% 53%; /* yellow-400 */
+  --chart-5: 43 96% 56%; /* amber-400 */
+
+  /* Sidebar tokens (source baseline; consumed by nav in P3 sidebar restyle) */
+  --sidebar: 60 9% 98%; /* stone-50 */
+  --sidebar-foreground: 24 10% 10%;
+  --sidebar-primary: 24 10% 10%;
+  --sidebar-primary-foreground: 60 9% 98%;
+  --sidebar-accent: 20 6% 96%;
+  --sidebar-accent-foreground: 24 10% 10%;
+  --sidebar-border: 20 6% 90%;
+  --sidebar-ring: 25 6% 45%;
 }
 
 .pure-light {
@@ -83,19 +101,35 @@
   --muted-low: 20 6% 93%;
   --muted-foreground: 25 6% 45%;
 
-  --accent: 0 72% 51%;
-  --accent-foreground: 0 0% 100%;
+  /* Neutral accent — Newton baseline */
+  --accent: 20 6% 96%;
+  --accent-foreground: 24 10% 10%;
 
   --secondary-accent: 38 92% 50%;
   --secondary-accent-foreground: 24 10% 10%;
 
-  --destructive: 0 72% 51%;
+  --destructive: 347 77% 50%; /* rose-600 */
   --destructive-foreground: 0 0% 100%;
 
   --border: 20 6% 92%;
   --input: 20 6% 90%;
-  --ring: 0 72% 51%;
+  --ring: 25 6% 45%; /* stone-500 */
   --radius: 0.5rem;
+
+  --chart-1: 85 85% 35%;
+  --chart-2: 175 84% 32%;
+  --chart-3: 193 70% 27%;
+  --chart-4: 48 96% 53%;
+  --chart-5: 43 96% 56%;
+
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 24 10% 10%;
+  --sidebar-primary: 24 10% 10%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 20 6% 96%;
+  --sidebar-accent-foreground: 24 10% 10%;
+  --sidebar-border: 20 6% 92%;
+  --sidebar-ring: 25 6% 45%;
 }
 
 .dark {
@@ -119,19 +153,35 @@
   --muted-low: 24 6% 18%;
   --muted-foreground: 24 5% 65%;
 
-  /* Newton red, slightly desaturated for dark surfaces */
-  --accent: 0 70% 58%;
+  /* Neutral accent on dark — stone-700, elevated bg per source */
+  --accent: 30 7% 27%;
   --accent-foreground: 60 9% 98%;
 
   --secondary-accent: 38 92% 60%;
   --secondary-accent-foreground: 24 10% 11%;
 
-  --destructive: 0 70% 58%;
+  --destructive: 351 95% 71%; /* rose-400 — lifted for dark */
   --destructive-foreground: 60 9% 98%;
 
   --border: 24 5% 26%;
   --input: 24 5% 31%;
-  --ring: 0 70% 65%;
+  --ring: 25 6% 45%; /* stone-500 neutral */
+
+  /* Brand pops shift slightly brighter for dark surfaces */
+  --chart-1: 84 81% 44%; /* lime-500 */
+  --chart-2: 158 64% 52%; /* emerald-400 */
+  --chart-3: 43 96% 56%; /* amber-400 */
+  --chart-4: 271 91% 65%; /* purple-500 */
+  --chart-5: 351 87% 60%; /* rose-500 */
+
+  --sidebar: 24 10% 13%;
+  --sidebar-foreground: 60 9% 98%;
+  --sidebar-primary: 84 81% 44%; /* lime-500 active state in dark */
+  --sidebar-primary-foreground: 24 10% 11%;
+  --sidebar-accent: 30 7% 27%;
+  --sidebar-accent-foreground: 60 9% 98%;
+  --sidebar-border: 24 5% 26%;
+  --sidebar-ring: 25 6% 45%;
 }
 
 .black {
@@ -155,18 +205,34 @@
   --muted-low: 24 6% 15%;
   --muted-foreground: 24 5% 65%;
 
-  --accent: 0 70% 58%;
+  /* Neutral accent on black — slightly elevated */
+  --accent: 30 7% 22%;
   --accent-foreground: 60 9% 98%;
 
   --secondary-accent: 38 92% 60%;
   --secondary-accent-foreground: 24 10% 5%;
 
-  --destructive: 0 70% 58%;
+  --destructive: 351 95% 71%;
   --destructive-foreground: 60 9% 98%;
 
   --border: 24 5% 26%;
   --input: 24 5% 31%;
-  --ring: 0 70% 65%;
+  --ring: 25 6% 45%;
+
+  --chart-1: 84 81% 44%;
+  --chart-2: 158 64% 52%;
+  --chart-3: 43 96% 56%;
+  --chart-4: 271 91% 65%;
+  --chart-5: 351 87% 60%;
+
+  --sidebar: 24 10% 8%;
+  --sidebar-foreground: 60 9% 98%;
+  --sidebar-primary: 84 81% 44%;
+  --sidebar-primary-foreground: 24 10% 8%;
+  --sidebar-accent: 30 7% 22%;
+  --sidebar-accent-foreground: 60 9% 98%;
+  --sidebar-border: 24 5% 26%;
+  --sidebar-ring: 25 6% 45%;
 }
 
 @layer base {

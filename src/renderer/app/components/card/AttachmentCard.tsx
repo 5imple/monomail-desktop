@@ -300,7 +300,9 @@ export const AttachmentCard = memo(function AttachmentCard({
       {
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-medium text-muted-foreground">
+            {/* Newton gutter label: tracked uppercase mono — signature
+                treatment for FROM/TO/SUBJECT/ATTACHMENTS dividers. */}
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               {t('extension.contact.attachments', 'Attachments')}
             </div>
           </div>

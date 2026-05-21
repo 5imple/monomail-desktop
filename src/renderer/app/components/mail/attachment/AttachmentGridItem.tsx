@@ -108,23 +108,31 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
     <div
       onClick={preview ? handlePreview : downloadAttachment}
       className={cn(
-        // Newton attachment row: calm card chrome, accent on hover so the
-        // download affordance is clear without shouting.
-        'group flex w-full cursor-pointer items-center gap-2 rounded-md border border-border/60 bg-card px-3 py-2 transition-colors hover:border-accent/40 hover:bg-accent/5',
+        // Newton attachment chip: dedicated icon tile + two-line meta (file
+        // name above, mono size below). Hover lifts the border only — accent
+        // is intentionally neutral here so the chip stays calm in a list.
+        'group flex w-full cursor-pointer items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/40',
         className
       )}
       tabIndex={tabIndex}
     >
-      <div className="shrink-0 text-muted-foreground transition-colors group-hover:text-accent">
-        {isDownloading ? <Loader /> : getAttachmentIcon(attachment.mimeType)}
-      </div>
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="truncate text-[13px] font-medium tracking-tight text-foreground">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+        aria-hidden
+      >
+        {isDownloading ? (
+          <Loader />
+        ) : (
+          getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] font-medium tracking-tight text-foreground">
           {attachment.fileName}
-        </span>
-        <span className="ml-auto shrink-0 font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
+        </div>
+        <div className="mt-0.5 font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
           {formatFileSize(attachment.size)}
-        </span>
+        </div>
       </div>
       {children}
     </div>

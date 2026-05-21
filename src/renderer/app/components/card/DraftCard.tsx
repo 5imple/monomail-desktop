@@ -121,7 +121,14 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
   return (
     <>
       <div className={cn('group', className)}>
-        <Card className={cn('border-border/60 shadow-md', cardClassName)}>
+        <Card
+          className={cn(
+            // Newton draft signal: 3px red left stripe distinguishes the
+            // in-progress draft from sent messages in the same thread.
+            'relative overflow-hidden border-border/60 shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-red-500 before:content-[""]',
+            cardClassName
+          )}
+        >
           <CardHeader
             className="px-4 py-2"
             onClick={(e) => {

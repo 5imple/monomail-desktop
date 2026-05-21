@@ -105,23 +105,32 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
       sizeVariant={size}
       onClick={preview ? handlePreview : downloadAttachment}
       className={cn(
-        'group flex w-fit items-center gap-2 rounded-md border border-border/60 bg-card px-3 py-2 shadow-sm transition-colors hover:border-accent/40 hover:bg-accent/5'
+        // Newton attachment chip (button variant for inline-flow use):
+        // icon tile on the left, file name + mono size stacked on the right.
+        'group flex w-fit items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2 shadow-sm transition-colors hover:border-border hover:bg-muted/40'
       )}
       disabled={isDownloading || disabled}
       tabIndex={tabIndex}
     >
-      <span className="shrink-0 text-muted-foreground transition-colors group-hover:text-accent">
-        {isDownloading ? <Loader /> : getAttachmentIcon(attachment.mimeType)}
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+        aria-hidden
+      >
+        {isDownloading ? (
+          <Loader />
+        ) : (
+          getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
+        )}
       </span>
-      <div className="flex items-center gap-2">
-        <span className="max-w-64 truncate whitespace-nowrap text-[13px] font-medium tracking-tight text-foreground">
+      <div className="min-w-0 text-left">
+        <div className="max-w-64 truncate whitespace-nowrap text-[13px] font-medium tracking-tight text-foreground">
           {attachment.fileName}
-        </span>
-        <span className="font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
+        </div>
+        <div className="mt-0.5 font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
           {formatFileSize(attachment.size)}
-        </span>
-        {children}
+        </div>
       </div>
+      {children}
     </Button>
   );
 };
