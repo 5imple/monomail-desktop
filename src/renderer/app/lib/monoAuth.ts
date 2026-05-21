@@ -67,13 +67,17 @@ const idTokenListeners = new Set<Listener>();
 let hydrated = false;
 
 function buildUser(): MonoUser | null {
-  if (!mirror.accessToken || !mirror.member) return null;
+  // The access token alone is enough to bootstrap — `fetchData` in
+  // AuthContext calls `user.getIdToken()` to authorise `/mono/user/info`,
+  // and that response populates the member fields. So we don't gate on
+  // `mirror.member`; we just return empty strings until it loads.
+  if (!mirror.accessToken) return null;
   const m = mirror.member;
   return {
-    uid: m.uid,
-    email: m.email ?? null,
-    displayName: m.displayName ?? null,
-    photoURL: m.photoURL ?? null,
+    uid: m?.uid ?? '',
+    email: m?.email ?? null,
+    displayName: m?.displayName ?? null,
+    photoURL: m?.photoURL ?? null,
     getIdToken: async (forceRefresh?: boolean) => {
       if (!forceRefresh && mirror.accessToken && mirror.expiresAt > Date.now() + 5_000) {
         return mirror.accessToken;

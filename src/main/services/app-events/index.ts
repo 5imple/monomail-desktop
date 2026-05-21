@@ -346,7 +346,10 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
         paramsObject[key] = String(value).slice(0, 8192);
       });
 
-      const type = paramsObject['type'];
+      // The action is encoded either as the URL host (`mono-desktop://signIn?…`,
+      // the documented Phase-B shape) or as a `type` query param
+      // (legacy). Accept both so existing redirect flows keep working.
+      const type = paramsObject['type'] || urlObj.host || urlObj.hostname || '';
       log.info('Handling mono-desktop deep link:', type, redactParams(paramsObject));
 
       if (!mainWindow) {

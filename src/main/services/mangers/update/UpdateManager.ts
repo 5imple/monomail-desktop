@@ -11,6 +11,10 @@ export class UpdateManager {
   private cancellationToken: CancellationToken | null = null;
   private updateAvailable = false;
   private isOffline = false;
+  // True when no feed URL is configured; we skip checkForUpdates rather
+  // than letting electron-updater fall through to the (possibly missing)
+  // app-update.yml and crash with ENOENT.
+  private updatesDisabled = false;
 
   private constructor() {
     this.autoUpdater = autoUpdater;
@@ -54,10 +58,11 @@ export class UpdateManager {
         ? `https://storage.googleapis.com/${legacyBucket}/releases/`
         : '';
     if (!feedUrl) {
-      log.error(
+      log.warn(
         '[UpdateManager] No update feed configured (MONO_ENV_UPDATE_FEED_URL ' +
           'or MONO_ENV_FIREBASE_STORAGE_BUCKET). Updates are disabled in this build.'
       );
+      this.updatesDisabled = true;
       this.setupListeners();
       return;
     }
@@ -158,6 +163,16 @@ export class UpdateManager {
 
   /** Check for updates manually */
   async checkForUpdates(retries = 0, delay = 3000): Promise<void> {
+    // No feed → don't even ask electron-updater. It would fall through to
+    // app-update.yml (which may be missing if env interpolation produced an
+    // empty publish URL) and throw an unhandled ENOENT.
+    if (this.updatesDisabled) {
+      if (!windowManager.getMainAppWindow()) {
+        windowManager.createAppWindow();
+      }
+      return;
+    }
+
     // Skip update check if we know we're offline
     await systemManager.checkNetworkConnectivity();
     if (systemManager.getIsOffline()) {
