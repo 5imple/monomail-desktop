@@ -3,7 +3,7 @@ import { Navigate, RouteObject } from 'react-router-dom';
 import AppLayout from '@/renderer/app/containers/layout/AppLayout';
 import LinkShareLayout from '@/renderer/app/containers/layout/LinkShareLayout';
 import SignInLayout from '@/renderer/app/containers/layout/SignInLayout';
-import SubscriptionLayout from '@/renderer/app/containers/layout/SubscriptionLayout';
+// SubscriptionLayout removed — payment-free build.
 import AuthGuard from '@/renderer/app/middlewares/AuthGuard';
 import OnBoardingLayout from '@/renderer/app/containers/layout/OnBoardingLayout';
 import ElectronGuard from '@/renderer/app/middlewares/ElectronGuard';
@@ -55,10 +55,7 @@ const baseRoutes: RouteObject[] = [
     path: '/onboarding',
     element: applyGuards(<OnBoardingLayout />, false, false) // Requires auth but not subscription
   },
-  // {
-  //   path: '/subscription',
-  //   element: applyGuards(<SubscriptionLayout />, true, false) // Requires auth but not subscription
-  // },
+  // /subscription route removed — payment-free build.
   {
     path: '/share/:id',
     // LinkShareLayout doesn't need ElectronGuard by default
