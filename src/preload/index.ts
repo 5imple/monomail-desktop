@@ -2,7 +2,6 @@ import { isValidRendererChannel, ValidRendererChannel } from '@/main/validChanne
 import { electronAPI } from '@electron-toolkit/preload';
 import { BrowserWindowConstructorOptions, contextBridge, ipcRenderer } from 'electron';
 
-import { FCM_START_SERVICE, FCM_STOP_SERVICE } from '@/main/api/message/types';
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import { INativeNotificationOptions } from '@/main/services/notification/INotificationOptions';
 import { AudioType } from '@/renderer/app/lib/soundManager';
@@ -41,17 +40,15 @@ const api = {
     uid?: string
   ) => ipcRenderer.invoke('main:window:open', route, options, uid),
   closeWindow: (id: string) => ipcRenderer.invoke('main:window:close', id),
-  startNotificationService: (uid: string) => {
-    ipcRenderer.invoke(
-      FCM_START_SERVICE,
-      import.meta.env.MONO_ENV_FIREBASE_APP_ID,
-      import.meta.env.MONO_ENV_FIREBASE_PROJECT_ID,
-      import.meta.env.MONO_ENV_FIREBASE_API_KEY,
-      import.meta.env.MONO_ENV_FIREBASE_VAPID_KEY,
-      uid
-    );
+  // Push delivery moved to a backend-owned WebSocket in Phase B
+  // (see services/push/WebSocketPushClient.ts). Kept as no-ops so the
+  // renderer-side API contract stays stable until call sites are pruned.
+  startNotificationService: (_uid: string) => {
+    /* push channel auto-starts on token-changed */
   },
-  stopNotificationService: () => ipcRenderer.invoke(FCM_STOP_SERVICE),
+  stopNotificationService: () => {
+    /* push channel stops on sign-out */
+  },
   getNotificationPreference: (uid: string) =>
     ipcRenderer.invoke('main:notification:preference:get', uid),
   setNotificationPreference: (uid: string, preference: string) =>

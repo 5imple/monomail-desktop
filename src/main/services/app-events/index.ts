@@ -1,7 +1,8 @@
 import mailApi from '@/main/api/mail/mailApi';
-import { setup as setupPushReceiver } from '@/main/api/message/electron-message-receiver';
 import { registerIpcHandlers } from '@/main/services/ipc-handlers';
+import { webSocketPushClient } from '@/main/services/push/WebSocketPushClient';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
+import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
@@ -66,7 +67,7 @@ export function registerAppEventHandlers() {
     systemManager.initializeAutoStartSettings();
 
     updateManager.checkForUpdates();
-    setupPushReceiver();
+    webSocketPushClient.start();
     session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
       if (details.url.includes('lh3.googleusercontent.com')) {
         delete details.requestHeaders['Referer'];
@@ -87,13 +88,12 @@ export function registerAppEventHandlers() {
       //     nonce-based scheme as a follow-up).
       //   - kept `img-src *` because email images come from arbitrary
       //     hosts; the proxy-image strategy is a future hardening step.
-      const authDomain = import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN;
       const homepage = import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN;
       const apiOrigin = import.meta.env.MONO_ENV_API_URL;
       const backendOrigin = (import.meta.env.MONO_ENV_BACKEND_URL || '').trim();
       const publicDomain = (import.meta.env.MONO_ENV_PUBLIC_DOMAIN || '').trim();
-      // Derive a wss:// origin from backendOrigin so the Phase B WebSocket
-      // push channel works without a separate env var.
+      // Derive a wss:// origin from backendOrigin so the push WebSocket
+      // works without a separate env var.
       const backendWs = backendOrigin
         ? backendOrigin.replace(/^https?:\/\//, 'wss://').replace(/^http:/, 'ws:')
         : '';
@@ -101,22 +101,11 @@ export function registerAppEventHandlers() {
         "'self'",
         'blob:',
         'data:',
-        authDomain ? `https://${authDomain}` : '',
         homepage ? `https://${homepage}` : '',
         apiOrigin || '',
         backendOrigin,
         backendWs,
         publicDomain,
-        // ---- Pending Phase B removal: still required by Firebase Auth +
-        // FCM SDKs while they're loaded. Drop these once auth + push are
-        // migrated to the on-prem backend.
-        'https://*.googleapis.com',
-        'https://*.firebaseio.com',
-        'https://*.firebasedatabase.app',
-        'https://fcm.googleapis.com',
-        'wss://*.firebaseio.com',
-        'wss://*.googleapis.com',
-        // ----
         'https://*.amplitude.com',
         'https://api.mixpanel.com',
         'https://*.paddle.com'
@@ -367,16 +356,31 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
         switch (type) {
           case 'signIn':
           case 'addAccount': {
-            const token = paramsObject['token'];
-            if (!isPlausibleJwt(token)) {
-              log.warn(
-                `Rejected ${type} deep-link: token is missing or malformed`
-              );
+            const accessToken = paramsObject['token'];
+            const refreshToken = paramsObject['refresh_token'];
+            const expiresInRaw = paramsObject['expires_in'];
+            if (!isPlausibleJwt(accessToken)) {
+              log.warn(`Rejected ${type} deep-link: token is missing or malformed`);
               return;
             }
+            if (!refreshToken || refreshToken.length < 16) {
+              log.warn(`Rejected ${type} deep-link: refresh_token missing or too short`);
+              return;
+            }
+            const expiresInSec = expiresInRaw ? Number.parseInt(expiresInRaw, 10) : NaN;
+            tokenManager.saveTokens({
+              accessToken,
+              refreshToken,
+              expiresInSec: Number.isFinite(expiresInSec) && expiresInSec > 0 ? expiresInSec : 3600
+            });
+            // The renderer side is informed via `renderer:auth:token-changed`
+            // (fired by the TokenManager listener). The legacy sign-in /
+            // add-account channels stay for back-compat with the AuthContext
+            // dev-token path; pre-Phase-B they carried a Firebase custom
+            // token, now they carry the access token directly.
             const channel =
               type === 'signIn' ? 'renderer:auth:sign-in' : 'renderer:auth:add-account';
-            mainWindow.webContents.send(channel, token);
+            mainWindow.webContents.send(channel, accessToken);
             return;
           }
           case 'billingUpdated':

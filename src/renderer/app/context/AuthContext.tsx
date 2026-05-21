@@ -15,7 +15,7 @@ import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import AccountSelectDialog from '@/renderer/app/containers/dialog/AccountSelectDialog';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
-import { auth } from '@/renderer/app/lib/firebase';
+import { auth } from '@/renderer/app/lib/monoAuth';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
 import { getCachedBillingInfo, useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
 import { useAutopilotSettings } from '@/renderer/app/store/ai/useAutopilotSettings';
@@ -35,7 +35,11 @@ import {
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 import * as amplitude from '@amplitude/analytics-browser';
-import { onAuthStateChanged, signInWithCustomToken, User } from 'firebase/auth';
+import {
+  MonoUser as User,
+  signInWithToken as signInWithCustomToken,
+  onAuthStateChanged
+} from '@/renderer/app/lib/monoAuth';
 import mixpanel from 'mixpanel-browser';
 import React, {
   createContext,
@@ -980,98 +984,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     );
 
-    const unsubscribeTokenDiagnostic = auth.onIdTokenChanged(async (user) => {
-      if (user) {
-        const tokenDetails = {
-          refreshTime: new Date().toISOString(),
-          expirationTime: new Date(user['stsTokenManager']?.expirationTime).toISOString()
-        };
-
-        console.log('Token refresh diagnostic:', tokenDetails);
-      }
-    });
-
-    // Add custom token refresh mechanism
-    let tokenRefreshTimer: number | null = null;
-
-    const startManualTokenRefresh = () => {
-      // Clear any existing timer
-      if (tokenRefreshTimer) {
-        clearInterval(tokenRefreshTimer);
-      }
-
-      // Set a timer to refresh every 45 minutes (tokens expire after 60 minutes)
-      tokenRefreshTimer = window.setInterval(
-        async () => {
-          if (auth.currentUser) {
-            try {
-              console.log('Manual token refresh attempt');
-              const newToken = await auth.currentUser.getIdToken(true);
-              apiClient.setApiClientIdToken(newToken);
-              electronApi.setIdToken(newToken);
-
-              console.log('Manual token refresh successful', {
-                refreshTime: new Date().toISOString(),
-                nextRefresh: new Date(Date.now() + 45 * 60 * 1000).toISOString()
-              });
-            } catch (error) {
-              console.error('Manual token refresh failed:', error);
-            }
-          }
-        },
-        45 * 60 * 1000
-      ); // 45 minutes
-    };
-
-    // Start the refresh timer when a user is authenticated
-    if (auth.currentUser) {
-      console.log('Starting manual token refresh mechanism');
-      startManualTokenRefresh();
-    }
-
-    // Also listen for auth state changes to restart the timer if needed
-    const refreshTimerManager = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log('Auth state changed, restarting manual token refresh');
-        startManualTokenRefresh();
-      } else if (tokenRefreshTimer) {
-        console.log('User signed out, stopping manual token refresh');
-        clearInterval(tokenRefreshTimer);
-        tokenRefreshTimer = null;
-      }
-    });
-    const handleAppFocus = async () => {
-      // Only refresh if token is older than 30 minutes
-      if (auth.currentUser) {
-        const tokenAge = auth.currentUser['stsTokenManager']?.expirationTime - Date.now();
-        const tokenAgeMinutes = tokenAge / 60000;
-
-        if (tokenAgeMinutes < 30) {
-          try {
-            console.log(
-              'Refreshing token on app focus (token age: ' + tokenAgeMinutes.toFixed(1) + ' min)'
-            );
-            const newToken = await auth.currentUser.getIdToken(true);
-            apiClient.setApiClientIdToken(newToken);
-            electronApi.setIdToken(newToken);
-          } catch (error) {
-            console.error('Failed to refresh token on app focus:', error);
-          }
-        }
-      }
-    };
-
-    const removeAppFocusListener = electronApi.on('renderer:native:focus', handleAppFocus);
+    // Phase-B: token refresh lives in the main-process TokenManager, which
+    // schedules a refresh ~60s before each access token expires. The
+    // renderer just listens for `renderer:auth:token-changed` (handled
+    // inside monoAuth) and re-flows the new token through React state via
+    // `onAuthStateChanged` above.
 
     return () => {
       unsubscribeAuth();
       removeSignInListener();
-      unsubscribeTokenDiagnostic();
-      removeAppFocusListener();
       removeAccountScopeUpdateListener();
       removeAddAccountListener();
-      if (tokenRefreshTimer) clearInterval(tokenRefreshTimer);
-      refreshTimerManager();
     };
   }, []);
 
