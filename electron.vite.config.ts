@@ -19,11 +19,13 @@ export default defineConfig({
       externalizeDepsPlugin({
         exclude: [
           'node-machine-id',
-          '@aracna/core',
-          '@aracna/fcm',
           'electron-store',
           'electron-updater',
-          'electron-log'
+          'electron-log',
+          // Bundled into main.js because the packaged app.asar ships with
+          // no node_modules; deps that aren't excluded here are externalized
+          // and would fail to require() at runtime.
+          'ws'
         ]
       })
     ]
@@ -157,12 +159,8 @@ export default defineConfig({
             // Date handling - Combine into one chunk
             'date-utils': ['date-fns', 'date-fns-tz', 'dayjs'],
 
-            // Firebase services - Split into smaller chunks
-            'firebase-core': ['@firebase/app'],
-            'firebase-auth': ['@firebase/auth'],
-            'firebase-db': ['@firebase/firestore'],
-            'firebase-functions': ['@firebase/functions'],
-            'firebase-storage': ['@firebase/storage'],
+            // Firebase chunk hints removed in Phase B — auth + push now
+            // live in the main process (TokenManager + WebSocketPushClient).
 
             // TipTap editor - Combine into one chunk
             tiptap: ['@tiptap/react', '@tiptap/starter-kit'],
