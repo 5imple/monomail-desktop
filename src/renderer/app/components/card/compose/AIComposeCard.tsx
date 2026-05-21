@@ -256,7 +256,11 @@ const AIComposeCard: FC<AIComposeCardProps> = ({ onSave, onClose, uid, draft }) 
       >
         <div
           className={cn(
-            'absolute inset-0 animate-gradient-flow rounded-lg bg-gradient-to-r from-pink-500 via-violet-500 to-cyan-500 to-pink-500 blur-xl transition-all duration-6000 ease-bouncy-in-out',
+            // AI gradient halo: tuned to amber → red gradient. Newton uses
+            // amber (secondary-accent) for AI affordances; the gradient
+            // sweeps through the primary accent on the way to keep visual
+            // motion without introducing a third palette.
+            'absolute inset-0 animate-gradient-flow rounded-lg bg-gradient-to-r from-[hsl(var(--secondary-accent)/0.7)] via-[hsl(var(--accent)/0.5)] to-[hsl(var(--secondary-accent)/0.7)] blur-xl transition-all duration-6000 ease-bouncy-in-out',
             isGenerating ? 'blur-sm duration-1000' : 'blur-lg'
           )}
         ></div>
@@ -276,8 +280,8 @@ const AIComposeCard: FC<AIComposeCardProps> = ({ onSave, onClose, uid, draft }) 
             >
               {isGenerating ? (
                 <div className="p-3">
-                  <div className="mb-2 h-4 w-3/4 animate-pulse rounded-sm bg-violet-500/20"></div>
-                  <div className="h-4 w-1/2 animate-pulse rounded-sm bg-violet-500/15"></div>
+                  <div className="mb-2 h-4 w-3/4 animate-pulse rounded-sm bg-[hsl(var(--secondary-accent)/0.2)]"></div>
+                  <div className="h-4 w-1/2 animate-pulse rounded-sm bg-[hsl(var(--secondary-accent)/0.15)]"></div>
                 </div>
               ) : (
                 displayedContent.length > 0 && (

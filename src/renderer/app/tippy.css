@@ -1,25 +1,29 @@
-/* Mono theme for Tippy.js with card background, border, shadow-xl and rounded-lg */
+/* Newton theme for Tippy.js. Card background + calm border (border/60)
+   and a softer shadow than the original shadow-xl drop — matches the
+   Phase-9 tooltip primitive so the BubbleMenu reads consistent with the
+   rest of the popover surfaces. */
 .tippy-box[data-theme~='mono'] {
   background-color: hsl(var(--card));
   color: hsl(var(--card-foreground));
-  border: 1px solid hsl(var(--border));
+  border: 1px solid hsl(var(--border) / 0.6);
   border-radius: 0.5rem;
   padding: 0.25rem;
   box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 10px 10px -5px rgba(0, 0, 0, 0.04); /* shadow-xl */
+    0 4px 6px -1px rgba(0, 0, 0, 0.06),
+    0 2px 4px -2px rgba(0, 0, 0, 0.04); /* shadow-md */
 }
 
-/* Dark variant for Mono theme */
+/* Dark variant for Mono theme — slightly heavier drop on dark surfaces
+   so the popover still separates from the document behind it. */
 .tippy-box[data-theme~='mono'].dark {
   background-color: hsl(var(--card));
   color: hsl(var(--card-foreground));
-  border: 1px solid hsl(var(--border));
+  border: 1px solid hsl(var(--border) / 0.6);
   border-radius: 0.5rem;
   padding: 0.25rem;
   box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.3),
-    0 10px 10px -5px rgba(0, 0, 0, 0.2); /* enhanced shadow for dark mode */
+    0 4px 6px -1px rgba(0, 0, 0, 0.4),
+    0 2px 4px -2px rgba(0, 0, 0, 0.2);
 }
 
 /* Animation */

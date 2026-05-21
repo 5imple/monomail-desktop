@@ -188,7 +188,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
       {/* Valid Attachments */}
 
       {/* Footer Actions */}
-      <CardFooter className="flex items-end gap-8 border-0 p-2">
+      <CardFooter className="flex items-center gap-3 border-t border-border/40 p-2">
         <div className="flex items-center">
           <Button
             className={cn(
@@ -229,7 +229,9 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
               isCurrentAccountExpired
                 ? 'cursor-not-allowed text-muted-foreground/50'
                 : hasProAccess
-                  ? 'text-muted-foreground hover:text-accent'
+                  ? // AI affordance uses amber (secondary-accent) so red
+                    // stays reserved for primary actions.
+                    'text-muted-foreground hover:text-[hsl(var(--secondary-accent))]'
                   : 'cursor-not-allowed text-muted-foreground/50'
             )}
             onClick={handleAiAction}
