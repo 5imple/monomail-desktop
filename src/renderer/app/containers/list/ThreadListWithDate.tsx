@@ -351,19 +351,31 @@ function ThreadListWithDate({ isScrolled, setKeyPressed, onScroll }: ThreadListW
                 firstThreadTimestamp={group.firstThreadTimestamp}
               />
 
-              {/* Threads in this date group */}
+              {/* Threads in this date group — staggered fade-in (~40ms
+                  per row, capped at 400ms) so the inbox loads as a calm
+                  waterfall instead of a flash of unstyled list. New rows
+                  appearing later via pagination also animate, which makes
+                  paginated loads feel intentional. */}
               {group.threads.map((threadId, index) => {
                 const isLastThreadInList =
                   index === group.threads.length - 1 && groupIndex === processedThreads.length - 1;
 
                 return (
-                  <MemoizedThreadItem
+                  <div
                     key={threadId}
-                    threadId={threadId}
-                    onClick={handleItemClick}
                     ref={isLastThreadInList ? lastThreadElementRef : null}
-                    density={preference.appearance.density}
-                  />
+                    className="duration-300 animate-in fade-in-0"
+                    style={{
+                      animationDelay: `${Math.min(index * 40, 400)}ms`,
+                      animationFillMode: 'both'
+                    }}
+                  >
+                    <MemoizedThreadItem
+                      threadId={threadId}
+                      onClick={handleItemClick}
+                      density={preference.appearance.density}
+                    />
+                  </div>
                 );
               })}
             </React.Fragment>

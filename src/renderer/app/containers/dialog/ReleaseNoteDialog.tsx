@@ -32,27 +32,32 @@ const Badge: FC<{ children: React.ReactNode; category?: string }> = ({
   children,
   category = 'default'
 }) => {
-  // Map category names to colors
+  // Map category names to colors. Aligned to the Newton palette:
+  //   stone  → neutral / informational
+  //   red    → primary action (compose)
+  //   lime   → active categorization / customization
+  //   amber  → command / transient
+  //   rose   → security-sensitive
   const getCategoryColor = (category: string) => {
     const categoryColors: Record<string, string> = {
-      history: 'bg-red-500',
-      templates: 'bg-purple-500',
-      notifications: 'bg-cyan-500',
-      contacts: 'bg-cyan-500',
-      compose: 'bg-green-500',
-      slash: 'bg-orange-500',
-      slack: 'bg-blue-700',
-      auth: 'bg-red-500',
-      'oauth applications': 'bg-red-500',
-      preferences: 'bg-yellow-500',
-      labeling: 'bg-green-500',
-      api: 'bg-gray-500',
-      default: 'bg-gray-500'
+      history: 'bg-stone-500',
+      templates: 'bg-chart-1',
+      notifications: 'bg-stone-500',
+      contacts: 'bg-stone-500',
+      compose: 'bg-red-500',
+      slash: 'bg-amber-500',
+      slack: 'bg-stone-500',
+      auth: 'bg-rose-600',
+      'oauth applications': 'bg-rose-600',
+      preferences: 'bg-stone-400',
+      labeling: 'bg-chart-1',
+      api: 'bg-stone-500',
+      default: 'bg-stone-400'
     };
 
     // Normalize category for lookup - lowercase for case insensitive matching
     const normalizedCategory = category.toLowerCase();
-    return categoryColors[normalizedCategory] || 'bg-gray-400';
+    return categoryColors[normalizedCategory] || 'bg-stone-400';
   };
 
   return (

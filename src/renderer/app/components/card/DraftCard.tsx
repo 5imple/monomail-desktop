@@ -46,6 +46,21 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
     setIsCollapsed(collapsed);
   }, [collapsed]);
 
+  // Draft-save pulse: flash a small lime dot next to the "Draft" label
+  // whenever the draft's timestamp updates (i.e., auto-save fired).
+  // Skip the initial mount so an existing draft doesn't flash on open.
+  const [justSaved, setJustSaved] = useState(false);
+  const skipFirstSaveRef = useRef(true);
+  useEffect(() => {
+    if (skipFirstSaveRef.current) {
+      skipFirstSaveRef.current = false;
+      return;
+    }
+    setJustSaved(true);
+    const timer = setTimeout(() => setJustSaved(false), 800);
+    return () => clearTimeout(timer);
+  }, [draftMessage.timestamp]);
+
   const updateHeight = () => {
     if (containerRef.current && contentRef.current) {
       const contentHeight = contentRef.current.scrollHeight;
@@ -139,17 +154,23 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
             {/* Use draftMessage instead of item */}
             <div className="flex items-center gap-4 text-sm">
               <div className="w-full min-w-0">
-                <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                <p className="mb-0.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                   {draftMessage.isAiGenerated ? (
                     <>
                       <MonoIcon
-                        className="mr-1 inline-block h-3 w-3 -translate-y-[1px] text-accent"
+                        className="mr-1 inline-block h-3 w-3 -translate-y-[1px] text-chart-1"
                         type={'Sparkles'}
                       />
                       AI draft
                     </>
                   ) : (
                     'Draft'
+                  )}
+                  {justSaved && (
+                    <span
+                      aria-hidden
+                      className="h-1 w-1 shrink-0 rounded-full bg-chart-1 animate-pulse"
+                    />
                   )}
                 </p>
                 <div className="flex items-center justify-between gap-2">

@@ -73,7 +73,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           onClick={() => setShowCc(!showCc)}
           className={cn(
             'font-mono text-[10px] uppercase tracking-[0.18em] transition-colors',
-            showCc ? 'text-accent' : 'text-muted-foreground hover:text-foreground'
+            showCc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
           )}
           variant={'text'}
           sizeVariant={'sm'}
@@ -84,7 +84,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           onClick={() => setShowBcc(!showBcc)}
           className={cn(
             'font-mono text-[10px] uppercase tracking-[0.18em] transition-colors',
-            showBcc ? 'text-accent' : 'text-muted-foreground hover:text-foreground'
+            showBcc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
           )}
           variant={'text'}
           sizeVariant={'sm'}

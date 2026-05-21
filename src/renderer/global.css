@@ -165,7 +165,11 @@
 
   --border: 24 5% 26%;
   --input: 24 5% 31%;
-  --ring: 25 6% 45%; /* stone-500 neutral */
+  /* Stone-400 in dark for stronger focus visibility — stone-500 sat at
+     3.49:1 against the dark canvas (barely above the WCAG AA 3:1 floor
+     for UI components). Stone-400 lifts contrast to 7.17:1 while keeping
+     the neutral Newton hue. */
+  --ring: 30 5% 64%;
 
   /* Brand pops shift slightly brighter for dark surfaces */
   --chart-1: 84 81% 44%; /* lime-500 */
@@ -217,7 +221,8 @@
 
   --border: 24 5% 26%;
   --input: 24 5% 31%;
-  --ring: 25 6% 45%;
+  /* Stone-400 for focus visibility on black canvas — matches .dark fix. */
+  --ring: 30 5% 64%;
 
   --chart-1: 84 81% 44%;
   --chart-2: 158 64% 52%;
