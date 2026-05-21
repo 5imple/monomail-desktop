@@ -342,13 +342,14 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 
             <div className={cn('flex items-center')}>
               <Button
+                variant="send"
                 disabled={sendDisabled || isSending || isCurrentAccountExpired}
                 onClick={handleSubmit}
                 tooltip={getSendDisabledReason()}
                 shortcut={
                   !isCurrentAccountExpired && !sendDisabled && !isSending ? 'MOD+ENTER' : undefined
                 }
-                className="flex border-none disabled:pointer-events-auto"
+                className="flex disabled:pointer-events-auto"
               >
                 {isSending ? (
                   <Loader className="mr-2" />

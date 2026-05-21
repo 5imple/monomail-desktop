@@ -47,7 +47,7 @@ const CategoryInboxNav: FC<CategoryInboxNavProps> = () => {
         title: t('sidebar.nav.category.social'),
         icon: 'UserGroup',
         parentIcon: 'UserGroup',
-        iconColor: 'text-blue-500'
+        iconColor: 'text-muted-foreground'
       },
       {
         id: 'category:promotions',

@@ -97,7 +97,7 @@ const PrimaryInboxNav: FC<PrimaryInboxNavProps> = () => {
         title: t('sidebar.nav.all_mail'),
         icon: 'Envelope',
         parentIcon: 'EnvelopeStack',
-        iconColor: 'text-blue-500',
+        iconColor: 'text-primary',
         hotkey: 'G+A'
       }
     ],

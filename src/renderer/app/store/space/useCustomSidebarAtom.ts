@@ -155,7 +155,7 @@ export const getDefaultNavItemProperties = (
     'all-mail': {
       title: t('sidebar.nav.all_mail'),
       icon: 'Envelope',
-      iconColor: 'text-blue-500',
+      iconColor: 'text-primary',
       query: 'in:all -in:trash',
       hotkey: 'G+A'
     },
@@ -181,7 +181,7 @@ export const getDefaultNavItemProperties = (
     social: {
       title: t('sidebar.nav.category.social'),
       icon: 'UserGroup',
-      iconColor: 'text-blue-500',
+      iconColor: 'text-muted-foreground',
       query: 'category:social'
     },
     promotions: {
@@ -259,7 +259,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.all_mail'),
     icon: 'Envelope',
-    iconColor: 'text-blue-500',
+    iconColor: 'text-primary',
     query: 'in:all -in:trash',
     hotkey: 'G+A',
     position: 4
@@ -314,7 +314,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.all_mail'),
     icon: 'Envelope',
-    iconColor: 'text-blue-500',
+    iconColor: 'text-primary',
     query: 'in:all -in:trash',
     hotkey: 'G+A',
     position: 4
@@ -353,7 +353,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'secondary',
     title: t('sidebar.nav.category.social'),
     icon: 'UserGroup',
-    iconColor: 'text-blue-500',
+    iconColor: 'text-muted-foreground',
     query: 'category:social',
     position: 8
   },
