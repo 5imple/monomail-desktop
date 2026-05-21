@@ -22,6 +22,11 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { Switch } from '@/renderer/app/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
+import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
+import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
+import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
+import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 
 interface ComposeCardFooterProps {
   className?: string;
@@ -340,7 +345,18 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
               </SelectContent>
             </Select>
 
-            <div className={cn('flex items-center')}>
+            <div className={cn('flex items-center gap-2')}>
+              {/* P8 piece 5 — Send Later. Client-only: adds the draft to the
+                  queue atom's scheduledItems with a chosen sendAt. The draft
+                  itself stays as a draft (no actual send fires at scheduled
+                  time — that requires backend pieces 4 + 6). User can find
+                  the entry under the Later tab. */}
+              <SendLaterButton
+                draft={draft}
+                disabled={
+                  sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0
+                }
+              />
               <Button
                 variant="send"
                 disabled={sendDisabled || isSending || isCurrentAccountExpired}
@@ -367,3 +383,69 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 };
 
 export default ComposeCardFooter;
+
+/**
+ * Send-Later trigger — small icon button next to Send Now. Opens a
+ * popover with schedule presets (In 1 hour, Tomorrow morning, etc.).
+ * Picking one stamps the draft into the Later queue's scheduledItems
+ * map. No actual send fires; the entry is purely informational until
+ * the backend can take ownership of the queue (P8 pieces 4 + 6).
+ */
+function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { scheduleDraft } = useQueueAtom();
+  const { setActiveLayout } = useGlobalAtom();
+  const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
+
+  const handlePickPreset = useCallback(
+    (preset: { id: string; label: string; scheduledFor: string | null }) => {
+      if (!preset.scheduledFor) return;
+      const bodyPlain = (draft.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      scheduleDraft({
+        id: `sched-${draft.id}-${Date.now()}`,
+        draftId: draft.id,
+        accountId: '',
+        recipients: draft.to.map((email) => ({ id: email, name: email, email })),
+        subject: draft.subject || '(no subject)',
+        bodySnippet: bodyPlain.slice(0, 160),
+        scheduledFor: preset.scheduledFor,
+        attachmentCount: Object.keys(draft.attachments || {}).length,
+        isReply: false
+      });
+      setOpen(false);
+      // Surface the queue so the user sees their entry land.
+      setActiveLayout('LATER');
+      toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
+    },
+    [draft, scheduleDraft, setActiveLayout]
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="secondary"
+          typeVariant="icon"
+          disabled={disabled}
+          tooltip="Send later"
+          className="h-10 w-10"
+        >
+          <MonoIcon type="Clock" className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={6}
+        className="w-auto border-none bg-transparent p-0 shadow-none"
+      >
+        <ReschedulePopover
+          presets={presets}
+          heading="Send Later"
+          onPickPreset={handlePickPreset}
+          onPickCustom={() => setOpen(false)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}

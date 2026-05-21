@@ -27,7 +27,7 @@ interface LabelCount {
 const PrimaryInboxNav: FC<PrimaryInboxNavProps> = () => {
   const { accounts: authAccounts, preference } = useAuth();
   const { activeSpace, setActiveAccountsInSpace } = useSpaceAtom();
-  const { searchNewQuery, globalSearchQuery, activeLayout } = useGlobalAtom();
+  const { searchNewQuery, globalSearchQuery, activeLayout, setActiveLayout } = useGlobalAtom();
   const { getDraftsForAccount } = useDraftAtom();
   const { threadsMap } = useThreadAtom();
   const [isImportantOpen, setIsImportantOpen] = useState(true);
@@ -278,6 +278,20 @@ const PrimaryInboxNav: FC<PrimaryInboxNavProps> = () => {
 
   return (
     <div id="important-inboxes" className="flex flex-col gap-3 px-2">
+      {/* P8 Later Queue — global top-level entry. Switches the main panel
+          to QueueContainer via the activeLayout atom. Sits outside the
+          Important inboxes collapsible because it isn't an inbox query
+          and lives at the same hierarchy level as the rest of the
+          top-section nav. */}
+      <NavItem
+        variant="default"
+        id="later"
+        title={t('sidebar.nav.later', 'Later')}
+        icon={'Clock' as MonoIconType}
+        iconColor="text-primary"
+        active={activeLayout === 'LATER'}
+        onClick={() => setActiveLayout('LATER')}
+      />
       <Collapsible id="important-list" open={isImportantOpen} onOpenChange={setIsImportantOpen}>
         <div className="group flex h-10 items-center justify-between text-muted-foreground hover:bg-background/30">
           <CollapsibleTrigger asChild>

@@ -30,7 +30,7 @@ export const searchHistoryAtom = atomWithStorage<string[]>(
     defaultValue: []
   })
 );
-export type GlobalLayout = 'MAIL' | 'CATCHUP';
+export type GlobalLayout = 'MAIL' | 'CATCHUP' | 'LATER';
 
 export const activeLayoutAtom = atom<GlobalLayout>('MAIL');
 
