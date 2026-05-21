@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 
 interface SignInLayoutProps {}
 
@@ -31,17 +31,84 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
   const { signIn, isLoading, signOut, isLoggedIn, preference, member, idToken } = useAuth();
   const { loading } = useGlobalAtom();
   const { spaces } = useSpaceAtom();
-  const { hasActiveSubscription, fetchSubscription } = useBillingAtom();
+  // Payment-free build — subscription check is a constant true.
+  const hasActiveSubscription = () => true;
+  const fetchSubscription = async (_token: string) => undefined;
   const [devToken, setDevToken] = useState<string>('');
   const navigate = useNavigate();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [subscriptionChecked, setSubscriptionChecked] = useState(false);
 
-  const handleSignIn = useCallback(() => {
-    const baseUrl = import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN;
+  const handleSignIn = useCallback(async () => {
+    const rawBaseUrl = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
+    if (!rawBaseUrl) {
+      toast.error(
+        'Sign-in unavailable: MONO_ENV_HOMEPAGE_DOMAIN is not configured for this build.'
+      );
+      return;
+    }
+    // Reject unschemed values like "localhost" — the main-process
+    // window-open guard would silently deny them and the button would
+    // appear broken. Tell the user instead.
+    const baseUrl = /^https?:\/\//i.test(rawBaseUrl) ? rawBaseUrl : '';
+    if (!baseUrl) {
+      toast.error(
+        `Sign-in unavailable: MONO_ENV_HOMEPAGE_DOMAIN is "${rawBaseUrl}", which must start with http(s)://. ` +
+          'Point this at your on-prem sign-in page and rebuild.'
+      );
+      return;
+    }
     const client = isElectron ? 'web-electron' : 'web';
-    window.open(`${baseUrl}/sign-in?client=${client}`);
+    const signInUrl = `${baseUrl.replace(/\/$/, '')}/sign-in?client=${client}`;
+
+    // Dev shortcut: when pointed at localhost, fetch the mock backend's
+    // sign-in HTML directly, pull access + refresh tokens out of the
+    // `mono-desktop://signIn?…` link, and hand them straight to main via
+    // the `dev-sign-in` IPC. Bypasses the system-browser hop + macOS
+    // Launch Services protocol handler (both unreliable in `npm run dev`
+    // because Electron is the generic node_modules binary, not a
+    // registered .app). The IPC funnels into the same `tokenManager.
+    // saveTokens` call as the production deep-link path, so downstream
+    // events (`renderer:auth:token-changed` etc.) fire identically.
+    // Production never enters this branch — the regex below is the gate.
+    const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(baseUrl);
+    if (isLocalDev) {
+      try {
+        const res = await fetch(signInUrl);
+        if (res.ok) {
+          const html = await res.text();
+          const linkMatch = html.match(/mono-desktop:\/\/signIn\?([^"'\s]+)/);
+          if (linkMatch) {
+            const params = new URLSearchParams(linkMatch[1]);
+            const accessToken = params.get('token');
+            const refreshToken = params.get('refresh_token');
+            const expiresInRaw = params.get('expires_in');
+            if (accessToken && refreshToken) {
+              const result = await electronApi.devSignIn({
+                accessToken,
+                refreshToken,
+                expiresInSec: expiresInRaw ? Number(expiresInRaw) : undefined
+              });
+              if (result.ok) return;
+              console.warn('[dev sign-in] devSignIn IPC failed:', result.error);
+            } else {
+              console.warn('[dev sign-in] mock HTML missing token or refresh_token');
+            }
+          } else {
+            console.warn(
+              '[dev sign-in] mock response missing mono-desktop://signIn link, falling back'
+            );
+          }
+        } else {
+          console.warn(`[dev sign-in] mock returned ${res.status}, falling back to browser`);
+        }
+      } catch (err) {
+        console.warn('[dev sign-in] direct fetch failed, falling back to browser:', err);
+      }
+    }
+
+    window.open(signInUrl);
   }, []);
   const [searchParams] = useSearchParams();
   const tokenParams = searchParams.get('token');
@@ -117,11 +184,7 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
       return <Navigate to={'/onboarding'} />;
     }
 
-    // Check subscription status after onboarding
-    if (!hasActiveSubscription()) {
-      return <Navigate to={'/subscription'} />;
-    }
-
+    // Payment removed — go straight to inbox after onboarding.
     return <Navigate to={'/'} />;
   }
 
@@ -162,7 +225,10 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
 
         <div className="flex h-screen flex-col items-center justify-between p-16 transition-colors">
           <div></div>
-          <div className="flex flex-col items-center gap-8">
+          {/* Newton entrance: fade + subtle lift on first paint so the
+              sign-in surface doesn't pop in. Honors prefers-reduced-motion
+              automatically via tailwindcss-animate. */}
+          <div className="flex flex-col items-center gap-8 duration-500 animate-in fade-in-0 slide-in-from-bottom-2">
             <MonoLogo className="h-24" />
             <Button variant={'secondary'} disabled={isLoading} onClick={handleSignIn}>
               {isLoading ? (
@@ -172,16 +238,36 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
               )}
               {t('layout.sign_in.sign_in_with_google')}
             </Button>
-            {process.env.NODE_ENV === 'development' && (
-              <div className="flex flex-col gap-2">
-                <Textarea
-                  value={devToken}
-                  onChange={(e) => setDevToken(e.target.value)}
-                  placeholder="Enter token"
-                ></Textarea>
-                <Button onClick={handleDevSignIn}>Sign in with Token (Dev)</Button>
-              </div>
-            )}
+            {(() => {
+              const homepage = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
+              const homepageMisconfigured =
+                !homepage || !/^https?:\/\//i.test(homepage);
+              const showDevAffordances =
+                process.env.NODE_ENV === 'development' || homepageMisconfigured;
+              if (!showDevAffordances) return null;
+              return (
+                <div className="flex w-80 flex-col gap-2">
+                  {homepageMisconfigured && (
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Backend not configured
+                    </p>
+                  )}
+                  {homepageMisconfigured && (
+                    <p className="text-xs text-muted-foreground">
+                      Set <code>MONO_ENV_HOMEPAGE_DOMAIN</code> to your on-prem sign-in URL
+                      (e.g. <code>https://app.example.com</code>) and rebuild. Until then,
+                      paste a backend-issued access token here to sign in directly.
+                    </p>
+                  )}
+                  <Textarea
+                    value={devToken}
+                    onChange={(e) => setDevToken(e.target.value)}
+                    placeholder="Paste access token"
+                  ></Textarea>
+                  <Button onClick={handleDevSignIn}>Sign in with Token</Button>
+                </div>
+              );
+            })()}
           </div>
           <div>
             <div className="mt-4 text-xs text-muted-foreground">

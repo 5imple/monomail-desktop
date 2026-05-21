@@ -174,7 +174,7 @@ export const getEditorExtensions = ({
       defaultProtocol: 'https',
       protocols: ['http', 'https'],
       HTMLAttributes: {
-        class: 'text-blue-600 underline'
+        class: 'text-accent underline underline-offset-2'
       },
       isAllowedUri: (url, ctx) => {
         try {

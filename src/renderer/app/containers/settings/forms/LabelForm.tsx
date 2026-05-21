@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger
 } from '@/renderer/app/components/ui/dropdown-menu';
 import { Input } from '@/renderer/app/components/ui/input';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import {
   Select,
   SelectContent,
@@ -253,41 +254,41 @@ export const LabelForm = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="mb-4 flex items-start">
-        <div>
-          <h3 className="text-lg font-medium">{t('settings.label.title')}</h3>
-          <p className="text-sm text-muted-foreground">{t('settings.label.description')}</p>
-        </div>
-        <div className="ml-auto flex gap-2">
-          {accountUids.length > 0 && (
-            <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-              <SelectTrigger variant={'secondary'} className="">
-                <SelectValue
-                  placeholder="Select Account"
-                  className={cn(buttonVariants({ variant: 'secondary' }))}
-                />
-              </SelectTrigger>
-              <SelectContent className="dark">
-                {accountUids.map((accountId) => (
-                  <SelectItem key={accountId} value={accountId}>
-                    {accountEmailMap[accountId]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <Button
-            variant="secondary"
-            onClick={handleAddLabel}
-            type="button"
-            disabled={!selectedAccountId}
-          >
-            <MonoIcon type="Plus" className="mr-2" />
-            {t('settings.label.add_label')}
-          </Button>
-        </div>
-      </div>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+      <SettingsPageHeader
+        title={t('settings.label.title')}
+        description={t('settings.label.description')}
+        action={
+          <div className="flex gap-2">
+            {accountUids.length > 0 && (
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                <SelectTrigger variant={'secondary'} className="">
+                  <SelectValue
+                    placeholder="Select Account"
+                    className={cn(buttonVariants({ variant: 'secondary' }))}
+                  />
+                </SelectTrigger>
+                <SelectContent className="dark">
+                  {accountUids.map((accountId) => (
+                    <SelectItem key={accountId} value={accountId}>
+                      {accountEmailMap[accountId]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              variant="secondary"
+              onClick={handleAddLabel}
+              type="button"
+              disabled={!selectedAccountId}
+            >
+              <MonoIcon type="Plus" className="mr-2" />
+              {t('settings.label.add_label')}
+            </Button>
+          </div>
+        }
+      />
 
       {!selectedAccountId ? (
         <div className="space-y-6 text-center">

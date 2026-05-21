@@ -13,7 +13,7 @@ import {
 } from '@/renderer/app/components/ui/select';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 
 import React, { useCallback, useRef, useState, useMemo } from 'react';
@@ -22,6 +22,11 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { Switch } from '@/renderer/app/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
+import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
+import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
+import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
+import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 
 interface ComposeCardFooterProps {
   className?: string;
@@ -48,7 +53,8 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   onFromChange
 }) => {
   const { t } = useTranslation();
-  const { hasProAccess, getUserPlan } = useBillingAtom();
+  // Payment-free build — all plan gates always pass.
+  const hasProAccess = true;
   const { accounts, getUidFromEmail, getAccountByUid } = useAuth();
   const { openDialog } = useDialogs();
   const [from, setFrom] = useState(draft.from);
@@ -95,12 +101,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
         return;
       }
 
-      if (getUserPlan() !== 'plus' && getUserPlan() !== 'plus_onetime' && getUserPlan() !== 'pro') {
-        // Open billing page if user doesn't have pro access
-        openDialog('preference', { defaultPage: 'billing' });
-        return;
-      }
-
+      // Payment-free build — tracking is always available.
       onTrackingChange(checked);
     },
     [isCurrentAccountExpired, openDialog, hasProAccess, onTrackingChange]
@@ -188,7 +189,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
       {/* Valid Attachments */}
 
       {/* Footer Actions */}
-      <CardFooter className="flex items-end gap-8 border-0 p-2">
+      <CardFooter className="flex items-center gap-3 border-t border-border/40 p-2">
         <div className="flex items-center">
           <Button
             className={cn(
@@ -229,7 +230,9 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
               isCurrentAccountExpired
                 ? 'cursor-not-allowed text-muted-foreground/50'
                 : hasProAccess
-                  ? 'text-muted-foreground hover:text-accent'
+                  ? // AI affordance uses amber (secondary-accent) so red
+                    // stays reserved for primary actions.
+                    'text-muted-foreground hover:text-[hsl(var(--secondary-accent))]'
                   : 'cursor-not-allowed text-muted-foreground/50'
             )}
             onClick={handleAiAction}
@@ -255,14 +258,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
                   size="sm"
                   checked={trackingEnabled}
                   onCheckedChange={handleTrackingToggle}
-                  disabled={
-                    isCurrentAccountExpired ||
-                    !(
-                      getUserPlan() === 'plus' ||
-                      getUserPlan() === 'plus_onetime' ||
-                      getUserPlan() === 'pro'
-                    )
-                  }
+                  disabled={isCurrentAccountExpired}
                 />
                 <MonoIcon
                   type="CheckCheck"
@@ -270,13 +266,9 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
                     'h-4 w-4',
                     isCurrentAccountExpired
                       ? 'text-muted-foreground/50'
-                      : getUserPlan() === 'plus' ||
-                          getUserPlan() === 'plus_onetime' ||
-                          getUserPlan() === 'pro'
-                        ? trackingEnabled
-                          ? 'text-accent'
-                          : 'text-muted-foreground'
-                        : 'text-muted-foreground/50'
+                      : trackingEnabled
+                        ? 'text-accent'
+                        : 'text-muted-foreground'
                   )}
                 />
               </TooltipTrigger>
@@ -338,15 +330,27 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
               </SelectContent>
             </Select>
 
-            <div className={cn('flex items-center')}>
+            <div className={cn('flex items-center gap-2')}>
+              {/* P8 piece 5 — Send Later. Client-only: adds the draft to the
+                  queue atom's scheduledItems with a chosen sendAt. The draft
+                  itself stays as a draft (no actual send fires at scheduled
+                  time — that requires backend pieces 4 + 6). User can find
+                  the entry under the Later tab. */}
+              <SendLaterButton
+                draft={draft}
+                disabled={
+                  sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0
+                }
+              />
               <Button
+                variant="send"
                 disabled={sendDisabled || isSending || isCurrentAccountExpired}
                 onClick={handleSubmit}
                 tooltip={getSendDisabledReason()}
                 shortcut={
                   !isCurrentAccountExpired && !sendDisabled && !isSending ? 'MOD+ENTER' : undefined
                 }
-                className="flex border-none disabled:pointer-events-auto"
+                className="flex disabled:pointer-events-auto"
               >
                 {isSending ? (
                   <Loader className="mr-2" />
@@ -364,3 +368,80 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 };
 
 export default ComposeCardFooter;
+
+/**
+ * Send-Later trigger — small icon button next to Send Now. Opens a
+ * popover with schedule presets (In 1 hour, Tomorrow morning, etc.).
+ * Picking one stamps the draft into the Later queue's scheduledItems
+ * map. No actual send fires; the entry is purely informational until
+ * the backend can take ownership of the queue (P8 pieces 4 + 6).
+ */
+function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { scheduleDraft, primaryAccountId } = useQueueAtom();
+  const { setActiveLayout } = useGlobalAtom();
+  const { getUidFromEmail } = useAuth();
+  const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
+
+  const handlePickPreset = useCallback(
+    async (preset: { id: string; label: string; scheduledFor: string | null }) => {
+      if (!preset.scheduledFor) return;
+      const accountId = getUidFromEmail(draft.from) || primaryAccountId;
+      if (!accountId) {
+        toast.error('Could not determine sending account');
+        return;
+      }
+      const bodyPlain = (draft.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const res = await scheduleDraft({
+        draftId: draft.id,
+        accountId,
+        sendAt: preset.scheduledFor,
+        draftSnapshot: {
+          subject: draft.subject || '(no subject)',
+          bodySnippet: bodyPlain.slice(0, 160),
+          recipients: draft.to.map((email) => ({ id: email, name: email, email })),
+          attachmentCount: Object.keys(draft.attachments || {}).length,
+          isReply: false
+        }
+      });
+      setOpen(false);
+      if (!res.ok) {
+        toast.error(`Couldn't schedule send: ${res.error}`);
+        return;
+      }
+      // Surface the queue so the user sees their entry land.
+      setActiveLayout('LATER');
+      toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
+    },
+    [draft, scheduleDraft, setActiveLayout, getUidFromEmail, primaryAccountId]
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="secondary"
+          typeVariant="icon"
+          disabled={disabled}
+          tooltip="Send later"
+          className="h-10 w-10"
+        >
+          <MonoIcon type="Clock" className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={6}
+        className="w-auto border-none bg-transparent p-0 shadow-none"
+      >
+        <ReschedulePopover
+          presets={presets}
+          heading="Send Later"
+          onPickPreset={handlePickPreset}
+          onPickCustom={() => setOpen(false)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}

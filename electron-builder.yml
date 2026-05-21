@@ -45,21 +45,19 @@ appImage:
 # crashed on launch. Re-enabling npmRebuild fixes this; electron-builder
 # rebuilds for both arches before merging into the universal binary.
 npmRebuild: true
-# Auto-update feed. The runtime UpdateManager.configureUpdater() calls
-# setFeedURL with the same URL based on MONO_ENV_FIREBASE_STORAGE_BUCKET,
-# so the two must stay in sync. The previous placeholder
-# `https://example.com/please-configure-your-update-server` was a foot-gun:
-# if a regression ever skipped setFeedURL, the updater would attempt to
-# resolve that host (or any future attacker who registers it) as authoritative.
+# Auto-update feed. The runtime UpdateManager.configureUpdater() also
+# reads MONO_ENV_UPDATE_FEED_URL and calls setFeedURL with it, so the two
+# stay in sync at runtime even if app-update.yml is out of date.
 #
-# `${env.MONO_ENV_FIREBASE_STORAGE_BUCKET}` is interpolated by electron-builder
-# at build time. If the env var is unset, the build fails loudly instead of
-# silently shipping a broken/insecure updater config.
+# `${env.MONO_ENV_UPDATE_FEED_URL}` is interpolated by electron-builder at
+# build time. When unset, the embedded value defaults to about:blank so
+# the updater never reaches a real host until configured; the runtime
+# guard in UpdateManager (`updatesDisabled`) keeps it from trying at all.
 #
 # TODO: add `publisherName` once Developer ID cert CN is known so
 # electron-updater verifies the new binary was signed by us, not just notarized.
 publish:
   provider: generic
-  url: https://storage.googleapis.com/${env.MONO_ENV_FIREBASE_STORAGE_BUCKET}/releases/
+  url: ${env.MONO_ENV_UPDATE_FEED_URL:-about:blank}
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

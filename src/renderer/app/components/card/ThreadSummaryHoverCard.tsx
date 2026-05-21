@@ -88,7 +88,7 @@ const ThreadSummaryHoverCard: React.FC<ThreadSummaryHoverCardProps> = ({ threadI
 
       {isVisible && summary && (
         <div
-          className="absolute z-50 max-w-sm rounded-md border bg-card p-3 text-sm shadow-xl transition-opacity duration-200"
+          className="absolute z-50 max-w-sm rounded-md border border-border/60 bg-card p-3 text-sm shadow-md transition-opacity duration-200"
           style={{
             position: 'fixed',
             top: `${positionRef.current.y}px`,

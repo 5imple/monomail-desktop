@@ -107,58 +107,57 @@ const TextEditor = React.forwardRef(
     useEffect(() => {
       if (!editor) return;
 
-      // Add custom CSS for link styling and resizable image behavior
+      // Add custom CSS for link styling and resizable image behavior.
+      // Inline resize-handle colours use the Newton accent via the CSS
+      // variable so they stay in lockstep with the rest of the palette
+      // (no more hardcoded Tailwind blue 500).
       const customStyleElement = document.createElement('style');
       customStyleElement.textContent = `
         /* Ensure link bubble menu has higher z-index than link overlay */
         .link-bubble-menu {
           z-index: 50;
         }
-        
+
         /* Resizable image styles */
         .resizable-image {
           cursor: pointer;
           transition: all 0.2s ease;
         }
-        
-        .resizable-image:hover {
-          outline: 2px solid #3b82f6;
-          outline-offset: 2px;
-        }
-        
+
+        .resizable-image:hover,
         .resizable-image.ProseMirror-selectednode {
-          outline: 2px solid #3b82f6;
+          outline: 2px solid hsl(var(--accent));
           outline-offset: 2px;
         }
-        
+
         /* Ensure proper image sizing */
         .ProseMirror img {
           max-width: 100%;
           height: auto;
           display: inline-block;
         }
-        
+
         /* Resize handles for images */
         .image-resizer {
           position: relative;
           display: inline-block;
         }
-        
+
         .image-resizer .resize-trigger {
           position: absolute;
           bottom: -6px;
           right: -6px;
           width: 12px;
           height: 12px;
-          background: #3b82f6;
-          border: 2px solid white;
+          background: hsl(var(--accent));
+          border: 2px solid hsl(var(--background));
           border-radius: 50%;
           cursor: nw-resize;
           opacity: 0;
           transition: opacity 0.2s ease;
           z-index: 10;
         }
-        
+
         .image-resizer:hover .resize-trigger,
         .image-resizer.ProseMirror-selectednode .resize-trigger {
           opacity: 1;
@@ -296,17 +295,15 @@ const TextEditor = React.forwardRef(
               duration: 100,
               appendTo: 'parent',
               theme: 'mono',
-              arrow: true,
+              arrow: false,
               placement: 'top',
-              maxWidth: 'none',
-              onShow: (instance) => {
-                // Add dark class to tippy box
-                instance.popper.classList.add('dark');
-              },
-              onHide: (instance) => {
-                // Remove dark class from tippy box
-                // instance.popper.classList.remove('dark');
-              }
+              maxWidth: 'none'
+              // Pre-Phase-4 the BubbleMenu forced a dark class onto the
+              // tippy popper so the toolbar always rendered dark-on-dark.
+              // That made the menu read as a chunky black slab against
+              // the light Newton UI. The toolbar now uses the standard
+              // popover treatment driven by the `mono` tippy theme
+              // (defined in global.css).
             }}
           >
             <TextEditorToolbar editor={editor} />

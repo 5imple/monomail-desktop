@@ -1,16 +1,15 @@
 import { GeneralForm } from '@/renderer/app/containers/settings/forms/GeneralForm';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useTranslation } from 'react-i18next';
 
 export default function SettingsGeneralPage() {
   const { t } = useTranslation();
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">{t('settings.general.title')}</h3>
-        <p className="text-sm text-muted-foreground outline-ring">
-          {t('settings.general.description')}
-        </p>
-      </div>
+    <div className="space-y-8">
+      <SettingsPageHeader
+        title={t('settings.general.title')}
+        description={t('settings.general.description')}
+      />
       <GeneralForm />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger
 } from '@/renderer/app/components/ui/dropdown-menu';
 import TemplateEditDialog from '@/renderer/app/containers/dialog/TemplateEditDialog';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { getPlainTextSnippet } from '@/renderer/app/lib/getPlainTextSnippet';
 import { cn } from '@/renderer/app/lib/utils';
@@ -80,17 +81,17 @@ const TemplateForm = () => {
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="mb-4 flex items-start">
-          <div>
-            <h3 className="text-lg font-medium">{t('settings.template.title')}</h3>
-            <p className="text-sm text-muted-foreground">{t('settings.template.description')}</p>
-          </div>
-          <Button className="ml-auto" variant="secondary" onClick={openAddDialog} type="button">
-            <MonoIcon type="Plus" className="mr-2" />
-            {t('settings.template.add_template')}
-          </Button>
-        </div>
+      <div className="space-y-8">
+        <SettingsPageHeader
+          title={t('settings.template.title')}
+          description={t('settings.template.description')}
+          action={
+            <Button variant="secondary" onClick={openAddDialog} type="button">
+              <MonoIcon type="Plus" className="mr-2" />
+              {t('settings.template.add_template')}
+            </Button>
+          }
+        />
 
         <div className="overflow-hidden rounded-md border shadow-sm">
           <div className="flex gap-1 border-b bg-muted px-2 py-2">

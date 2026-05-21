@@ -37,7 +37,7 @@ import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
 import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
@@ -81,7 +81,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
   const { signatures, getSignatureById } = useSignatureAtom();
-  const { billingInfo, getUserPlan, hasProAccess } = useBillingAtom();
+  // Payment-free build — every plan gate evaluates as pro.
+  const hasProAccess = true;
   const { contactArray } = useContactAtom();
   const { openDialog } = useDialogs();
   const { updateDraft, sendDraft, removeDraft } = useDraftAtom();
@@ -96,9 +97,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [usedAiDraft, setUsedAiDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isGeneratingSubject, setIsGeneratingSubject] = useState(false);
-  const [trackingEnabled, setTrackingEnabled] = useState(
-    getUserPlan() === 'pro' || getUserPlan() === 'plus' || getUserPlan() === 'plus_onetime'
-  );
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
 
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
@@ -778,15 +777,35 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   );
 
   const renderDraftStatus = useMemo(() => {
+    // Newton-styled status chips: mono uppercase tracked label paired
+    // with a small status glyph so the composer state reads as a tiny
+    // metadata stamp rather than a floating icon.
+    const baseClass =
+      'flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground';
     switch (draftSaveStatus) {
       case 'INITIALIZED':
         return null;
       case 'LOADING':
-        return <Loader />;
+        return (
+          <span className={baseClass}>
+            <Loader className="h-3 w-3" />
+            Saving
+          </span>
+        );
       case 'SAVED':
-        return <MonoIcon type={'CheckCircle'} className="h-4 w-4" />;
+        return (
+          <span className={baseClass}>
+            <MonoIcon type={'CheckCircle'} className="h-3 w-3" />
+            Saved
+          </span>
+        );
       case 'ERROR':
-        return <MonoIcon type={'AlertCircle'} />;
+        return (
+          <span className={cn(baseClass, 'text-destructive')}>
+            <MonoIcon type={'AlertCircle'} className="h-3 w-3" />
+            Save failed
+          </span>
+        );
     }
   }, [draftSaveStatus]);
 
@@ -1110,12 +1129,15 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     >
       <Card
         className={cn(
-          'orm ease-bounce-in-out pointer-events-auto flex flex-col border bg-card dark:bg-background',
+          'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/60 bg-card dark:bg-background',
           'h-[57vh] max-h-[570px] min-h-[500px] w-full min-w-[540px] max-w-[600px] transition-all duration-300',
           isMaximized && 'h-full min-h-full min-w-full max-w-full',
+          // Newton elevation: still clearly floating but less chunky than
+          // the prior 30% black drop. Refined edge keeps the popout
+          // distinct from the document behind it without screaming.
           isMinimized
-            ? 'shadow-md dark:shadow-white/20'
-            : 'shadow-xl shadow-black/30 dark:shadow-4xl dark:shadow-white/20',
+            ? 'shadow-md'
+            : 'shadow-xl shadow-black/10 dark:shadow-black/40',
           !isMaximized || isMinimized ? 'rounded-t-lg' : 'rounded-none border-0 shadow-none',
 
           // isClosing ? 'duration-0' : 'duration-400',
@@ -1132,7 +1154,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           <div
             onClick={() => isMinimized && toggleMinimize()}
             className={cn(
-              'flex items-center p-2 pb-0 transition-all',
+              'flex items-center gap-0.5 border-b border-border/40 p-2 transition-all',
+              isMinimized && 'border-b-0',
               isMaximized && 'mt-1',
               isElectron && isMaximized && sidebarCollapsed && 'pl-28'
             )}
@@ -1211,15 +1234,22 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           <>
             <CardContent className="no-drag flex-1 overflow-y-scroll p-0">
               <div className="flex h-full flex-col">
-                <div className="mt-2">
+                <div className="border-b border-border/40 px-4 pb-3 pt-3">
+                  <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    {replyMessage
+                      ? 'Replying'
+                      : historyMessage
+                        ? 'Forwarding'
+                        : 'New message'}
+                  </p>
                   <div className="relative">
                     <Input
                       ref={subjectRef}
                       variant="transparent"
                       placeholder={t('text_editor.placeholder.subject')}
                       className={cn(
-                        'text-md mb-1 border-none px-4 font-semibold',
-                        composeDraft.body && composeDraft.body.trim().length > 0 ? 'pr-12' : ''
+                        'h-auto border-none px-0 py-0 text-[18px] font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60',
+                        composeDraft.body && composeDraft.body.trim().length > 0 ? 'pr-10' : ''
                       )}
                       value={composeDraft.subject}
                       onChange={(e) => handleInputChange('subject', e.target.value)}
@@ -1255,7 +1285,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                         <Button
                           onClick={handleGenerateSubject}
                           disabled={isGeneratingSubject}
-                          className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 p-0"
+                          className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
                           variant="ghost"
                           typeVariant="icon"
                           tooltip={
@@ -1267,7 +1297,13 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                           {isGeneratingSubject ? (
                             <Loader className="h-4 w-4" />
                           ) : (
-                            <MonoIcon type="Sparkles" className="text-accent" />
+                            // AI affordance — amber secondary-accent. Red
+                            // accent stays reserved for primary actions
+                            // (send, unread, sign-in).
+                            <MonoIcon
+                              type="Sparkles"
+                              className="text-[hsl(var(--secondary-accent))]"
+                            />
                           )}
                         </Button>
                       )}

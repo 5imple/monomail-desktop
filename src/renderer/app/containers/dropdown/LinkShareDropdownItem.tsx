@@ -223,7 +223,13 @@ const LinkShareDropdownItem: FC<LinkShareDropdownItemProps> = ({ accountId, item
   }, [isPublished, shareId, itemId, accountId, accessLevel, type, trackEvent, addOrUpdateShare]);
 
   const getShareUrl = () => {
-    return `https://${import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN}/share/${shareId}`;
+    // Prefer the on-prem MONO_ENV_PUBLIC_DOMAIN. Falls back to the legacy
+    // Firebase auth domain so existing Firebase deployments still produce
+    // valid share URLs until they finish migrating off.
+    const publicDomain = (import.meta.env.MONO_ENV_PUBLIC_DOMAIN || '').trim();
+    const legacyDomain = import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN;
+    const host = publicDomain || (legacyDomain ? `https://${legacyDomain}` : '');
+    return `${host.replace(/\/$/, '')}/share/${shareId}`;
   };
 
   // Get current loading state and share status

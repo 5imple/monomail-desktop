@@ -13,7 +13,9 @@ const notificationBadgeVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground',
         success: 'bg-green-500 text-white',
         warning: 'bg-yellow-500 text-black',
-        info: 'bg-blue-500 text-white'
+        // Info badge uses Newton's neutral stone tone — the prior
+        // `bg-blue-500` was a holdover from the old monomail blue identity.
+        info: 'bg-muted-foreground text-background'
       },
       size: {
         sm: 'h-4 w-4 text-[10px] min-w-4',

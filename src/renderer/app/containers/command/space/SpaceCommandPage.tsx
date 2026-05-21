@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// Billing imports removed — payment-free build, space creation
+// always allowed.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
-import { canCreateMoreSpaces } from '@/renderer/app/lib/billingUtils';
 import { toast } from 'sonner';
 import SpaceSelectionPage from './SpaceSelectionPage';
 import SpaceAccountPage from './SpaceAccountPage';
@@ -30,7 +30,7 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
   const { t } = useTranslation();
   const { spaces, createSpace, updateSpace, updateAccountToSpace, switchSpace, deleteSpace } =
     useSpaceAtom();
-  const { getUserPlan } = useBillingAtom();
+  // Payment-free build — `getUserPlan` no longer needed; treat as always-pro.
   const { openDialog } = useDialogs();
 
   const [spaceName, setSpaceName] = useState('');
@@ -72,8 +72,7 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
 
   // Handle new space creation
   const handleCreateNew = () => {
-    const currentPlan = getUserPlan();
-    const canCreate = canCreateMoreSpaces(spaces.length, currentPlan);
+    const canCreate = true;
 
     if (!canCreate) {
       handleUpgrade();
@@ -196,9 +195,8 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
         // Switch to the updated space
         switchSpace(selectedSpaceId);
       } else {
-        // Check space limits before creating new space
-        const currentPlan = getUserPlan();
-        const canCreate = canCreateMoreSpaces(spaces.length, currentPlan);
+        // Payment-free build — space creation always allowed.
+        const canCreate = true;
 
         if (!canCreate) {
           toast.error(
@@ -243,7 +241,6 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
     updateSpace,
     updateAccountToSpace,
     switchSpace,
-    getUserPlan,
     handleUpgrade,
     onClose,
     t

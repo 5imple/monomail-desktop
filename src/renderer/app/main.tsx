@@ -16,7 +16,20 @@ import i18next from 'i18next';
 import mixpanel from 'mixpanel-browser';
 import ReactDOM from 'react-dom/client';
 import { HotkeysProvider } from 'react-hotkeys-hook';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter } from 'react-router-dom';
+
+// When the renderer is loaded from a non-http(s) URL (the standalone .app
+// path where the bundled renderer is served via the custom `monomail-app://`
+// scheme, or any file:// fallback), pushState-based routing is fragile —
+// reloads or deep-links don't resolve cleanly. Auto-fall-back to a hash
+// router for those origins. Hosted browser builds keep BrowserRouter so
+// URLs stay clean.
+const Router =
+  typeof window !== 'undefined' &&
+  window.location.protocol !== 'http:' &&
+  window.location.protocol !== 'https:'
+    ? HashRouter
+    : BrowserRouter;
 import AppRouter from './AppRouter';
 import { ThemeProvider } from './components/ThemeProvider';
 import { Toaster } from './components/ui/sonner';
@@ -69,7 +82,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <InternetConnection>
       <UndoProvider>
         <AuthProvider>
-          <BrowserRouter>
+          <Router>
             <RouteLogger>
               <TooltipProvider delayDuration={300}>
                 <SyncHistoryProvider>
@@ -88,7 +101,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                 </SyncHistoryProvider>
               </TooltipProvider>
             </RouteLogger>
-          </BrowserRouter>
+          </Router>
         </AuthProvider>
       </UndoProvider>
     </InternetConnection>

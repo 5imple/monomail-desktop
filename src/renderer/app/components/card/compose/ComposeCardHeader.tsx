@@ -29,7 +29,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
 
   return (
     <>
-      <div className="no-drag items-star flex justify-between border-b px-2">
+      <div className="no-drag flex items-start justify-between border-b border-border/40 px-3">
         <ContactSuggestionInput
           contacts={contactArray}
           className="z-10 min-h-0 items-start border-none px-0 py-0.5"
@@ -71,7 +71,10 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
         />
         <Button
           onClick={() => setShowCc(!showCc)}
-          className={cn(showCc ? 'text-foreground' : 'text-muted-foreground')}
+          className={cn(
+            'font-mono text-[10px] uppercase tracking-[0.18em] transition-colors',
+            showCc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+          )}
           variant={'text'}
           sizeVariant={'sm'}
         >
@@ -79,7 +82,10 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
         </Button>
         <Button
           onClick={() => setShowBcc(!showBcc)}
-          className={cn(showBcc ? 'text-foreground' : 'text-muted-foreground')}
+          className={cn(
+            'font-mono text-[10px] uppercase tracking-[0.18em] transition-colors',
+            showBcc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+          )}
           variant={'text'}
           sizeVariant={'sm'}
         >
@@ -87,7 +93,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
         </Button>
       </div>
       {composeDraft.cc.length > 0 || showCc ? (
-        <div className="no-drag flex items-center justify-between border-b px-2">
+        <div className="no-drag flex items-center justify-between border-b border-border/40 px-3">
           <ContactSuggestionInput
             contacts={contactArray}
             className="min-h-0 items-start border-none px-0 py-0.5"
@@ -131,7 +137,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
       ) : null}
 
       {composeDraft.bcc.length > 0 || showBcc ? (
-        <div className="no-drag flex items-center justify-between border-b px-2">
+        <div className="no-drag flex items-center justify-between border-b border-border/40 px-3">
           <ContactSuggestionInput
             contacts={contactArray}
             className="min-h-0 items-start border-none px-0 py-0.5"

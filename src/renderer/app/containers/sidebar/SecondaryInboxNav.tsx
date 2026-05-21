@@ -45,7 +45,7 @@ const SecondaryInboxNav: FC<SecondaryInboxNavProps> = () => {
         title: t('sidebar.nav.category.social'),
         icon: 'UserGroup',
         parentIcon: 'UserGroup',
-        iconColor: 'text-blue-500'
+        iconColor: 'text-muted-foreground'
       },
       {
         id: 'promotions',

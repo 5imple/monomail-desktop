@@ -21,7 +21,7 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { TooltipPortal } from '@radix-ui/react-tooltip';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 
@@ -41,7 +41,7 @@ type IntegrationFormValues = z.infer<typeof IntegrationFormSchema>;
 
 export function IntegrationForm() {
   const { member, accounts, idToken, updateAccounts } = useAuth();
-  const { getUserPlan } = useBillingAtom();
+  const getUserPlan = () => 'pro';
   const { openDialog } = useDialogs();
   const { t } = useTranslation();
   const form = useForm<IntegrationFormValues>({

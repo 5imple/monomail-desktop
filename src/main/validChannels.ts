@@ -2,7 +2,10 @@ export const validRendererChannel = [
   'renderer:native:focus',
   'renderer:native:blur',
   'renderer:naviagation:to',
-  'renderer:fcm:message-received',
+  // Push channel: replaces 'renderer:fcm:message-received' in Phase B. The
+  // payload shape is unchanged (matches the legacy FCM MessagePayload),
+  // it just arrives over a WebSocket now instead of FCM.
+  'renderer:push:message-received',
   'renderer:notification:native:clicked',
   'renderer:command:trigger',
   'renderer:update:info',
@@ -12,6 +15,8 @@ export const validRendererChannel = [
   'renderer:auth:add-account',
   'renderer:auth:scope-updated',
   'renderer:auth:billing-updated',
+  'renderer:auth:token-changed',
+  'renderer:auth:signed-out',
 
   'renderer:system:deeplink-query',
   'renderer:mailto:compose',
@@ -25,6 +30,9 @@ export const isValidRendererChannel = (channel: string): channel is ValidRendere
 
 export const validMainChannel = [
   'main:auth:set-id-token',
+  'main:auth:get-state',
+  'main:auth:sign-out',
+  'main:auth:refresh',
   'main:system:set-offline-status',
   'main:system:set-alert-sound',
   'main:system:set-window-fullsize-on-creation',

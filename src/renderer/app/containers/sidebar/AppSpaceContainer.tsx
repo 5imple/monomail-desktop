@@ -5,8 +5,8 @@ import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
-import { getSpaceLimitForPlan, canCreateMoreSpaces } from '@/renderer/app/lib/billingUtils';
+// Billing util imports removed — payment-free build. Space limits are
+// unlimited; the gating UI below evaluates accordingly.
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import React, { FC, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -16,19 +16,15 @@ interface AppSpaceContainerProps {}
 
 const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
   const { spaces, activeSpace, switchSpace } = useSpaceAtom();
-  const { getUserPlan } = useBillingAtom();
   const { openDialog } = useDialogs();
   const { t } = useTranslation();
   const { registerItem, registerAreaRef, unregisterItem, setPivotIndex } =
     useKeyboardNavigationContext();
 
-  // Get current user's plan and space limits
-  const currentPlan = getUserPlan();
-  const spaceLimit = getSpaceLimitForPlan(currentPlan);
-  const canCreateSpace = canCreateMoreSpaces(spaces.length, currentPlan);
-
-  // Determine if this is a basic or no subscription plan
-  const isLimitedPlan = currentPlan === 'free';
+  // Payment-free build — unlimited spaces, no plan gating.
+  const spaceLimit = Infinity;
+  const canCreateSpace = true;
+  const isLimitedPlan = false;
   const BASIC_SPACE_LIMIT = 2;
 
   // Ref for the container area

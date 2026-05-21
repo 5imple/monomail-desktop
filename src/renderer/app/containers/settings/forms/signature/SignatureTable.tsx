@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger
 } from '@/renderer/app/components/ui/dropdown-menu';
 import SignatureEditDialog from '@/renderer/app/containers/dialog/SignatureEditDialog';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { getPlainTextSnippet } from '@/renderer/app/lib/getPlainTextSnippet';
@@ -131,17 +132,17 @@ const SignatureTable = () => {
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="mb-4 flex items-start">
-          <div>
-            <h3 className="text-lg font-medium">{t('settings.signature.title')}</h3>
-            <p className="text-sm text-muted-foreground">{t('settings.signature.description')}</p>
-          </div>
-          <Button className="ml-auto" variant="secondary" onClick={openAddDialog} type="button">
-            <MonoIcon type="Plus" className="mr-2" />
-            {t('settings.signature.add_signature')}
-          </Button>
-        </div>
+      <div className="space-y-8">
+        <SettingsPageHeader
+          title={t('settings.signature.title')}
+          description={t('settings.signature.description')}
+          action={
+            <Button variant="secondary" onClick={openAddDialog} type="button">
+              <MonoIcon type="Plus" className="mr-2" />
+              {t('settings.signature.add_signature')}
+            </Button>
+          }
+        />
         <div className="overflow-hidden rounded-md border shadow-sm">
           <div className="flex gap-1 border-b bg-muted px-2 py-2">
             <div className="ml-2 basis-14 text-sm text-muted-foreground">

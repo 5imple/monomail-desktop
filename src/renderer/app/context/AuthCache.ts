@@ -1,5 +1,4 @@
 import { MonoAccount, MonoMember, UserPreference } from '@/main/api/auth/types';
-import { User } from 'firebase/auth';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 
 interface CachedAuthData {

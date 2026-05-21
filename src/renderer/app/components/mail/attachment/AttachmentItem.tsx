@@ -93,7 +93,10 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
   };
 
   const formatFileSize = (size: number) => {
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   };
 
   return (
@@ -101,20 +104,33 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
       variant={'secondary'}
       sizeVariant={size}
       onClick={preview ? handlePreview : downloadAttachment}
-      className={cn('flex w-fit items-center justify-center gap-2 rounded-md border p-3 shadow-sm')}
+      className={cn(
+        // Newton attachment chip (button variant for inline-flow use):
+        // icon tile on the left, file name + mono size stacked on the right.
+        'group flex w-fit items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2 shadow-sm transition-colors hover:border-border hover:bg-muted/40'
+      )}
       disabled={isDownloading || disabled}
       tabIndex={tabIndex}
     >
-      {isDownloading ? <Loader className="mr-1" /> : getAttachmentIcon(attachment.mimeType)}
-      <div className="flex flex-1 items-center text-sm">
-        <div className="max-w-64 overflow-hidden text-ellipsis">
-          <span className="whitespace-nowrap">{attachment.fileName}</span>
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+        aria-hidden
+      >
+        {isDownloading ? (
+          <Loader />
+        ) : (
+          getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
+        )}
+      </span>
+      <div className="min-w-0 text-left">
+        <div className="max-w-64 truncate whitespace-nowrap text-[13px] font-medium tracking-tight text-foreground">
+          {attachment.fileName}
         </div>
-        <span className="ml-2 mt-0.5 text-xs text-muted-foreground">
+        <div className="mt-0.5 font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
           {formatFileSize(attachment.size)}
-        </span>
-        {children}
+        </div>
       </div>
+      {children}
     </Button>
   );
 };

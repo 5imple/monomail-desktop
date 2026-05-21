@@ -20,7 +20,7 @@ import {
 import { DBCustomSearchThreadsMultiUser } from '@/renderer/app/lib/db/thread/customSearch';
 import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useThreadListAtom } from '@/renderer/app/store/layout/threadList/useThreadListAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -43,7 +43,7 @@ const useThreadFetchHandler = () => {
   const { setThreads, resetThreadsMap } = useThreadOperationAtom();
   const [hasMore, setHasMore] = useState(true);
   const { activeSpace } = useSpaceAtom();
-  const { getUserPlan, hasActiveSubscription } = useBillingAtom();
+  // Payment-free build — no plan gates.
   const { accounts, preference } = useAuth();
 
   // Refs to track latest state values
@@ -109,31 +109,14 @@ const useThreadFetchHandler = () => {
     const currentActiveSpace = activeSpaceRef.current;
     if (!currentActiveSpace?.activeAccountUids?.length) return [];
 
-    const userPlan = getUserPlan();
-    const isFreePlan = userPlan !== 'plus' && userPlan !== 'plus_onetime' && userPlan !== 'pro';
-
-    // Filter out accounts that have issues (same conditions as IntegrationForm alerts)
-    const validAccounts = currentActiveSpace.activeAccountUids.filter((uid) => {
-      const account = accounts.find((acc) => acc.uid === uid);
-      if (!account) return false;
-
-      // // Skip expired accounts
-      // if (account.isExpired) return false;
-
-      // // Skip accounts missing Gmail permissions
-      // if (!account.scopes.some((scope) => scope.includes('https://mail.google.com'))) return false;
-
-      // For free plans, only allow first 2 accounts (after filtering for issues)
-      if (isFreePlan) {
-        const accountIndex = accounts.findIndex((acc) => acc.uid === account.uid);
-        return accountIndex < 2;
-      }
-
-      return true;
-    });
+    // Payment-free build — every active account is allowed; no 2-account
+    // free-plan cap to enforce.
+    const validAccounts = currentActiveSpace.activeAccountUids.filter((uid) =>
+      accounts.some((acc) => acc.uid === uid)
+    );
 
     return validAccounts;
-  }, [getUserPlan, activeSpaceRef, accounts]);
+  }, [activeSpaceRef, accounts]);
 
   useEffect(() => {
     // Skip on initial mount
@@ -171,9 +154,8 @@ const useThreadFetchHandler = () => {
       const currentActiveSpace = activeSpaceRef.current;
       if (!currentActiveSpace?.activeAccountUids?.length) return false;
 
-      if (getUserPlan() === 'plus' || getUserPlan() === 'plus_onetime' || getUserPlan() === 'pro') {
-        return false;
-      }
+      // Payment-free build — never gate by thread age.
+      return false;
 
       // For free users, check if the newest thread is older than 60 days
       if (threads.length > 0) {

@@ -9,8 +9,7 @@ import {
 import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandInput';
 import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
-import { canCreateMoreSpaces, getSpaceLimitForPlan } from '@/renderer/app/lib/billingUtils';
+// Billing imports removed — payment-free build.
 import { Button } from '@/renderer/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
 
@@ -35,13 +34,11 @@ const SpaceSelectionPage: React.FC<SpaceSelectionPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const { spaces } = useSpaceAtom();
-  const { getUserPlan } = useBillingAtom();
   const [filteredSpaces, setFilteredSpaces] = useState(spaces);
 
-  // Get current user's plan and check space limits
-  const currentPlan = getUserPlan();
-  const canCreateSpace = canCreateMoreSpaces(spaces.length, currentPlan);
-  const spaceLimit = getSpaceLimitForPlan(currentPlan);
+  // Payment-free build — unlimited spaces.
+  const canCreateSpace = true;
+  const spaceLimit = Infinity;
 
   // Filter spaces based on input
   useEffect(() => {

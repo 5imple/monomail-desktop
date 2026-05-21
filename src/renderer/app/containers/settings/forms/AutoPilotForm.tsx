@@ -21,9 +21,10 @@ import {
 } from '@/renderer/app/components/ui/select';
 import { BillingBanner } from '@/renderer/app/components/ui/billing-banner';
 import { BillingSwitch } from '@/renderer/app/components/ui/billing-switch';
+import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useAutopilotSettings } from '@/renderer/app/store/ai/useAutopilotSettings';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 
@@ -35,7 +36,7 @@ export function AutoPilotForm() {
   const { accounts } = useAuth();
   const { loadAutopilotSettings, isLoading, updateAllSettingsForAccount, autopilotSettings } =
     useAutopilotSettings();
-  const { hasProAccess } = useBillingAtom();
+  const hasProAccess = true;
 
   const { t } = useTranslation();
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0].uid ?? '');
@@ -112,16 +113,12 @@ export function AutoPilotForm() {
     <Form {...form}>
       <BillingBanner type="pro" />
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="space-y-6">
-          <div className="flex items-start">
-            <div>
-              <h3 className="text-lg font-medium">{t('settings.ai.autopilot.title')}</h3>
-              <p className="text-sm text-muted-foreground">
-                {t('settings.ai.autopilot.description')}
-              </p>
-            </div>
-            <div className="ml-auto">
-              {accountUids.length > 0 && (
+        <div className="space-y-8">
+          <SettingsPageHeader
+            title={t('settings.ai.autopilot.title')}
+            description={t('settings.ai.autopilot.description')}
+            action={
+              accountUids.length > 0 ? (
                 <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                   <SelectTrigger variant="secondary">
                     <SelectValue placeholder="Select Account" />
@@ -134,9 +131,9 @@ export function AutoPilotForm() {
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </div>
-          </div>
+              ) : undefined
+            }
+          />
 
           {!selectedAccountId ? (
             <div className="space-y-6 text-center">

@@ -540,10 +540,13 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         <Card
           ref={itemRef}
           className={cn(
-            'duration-50 overflow-hidden shadow-lg transition-all',
+            // Newton reader card: minimal shadow + crisp border. The
+            // previous `shadow-lg` made every message a chunky elevated
+            // block — Newton's reader feels like a quiet document with
+            // soft section dividers instead.
+            'duration-50 overflow-hidden border-border/60 shadow-sm transition-all',
             ringVariants,
             draft && 'mb-2',
-            // isFocused && 'shadow-xl',
             cardClassName
           )}
           onKeyDown={(e) => {
@@ -552,23 +555,33 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           style={style}
         >
           <CardHeader
-            className={cn('p-3')}
+            className={cn('p-4 sm:p-5')}
             onClick={(e) => {
               e.stopPropagation();
               setIsCollapsed(!isCollapsed);
               onFocusRequest?.();
             }}
           >
-            {/* Use currentMessage instead of item */}
+            {/* Newton sender row: avatar + sender name (tracking-tight,
+                medium weight) + sender email (muted, hidden when
+                collapsed to leave space for snippet). Timestamp on the
+                right in mono tabular-nums. */}
             <div className="flex items-center gap-3 text-sm">
               <RecipientAvatar recipient={currentMessage.from} />
               <div className="flex-1 overflow-hidden">
                 <div className="flex items-center justify-between gap-2 overflow-hidden text-ellipsis">
-                  <div className="whitespace-nowrap font-semibold">
-                    {currentMessage.from && currentMessage.from.name.length > 0
-                      ? currentMessage.from.name[0].toUpperCase() +
-                        currentMessage.from.name.slice(1)
-                      : currentMessage.from.email.split('@')[0]}
+                  <div className="flex items-baseline gap-2 whitespace-nowrap">
+                    <span className="text-[14px] font-medium tracking-tight text-foreground">
+                      {currentMessage.from && currentMessage.from.name.length > 0
+                        ? currentMessage.from.name[0].toUpperCase() +
+                          currentMessage.from.name.slice(1)
+                        : currentMessage.from.email.split('@')[0]}
+                    </span>
+                    {!isCollapsed && currentMessage.from?.name?.length > 0 && (
+                      <span className="hidden text-[12px] text-muted-foreground sm:inline">
+                        {currentMessage.from.email}
+                      </span>
+                    )}
                   </div>
                   {/* {currentMessage.id} / {currentMessage.threadId} */}
                   {!isCollapsed &&
@@ -614,7 +627,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   </div>
                   {currentMessage.timestamp && (
                     <div className="ml-auto flex items-center gap-2 text-muted-foreground">
-                      <span className="shrink-0 whitespace-nowrap text-xs">
+                      <span className="shrink-0 whitespace-nowrap font-mono text-[11px] tabular-nums">
                         {formatDate(currentMessage.timestamp)}
                       </span>
                       {!preview && (
@@ -1176,7 +1189,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                 '-bottom-4 mx-auto flex justify-center opacity-0 duration-200',
                 isLastCard ? 'opacity-100' : 'group-hover:opacity-100',
 
-                isFocused && 'shadow-xl'
+                isFocused && 'shadow-md'
               )}
             >
               <div className="flex overflow-hidden rounded-lg border bg-card p-1 shadow-sm">

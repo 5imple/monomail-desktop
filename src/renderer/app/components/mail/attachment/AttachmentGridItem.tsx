@@ -2,7 +2,6 @@ import { apiClient } from '@/main/api/apiClient';
 import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoAttachment } from '@/main/models/types';
-import { Button, buttonVariants } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
 import { getAttachmentIcon } from '@/renderer/app/lib/getAttachmentIcon';
 import { cn } from '@/renderer/app/lib/utils';
@@ -95,29 +94,45 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
     }
   };
 
+  // Format file size with appropriate unit. The previous version forced
+  // MB even for byte-scale files (showing "0.00 MB" for a 200-byte
+  // signature image), which read as broken.
   const formatFileSize = (size: number) => {
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   };
 
   return (
     <div
       onClick={preview ? handlePreview : downloadAttachment}
       className={cn(
-        buttonVariants({ variant: 'secondary' }),
-        'flex w-full items-start items-center gap-1',
+        // Newton attachment chip: dedicated icon tile + two-line meta (file
+        // name above, mono size below). Hover lifts the border only — accent
+        // is intentionally neutral here so the chip stays calm in a list.
+        'group flex w-full cursor-pointer items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/40',
         className
       )}
-      // disabled={isDownloading || disabled}
       tabIndex={tabIndex}
     >
-      <div className="">{isDownloading ? <Loader /> : getAttachmentIcon(attachment.mimeType)}</div>
-      <div className="flex flex-1 items-center overflow-hidden">
-        <div className="overflow-hidden text-ellipsis">
-          <span className="whitespace-nowrap text-sm font-medium">{attachment.fileName}</span>
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+        aria-hidden
+      >
+        {isDownloading ? (
+          <Loader />
+        ) : (
+          getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] font-medium tracking-tight text-foreground">
+          {attachment.fileName}
         </div>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <div className="mt-0.5 font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
           {formatFileSize(attachment.size)}
-        </span>
+        </div>
       </div>
       {children}
     </div>

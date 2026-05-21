@@ -19,6 +19,23 @@ import { useSidebarMigration } from '@/renderer/app/store/space/migrateSidebarAt
 // Re-export types for other components to use
 export type { CustomNavItem, CustomSidebarState };
 
+/**
+ * Semantic icon colors for default sidebar nav items.
+ *
+ * Centralized here so we can recolor a category (e.g. "warning" → amber
+ * instead of yellow) in one place instead of touching every default.
+ * `CustomNavItem.iconColor` is still typed as a raw Tailwind class string;
+ * these constants are the canonical values to use for the defaults.
+ */
+export const NAV_ICON_COLOR = {
+  primary: 'text-primary',
+  muted: 'text-muted-foreground',
+  warning: 'text-yellow-500',
+  positive: 'text-green-500',
+  destructive: 'text-red-500',
+  feature: 'text-purple-500'
+} as const;
+
 // Atom for custom sidebar state by space ID
 export const customSidebarBySpaceAtom = atom<Record<string, CustomSidebarState>>({});
 
@@ -127,79 +144,79 @@ export const getDefaultNavItemProperties = (
     primary: {
       title: t('sidebar.nav.category.inbox'),
       icon: 'Inbox',
-      iconColor: 'text-primary',
+      iconColor: NAV_ICON_COLOR.primary,
       query: 'category:primary',
       hotkey: 'G+P'
     },
     starred: {
       title: t('sidebar.nav.star'),
       icon: 'Star',
-      iconColor: 'text-yellow-500',
+      iconColor: NAV_ICON_COLOR.warning,
       query: 'is:starred',
       hotkey: 'G+S'
     },
     sent: {
       title: t('sidebar.nav.sent'),
       icon: 'SendHorizontal',
-      iconColor: 'text-primary',
+      iconColor: NAV_ICON_COLOR.primary,
       query: 'in:sent',
       hotkey: 'G+T'
     },
     draft: {
       title: t('sidebar.nav.draft'),
       icon: 'Pen',
-      iconColor: 'text-primary',
+      iconColor: NAV_ICON_COLOR.primary,
       query: 'in:draft',
       hotkey: 'G+D'
     },
     'all-mail': {
       title: t('sidebar.nav.all_mail'),
       icon: 'Envelope',
-      iconColor: 'text-blue-500',
+      iconColor: NAV_ICON_COLOR.primary,
       query: 'in:all -in:trash',
       hotkey: 'G+A'
     },
     done: {
       title: t('sidebar.nav.done'),
       icon: 'CheckCircle',
-      iconColor: 'text-green-500',
+      iconColor: NAV_ICON_COLOR.positive,
       query: 'NOT in:inbox',
       hotkey: 'G+E'
     },
     trash: {
       title: t('sidebar.nav.trash'),
       icon: 'Trash',
-      iconColor: 'text-primary',
+      iconColor: NAV_ICON_COLOR.primary,
       query: 'in:trash'
     },
     spam: {
       title: t('sidebar.nav.spam'),
       icon: 'AlertCircle',
-      iconColor: 'text-red-500',
+      iconColor: NAV_ICON_COLOR.destructive,
       query: 'in:spam'
     },
     social: {
       title: t('sidebar.nav.category.social'),
       icon: 'UserGroup',
-      iconColor: 'text-blue-500',
+      iconColor: NAV_ICON_COLOR.muted,
       query: 'category:social'
     },
     promotions: {
       title: t('sidebar.nav.category.promotions'),
       icon: 'Newsletter',
-      iconColor: 'text-green-500',
+      iconColor: NAV_ICON_COLOR.positive,
       query: 'category:promotions'
     },
     updates: {
       title: t('sidebar.nav.category.updates'),
       icon: 'Bell',
-      iconColor: 'text-yellow-500',
+      iconColor: NAV_ICON_COLOR.warning,
       query: 'category:updates'
     },
     forums: {
       title: t('sidebar.nav.category.forums'),
       icon: 'ChatBubble',
-      iconColor: 'text-purple-500',
+      iconColor: NAV_ICON_COLOR.feature,
       query: 'category:forums'
     }
   };
@@ -219,7 +236,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.category.inbox'),
     icon: 'Inbox',
-    iconColor: 'text-primary',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'category:primary',
     hotkey: 'G+P',
     position: 0
@@ -229,7 +246,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.star'),
     icon: 'Star',
-    iconColor: 'text-yellow-500',
+    iconColor: NAV_ICON_COLOR.warning,
     query: 'is:starred',
     hotkey: 'G+S',
     position: 1
@@ -239,7 +256,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.sent'),
     icon: 'SendHorizontal',
-    iconColor: 'text-primary',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'in:sent',
     hotkey: 'G+T',
     position: 2
@@ -249,7 +266,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.draft'),
     icon: 'Pen',
-    iconColor: 'text-primary',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'in:draft',
     hotkey: 'G+D',
     position: 3
@@ -259,7 +276,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.all_mail'),
     icon: 'Envelope',
-    iconColor: 'text-blue-500',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'in:all -in:trash',
     hotkey: 'G+A',
     position: 4
@@ -274,7 +291,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.category.inbox'),
     icon: 'Inbox',
-    iconColor: 'text-primary',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'category:primary',
     hotkey: 'G+P',
     position: 0
@@ -284,7 +301,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.star'),
     icon: 'Star',
-    iconColor: 'text-yellow-500',
+    iconColor: NAV_ICON_COLOR.warning,
     query: 'is:starred',
     hotkey: 'G+S',
     position: 1
@@ -294,7 +311,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.sent'),
     icon: 'SendHorizontal',
-    iconColor: 'text-primary',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'in:sent',
     hotkey: 'G+T',
     position: 2
@@ -304,7 +321,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.draft'),
     icon: 'Pen',
-    iconColor: 'text-primary',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'in:draft',
     hotkey: 'G+D',
     position: 3
@@ -314,7 +331,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.all_mail'),
     icon: 'Envelope',
-    iconColor: 'text-blue-500',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'in:all -in:trash',
     hotkey: 'G+A',
     position: 4
@@ -325,7 +342,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.done'),
     icon: 'CheckCircle',
-    iconColor: 'text-green-500',
+    iconColor: NAV_ICON_COLOR.positive,
     query: 'NOT in:inbox',
     hotkey: 'G+E',
     position: 5
@@ -335,7 +352,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.trash'),
     icon: 'Trash',
-    iconColor: 'text-primary',
+    iconColor: NAV_ICON_COLOR.primary,
     query: 'in:trash',
     position: 6
   },
@@ -344,7 +361,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'primary',
     title: t('sidebar.nav.spam'),
     icon: 'AlertCircle',
-    iconColor: 'text-red-500',
+    iconColor: NAV_ICON_COLOR.destructive,
     query: 'in:spam',
     position: 7
   },
@@ -353,7 +370,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'secondary',
     title: t('sidebar.nav.category.social'),
     icon: 'UserGroup',
-    iconColor: 'text-blue-500',
+    iconColor: NAV_ICON_COLOR.muted,
     query: 'category:social',
     position: 8
   },
@@ -362,7 +379,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'secondary',
     title: t('sidebar.nav.category.promotions'),
     icon: 'Newsletter',
-    iconColor: 'text-green-500',
+    iconColor: NAV_ICON_COLOR.positive,
     query: 'category:promotions',
     position: 9
   },
@@ -371,7 +388,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'secondary',
     title: t('sidebar.nav.category.updates'),
     icon: 'Bell',
-    iconColor: 'text-yellow-500',
+    iconColor: NAV_ICON_COLOR.warning,
     query: 'category:updates',
     position: 10
   },
@@ -380,7 +397,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     type: 'secondary',
     title: t('sidebar.nav.category.forums'),
     icon: 'ChatBubble',
-    iconColor: 'text-purple-500',
+    iconColor: NAV_ICON_COLOR.feature,
     query: 'category:forums',
     position: 11
   }

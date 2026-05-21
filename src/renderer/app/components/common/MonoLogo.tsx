@@ -15,7 +15,6 @@ const MonoLogo: FC<MonoLogoProps> = ({ className }) => {
   ) : (
     <img src={MonoLight} className={cn('w-24', className)} />
   );
-  // <MonoIcon type={'Mono'} className={cn('w-[27px] h-fit text-foreground', className)} />);
 };
 
 export default MonoLogo;

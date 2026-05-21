@@ -1,4 +1,12 @@
 import { SplitCategoryPreferences } from '@/main/api/auth/types';
+import type {
+  CreateScheduleRequest as QueueScheduleRequest,
+  CreateSnoozeRequest as QueueSnoozeRequest,
+  ScheduleRecord as QueueScheduleRecord,
+  SnoozeRecord as QueueSnoozeRecord
+} from '@/main/api/queue/types';
+
+type QueueResult<T> = { ok: true; data: T } | { ok: false; error: string };
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import {
   INativeNotificationOptions,
@@ -35,11 +43,74 @@ interface IpcRenderer {
   off: <T = any>(channel: ValidRendererChannel, callback: (...args: T[]) => void) => void;
 
   /**
-   * Set the ID token for authentication.
-   * @param {string | null} token - The ID token to set.
-   * @returns {Promise<void>}
+   * @deprecated Pre-Phase-B the renderer pushed Firebase ID tokens into
+   * main here. Now tokens live in main (loaded from the OAuth deep-link),
+   * and this becomes a no-op in the bridge.
    */
   setIdToken: (token: string | null) => Promise<void>;
+
+  /**
+   * Read the current auth state from main. Returns null when signed out.
+   */
+  getAuthState: () => Promise<
+    | {
+        accessToken: string;
+        expiresAt: number;
+        member: {
+          uid: string;
+          email: string;
+          displayName?: string;
+          photoURL?: string;
+        } | null;
+      }
+    | null
+  >;
+
+  /**
+   * Clear tokens in main + tear down the WebSocket push channel.
+   */
+  signOutMain: () => Promise<void>;
+
+  /**
+   * Force a refresh round-trip. Returns { ok, accessToken?, expiresAt?, error? }.
+   */
+  refreshToken: () => Promise<
+    { ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }
+  >;
+  /**
+   * Dev-only: hand pre-parsed tokens straight to main's TokenManager. Used
+   * by SignInLayout when the configured homepage is localhost — bypasses
+   * the OS protocol handler (unreliable in `npm run dev`).
+   */
+  devSignIn: (args: {
+    accessToken: string;
+    refreshToken: string;
+    expiresInSec?: number;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+
+  // ---------- P8 Later Queue ----------
+  // Each method wraps main:queue:* IPC. Responses are always
+  // { ok: true, data: T } | { ok: false; error: string } — the IPC
+  // handler normalizes axios rejections into the error branch.
+  queueSnooze: (req: QueueSnoozeRequest) => Promise<QueueResult<QueueSnoozeRecord>>;
+  queueListSnoozed: (accountId: string) => Promise<QueueResult<{ items: QueueSnoozeRecord[] }>>;
+  queueUnsnooze: (snoozeId: string) => Promise<QueueResult<{ ok: boolean }>>;
+  queueRescheduleSnooze: (args: {
+    snoozeId: string;
+    snoozeUntil: string;
+  }) => Promise<QueueResult<QueueSnoozeRecord>>;
+  queueSchedule: (req: QueueScheduleRequest) => Promise<QueueResult<QueueScheduleRecord>>;
+  queueListScheduled: (
+    accountId: string
+  ) => Promise<QueueResult<{ items: QueueScheduleRecord[] }>>;
+  queueCancelSchedule: (scheduleId: string) => Promise<QueueResult<{ ok: boolean }>>;
+  queueRescheduleSend: (args: {
+    scheduleId: string;
+    sendAt: string;
+  }) => Promise<QueueResult<QueueScheduleRecord>>;
+  queueSendNow: (
+    scheduleId: string
+  ) => Promise<QueueResult<{ ok: boolean; messageId: string }>>;
   /**
    * Set the app offline
    * @param {boolean} status - Offline status
@@ -286,6 +357,68 @@ const electronApi: IpcRenderer = {
       console.warn(`Electron API 'setIdToken' is not available in web environment`);
       return Promise.resolve();
     }
+  },
+  getAuthState: async () => {
+    if (isElectron) {
+      return window.electronBridge.getAuthState();
+    }
+    return null;
+  },
+  signOutMain: async () => {
+    if (isElectron) {
+      return window.electronBridge.signOutMain();
+    }
+    return Promise.resolve();
+  },
+  refreshToken: async () => {
+    if (isElectron) {
+      return window.electronBridge.refreshToken();
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  devSignIn: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.devSignIn(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+
+  // ---------- P8 Later Queue ----------
+  queueSnooze: async (req) => {
+    if (isElectron) return window.electronBridge.queueSnooze(req);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueListSnoozed: async (accountId) => {
+    if (isElectron) return window.electronBridge.queueListSnoozed(accountId);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueUnsnooze: async (snoozeId) => {
+    if (isElectron) return window.electronBridge.queueUnsnooze(snoozeId);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueRescheduleSnooze: async (args) => {
+    if (isElectron) return window.electronBridge.queueRescheduleSnooze(args);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueSchedule: async (req) => {
+    if (isElectron) return window.electronBridge.queueSchedule(req);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueListScheduled: async (accountId) => {
+    if (isElectron) return window.electronBridge.queueListScheduled(accountId);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueCancelSchedule: async (scheduleId) => {
+    if (isElectron) return window.electronBridge.queueCancelSchedule(scheduleId);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueRescheduleSend: async (args) => {
+    if (isElectron) return window.electronBridge.queueRescheduleSend(args);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  queueSendNow: async (scheduleId) => {
+    if (isElectron) return window.electronBridge.queueSendNow(scheduleId);
+    return { ok: false, error: 'Not in Electron' };
   },
   setActiveUid: async (uid) => {
     if (isElectron) {

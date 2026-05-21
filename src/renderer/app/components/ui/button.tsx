@@ -24,13 +24,19 @@ const buttonVariants = cva(
           'bg-gradient-to-t from-primary to-[#303030ff] dark:from-neutral-200 dark:to-primary bg-primary dark:bg-neutral-200 hover:bg-none hover:bg-primary  dark:hover:neutral-200',
         destructive:
           'bg-gradient-to-t from-red-700 to-destructive text-destructive-foreground hover:bg-none bg-red-700 hover:bg-red-700 border-destructive/95',
+        // Newton primary action — reserved for Send / Compose / other CTAs
+        // that source uses red-500 for. Distinct from `destructive` (rose).
+        send: 'bg-red-500 text-white border border-red-600 shadow-sm hover:bg-red-600',
         outline: 'border border-input bg-background hover:bg-muted-low/50 hover:text-foreground',
         // secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         secondary:
           'bg-gradient-to-t from-secondary dark:from-background to-background dark:to-secondary text-secondary-foreground hover:bg-none bg-secondary dark:bg-background hover:bg-secondary dark:hover:bg-background border shadow-sm',
         ghost: 'hover:bg-muted hover:text-foreground',
         text: 'hover:text-foreground text-foreground',
-        link: 'text-accent dark:text-accent underline-offset-2 underline'
+        // Link reads as foreground stone so it's legible. The prior
+        // `text-accent` resolved to stone-100 after the token migration
+        // and was invisible on light backgrounds.
+        link: 'text-primary dark:text-primary underline-offset-2 underline hover:text-primary/80'
       },
       sizeVariant: {
         default: 'h-10 rounded-md p-3',

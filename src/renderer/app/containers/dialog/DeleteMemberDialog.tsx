@@ -14,7 +14,7 @@ import {
 import Loader from '@/renderer/app/components/ui/loader';
 import { Alert, AlertDescription, AlertTitle } from '@/renderer/app/components/ui/alert';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 
 import React, { FC, useState } from 'react';
@@ -31,7 +31,7 @@ interface DeleteMemberDialogProps {
 
 const DeleteMemberDialog: FC<DeleteMemberDialogProps> = ({ children, open, onOpenChange }) => {
   const { t } = useTranslation();
-  const { billingInfo } = useBillingAtom();
+  const billingInfo = { subscription: null, hasOneTimePurchase: false, order: null };
   const { member, signOut, accounts } = useAuth();
   const { closeDialog } = useDialogs();
   const { exitWorker: exitHistoryWorker } = useSyncHistory();

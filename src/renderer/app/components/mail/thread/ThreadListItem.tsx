@@ -345,22 +345,24 @@ export const ThreadListItem = React.memo(
       }, [currentThread, variant]);
 
       const containerHeight = variant === 'compact' ? 'h-[42px]' : 'h-[80.5px]';
+      // Newton-style row container:
+      //   - `relative` so the 3px unread leading bar can be absolutely
+      //     positioned inside the row (Newton's signature accent).
+      //   - Uniform card background for both read and unread rows; the
+      //     read/unread distinction is carried by the leading bar +
+      //     font-weight, not by a tinted background. (Tinted-read-rows
+      //     was monomail's previous pattern — Newton's calmer aesthetic
+      //     keeps the background still and lets typography do the work.)
+      //   - Selection uses a soft accent tint with a thicker leading bar.
+      const isUnread = currentThread?.labelIds.includes('UNREAD');
       const containerClasses = cn(
-        'transition-opacity duration-100',
-        'bg-card/70 dark:bg-card/60 hover:bg-muted-low dark:bg-muted dark:hover:bg-muted-high ',
-        currentThread && !currentThread.labelIds.includes('UNREAD') && 'text-muted-foreground',
-        currentThread &&
-          !currentThread.labelIds.includes('UNREAD') &&
-          'bg-muted/90 dark:bg-card/60 dark:hover:bg-muted-low/50',
+        'relative transition-opacity duration-100',
+        'bg-card hover:bg-muted/60 dark:bg-card dark:hover:bg-muted/40',
+        currentThread && !isUnread && 'text-muted-foreground',
         selectedThreads.includes(threadId) &&
-          cn(
-            'border-l-[3px] border-l-primary bg-primary/10 hover:bg-primary/10',
-            variant === 'compact'
-              ? 'dark:bg-primary/20 dark:hover:bg-primary/20'
-              : 'dark:bg-primary/15 dark:hover:bg-primary/15'
-          ),
+          'bg-accent/10 hover:bg-accent/15 dark:bg-accent/15 dark:hover:bg-accent/20',
         !isLoaded ? 'opacity-0' : 'opacity-100',
-        'focus-visible:bg-primary/10',
+        'focus-visible:bg-accent/10',
         variant === 'compact' && !currentThread && 'hidden'
       );
 
@@ -519,49 +521,94 @@ export const ThreadListItem = React.memo(
                     </div>
                   </div>
                 ) : (
-                  // compact variant layout
+                  // Newton-style compact variant: single horizontal row.
+                  //
+                  // Anatomy (left → right):
+                  //   [3px red unread bar] [sender column 176px] · [subject · snippet flexbox] · [right metadata cluster]
+                  //
+                  // The 3px leading bar replaces the previous tiny round
+                  // unread dot — Newton's signature is the architectural
+                  // vertical accent instead of a pulsing-ish dot. Star,
+                  // tracking, labels, and message-count all sit on the
+                  // right next to the timestamp. All the original
+                  // callbacks (DraggableSender, executeCommand, search-
+                  // by-label) and accessibility wiring are preserved.
                   <>
+                    {isUnread && (
+                      <span
+                        aria-hidden
+                        className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent"
+                      />
+                    )}
                     <div
                       className={cn(
-                        'relative flex items-center gap-2 p-3',
-                        selectedThreads.includes(threadId) && 'pl-[7.5px]'
+                        'flex items-center gap-4 px-6 py-2.5 sm:gap-6 sm:px-8',
+                        selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
                       )}
                     >
-                      <div className="flex-shrink-0">
-                        <span
-                          className={cn(
-                            'mt-[1px] flex h-2 w-2 shrink-0 rounded-full',
-                            Object.keys(currentThread.attachments).length > 0 && ''
-                          )}
-                          style={{
-                            backgroundColor: currentThread.labelIds.includes('UNREAD')
-                              ? (preference.account.accentColor[currentThread.accountId] ??
-                                '#035ddf')
-                              : 'transparent'
-                          }}
-                        />
-                      </div>
-                      <div className="flex min-h-6 w-40 items-center gap-2 overflow-hidden">
+                      {/* Sender column (fixed width, anchor) */}
+                      <div className="flex min-h-6 w-44 shrink-0 items-center gap-2.5 overflow-hidden">
                         {currentThread.from.length > 0 &&
                           preference.display.threadList?.showAvatar && (
                             <RecipientAvatar
                               recipient={currentThread.from[0]}
-                              className="h-7 w-7 border"
+                              className="h-6 w-6 shrink-0 border"
                             />
                           )}
-                        <div className="w-fit overflow-hidden text-ellipsis">
+                        <div className="min-w-0 flex-1 overflow-hidden">
                           <span
                             className={cn(
-                              'text-md whitespace-nowrap',
-                              !currentThread.labelIds.includes('UNREAD') ? '' : 'font-semibold'
+                              'block truncate text-[14px] tracking-tight',
+                              isUnread
+                                ? 'font-semibold text-foreground'
+                                : 'font-medium text-muted-foreground'
                             )}
                           >
                             {renderSenderNames()}
                           </span>
                         </div>
+                        {currentThread.items.length > 1 && (
+                          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                            {currentThread.items.length}
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                      {/* Subject + snippet flow */}
+                      <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
+                        <span
+                          className={cn(
+                            'shrink-0 max-w-[45%] truncate text-[14px] tracking-tight',
+                            isUnread
+                              ? 'font-semibold text-foreground'
+                              : 'font-medium text-foreground/80'
+                          )}
+                          dangerouslySetInnerHTML={{
+                            __html:
+                              !highlightedContent.subject || highlightedContent.subject === ''
+                                ? '(No subject)'
+                                : highlightedContent.subject
+                          }}
+                        />
+                        {preference.display.threadList?.showSnippet &&
+                          highlightedContent.snippet && (
+                            <>
+                              <span
+                                aria-hidden
+                                className="shrink-0 text-muted-foreground/40"
+                              >
+                                ·
+                              </span>
+                              <span
+                                className="hidden min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground sm:inline"
+                                dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
+                              />
+                            </>
+                          )}
+                      </div>
+
+                      {/* Right metadata cluster: star · tracking · labels · time */}
+                      <div className="flex shrink-0 items-center gap-2.5">
                         {currentThread.labelIds.includes('STARRED') && (
                           <Button
                             variant={'text'}
@@ -593,13 +640,13 @@ export const ThreadListItem = React.memo(
                                     : 'Check'
                                 }
                                 className={cn(
+                                  'h-3.5 w-3.5',
                                   trackingHistoryData.hasReads
                                     ? 'text-accent'
                                     : 'text-muted-foreground'
                                 )}
                               />
                             </TooltipTrigger>
-
                             <TooltipContent>
                               {trackingHistoryData.hasReads
                                 ? `Read ${trackingHistoryData.totalCount} times`
@@ -608,62 +655,34 @@ export const ThreadListItem = React.memo(
                           </Tooltip>
                         )}
 
+                        {Object.keys(currentThread.attachments).length > 0 && (
+                          <MonoIcon
+                            type={'Paperclip'}
+                            className="h-3 w-3 text-muted-foreground"
+                          />
+                        )}
+
                         {preference.display.threadList?.showLabels && renderLabels()}
 
-                        {currentThread.items.length > 1 && (
-                          <span className="font-regular text-xs text-muted-foreground">
-                            {currentThread.items.length}
-                          </span>
-                        )}
-                        <div className="static flex overflow-hidden">
-                          <div className="flex-1 overflow-hidden">
-                            <div className="flex items-center overflow-hidden">
-                              <div className="inline-flex min-w-0 shrink">
-                                <span
-                                  className="text-md line-clamp-1 font-normal"
-                                  dangerouslySetInnerHTML={{
-                                    __html:
-                                      !highlightedContent.subject ||
-                                      highlightedContent.subject === ''
-                                        ? '(No subject)'
-                                        : highlightedContent.subject
-                                  }}
-                                />
-                              </div>
-                              <div className="min-w-0 flex-1 overflow-hidden text-ellipsis">
-                                {preference.display.threadList?.showSnippet &&
-                                  highlightedContent.snippet && (
-                                    <span
-                                      className="ml-2 line-clamp-1 text-muted-foreground"
-                                      dangerouslySetInnerHTML={{
-                                        __html: highlightedContent.snippet
-                                      }}
-                                    />
-                                  )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className={cn(
-                          'flex-0 whitespace-nowrap text-end text-xs',
-                          selectedThreads.includes(currentThread.id)
-                            ? 'text-muted-foreground'
-                            : 'text-muted-foreground'
-                        )}
-                      >
-                        {formatListDate(currentThread.timestamp)}
+                        <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                          {formatListDate(currentThread.timestamp)}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="ml-40">
-                      <ScrollArea className="mr-3">
-                        {preference.display.threadList?.showAttachments != false &&
-                          renderAttachments()}
-                        <ScrollAreaScrollbar orientation={'horizontal'} />
-                      </ScrollArea>
-                    </div>
+                    {/* Attachment previews — kept below the row when the
+                        thread has attachments + the preference enables it.
+                        Aligned to the sender-column inset so they tuck
+                        under the subject area visually. */}
+                    {preference.display.threadList?.showAttachments != false &&
+                      Object.keys(currentThread.attachments).length > 0 && (
+                        <div className="pl-[calc(11rem+2rem)] pr-6 sm:pl-[calc(11rem+2.5rem)]">
+                          <ScrollArea className="mr-3">
+                            {renderAttachments()}
+                            <ScrollAreaScrollbar orientation={'horizontal'} />
+                          </ScrollArea>
+                        </div>
+                      )}
                   </>
                 )}
               </div>

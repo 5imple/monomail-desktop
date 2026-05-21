@@ -1,14 +1,17 @@
 import mailApi from '@/main/api/mail/mailApi';
-import { setup as setupPushReceiver } from '@/main/api/message/electron-message-receiver';
 import { registerIpcHandlers } from '@/main/services/ipc-handlers';
+import { webSocketPushClient } from '@/main/services/push/WebSocketPushClient';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
+import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { protocols } from '@/main/utils/contants';
-import { app, BrowserWindow, powerSaveBlocker, session } from 'electron';
+import { app, BrowserWindow, nativeImage, net, powerSaveBlocker, protocol, session } from 'electron';
 import log from 'electron-log';
+import * as fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 export function registerAppEventHandlers() {
   app.whenReady().then(() => {
@@ -23,15 +26,66 @@ export function registerAppEventHandlers() {
         app.setAsDefaultProtocolClient(protocol);
       }
     });
+
+    // Set the dock icon in dev mode. In packaged builds, electron-builder
+    // bakes the icon into the .app bundle (see electron-builder.yml); in
+    // dev mode we're running Electron's stock executable, which would
+    // otherwise show the default atom icon in the macOS dock.
+    if (process.platform === 'darwin' && app.dock && !app.isPackaged) {
+      try {
+        const dockIconPath = path.join(app.getAppPath(), 'resources/dev/dev-512.png');
+        const dockIcon = nativeImage.createFromPath(dockIconPath);
+        if (!dockIcon.isEmpty()) {
+          app.dock.setIcon(dockIcon);
+        } else {
+          log.warn('[dock] Dev icon image is empty:', dockIconPath);
+        }
+      } catch (err) {
+        log.warn('[dock] Failed to set dev dock icon:', err);
+      }
+    }
   });
   app.on('ready', () => {
+    // Serve the bundled renderer over a custom scheme so it has a stable
+    // origin (file:// resolves `<base href="/">` to filesystem root, which
+    // breaks every asset URL). Pages requested via this scheme are served
+    // from `out/renderer/`; unknown SPA routes (anything without a file
+    // extension that does not exist on disk) fall back to `index.html`.
+    const rendererDir = path.join(__dirname, '../renderer');
+    protocol.handle('monomail-app', async (request) => {
+      try {
+        const requestURL = new URL(request.url);
+        let pathname = decodeURIComponent(requestURL.pathname);
+        if (pathname === '' || pathname === '/') {
+          pathname = '/index.html';
+        }
+        let filePath = path.join(rendererDir, pathname);
+        // Guard against directory traversal — the resolved path must stay
+        // inside the renderer dir.
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(path.resolve(rendererDir))) {
+          return new Response('Forbidden', { status: 403 });
+        }
+        if (!fs.existsSync(resolved) && !path.extname(pathname)) {
+          // SPA-style fallback: unknown route → serve the SPA shell.
+          filePath = path.join(rendererDir, 'index.html');
+        } else {
+          filePath = resolved;
+        }
+        return await net.fetch(pathToFileURL(filePath).toString());
+      } catch (err) {
+        log.error('[protocol:monomail-app] handler error:', err);
+        return new Response('Not found', { status: 404 });
+      }
+    });
+
     registerIpcHandlers();
     // windowManager.createAppWindow();
 
     systemManager.initializeAutoStartSettings();
 
     updateManager.checkForUpdates();
-    setupPushReceiver();
+    webSocketPushClient.start();
     session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
       if (details.url.includes('lh3.googleusercontent.com')) {
         delete details.requestHeaders['Referer'];
@@ -52,39 +106,42 @@ export function registerAppEventHandlers() {
       //     nonce-based scheme as a follow-up).
       //   - kept `img-src *` because email images come from arbitrary
       //     hosts; the proxy-image strategy is a future hardening step.
-      const authDomain = import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN;
       const homepage = import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN;
       const apiOrigin = import.meta.env.MONO_ENV_API_URL;
+      const backendOrigin = (import.meta.env.MONO_ENV_BACKEND_URL || '').trim();
+      const publicDomain = (import.meta.env.MONO_ENV_PUBLIC_DOMAIN || '').trim();
+      // Derive a wss:// origin from backendOrigin so the push WebSocket
+      // works without a separate env var.
+      const backendWs = backendOrigin
+        ? backendOrigin.replace(/^https?:\/\//, 'wss://').replace(/^http:/, 'ws:')
+        : '';
       const connectAllow = [
         "'self'",
         'blob:',
         'data:',
-        authDomain ? `https://${authDomain}` : '',
         homepage ? `https://${homepage}` : '',
         apiOrigin || '',
-        'https://*.googleapis.com',
-        'https://*.firebaseio.com',
-        'https://*.firebasedatabase.app',
-        'https://*.cloudfunctions.net',
-        'https://storage.googleapis.com',
-        'https://fcm.googleapis.com',
+        backendOrigin,
+        backendWs,
+        publicDomain,
         'https://*.amplitude.com',
         'https://api.mixpanel.com',
-        'https://*.paddle.com',
-        'wss://*.firebaseio.com',
-        'wss://*.googleapis.com'
+        'https://*.paddle.com'
       ]
         .filter(Boolean)
         .join(' ');
 
       const csp = [
         "default-src 'self'",
-        "script-src 'self' https://www.googletagmanager.com https://*.amplitude.com 'unsafe-inline'",
+        // `googletagmanager.com` removed alongside Firebase Analytics. Kept
+        // amplitude inline-loaded variant.
+        "script-src 'self' https://*.amplitude.com 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com data:",
         // email images are sender-controlled hosts — keep open but stripped
-        // schemes (no `*` for protocol).
-        'img-src https: http: data: blob:',
+        // schemes (no `*` for protocol). `'self'` covers the custom
+        // `monomail-app://` scheme used for the bundled standalone build.
+        "img-src 'self' https: http: data: blob:",
         'media-src https: blob:',
         `connect-src ${connectAllow}`,
         "object-src 'self' blob:",
@@ -307,7 +364,10 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
         paramsObject[key] = String(value).slice(0, 8192);
       });
 
-      const type = paramsObject['type'];
+      // The action is encoded either as the URL host (`mono-desktop://signIn?…`,
+      // the documented Phase-B shape) or as a `type` query param
+      // (legacy). Accept both so existing redirect flows keep working.
+      const type = paramsObject['type'] || urlObj.host || urlObj.hostname || '';
       log.info('Handling mono-desktop deep link:', type, redactParams(paramsObject));
 
       if (!mainWindow) {
@@ -317,16 +377,31 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
         switch (type) {
           case 'signIn':
           case 'addAccount': {
-            const token = paramsObject['token'];
-            if (!isPlausibleJwt(token)) {
-              log.warn(
-                `Rejected ${type} deep-link: token is missing or malformed`
-              );
+            const accessToken = paramsObject['token'];
+            const refreshToken = paramsObject['refresh_token'];
+            const expiresInRaw = paramsObject['expires_in'];
+            if (!isPlausibleJwt(accessToken)) {
+              log.warn(`Rejected ${type} deep-link: token is missing or malformed`);
               return;
             }
+            if (!refreshToken || refreshToken.length < 16) {
+              log.warn(`Rejected ${type} deep-link: refresh_token missing or too short`);
+              return;
+            }
+            const expiresInSec = expiresInRaw ? Number.parseInt(expiresInRaw, 10) : NaN;
+            tokenManager.saveTokens({
+              accessToken,
+              refreshToken,
+              expiresInSec: Number.isFinite(expiresInSec) && expiresInSec > 0 ? expiresInSec : 3600
+            });
+            // The renderer side is informed via `renderer:auth:token-changed`
+            // (fired by the TokenManager listener). The legacy sign-in /
+            // add-account channels stay for back-compat with the AuthContext
+            // dev-token path; pre-Phase-B they carried a Firebase custom
+            // token, now they carry the access token directly.
             const channel =
               type === 'signIn' ? 'renderer:auth:sign-in' : 'renderer:auth:add-account';
-            mainWindow.webContents.send(channel, token);
+            mainWindow.webContents.send(channel, accessToken);
             return;
           }
           case 'billingUpdated':

@@ -88,7 +88,7 @@ const UpdateNotificationCard: FC<UpdateNotificationCardProps> = ({}) => {
     <animated.div style={{ ...styles }}>
       {isVisible && (
         <div className="m-2 mb-16 mt-0">
-          <div className={'group w-full rounded-lg border p-3 shadow-xl'}>
+          <div className={'group w-full rounded-lg border border-border/60 bg-card p-3 shadow-md'}>
             <div className="mb-3">
               <h4 className="mb-1 text-sm font-medium">{content.title}</h4>
               <p className="text-sm text-muted-foreground">{content.description}</p>

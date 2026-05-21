@@ -13,12 +13,20 @@ const toggleVariants = cva(
         default: 'bg-transparent',
         outline: 'border border-input bg-transparent hover:bg-muted-low hover:text-foreground',
         text: 'hover:text-foreground text-foreground hover:bg-transparent data-[state=on]:bg-transparent',
+        // Newton accent toggle — used in the Tiptap BubbleMenu. Pressed
+        // state lights a soft lime tint behind the icon so the active
+        // formatting is obvious at a glance without dominating the menu.
+        // (Was `bg-accent/10` + `text-accent`; both resolved to stone-100
+        // after the token migration and rendered as effectively invisible.)
         accent:
-          'text-muted-foreground data-[state=on]:bg-transparent data-[state=on]:hover:bg-muted  data-[state=on]:text-accent'
+          'text-muted-foreground hover:bg-muted-low/60 hover:text-foreground data-[state=on]:bg-[hsl(var(--chart-1)/0.12)] data-[state=on]:text-[hsl(var(--chart-1))] data-[state=on]:hover:bg-[hsl(var(--chart-1)/0.18)]'
       },
       sizeVariant: {
         default: 'h-10 px-3',
         sm: 'h-9 px-2.5',
+        // Tighter chip used by the formatting bubble menu so it doesn't
+        // dominate the editor surface.
+        xs: 'h-7 w-7 p-0',
         lg: 'h-11 px-5'
       }
     },

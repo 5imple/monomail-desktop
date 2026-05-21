@@ -7,7 +7,7 @@ import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { CommandType } from '@/renderer/app/types';
@@ -29,7 +29,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
   const { theme, setTheme } = useTheme();
   const { updateDraft } = useDraftAtom();
   const { activeSpace, spaces } = useSpaceAtom();
-  const { getUserPlan } = useBillingAtom();
+  // Payment-free build — getUserPlan no longer needed.
   const { openDialog, dialogState } = useDialogs();
   const {
     unmarkThreadAsSpam,

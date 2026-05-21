@@ -110,6 +110,16 @@ typings/
 # Electron-Forge
 out/
 
+# Packaged Electron app bundles — these are build artifacts and can be
+# hundreds of MB. Never commit them; GitHub rejects files over 100MB
+# anyway. The release flow ships .app bundles via the updater feed, not
+# via git.
+*.app
+*.app/
+*.dmg
+*.zip
+Mail Desktop*.app
+Mail Desktop*.app/
 
 
 .firebase

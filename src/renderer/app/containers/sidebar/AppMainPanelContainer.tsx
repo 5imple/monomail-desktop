@@ -1,5 +1,6 @@
 import GlobalComposeCard from '@/renderer/app/components/card/compose/GlobalComposeCard';
 import { MailLayout } from '@/renderer/app/containers/layout/MailLayout';
+import QueueContainer from '@/renderer/app/containers/queue/QueueContainer';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
@@ -32,7 +33,7 @@ const AppMainPanelContainer: FC<{ className?: string }> = ({ className }) => {
       )}
     >
       <div className={cn('relative flex-1 overflow-hidden', className)}>
-        <MailLayout />
+        {activeLayout === 'LATER' ? <QueueContainer /> : <MailLayout />}
         {memoizedDrafts}
       </div>
     </div>

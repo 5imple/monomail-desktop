@@ -116,10 +116,17 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
   }, [contentRef.current, item.id]);
 
   return (
-    <Card className="transition-all duration-400 ease-bouncy-in-out">
-      <CardHeader className="border-b">
+    <Card className="border-border/60 shadow-sm transition-all duration-400 ease-bouncy-in-out">
+      <CardHeader className="border-b border-border/40 px-4 py-3">
         <div className="flex items-center justify-between">
-          <div className="text-md ml-1 font-semibold">{getReferenceTitle()}</div>
+          <div>
+            <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              Quoted · {type === 'reply' ? 'Reply' : 'Forward'}
+            </p>
+            <div className="text-[14px] font-medium tracking-tight text-foreground">
+              {getReferenceTitle()}
+            </div>
+          </div>
           <div>
             <Button
               onClick={toggleExpand}
@@ -130,20 +137,12 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
             >
               {isExpanded ? <MonoIcon type={'Minimize'} /> : <MonoIcon type={'Maximize'} />}
             </Button>
-            {/* <Button
-              tooltip={'Remove message'}
-              variant={'ghost'}
-              sizeVariant={'sm'}
-              typeVariant={'icon'}
-            >
-              <MonoIcon type={'X'} />
-            </Button> */}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="border-b">
+      <CardContent className="border-b border-border/40">
         {/* Always visible subject */}
-        <div className="font-semibold">
+        <div className="text-[14px] font-medium tracking-tight">
           {item.subject.length > 0 ? item.subject : '(No subject)'}
         </div>
         {/* Collapsible content */}

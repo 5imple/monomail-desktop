@@ -11,6 +11,10 @@ export class UpdateManager {
   private cancellationToken: CancellationToken | null = null;
   private updateAvailable = false;
   private isOffline = false;
+  // True when no feed URL is configured; we skip checkForUpdates rather
+  // than letting electron-updater fall through to the (possibly missing)
+  // app-update.yml and crash with ENOENT.
+  private updatesDisabled = false;
 
   private constructor() {
     this.autoUpdater = autoUpdater;
@@ -33,27 +37,39 @@ export class UpdateManager {
         ? 'beta'
         : 'latest';
 
-    // Refuse to configure an update feed without an explicit bucket. The
-    // previous code would silently fall back to
-    // `https://storage.googleapis.com//releases/` if the env var was empty,
-    // which `electron-updater` would treat as a valid feed — anything that
-    // 200s on that path is then trusted to install. Failing closed is the
-    // only safe default for an auto-updater.
-    const bucket = import.meta.env.MONO_ENV_FIREBASE_STORAGE_BUCKET;
-    if (!bucket || typeof bucket !== 'string' || !bucket.trim()) {
-      log.error(
-        '[UpdateManager] MONO_ENV_FIREBASE_STORAGE_BUCKET is not set — refusing to configure auto-updater. ' +
-          'Updates are disabled in this build. Set the env var at build time.'
+    // Refuse to configure an update feed without an explicit URL. Silently
+    // falling back to a default would let `electron-updater` install
+    // anything that 200s on that path — failing closed is the only safe
+    // default for an auto-updater.
+    //
+    // Resolution order:
+    //   1. MONO_ENV_UPDATE_FEED_URL — explicit, on-prem-friendly. Should be
+    //      a full URL ending in `/` (e.g. https://updates.example.com/mac/).
+    //   2. MONO_ENV_FIREBASE_STORAGE_BUCKET — legacy Firebase-hosted bucket.
+    //      Kept so existing Firebase deployments still work; Phase B will
+    //      drop this branch entirely.
+    const explicitFeed = (import.meta.env.MONO_ENV_UPDATE_FEED_URL || '').trim();
+    const legacyBucket = (import.meta.env.MONO_ENV_FIREBASE_STORAGE_BUCKET || '').trim();
+    const feedUrl = explicitFeed
+      ? explicitFeed.endsWith('/')
+        ? explicitFeed
+        : `${explicitFeed}/`
+      : legacyBucket
+        ? `https://storage.googleapis.com/${legacyBucket}/releases/`
+        : '';
+    if (!feedUrl) {
+      log.warn(
+        '[UpdateManager] No update feed configured (MONO_ENV_UPDATE_FEED_URL ' +
+          'or MONO_ENV_FIREBASE_STORAGE_BUCKET). Updates are disabled in this build.'
       );
+      this.updatesDisabled = true;
       this.setupListeners();
       return;
     }
 
-    const firebaseBucketBaseUrl = `https://storage.googleapis.com/${bucket}/releases/`;
-
     this.autoUpdater.channel = channel;
     this.autoUpdater.setFeedURL({
-      url: firebaseBucketBaseUrl,
+      url: feedUrl,
       provider: 'generic',
       channel
     });
@@ -147,6 +163,16 @@ export class UpdateManager {
 
   /** Check for updates manually */
   async checkForUpdates(retries = 0, delay = 3000): Promise<void> {
+    // No feed → don't even ask electron-updater. It would fall through to
+    // app-update.yml (which may be missing if env interpolation produced an
+    // empty publish URL) and throw an unhandled ENOENT.
+    if (this.updatesDisabled) {
+      if (!windowManager.getMainAppWindow()) {
+        windowManager.createAppWindow();
+      }
+      return;
+    }
+
     // Skip update check if we know we're offline
     await systemManager.checkNetworkConnectivity();
     if (systemManager.getIsOffline()) {

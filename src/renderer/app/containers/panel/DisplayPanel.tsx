@@ -31,7 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import { Button } from '@/renderer/app/components/ui/button';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 
 interface DisplayPanelProps {
   className?: string;
@@ -64,7 +64,8 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
   const { removeDraft, sendDraftQueue } = useDraftAtom();
   const executeCommand = useExecuteCommand();
   const { inlineDrafts } = useComposeInlineAtom();
-  const { getUserPlan, hasActiveSubscription } = useBillingAtom();
+  const getUserPlan = () => 'pro';
+  const hasActiveSubscription = () => true;
   const { trackEvent } = useUserTrackingData();
 
   // Focus tracking

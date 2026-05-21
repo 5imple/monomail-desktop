@@ -8,6 +8,7 @@ import Loader from '@/renderer/app/components/ui/loader';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import OfflineIndicator from '@/renderer/app/components/OfflineIndicator';
 import FilterOptionDropdownMenu from '@/renderer/app/containers/filter/FilterOptionDropdownMenu';
+import InboxFilterTabs from '@/renderer/app/containers/filter/InboxFilterTabs';
 import PinHeader from '@/renderer/app/containers/header/PinHeader';
 import ThreadSelectionToast from '@/renderer/app/containers/list/ThreadSelectionToast';
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
@@ -20,7 +21,7 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useDefaultNav, useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useBillingAtom } from '@/renderer/app/store/account/useBillingAtom';
+// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 
@@ -44,7 +45,8 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     const { fetchThreadsHandler, resetThreadsArray, loadingStatus } = useThreadList();
     const { aggregatedSyncState } = useSyncHistory();
     const { updateDraft } = useDraftAtom();
-    const { getUserPlan, loading: billingLoading } = useBillingAtom();
+    const getUserPlan = () => 'pro';
+    const billingLoading = false;
     const { openDialog } = useDialogs();
     const { labelsMapByAccount } = useLabelAtom();
 
@@ -208,42 +210,59 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
       }
     };
 
+    // Newton-style header: hero title at text-2xl tracking-tight,
+    // a quiet mono uppercase scope label above, calm muted-foreground
+    // toolbar buttons on the right. The title block uses more vertical
+    // breathing room (px-6 pt-4) than the original compact toolbar so
+    // the inbox feels editorial rather than dashboard-y.
+    const scopeLabel = activeItem?.title
+      ? activeItem.title
+      : globalSearchQuery
+        ? t('header.list.searched')
+        : t('header.list.no_inbox_selected');
+
     return (
       <div ref={ref} className="z-10">
         <ThreadSelectionToast />
-        <div className="drag flex items-center gap-3 p-2 pl-4">
+        <div className="drag flex items-end gap-3 px-6 pt-4 pb-3 sm:pt-5">
           <div
             className={cn(
-              'flex items-center gap-1',
+              'flex min-w-0 flex-1 items-end gap-3',
               // Only add transition if not loading
               !sidebarLoading && 'transition-all duration-200',
               sidebarCollapsed && isElectron ? 'translate-x-[88px]' : ''
             )}
           >
             {!isElectron && sidebarCollapsed && <SidebarCollapseButton className="mr-2" />}
-            <h1 className={cn('mb-0.5 line-clamp-1 text-lg font-bold')}>
-              {activeItem?.title
-                ? activeItem.title
-                : globalSearchQuery
-                  ? t('header.list.searched')
-                  : t('header.list.no_inbox_selected')}
-            </h1>
 
-            {
-              <Button
-                disabled={loadingStatus === 'LOADING'}
-                variant={'ghost'}
-                sizeVariant={'sm'}
-                className="ml-0.5 text-muted-foreground"
-                onClick={handleRefresh}
-              >
-                {aggregatedSyncState.isSyncing || loadingStatus === 'LOADING' ? (
-                  <Loader />
-                ) : (
-                  <MonoIcon type={'RotateCcw'} />
-                )}
-              </Button>
-            }
+            <div className="min-w-0">
+              {/* Tiny mono "scope" label sits above the title so the title
+                  itself doesn't need to repeat the folder name. Hidden if
+                  there's no scope to communicate. */}
+              <p className="mb-0.5 line-clamp-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                {globalSearchQuery && activeItem?.id !== 'search'
+                  ? 'Inbox'
+                  : 'Newton'}
+              </p>
+              <h1 className="line-clamp-1 text-[22px] font-medium tracking-tight text-foreground sm:text-[26px]">
+                {scopeLabel}
+              </h1>
+            </div>
+
+            <Button
+              disabled={loadingStatus === 'LOADING'}
+              variant={'ghost'}
+              sizeVariant={'sm'}
+              className="mb-1 text-muted-foreground hover:text-foreground"
+              onClick={handleRefresh}
+              tooltip={t('header.list.refresh') || 'Refresh'}
+            >
+              {aggregatedSyncState.isSyncing || loadingStatus === 'LOADING' ? (
+                <Loader />
+              ) : (
+                <MonoIcon type={'RotateCcw'} className="h-3.5 w-3.5" />
+              )}
+            </Button>
 
             {accountsWithErrors.length > 0 && !billingLoading && (
               <Tooltip>
@@ -251,7 +270,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
                   <Button
                     variant="ghost"
                     sizeVariant="sm"
-                    className="h-6 w-6 p-0 hover:bg-destructive/10"
+                    className="mb-1 h-6 w-6 p-0 hover:bg-destructive/10"
                     onClick={handleAccountReconnectClick}
                   >
                     <MonoIcon type="AlertCircle" className="h-4 w-4 text-destructive" />
@@ -263,12 +282,11 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
               </Tooltip>
             )}
           </div>
-          <div className="no-drag ml-auto flex items-center gap-2">
+
+          <div className="no-drag mb-1 ml-auto flex items-center gap-1.5">
             <OfflineIndicator />
 
-            <div className="flex items-center gap-1">
-              <UserAvatar user={member} />
-            </div>
+            <UserAvatar user={member} />
 
             <Button
               onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
@@ -281,12 +299,15 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
             >
               <MonoIcon type="GoogleCalendar" className="text-muted-foreground" />
             </Button>
-            {/* Filter dropdown menu */}
 
             <FilterOptionDropdownMenu />
           </div>
         </div>
-        <div id="pin-header" className={cn('no-drag flex items-center')}>
+        {/* Newton filter tabs — quick All / Unread / With attachments
+            shortcuts under the title. The full FilterOptionDropdownMenu
+            stays in the toolbar above for advanced filtering. */}
+        <InboxFilterTabs />
+        <div id="pin-header" className={cn('no-drag flex items-center px-6')}>
           <PinHeader />
         </div>
         {globalSearchQuery === 'in:trash' && (

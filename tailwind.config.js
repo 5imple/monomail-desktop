@@ -22,6 +22,29 @@ module.exports = {
         xxs: '300px', // min-width
         xs: '540px' // min-width
       },
+      fontFamily: {
+        // Inter for body + headings (Newton's primary typeface).
+        sans: [
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif'
+        ],
+        // IBM Plex Mono for tracked uppercase labels (FROM/TO/SUBJECT,
+        // date dividers, kbd badges, file sizes, version info, timestamps).
+        // Components opt in via the `font-mono` utility.
+        mono: [
+          'IBM Plex Mono',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Consolas',
+          'Liberation Mono',
+          'monospace'
+        ]
+      },
       transitionTimingFunction: {
         'bouncy-in-out': 'cubic-bezier(.47,1.14,.41,1)'
       },
@@ -79,6 +102,10 @@ module.exports = {
           DEFAULT: 'hsl(var(--accent))',
           foreground: 'hsl(var(--accent-foreground))'
         },
+        'secondary-accent': {
+          DEFAULT: 'hsl(var(--secondary-accent))',
+          foreground: 'hsl(var(--secondary-accent-foreground))'
+        },
         popover: {
           DEFAULT: 'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))'
@@ -86,10 +113,29 @@ module.exports = {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))'
+        },
+        chart: {
+          1: 'hsl(var(--chart-1))',
+          2: 'hsl(var(--chart-2))',
+          3: 'hsl(var(--chart-3))',
+          4: 'hsl(var(--chart-4))',
+          5: 'hsl(var(--chart-5))'
+        },
+        sidebar: {
+          DEFAULT: 'hsl(var(--sidebar))',
+          foreground: 'hsl(var(--sidebar-foreground))',
+          primary: 'hsl(var(--sidebar-primary))',
+          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+          accent: 'hsl(var(--sidebar-accent))',
+          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+          border: 'hsl(var(--sidebar-border))',
+          ring: 'hsl(var(--sidebar-ring))'
         }
       },
       borderRadius: {
+        xl: 'calc(var(--radius) + 4px)',
         lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
         default: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
       },

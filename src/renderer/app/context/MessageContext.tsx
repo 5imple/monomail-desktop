@@ -5,8 +5,9 @@ import {
   AIDraftAddedPayload,
   MessageAddedPayload,
   MessageDeletedPayload,
-  MessageLabelModificationPayload
-} from '@/main/api/message/fcm';
+  MessageLabelModificationPayload,
+  PushPayload
+} from '@/main/api/message/push';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
@@ -17,14 +18,14 @@ import {
   DBUpdateMessageLabels
 } from '@/renderer/app/lib/db/message';
 import { DBGetThread } from '@/renderer/app/lib/db/thread';
-import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
-import { messaging } from '@/renderer/app/lib/firebase';
+import electronApi from '@/renderer/app/lib/electronApi';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import { MessagePayload, onMessage } from 'firebase/messaging';
+
+type MessagePayload = PushPayload;
 import React, {
   createContext,
   ReactNode,
@@ -349,14 +350,14 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
   );
 
   useEffect(() => {
-    const removeFcmMessageListener = electronApi.on<MessagePayload>(
-      'renderer:fcm:message-received',
+    // Push delivery moved to a backend-owned WebSocket in Phase B; the
+    // payload shape is unchanged. Browser/PWA builds no longer receive
+    // pushes directly here — the desktop main process is the single
+    // delivery point now.
+    const removePushMessageListener = electronApi.on<MessagePayload>(
+      'renderer:push:message-received',
       handleIncomingMessage
     );
-
-    if (!isElectron) {
-      onMessage(messaging, handleIncomingMessage);
-    }
 
     const removeNotificationClickListener = electronApi.on<{ uid: string; threadId: string }>(
       'renderer:notification:native:clicked',
@@ -364,7 +365,7 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
     );
 
     return () => {
-      removeFcmMessageListener();
+      removePushMessageListener();
       removeNotificationClickListener();
     };
   }, [handleIncomingMessage, handleNotificationClick]);

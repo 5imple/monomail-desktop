@@ -191,6 +191,57 @@ export const ThreadListDenseItem = React.memo(
         ];
       }, [currentThread?.labelIds]); // Specific dependency on labelIds for reactivity
 
+      const isUnread = currentThread?.labelIds.includes('UNREAD');
+
+      // Same sender renderer used by the other two row variants.
+      const renderSenderNames = () => {
+        const uniqueItems = new Set();
+        const displayItems: React.ReactNode[] = [];
+        [...currentThread.items].reverse().forEach((item, index) => {
+          if (item.type === 'draft') {
+            const key = 'draft';
+            if (!uniqueItems.has(key)) {
+              uniqueItems.add(key);
+              displayItems.push(
+                <span key={`draft-${index}`} className="font-semibold text-destructive">
+                  {(item as MonoDraft).isAiGenerated && (
+                    <MonoIcon className="mb-1 mr-1 inline text-destructive" type={'Sparkles'} />
+                  )}
+                  Draft
+                </span>
+              );
+            }
+          } else if (item.type === 'message' && (item as MonoMessage).from) {
+            const message = item as MonoMessage;
+            const displayName = accounts.some((a) => a.email === message.from.email)
+              ? 'Me'
+              : message.from.name || message.from.email;
+            if (!uniqueItems.has(displayName)) {
+              uniqueItems.add(displayName);
+              if (displayName !== 'Me') {
+                displayItems.push(
+                  <DraggableSender
+                    key={`message-${index}`}
+                    sender={displayName}
+                    email={message.from.email}
+                    threadId={currentThread.id}
+                    index={index}
+                  />
+                );
+              } else {
+                displayItems.push(<span key={`message-${index}`}>{displayName}</span>);
+              }
+            }
+          }
+        });
+        return displayItems.map((item, i) => (
+          <React.Fragment key={`fragment-${i}`}>
+            {item}
+            {i < displayItems.length - 1 && ', '}
+          </React.Fragment>
+        ));
+      };
+
       return (
         <div
           ref={containerRef}
@@ -201,135 +252,91 @@ export const ThreadListDenseItem = React.memo(
           tabIndex={0}
           role="button"
           className={cn(
-            // 'transition-all duration-200',
-            'transition-opacity duration-200',
-            'bg-card hover:bg-muted-low dark:bg-muted dark:hover:bg-primary/20 hover:dark:bg-muted-low/50',
-            currentThread && !currentThread.labelIds.includes('UNREAD') && 'text-muted-foreground',
-            currentThread && !currentThread.labelIds.includes('UNREAD') && 'bg-muted dark:bg-card',
+            'relative transition-opacity duration-200',
+            'bg-card hover:bg-muted/60 dark:bg-card dark:hover:bg-muted/40',
+            currentThread && !isUnread && 'text-muted-foreground',
             selectedThreads.includes(threadId) &&
-              'border-l-[3px] border-l-primary bg-primary/10 hover:bg-primary/10 dark:bg-primary/20 dark:hover:bg-primary/20',
+              'bg-accent/10 hover:bg-accent/15 dark:bg-accent/15 dark:hover:bg-accent/20',
             opacity == 0 ? 'opacity-0' : 'opacity-100',
-            // 'outline-ring focus-visible:bg-primary/10 focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-ring'
-            'focus-visible:bg-primary/15',
-
+            'focus-visible:bg-accent/10',
             !currentThread && 'hidden'
-            // 'focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-ring'
           )}
         >
           {!currentThread || !isRendering ? (
-            <div
-              className={cn(
-                'h-full transition-[height] duration-200 ease-bouncy-in-out',
-                'h-[42px]'
-              )}
-            ></div>
+            <div className="h-[42px] transition-[height] duration-200 ease-bouncy-in-out" />
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
-              {/* <ThreadSummaryHoverCard threadId={currentThread.id}> */}
+              {isUnread && (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent"
+                />
+              )}
               <div
-                ref={setRefs} // Use our combined ref function
+                ref={setRefs}
                 className={cn('text-left text-sm transition-colors')}
               >
-                <div className={cn('relative flex items-center gap-2 p-3')}>
-                  <div className="flex-shrink-0">
-                    <span
-                      className={cn(
-                        `mt-[1px] flex h-2 w-2 shrink-0 rounded-full`,
-                        Object.keys(currentThread.attachments).length > 0 && ''
-                      )}
-                      style={{
-                        backgroundColor: currentThread.labelIds.includes('UNREAD')
-                          ? (preference.account.accentColor[currentThread.accountId] ?? '#035ddf')
-                          : 'transparent'
-                      }}
-                    ></span>
-                  </div>
-                  <div className="flex min-h-6 w-32 items-center gap-2 overflow-hidden">
-                    <div className="w-fit overflow-hidden text-ellipsis">
+                {/* Newton dense row: single line, narrower sender column
+                    (w-36) compared to compact (w-44), tighter vertical
+                    padding (py-2). No avatar in this variant. */}
+                <div
+                  className={cn(
+                    'flex items-center gap-4 px-6 py-2 sm:gap-5 sm:px-8',
+                    selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
+                  )}
+                >
+                  {/* Sender column */}
+                  <div className="flex min-h-6 w-36 shrink-0 items-center gap-2 overflow-hidden">
+                    <div className="min-w-0 flex-1 overflow-hidden">
                       <span
                         className={cn(
-                          'text-md whitespace-nowrap',
-                          !currentThread.labelIds.includes('UNREAD') ? '' : 'font-semibold'
+                          'block truncate text-[14px] tracking-tight',
+                          isUnread
+                            ? 'font-semibold text-foreground'
+                            : 'font-medium text-muted-foreground'
                         )}
                       >
-                        {(() => {
-                          // Use a Set to store unique names/labels
-                          const uniqueItems = new Set();
-                          const displayItems: React.ReactNode[] = [];
-
-                          // Process items in reverse order
-                          [...currentThread.items].reverse().forEach((item, index) => {
-                            if (item.type === 'draft') {
-                              const key = 'draft';
-                              if (!uniqueItems.has(key)) {
-                                uniqueItems.add(key);
-                                displayItems.push(
-                                  <span
-                                    key={`draft-${index}`}
-                                    className="font-semibold text-destructive"
-                                  >
-                                    {(item as MonoDraft).isAiGenerated && (
-                                      <MonoIcon
-                                        className="mb-1 mr-1 inline text-destructive"
-                                        type={'Sparkles'}
-                                      />
-                                    )}
-                                    Draft
-                                  </span>
-                                );
-                              }
-                            } else if (item.type === 'message' && (item as MonoMessage).from) {
-                              let displayName = '';
-
-                              if (
-                                accounts.some(
-                                  (account) => account.email === (item as MonoMessage).from.email
-                                )
-                              ) {
-                                // if (currentAccount && item.from.email === currentAccount.email) {
-                                displayName = 'Me';
-                              } else {
-                                displayName =
-                                  (item as MonoMessage).from.name ||
-                                  (item as MonoMessage).from.email;
-                              }
-
-                              if (!uniqueItems.has(displayName)) {
-                                uniqueItems.add(displayName);
-
-                                // Use DraggableSender for non-draft and non-Me senders
-                                if (displayName !== 'Me') {
-                                  displayItems.push(
-                                    <DraggableSender
-                                      key={`message-${index}`}
-                                      sender={displayName}
-                                      email={(item as MonoMessage).from.email}
-                                      threadId={currentThread.id}
-                                      index={index}
-                                    />
-                                  );
-                                } else {
-                                  displayItems.push(
-                                    <span key={`message-${index}`}>{displayName}</span>
-                                  );
-                                }
-                              }
-                            }
-                          });
-
-                          // Join with commas
-                          return displayItems.map((item, i) => (
-                            <React.Fragment key={`fragment-${i}`}>
-                              {item}
-                              {i < displayItems.length - 1 && ', '}
-                            </React.Fragment>
-                          ));
-                        })()}
+                        {renderSenderNames()}
                       </span>
                     </div>
+                    {currentThread.items.length > 1 && (
+                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {currentThread.items.length}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                  {/* Subject + snippet flow */}
+                  <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
+                    <span
+                      className={cn(
+                        'shrink-0 max-w-[45%] truncate text-[14px] tracking-tight',
+                        isUnread
+                          ? 'font-semibold text-foreground'
+                          : 'font-medium text-foreground/80'
+                      )}
+                      dangerouslySetInnerHTML={{
+                        __html:
+                          !highlightedContent.subject || highlightedContent.subject === ''
+                            ? '(No subject)'
+                            : highlightedContent.subject
+                      }}
+                    />
+                    {highlightedContent.snippet && (
+                      <>
+                        <span aria-hidden className="shrink-0 text-muted-foreground/40">
+                          ·
+                        </span>
+                        <span
+                          className="hidden min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground sm:inline"
+                          dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
+                        />
+                      </>
+                    )}
+                  </div>
+
+                  {/* Right metadata cluster */}
+                  <div className="flex shrink-0 items-center gap-2.5">
                     {currentThread.labelIds.includes('STARRED') && (
                       <Button
                         variant={'text'}
@@ -349,19 +356,26 @@ export const ThreadListDenseItem = React.memo(
                       </Button>
                     )}
 
+                    {Object.keys(currentThread.attachments).length > 0 && (
+                      <MonoIcon
+                        type={'Paperclip'}
+                        className="h-3 w-3 text-muted-foreground"
+                      />
+                    )}
+
                     {uniqueLabelIds.length > 0 && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         {uniqueLabelIds.map((labelId, index) => {
                           const label = accountLabels[labelId];
                           return label && label.name.length > 0 ? (
                             <Badge
-                              key={`${labelId}-${index}`} // Ensure unique key
+                              key={`${labelId}-${index}`}
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
                                 memoizedSearchQuery(`label:${label.name}`, [currentThread.id]);
                               }}
-                              className={cn('rounded-sm')}
+                              className="rounded-sm"
                               style={{
                                 color: label.color.textColor,
                                 backgroundColor: label.color.backgroundColor
@@ -379,54 +393,17 @@ export const ThreadListDenseItem = React.memo(
                       </div>
                     )}
 
-                    {currentThread.items.length > 1 && (
-                      <span className="font-regular text-xs text-muted-foreground">
-                        {currentThread.items.length}
-                      </span>
-                    )}
-                    <div className="static flex overflow-hidden">
-                      <div className="flex-1 overflow-hidden">
-                        <div className="flex items-center overflow-hidden">
-                          <div className="inline-flex min-w-0 shrink">
-                            <span
-                              className="text-md line-clamp-1 font-normal"
-                              dangerouslySetInnerHTML={{
-                                __html:
-                                  !highlightedContent.subject || highlightedContent.subject === ''
-                                    ? '(No subject)'
-                                    : highlightedContent.subject
-                              }}
-                            ></span>
-                          </div>
-                          <div className="min-w-0 flex-1 overflow-hidden text-ellipsis">
-                            {highlightedContent.snippet && (
-                              <span
-                                className="ml-2 line-clamp-1 text-muted-foreground"
-                                dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
-                              ></span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className={cn(
-                      'flex-0 whitespace-nowrap text-end text-xs',
-                      // 'transition-colors duration-200',
-                      selectedThreads.includes(currentThread.id)
-                        ? 'text-foreground'
-                        : 'text-muted-foreground'
-                    )}
-                  >
-                    {formatListDate(currentThread.timestamp)}
+                    <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {formatListDate(currentThread.timestamp)}
+                    </span>
                   </div>
                 </div>
 
-                <div className="ml-40">
-                  <ScrollArea className="mr-3">
-                    {Object.keys(currentThread.attachments).length > 0 && (
-                      <div className="mb-2 flex items-center gap-1 p-1">
+                {/* Attachment thumbnails — tucked under the subject column */}
+                {Object.keys(currentThread.attachments).length > 0 && (
+                  <div className="pl-[calc(9rem+2rem)] pr-6 sm:pl-[calc(9rem+2.5rem)]">
+                    <ScrollArea className="mr-3">
+                      <div className="mb-2 flex items-center gap-1.5 p-1">
                         {Object.keys(currentThread.attachments)
                           .slice(0, 2)
                           .map((id) => (
@@ -441,24 +418,22 @@ export const ThreadListDenseItem = React.memo(
                               attachment={currentThread.attachments[id]}
                             />
                           ))}
-
                         {Object.keys(currentThread.attachments).length > 2 && (
                           <Button
                             variant={'secondary'}
                             sizeVariant={'sm'}
                             tabIndex={-1}
-                            className="text-ellipsis text-sm font-normal"
+                            className="font-mono text-[11px] font-normal"
                           >
                             + {Object.keys(currentThread.attachments).length - 2}
                           </Button>
                         )}
                       </div>
-                    )}
-                    <ScrollAreaScrollbar orientation={'horizontal'} />
-                  </ScrollArea>
-                </div>
+                      <ScrollAreaScrollbar orientation={'horizontal'} />
+                    </ScrollArea>
+                  </div>
+                )}
               </div>
-              {/* </ThreadSummaryHoverCard> */}
             </ThreadItemContextMenu>
           )}
         </div>

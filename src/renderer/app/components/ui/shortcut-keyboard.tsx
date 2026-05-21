@@ -52,20 +52,24 @@ const keyToIcon = (key: string): string => {
 const parseShortcut = (shortcut: Keys): string[] =>
   Array.isArray(shortcut) ? shortcut : (shortcut as string).split('+');
 
-// Define styles for keyboard keys
+// Newton kbd chip: IBM Plex Mono, tabular alignment, calm muted-low
+// background. The chip reads as a tiny piece of code rather than a
+// chunky button — fits inline next to a verb without dominating the
+// surrounding sentence.
 const keyboardVariants = cva(
-  'flex items-center justify-center rounded-sm text-[0.7rem] font-medium px-1 transition-all duration-300',
+  'inline-flex items-center justify-center rounded-[3px] px-1 font-mono text-[10px] font-medium tabular-nums leading-none tracking-tight transition-colors',
   {
     variants: {
       sizeVariant: {
-        default: 'h-5 min-w-5',
-        sm: 'h-4 min-w-4 text-[0.65rem]',
-        xs: 'h-3 min-w-3 text-[0.6rem]'
+        default: 'h-[18px] min-w-[18px]',
+        sm: 'h-4 min-w-4 text-[10px]',
+        xs: 'h-3.5 min-w-3.5 text-[9px]'
       },
       variant: {
-        default: 'bg-muted text-muted-foreground border shadow-sm',
-        flat: 'bg-muted text-muted-foreground shadow-none',
-        text: 'opacity-60 shadow-none p-0 text-sm min-w-0'
+        default:
+          'bg-muted-low/80 text-muted-foreground border border-border/60 shadow-[inset_0_-1px_0_hsl(var(--border)/0.6)]',
+        flat: 'bg-muted-low/60 text-muted-foreground',
+        text: 'p-0 text-[11px] text-muted-foreground/80'
       }
     },
     defaultVariants: {
@@ -87,14 +91,14 @@ const ShortcutKeyboard: FC<ShortcutKeyboardProps> = ({
   const keys = useMemo(() => parseShortcut(shortcut), [shortcut]);
 
   return (
-    <span className={cn('flex gap-1 text-xs text-muted-foreground', className)}>
+    <span className={cn('inline-flex items-center gap-0.5', className)}>
       {keys.map((key) => (
-        <div
+        <kbd
           key={key}
           className={cn(keyboardVariants({ variant, sizeVariant }), keyboardClassName)}
         >
           {keyToIcon(key)}
-        </div>
+        </kbd>
       ))}
     </span>
   );

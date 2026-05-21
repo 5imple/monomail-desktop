@@ -436,8 +436,8 @@ const DraggableEventInner: React.FC<{
           {...startDraggable.listeners}
           className={cn(
             'absolute -top-1 left-0 right-0 z-30 h-2 cursor-ns-resize rounded-sm opacity-0 transition-all group-hover:opacity-100',
-            hoveredHandle === 'start' && 'bg-blue-400/30',
-            startDraggable.isDragging && 'h-3 bg-blue-400/40 opacity-100'
+            hoveredHandle === 'start' && 'bg-[hsl(var(--chart-1)/0.3)]',
+            startDraggable.isDragging && 'h-3 bg-[hsl(var(--chart-1)/0.4)] opacity-100'
           )}
           onMouseEnter={() => setHoveredHandle('start')}
           onMouseLeave={() => setHoveredHandle(null)}
@@ -450,8 +450,8 @@ const DraggableEventInner: React.FC<{
           {...endDraggable.listeners}
           className={cn(
             'absolute -bottom-1 left-0 right-0 z-30 h-2 cursor-ns-resize rounded-sm opacity-0 transition-all group-hover:opacity-100',
-            hoveredHandle === 'end' && 'bg-blue-400/30',
-            endDraggable.isDragging && 'h-3 bg-blue-400/40 opacity-100'
+            hoveredHandle === 'end' && 'bg-[hsl(var(--chart-1)/0.3)]',
+            endDraggable.isDragging && 'h-3 bg-[hsl(var(--chart-1)/0.4)] opacity-100'
           )}
           onMouseEnter={() => setHoveredHandle('end')}
           onMouseLeave={() => setHoveredHandle(null)}
@@ -464,7 +464,7 @@ const DraggableEventInner: React.FC<{
               className={cn(
                 'absolute -top-0.5 left-1/2 z-20 h-1 w-8 -translate-x-1/2 rounded-full transition-all',
                 startDraggable.isDragging
-                  ? 'h-1.5 w-12 bg-blue-400 opacity-100'
+                  ? 'h-1.5 w-12 bg-chart-1 opacity-100'
                   : 'opacity-0 group-hover:opacity-100'
               )}
               style={
@@ -479,7 +479,7 @@ const DraggableEventInner: React.FC<{
               className={cn(
                 'absolute -bottom-0.5 left-1/2 z-20 h-1 w-8 -translate-x-1/2 rounded-full transition-all',
                 endDraggable.isDragging
-                  ? 'h-1.5 w-12 bg-blue-400 opacity-100'
+                  ? 'h-1.5 w-12 bg-chart-1 opacity-100'
                   : 'opacity-0 group-hover:opacity-100'
               )}
               style={

@@ -101,7 +101,7 @@ const LinkShareLayout: FC<LinkShareLayoutProps> = () => {
   };
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background duration-500 animate-in fade-in-0">
       <BaseHeader
         className={'sticky top-0 z-10 h-fit w-full bg-background/80 p-2 backdrop-blur-xl'}
       >

@@ -2,7 +2,6 @@ import { isValidRendererChannel, ValidRendererChannel } from '@/main/validChanne
 import { electronAPI } from '@electron-toolkit/preload';
 import { BrowserWindowConstructorOptions, contextBridge, ipcRenderer } from 'electron';
 
-import { FCM_START_SERVICE, FCM_STOP_SERVICE } from '@/main/api/message/types';
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import { INativeNotificationOptions } from '@/main/services/notification/INotificationOptions';
 import { AudioType } from '@/renderer/app/lib/soundManager';
@@ -25,6 +24,26 @@ const api = {
     ipcRenderer.removeListener(channel, callback);
   },
   setIdToken: (token: string | null) => ipcRenderer.invoke('main:auth:set-id-token', token),
+  getAuthState: () => ipcRenderer.invoke('main:auth:get-state'),
+  signOutMain: () => ipcRenderer.invoke('main:auth:sign-out'),
+  refreshToken: () => ipcRenderer.invoke('main:auth:refresh'),
+  devSignIn: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
+    ipcRenderer.invoke('main:auth:dev-sign-in', args),
+  // ---------- P8 Later Queue ----------
+  queueSnooze: (req: any) => ipcRenderer.invoke('main:queue:snooze', req),
+  queueListSnoozed: (accountId: string) =>
+    ipcRenderer.invoke('main:queue:list-snoozed', accountId),
+  queueUnsnooze: (snoozeId: string) => ipcRenderer.invoke('main:queue:unsnooze', snoozeId),
+  queueRescheduleSnooze: (args: { snoozeId: string; snoozeUntil: string }) =>
+    ipcRenderer.invoke('main:queue:reschedule-snooze', args),
+  queueSchedule: (req: any) => ipcRenderer.invoke('main:queue:schedule', req),
+  queueListScheduled: (accountId: string) =>
+    ipcRenderer.invoke('main:queue:list-scheduled', accountId),
+  queueCancelSchedule: (scheduleId: string) =>
+    ipcRenderer.invoke('main:queue:cancel-schedule', scheduleId),
+  queueRescheduleSend: (args: { scheduleId: string; sendAt: string }) =>
+    ipcRenderer.invoke('main:queue:reschedule-send', args),
+  queueSendNow: (scheduleId: string) => ipcRenderer.invoke('main:queue:send-now', scheduleId),
   setAlertSound: (audio: AudioType) => ipcRenderer.invoke('main:system:set-alert-sound', audio),
   setIsFullSizeWindowOnCreation: (value: boolean) =>
     ipcRenderer.invoke('main:system:set-window-fullsize-on-creation', value),
@@ -38,17 +57,15 @@ const api = {
     uid?: string
   ) => ipcRenderer.invoke('main:window:open', route, options, uid),
   closeWindow: (id: string) => ipcRenderer.invoke('main:window:close', id),
-  startNotificationService: (uid: string) => {
-    ipcRenderer.invoke(
-      FCM_START_SERVICE,
-      import.meta.env.MONO_ENV_FIREBASE_APP_ID,
-      import.meta.env.MONO_ENV_FIREBASE_PROJECT_ID,
-      import.meta.env.MONO_ENV_FIREBASE_API_KEY,
-      import.meta.env.MONO_ENV_FIREBASE_VAPID_KEY,
-      uid
-    );
+  // Push delivery moved to a backend-owned WebSocket in Phase B
+  // (see services/push/WebSocketPushClient.ts). Kept as no-ops so the
+  // renderer-side API contract stays stable until call sites are pruned.
+  startNotificationService: (_uid: string) => {
+    /* push channel auto-starts on token-changed */
   },
-  stopNotificationService: () => ipcRenderer.invoke(FCM_STOP_SERVICE),
+  stopNotificationService: () => {
+    /* push channel stops on sign-out */
+  },
   getNotificationPreference: (uid: string) =>
     ipcRenderer.invoke('main:notification:preference:get', uid),
   setNotificationPreference: (uid: string, preference: string) =>

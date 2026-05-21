@@ -8,7 +8,6 @@ import { default as OnBoardingCommandTrigger } from '@/renderer/app/containers/o
 import OnBoardingFinal from '@/renderer/app/containers/onboarding/OnBoardingFinal';
 import OnBoardingPinContacts from '@/renderer/app/containers/onboarding/OnBoardingPinContacts';
 import OnBoardingSpaceTemplates from '@/renderer/app/containers/onboarding/OnBoardingSpaceTemplates';
-import OnBoardingSubscribe from '@/renderer/app/containers/onboarding/OnBoardingSubscribe';
 import OnBoardingWelcome from '@/renderer/app/containers/onboarding/OnBoardingWelcome';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
@@ -368,12 +367,7 @@ const OnBoardingLayout: FC = () => {
           <OnBoardingCommand onContinue={onContinue} />
         )
       },
-      {
-        name: 'subscribe',
-        component: (onContinue: () => void, onBack?: () => void) => (
-          <OnBoardingSubscribe onContinue={onContinue} />
-        )
-      },
+      // 'subscribe' step removed — payment-free build.
       {
         name: 'final',
         component: (onContinue: () => void, onBack?: () => void) => (

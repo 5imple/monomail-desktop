@@ -203,12 +203,12 @@ const SwipeableListItem = forwardRef<SwipeableListItemRef, SwipeableListItemProp
           initiateRemove('right');
         } else if (onShortSwipeRight) {
           onShortSwipeRight.action();
-          setBgColorClass('bg-blue-500');
+          setBgColorClass('bg-stone-400');
           setSwipeDistance(0);
         }
       } else if (swipeDistanceRef.current > thresholdShort && onShortSwipeRight) {
         onShortSwipeRight.action();
-        setBgColorClass('bg-blue-500');
+        setBgColorClass('bg-stone-400');
         setSwipeDistance(0);
       } else if (swipeDistanceRef.current < -thresholdLong) {
         if (onLongSwipeLeft) {
@@ -248,14 +248,14 @@ const SwipeableListItem = forwardRef<SwipeableListItemRef, SwipeableListItemProp
 
     const getBackgroundColorClass = (distance: number) => {
       if (distance > thresholdLong && onLongSwipeRight) return 'bg-green-500';
-      if (distance > thresholdShort && onShortSwipeRight) return 'bg-blue-500';
+      if (distance > thresholdShort && onShortSwipeRight) return 'bg-stone-400';
       if (distance < -thresholdLong && onLongSwipeLeft) return 'bg-red-500';
       if (distance < -thresholdShort && onShortSwipeLeft) return 'bg-orange-500';
       if (swipeDistanceRef.current < 0) {
         if (onShortSwipeLeft) return 'bg-orange-500 duration-0';
         if (onLongSwipeLeft) return 'bg-red-500 duration-0';
       } else if (swipeDistanceRef.current > 0) {
-        if (onShortSwipeRight) return 'bg-blue-500 duration-0';
+        if (onShortSwipeRight) return 'bg-stone-400 duration-0';
         if (onLongSwipeRight) return 'bg-green-500 duration-0';
       }
       return 'bg-muted-low duration-0';
@@ -321,7 +321,7 @@ const SwipeableListItem = forwardRef<SwipeableListItemRef, SwipeableListItemProp
         <div
           className={cn(
             'absolute top-0 left-0 bottom-0',
-            'bg-blue-500 border-b flex items-center justify-center transition-colors duration-300 text-background',
+            'bg-stone-400 border-b flex items-center justify-center transition-colors duration-300 text-background',
             bgColorClass
           )}
           style={{

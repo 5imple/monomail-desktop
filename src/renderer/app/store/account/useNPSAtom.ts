@@ -1,3 +1,4 @@
+import { backendUrl } from '@/renderer/app/lib/backendUrl';
 import { atom, useAtom } from 'jotai';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -59,16 +60,13 @@ export function useNPSAtom() {
         throw new Error('Authentication token not available');
       }
 
-      const response = await fetch(
-        `https://us-central1-${import.meta.env.MONO_ENV_FIREBASE_PROJECT_ID}.cloudfunctions.net/nps/entries`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-            'Content-Type': 'application/json'
-          }
+      const response = await fetch(`${backendUrl()}/nps/entries`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
         }
-      );
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -113,17 +111,14 @@ export function useNPSAtom() {
         throw new Error('NPS score must be between 0 and 10');
       }
 
-      const response = await fetch(
-        `https://us-central1-${import.meta.env.MONO_ENV_FIREBASE_PROJECT_ID}.cloudfunctions.net/nps`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(npsData)
-        }
-      );
+      const response = await fetch(`${backendUrl()}/nps`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(npsData)
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

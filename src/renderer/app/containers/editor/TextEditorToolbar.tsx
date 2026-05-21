@@ -82,54 +82,63 @@ const TextEditorToolbar = ({ editor, className }: { editor: Editor; className?: 
   return (
     <div
       className={`pointer-events-auto relative z-10 p-0 ${
-        className || 'flex flex-row items-center gap-1'
+        className || 'flex flex-row items-center gap-0.5'
       }`}
     >
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive('bold')}
         onPressedChange={() => editor.chain().focus().toggleBold().run()}
       >
-        <MonoIcon type="Bold" className="h-4 w-4" />
+        <MonoIcon type="Bold" className="h-3.5 w-3.5" />
       </Toggle>
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive('italic')}
         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
       >
-        <MonoIcon type="Italic" className="h-4 w-4" />
+        <MonoIcon type="Italic" className="h-3.5 w-3.5" />
       </Toggle>
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive('strike')}
         onPressedChange={() => editor.chain().focus().toggleStrike().run()}
       >
-        <MonoIcon type="Strikethrough" className="h-4 w-4" />
+        <MonoIcon type="Strikethrough" className="h-3.5 w-3.5" />
       </Toggle>
-      <Separator orientation="vertical" className="h-6 w-[1px]" />
+      <Separator orientation="vertical" className="mx-0.5 h-5 w-[1px] bg-border/60" />
 
       <Popover open={isTextColorPickerOpen} onOpenChange={setIsTextColorPickerOpen}>
         <PopoverTrigger asChild>
           <Toggle
-            sizeVariant={'sm'}
+            sizeVariant={'xs'}
             variant={'accent'}
             onClick={(e) => {
               setIsTextColorPickerOpen((prev) => !prev);
             }}
           >
-            <MonoIcon type="TextBaseline" className="h-4 w-4" />
+            <MonoIcon type="TextBaseline" className="h-3.5 w-3.5" />
           </Toggle>
         </PopoverTrigger>
 
-        <PopoverContent className="w-fit p-1" side={'top'} onClick={(e) => e.stopPropagation()}>
+        <PopoverContent
+          className="w-fit border-border/60 p-2"
+          side={'top'}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+            Text colour
+          </p>
           <div className="grid grid-cols-6 gap-0.5">
             {colors.map((color) => (
-              <div
+              <button
+                type="button"
+                aria-label={`Set text colour ${color}`}
                 key={color}
-                className="h-5 w-5 rounded-sm border border-border/50 shadow-sm"
+                className="h-5 w-5 cursor-pointer rounded-sm border border-border/60 transition-transform hover:scale-110"
                 style={{ backgroundColor: color }}
                 onClick={() => handleColorChange('text', color)}
               />
@@ -141,22 +150,31 @@ const TextEditorToolbar = ({ editor, className }: { editor: Editor; className?: 
       <Popover open={isBackgroundColorPickerOpen} onOpenChange={setIsBackgroundColorPickerOpen}>
         <PopoverTrigger asChild>
           <Toggle
-            sizeVariant={'sm'}
+            sizeVariant={'xs'}
             variant={'accent'}
             onClick={(e) => {
               setIsBackgroundColorPickerOpen((prev) => !prev);
             }}
           >
-            <MonoIcon type="Highlighter" className="h-4 w-4" />
+            <MonoIcon type="Highlighter" className="h-3.5 w-3.5" />
           </Toggle>
         </PopoverTrigger>
 
-        <PopoverContent className="w-fit p-1" side={'top'} onClick={(e) => e.stopPropagation()}>
+        <PopoverContent
+          className="w-fit border-border/60 p-2"
+          side={'top'}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+            Highlight
+          </p>
           <div className="grid grid-cols-6 gap-0.5">
             {colors.map((color) => (
-              <div
+              <button
+                type="button"
+                aria-label={`Set highlight ${color}`}
                 key={color}
-                className="h-5 w-5 rounded-sm border border-border/50 shadow-sm"
+                className="h-5 w-5 cursor-pointer rounded-sm border border-border/60 transition-transform hover:scale-110"
                 style={{ backgroundColor: color }}
                 onClick={() => handleColorChange('background', color)}
               />
@@ -164,57 +182,57 @@ const TextEditorToolbar = ({ editor, className }: { editor: Editor; className?: 
           </div>
         </PopoverContent>
       </Popover>
-      <Separator orientation="vertical" className="h-6 w-[1px]" />
+      <Separator orientation="vertical" className="mx-0.5 h-5 w-[1px] bg-border/60" />
 
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive('bulletList')}
         onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
       >
-        <MonoIcon type="List" className="h-4 w-4" />
+        <MonoIcon type="List" className="h-3.5 w-3.5" />
       </Toggle>
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive('orderedList')}
         onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
       >
-        <MonoIcon type="ListOrdered" className="h-4 w-4" />
+        <MonoIcon type="ListOrdered" className="h-3.5 w-3.5" />
       </Toggle>
-      <Separator orientation="vertical" className="h-6 w-[1px]" />
+      <Separator orientation="vertical" className="mx-0.5 h-5 w-[1px] bg-border/60" />
 
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive({ textAlign: 'justify' })}
         onPressedChange={() => handleTextAlign('justify')}
       >
-        <MonoIcon type="AlignJustify" className="h-4 w-4" />
+        <MonoIcon type="AlignJustify" className="h-3.5 w-3.5" />
       </Toggle>
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive({ textAlign: 'left' })}
         onPressedChange={() => handleTextAlign('left')}
       >
-        <MonoIcon type="AlignLeft" className="h-4 w-4" />
+        <MonoIcon type="AlignLeft" className="h-3.5 w-3.5" />
       </Toggle>
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive({ textAlign: 'center' })}
         onPressedChange={() => handleTextAlign('center')}
       >
-        <MonoIcon type="AlignCenter" className="h-4 w-4" />
+        <MonoIcon type="AlignCenter" className="h-3.5 w-3.5" />
       </Toggle>
       <Toggle
-        sizeVariant={'sm'}
+        sizeVariant={'xs'}
         variant={'accent'}
         pressed={editor.isActive({ textAlign: 'right' })}
         onPressedChange={() => handleTextAlign('right')}
       >
-        <MonoIcon type="AlignRight" className="h-4 w-4" />
+        <MonoIcon type="AlignRight" className="h-3.5 w-3.5" />
       </Toggle>
     </div>
   );
