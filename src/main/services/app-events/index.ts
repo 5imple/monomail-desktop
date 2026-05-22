@@ -1,6 +1,7 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { registerIpcHandlers } from '@/main/services/ipc-handlers';
 import { webSocketPushClient } from '@/main/services/push/WebSocketPushClient';
+import { completeAccountLinkWithBackend } from '@/main/services/mangers/auth/accountLinking';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
@@ -386,6 +387,19 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
         switch (type) {
           case 'signIn':
           case 'addAccount': {
+            if (type === 'addAccount' && paramsObject['intent'] && paramsObject['code']) {
+              const result = await completeAccountLinkWithBackend({
+                intent: paramsObject['intent'],
+                code: paramsObject['code']
+              });
+              if (!result.ok) {
+                log.warn('Rejected addAccount completion deep-link:', result.error);
+                return;
+              }
+              mainWindow.webContents.send('renderer:auth:add-account', result.accessToken);
+              return;
+            }
+
             const accessToken = paramsObject['token'];
             const refreshToken = paramsObject['refresh_token'];
             const expiresInRaw = paramsObject['expires_in'];

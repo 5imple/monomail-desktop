@@ -4,7 +4,7 @@ This document is the source of truth for what the on-prem backend must
 expose so the Phase B desktop client (Firebase removed) works against it.
 
 The desktop client (`src/main/api/apiClient.ts`) makes ~158 REST calls
-against `MONO_ENV_API_URL`; the on-prem migration adds **three new
+against `MONO_ENV_API_URL`; the on-prem migration adds **four new
 surfaces** the backend team must implement, plus moves three previously-
 Cloud-Functions endpoints to the same backend origin.
 
@@ -40,12 +40,14 @@ All `MONO_ENV_FIREBASE_*` vars are no longer read by any code.
    ```
    mono-desktop://signIn?token=<accessToken>&refresh_token=<refreshToken>&expires_in=3600
    ```
-   - `token` — the access token (any string ≥ 16 chars; the client validates
-     a basic JWT shape `xxx.yyy.zzz` if you want strict checking, but any
-     opaque token works in practice).
-   - `refresh_token` — refresh token (any string ≥ 16 chars).
-   - `expires_in` — seconds until the access token expires. Optional, defaults
-     to 3600.
+
+- `token` — the access token. The desktop client accepts JWT-shaped
+  tokens (`xxx.yyy.zzz`, 32-8192 chars) and rejects malformed values before
+  they reach the renderer.
+- `refresh_token` — refresh token (any string ≥ 16 chars).
+- `expires_in` — seconds until the access token expires. Optional, defaults
+  to 3600.
+
 5. The Electron main process catches the deep link and persists all three
    values in `safeStorage`. The renderer learns about sign-in via an IPC
    event (`renderer:auth:token-changed`).
@@ -76,16 +78,41 @@ ${MONO_ENV_HOMEPAGE_DOMAIN}/add-account?client=web-electron&provider=gmail&inten
 ```
 
 The web page validates the intent server-side, runs Google OAuth, links the
-mailbox to the existing member, then redirects to:
+mailbox to the existing member, creates a one-time completion code bound to
+that intent/member, then redirects to:
 
 ```
-mono-desktop://addAccount?token=…&refresh_token=…&expires_in=…
+mono-desktop://addAccount?intent=<opaque>&code=<one-time completion code>
+```
+
+The desktop main process then exchanges the completion code server-side:
+
+```
+POST ${MONO_ENV_BACKEND_URL}/desktop/account-link-completions
+Authorization: Bearer <current accessToken>
+Content-Type: application/json
+
+{ "intent": "<opaque one-time value>", "code": "<one-time completion code>" }
+```
+
+Response 200:
+
+```json
+{
+  "accessToken": "<new backend access token>",
+  "refreshToken": "<new backend refresh token>",
+  "expiresIn": 3600
+}
 ```
 
 The desktop client treats this as adding a secondary mailbox to the
-existing session — the token replaces the active session's. Do not put
-member tokens or bearer tokens in the browser URL; only the opaque intent
-belongs there.
+existing session — the returned token replaces the active session's.
+Do not put member tokens, refresh tokens, or bearer tokens in the browser URL;
+only the opaque intent and one-time completion code belong there.
+
+For migration compatibility, the current desktop client still accepts the
+older `mono-desktop://addAccount?token=…&refresh_token=…` form, but new
+production implementations should use the completion-code exchange above.
 
 ### `POST ${MONO_ENV_BACKEND_URL}/auth/refresh`
 

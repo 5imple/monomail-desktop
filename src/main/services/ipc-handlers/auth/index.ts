@@ -1,4 +1,5 @@
 import { apiClient } from '@/main/api/apiClient';
+import { completeAccountLinkWithBackend } from '@/main/services/mangers/auth/accountLinking';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
 import { resolveBackendUrl, tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
@@ -160,6 +161,31 @@ export function registerAuthHandlers() {
           error: error instanceof Error ? error.message : 'Account linking failed'
         };
       }
+    }
+  );
+
+  ipcMain.handle(
+    'main:auth:complete-account-link',
+    async (
+      _,
+      args?: { intent?: string; code?: string }
+    ): Promise<
+      | { ok: true; accessToken: string; expiresAt: number }
+      | { ok: false; error: string; status?: number }
+    > => {
+      const result = await completeAccountLinkWithBackend({
+        intent: args?.intent ?? '',
+        code: args?.code ?? ''
+      });
+
+      if (result.ok) {
+        const mainAppWindow = windowManager.getMainAppWindow();
+        if (mainAppWindow) {
+          mainAppWindow.webContents.send('renderer:auth:add-account', result.accessToken);
+        }
+      }
+
+      return result;
     }
   );
 
