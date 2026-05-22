@@ -83,8 +83,12 @@ const schedules = new Map();
 /** @type {Set<import('ws').WebSocket>} */
 const wsClients = new Set();
 
-const QUEUE_MAX_PER_ACCOUNT = 50;
-const QUEUE_MIN_FUTURE_MS = 60_000;
+const QUEUE_MAX_PER_ACCOUNT = Number(process.env.MOCK_QUEUE_MAX_PER_ACCOUNT || 50);
+// 60s in production; integration tests override to a much smaller window
+// so reschedule + tick assertions don't have to wait a full minute. The
+// invariant stays: timestamps must be in the future by at least this
+// margin.
+const QUEUE_MIN_FUTURE_MS = Number(process.env.MOCK_QUEUE_MIN_FUTURE_MS || 60_000);
 const QUEUE_TICK_MS = Number(process.env.MOCK_QUEUE_TICK_MS || 30_000);
 
 function isPlausibleIsoFuture(s) {
