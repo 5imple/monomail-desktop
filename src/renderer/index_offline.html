@@ -135,30 +135,8 @@
       <div class="text-md text-muted-foreground">
         Try checking your connection or reconnecting to Wi-Fi
       </div>
-      <button onclick="tryReload()" class="reload-button no-drag">Reload</button>
+      <button id="reload-button" class="reload-button no-drag">Reload</button>
     </div>
-
-    <script>
-      function tryReload() {
-        const params = new URLSearchParams(window.location.search);
-        const appURL = params.get('appUrl');
-        window.location = appURL;
-      }
-
-      // Automatically try to reload when network returns.
-      window.addEventListener('online', tryReload);
-
-      // Set up OS-specific things.
-      document.addEventListener('DOMContentLoaded', () => {
-        const isWindows = /(win64)|(wow64)|(windows)/i.test(navigator.userAgent);
-        if (isWindows) {
-          document.body.classList.add('windows');
-        }
-
-        // Automatically try to reload once after a short delay
-
-        tryReload();
-      });
-    </script>
+    <script type="module" src="/offline.ts"></script>
   </body>
 </html>

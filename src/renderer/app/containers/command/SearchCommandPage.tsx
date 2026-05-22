@@ -7,7 +7,6 @@ import {
 } from '@/renderer/app/components/ui/command';
 import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandInput';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
-import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { ellipsisEmailString, ellipsisString } from '@/renderer/app/lib/minimizeEmail';
 import { cn } from '@/renderer/app/lib/utils';
@@ -17,10 +16,7 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import mailApi from '@/main/api/mail/mailApi';
-import { useAuth } from '@/renderer/app/context/AuthContext';
 import MonoIcon from '@/renderer/app/components/icons/icons';
-import Loader from '@/renderer/app/components/ui/loader';
 import { Button } from '@/renderer/app/components/ui/button';
 
 interface SearchCommandPageProps {
@@ -29,10 +25,7 @@ interface SearchCommandPageProps {
   onClose: () => void;
   onSelect: () => void;
   pushPage: (value: string[]) => void;
-  bounce: () => void;
   onKeydown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
-  onAiSearchStateChange?: (isActive: boolean, isLoading: boolean) => void;
-  initialAiSearchMode?: boolean;
 }
 
 const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
@@ -41,22 +34,16 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   onClose,
   onSelect,
   pushPage,
-  bounce,
-  onKeydown,
-  onAiSearchStateChange,
-  initialAiSearchMode = false
+  onKeydown
 }) => {
   const [searchState, setSearchState] = useState({
     currentQueryPart: '',
     showOperators: true
   });
-  const [aiSearchMode, setAiSearchMode] = useState(initialAiSearchMode);
-  const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const { searchNewQuery, searchHistory, removeFromSearchHistory } = useGlobalAtom();
-  const { openDialog, closeDialog } = useDialogs();
+  const { closeDialog } = useDialogs();
   const { contactArray } = useContactAtom();
   const { activeSpace } = useSpaceAtom();
-  const { accounts } = useAuth();
 
   const unpinnedContacts = useMemo(() => {
     const pinnedEmails = activeSpace?.pinnedEmails || [];
@@ -146,20 +133,6 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
     });
   }, [searchQuery]);
 
-  // Initialize AI search state when component mounts
-  // useEffect(() => {
-  //   if (initialAiSearchMode) {
-  //     onAiSearchStateChange?.(true, false);
-  //   }
-  // }, [initialAiSearchMode, onAiSearchStateChange]);
-
-  // Reset AI search state when component unmounts
-  useEffect(() => {
-    return () => {
-      onAiSearchStateChange?.(false, false);
-    };
-  }, []);
-
   // Filter operators based on the current query part.
   const getFilteredOperators = (queryPart: string) => {
     return allOperators.filter(
@@ -181,10 +154,6 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
 
   // Function to perform the search.
   const performSearch = async (query: string, addToHistory = true) => {
-    // Reset AI search states immediately
-    setAiSearchMode(false);
-    onAiSearchStateChange?.(false, false);
-
     closeDialog('commandPalette');
     searchNewQuery(query, undefined, addToHistory);
     // Track the search event.
@@ -201,52 +170,6 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
       setSearchState({ currentQueryPart: '', showOperators: true });
       onClose();
     }, 300); // Reduced timeout for better responsiveness
-  };
-
-  // Function to perform AI search
-  const performAiSearch = async (naturalLanguageQuery: string) => {
-    if (!naturalLanguageQuery.trim()) return;
-
-    // Get the first active account UID for the API call
-    const activeAccountUid = activeSpace?.activeAccountUids?.[0];
-    if (!activeAccountUid) {
-      console.error('No active account found for AI search');
-      return;
-    }
-
-    setAiSearchLoading(true);
-    onAiSearchStateChange?.(aiSearchMode, true);
-    try {
-      const response = await mailApi.generateSearchQueries(activeAccountUid, {
-        prompt: naturalLanguageQuery.trim()
-      });
-
-      if (response.query) {
-        // Use the first (highest confidence) search query
-        const bestQuery = response.query;
-
-        trackEvent('ai_search_performed', {
-          prompt: naturalLanguageQuery,
-          generated_query: bestQuery,
-          description: response.description
-        });
-
-        // Perform search with the generated query (this will reset AI state)
-        performSearch(bestQuery);
-      }
-    } catch (error) {
-      console.error('AI search error:', error);
-      trackEvent('ai_search_error', {
-        prompt: naturalLanguageQuery,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      // Reset AI search state on error
-      setAiSearchMode(false);
-      onAiSearchStateChange?.(false, false);
-    } finally {
-      setAiSearchLoading(false);
-      // Only reset loading state here, not active state since performSearch will handle that
-    }
   };
 
   // When an operator is selected, update the query and track the event.
@@ -285,24 +208,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   const [listHeight, setListHeight] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Handle key events for AI search mode
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const newAiSearchMode = !aiSearchMode;
-      setAiSearchMode(newAiSearchMode);
-      onAiSearchStateChange?.(newAiSearchMode, aiSearchLoading);
-      trackEvent('ai_search_mode_toggled', { enabled: newAiSearchMode });
-      return;
-    }
-
-    if (aiSearchMode && e.key === 'Enter') {
-      e.preventDefault();
-      performAiSearch(searchQuery);
-      return;
-    }
-
-    // Pass through to original handler for other keys
     onKeydown(e);
   };
 
@@ -316,53 +222,40 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
         }
       }, 0);
     }
-  }, [searchState, filteredOperators, filteredContacts, loading, aiSearchMode]);
+  }, [searchState, filteredOperators, filteredContacts, loading]);
 
   // Additional effect to ensure scroll position stays at top when search query changes
   useEffect(() => {
-    if (commandScrollListRef.current && !aiSearchMode) {
+    if (commandScrollListRef.current) {
       // commandScrollListRef.current.scrollTop = 0;
 
       commandScrollListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [searchQuery, aiSearchMode]);
+  }, [searchQuery]);
 
   return (
     <div className="relative">
       <EnhancedCommandInput
-        placeholder={
-          aiSearchMode
-            ? t('command_palette.search.ai_placeholder', 'Ask in natural language...')
-            : t('command_palette.search.placeholder')
-        }
+        placeholder={t('command_palette.search.placeholder')}
         autoFocus
         value={searchQuery}
         onValueChange={setSearchQuery}
-        prepend={
-          aiSearchMode ? (
-            <div className="px-2">
-              {aiSearchLoading ? <Loader /> : <MonoIcon type="Search" className="h-4 w-4" />}
-            </div>
-          ) : (
-            <ShortcutKeyboard shortcut={'Tab'} className="px-2" />
-          )
-        }
-        renderCondition={(part) => (aiSearchMode ? false : part.includes(':'))}
+        renderCondition={(part) => part.includes(':')}
         onKeyDown={handleKeyDown}
       />
       <CommandList
         ref={commandScrollListRef}
         className={cn(
           'h-[0px] origin-top transition-all duration-200 ease-bouncy-in-out',
-          loading || aiSearchMode ? '' : `h-[${listHeight}px]`
+          loading ? '' : `h-[${listHeight}px]`
         )}
         style={{
           transition: 'height 300ms',
-          height: aiSearchMode ? '0px' : `${listHeight}px`
+          height: `${listHeight}px`
         }}
       >
         <div ref={commandListRef}>
-          {!aiSearchMode && countQueries(searchQuery) > 0 && (
+          {countQueries(searchQuery) > 0 && (
             <CommandGroup heading={t('command_palette.header.search')} className="p-2">
               <CommandItem
                 variant="raycast"
@@ -384,7 +277,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
             </CommandGroup>
           )}
 
-          {!aiSearchMode && filteredContacts.length > 0 && (
+          {filteredContacts.length > 0 && (
             <CommandGroup className="p-2">
               {filteredContacts.map((contact) => (
                 <CommandItem
@@ -410,7 +303,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
             </CommandGroup>
           )}
 
-          {!aiSearchMode && searchHistory.length > 0 && (
+          {searchHistory.length > 0 && (
             <CommandGroup
               heading={t('command_palette.header.recent_searches', 'Recent Searches')}
               className="p-2"
@@ -444,7 +337,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
             </CommandGroup>
           )}
 
-          {!aiSearchMode && searchQuery.trim() !== '' && (
+          {searchQuery.trim() !== '' && (
             <CommandGroup heading={t('command_palette.header.operators')} className="p-2">
               {filteredOperators
                 .map((operator, index) => {

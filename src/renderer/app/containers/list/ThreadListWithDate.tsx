@@ -85,8 +85,7 @@ interface ThreadListWithDateProps {
 
 function ThreadListWithDate({ isScrolled, setKeyPressed, onScroll }: ThreadListWithDateProps) {
   const { t } = useTranslation();
-  const { needPayment, loadMore, hasMore, fetchThreadsHandler, loadingStatus, threadIds } =
-    useThreadList();
+  const { loadMore, hasMore, fetchThreadsHandler, loadingStatus, threadIds } = useThreadList();
 
   const { aggregatedSyncState } = useSyncThread();
   const { preference } = useAuth();
@@ -381,29 +380,22 @@ function ThreadListWithDate({ isScrolled, setKeyPressed, onScroll }: ThreadListW
             </React.Fragment>
           ))}
 
-          {!hasMore && !needPayment && loadingStatus === 'DONE' && (
+          {!hasMore && loadingStatus === 'DONE' && (
             <div className="my-4 py-8 text-center text-sm text-muted-foreground">
               <MonoIcon type={'CheckCircle'} className="mx-auto mb-2" />
               {t('thread_list.up_to_date')}
             </div>
           )}
 
-          {loadingStatus === 'ERROR' &&
-            (needPayment ? (
-              <div className="my-4 py-8 text-center">
-                <MonoIcon type={'AlertCircle'} className="mx-auto mb-2 text-destructive" />
-                <div className="text-sm text-muted-foreground">{t('thread_list.beta_limited')}</div>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                <MonoIcon type={'AlertCircle'} className="mx-auto mb-4 h-4 w-4 text-destructive" />
-                <Button variant={'secondary'} onClick={() => fetchThreadsHandler(true)}>
-                  {t('thread_list.try_again')}
-                </Button>
-              </div>
-            ))}
-          {((hasMore && !needPayment && loadingStatus !== 'ERROR') ||
-            loadingStatus === 'LOADING') && (
+          {loadingStatus === 'ERROR' && (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <MonoIcon type={'AlertCircle'} className="mx-auto mb-4 h-4 w-4 text-destructive" />
+              <Button variant={'secondary'} onClick={() => fetchThreadsHandler(true)}>
+                {t('thread_list.try_again')}
+              </Button>
+            </div>
+          )}
+          {((hasMore && loadingStatus !== 'ERROR') || loadingStatus === 'LOADING') && (
             <div className="my-4 py-8 text-center text-sm text-muted-foreground">
               <Loader className="mx-auto mb-7" />
             </div>

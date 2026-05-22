@@ -19,7 +19,6 @@ export { default as At } from './at.svg?react';
 export { default as Banknotes } from './banknotes.svg?react';
 export { default as Beaker } from './beaker.svg?react';
 export { default as Bell } from './bell.svg?react';
-export { default as Billing } from './billing.svg?react';
 export { default as Bold } from './bold.svg?react';
 export { default as Bolt } from './bolt.svg?react';
 export { default as Book } from './book.svg?react';

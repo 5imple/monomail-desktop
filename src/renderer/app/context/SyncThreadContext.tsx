@@ -13,7 +13,6 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
-// useBillingAtom removed — payment-free build.
 import { ValidLabel, validLabels } from '@/renderer/app/lib/db/thread';
 import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 
@@ -280,7 +279,7 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
         }
       }));
 
-      // Show notification if sync was limited due to billing
+      // Show notification if sync was limited by thread age.
       if (limitReached && limitReason === '365_day_limit') {
         toast.info(t('toast.info.sync_limited_365_days'), {
           description: t('toast.info.sync_limited_365_days_description')

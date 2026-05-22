@@ -258,7 +258,13 @@ const server = createServer(async (req, res) => {
 
     const intent = `mock-intent-${randomBytes(18).toString('hex')}`;
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
-    accountLinkIntents.set(intent, { provider, expiresAt, used: false });
+    accountLinkIntents.set(intent, {
+      provider,
+      expiresAt,
+      completionCode: null,
+      completionExpiresAt: null,
+      used: false
+    });
     return send(res, 200, { intent, expiresAt });
   }
 
@@ -273,12 +279,15 @@ const server = createServer(async (req, res) => {
       );
     }
 
-    if (entry) entry.used = true;
+    const completionCode = `mock-link-code-${randomBytes(18).toString('hex')}`;
+    if (entry) {
+      entry.completionCode = completionCode;
+      entry.completionExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+    }
     const account = ensureSecondaryAccount();
-    const tokens = issueTokens();
-    const deeplink = `${DEEPLINK_PROTOCOL}://addAccount?token=${encodeURIComponent(
-      tokens.accessToken
-    )}&refresh_token=${encodeURIComponent(tokens.refreshToken)}&expires_in=${tokens.expiresIn}`;
+    const deeplink = `${DEEPLINK_PROTOCOL}://addAccount?intent=${encodeURIComponent(
+      intent || ''
+    )}&code=${encodeURIComponent(completionCode)}`;
     return send(
       res,
       200,
@@ -303,8 +312,52 @@ const server = createServer(async (req, res) => {
   <a class="btn" href="${deeplink}">Return to Mono Mail</a>
   <p class="small">The desktop app opened this page with an opaque account-link intent, not a bearer token.</p>
 </body>
-</html>`
+  </html>`
     );
+  }
+
+  if (method === 'POST' && path === '/desktop/account-link-completions') {
+    const body = await readJson(req).catch(() => ({}));
+    const intent = typeof body.intent === 'string' ? body.intent : '';
+    const code = typeof body.code === 'string' ? body.code : '';
+    const entry = intent ? accountLinkIntents.get(intent) : null;
+
+    if (
+      !entry ||
+      entry.used ||
+      Date.parse(entry.expiresAt) <= Date.now() ||
+      !entry.completionCode ||
+      entry.completionCode !== code ||
+      !entry.completionExpiresAt ||
+      Date.parse(entry.completionExpiresAt) <= Date.now()
+    ) {
+      return send(res, 400, {
+        error: 'Account-link completion code is invalid or expired'
+      });
+    }
+
+    entry.used = true;
+    ensureSecondaryAccount();
+    return send(res, 200, issueTokens());
+  }
+
+  if (method === 'POST' && path === '/desktop/unsubscribe') {
+    const body = await readJson(req).catch(() => ({}));
+    const unsubscribeUrl = typeof body.url === 'string' ? body.url : '';
+    try {
+      const parsed = new URL(unsubscribeUrl);
+      if (parsed.protocol !== 'https:') {
+        return send(res, 400, { ok: false, error: 'Only HTTPS unsubscribe URLs are allowed' });
+      }
+    } catch {
+      return send(res, 400, { ok: false, error: 'Invalid unsubscribe URL' });
+    }
+
+    // Production should perform the outbound List-Unsubscribe request here.
+    // The mock does not contact external hosts; it only proves the desktop
+    // sends sender-controlled URLs to the backend proxy instead of fetching
+    // them directly from the user's machine.
+    return send(res, 200, { ok: true, status: 204 });
   }
 
   // --- Auth refresh ---
@@ -339,12 +392,6 @@ const server = createServer(async (req, res) => {
       userId: STUB_MEMBER.uid
     };
     return send(res, 200, entry);
-  }
-
-  // --- Billing (ported Cloud Function) ---
-  if (method === 'GET' && path === '/payment/payment-info') {
-    // Return 404 so the client treats this as "no active subscription".
-    return send(res, 404, { error: 'no subscription' });
   }
 
   // --- Share resolver (placeholder) ---

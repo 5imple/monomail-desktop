@@ -51,8 +51,7 @@ export const useRegisterHotkeys = (options = {}) => {
       openDialog('commandPalette', {
         pages: [],
         searchQuery: '',
-        bookmarkName: '',
-        aiSearchMode: false
+        bookmarkName: ''
       });
     },
     { preventDefault: true, ...options },

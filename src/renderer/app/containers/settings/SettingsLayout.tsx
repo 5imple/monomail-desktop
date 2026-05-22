@@ -1,4 +1,3 @@
-import SettingsDisplayPage from '@/renderer/app/containers/settings/display/SettingsDisplayPage';
 import SettingsThreadListDisplayPage from '@/renderer/app/containers/settings/display/SettingsThreadListDisplayPage';
 import SettingsEmailAccountPage from '@/renderer/app/containers/settings/integration/SettingsIntegrationPage';
 import SettingsNotificationsPage from '@/renderer/app/containers/settings/notification/SettingsNotificationPage';
@@ -11,7 +10,6 @@ import { Label } from '@/renderer/app/components/ui/label';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import SettingsAccountPage from '@/renderer/app/containers/settings/account/SettingsAccountPage';
-// SettingsBillingPage import removed — payment-free build.
 import SettingsComposePage from '@/renderer/app/containers/settings/compose/SettingsComposePage';
 import { LabelForm } from '@/renderer/app/containers/settings/forms/LabelForm';
 import SettingsGeneralPage from '@/renderer/app/containers/settings/general/SettingsGeneralPage';
@@ -20,13 +18,8 @@ import SettingsSignaturePage from '@/renderer/app/containers/settings/signature/
 import SettingsSystemPage from '@/renderer/app/containers/settings/system/SettingsSystemPage';
 import SettingsTemplatePage from '@/renderer/app/containers/settings/template/SettingsTemplatePage';
 import { cn } from '@/renderer/app/lib/utils';
-import { useDefaultNav } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useTranslation } from 'react-i18next';
 import SettingsDisplayInboxPage from '@/renderer/app/containers/settings/inbox/SettingsDisplayInboxPage';
-import SettingsFilterPage from '@/renderer/app/containers/settings/filter/SettingsFilterPage';
-import SettingsAutoPilotPage from '@/renderer/app/containers/settings/autopilot/SettingsAutoPilotPage';
-import AutoPilotForm from '@/renderer/app/containers/settings/forms/AutoPilotForm';
-import ToneProfileForm from '@/renderer/app/containers/settings/forms/ToneProfileForm';
 import { Badge } from '@/renderer/app/components/ui/badge';
 
 interface SidebarNavItem {
@@ -46,6 +39,26 @@ interface SidebarNavProps extends React.HTMLAttributes<HTMLElement> {
 interface SettingsLayoutProps {
   defaultPage?: string;
 }
+
+const visibleSettingsPages = new Set([
+  'general',
+  'notifications',
+  'shortcut',
+  'integration',
+  'compose',
+  'label',
+  'signature',
+  'template',
+  'account',
+  'inbox',
+  'threadlist',
+  'profile',
+  'system'
+]);
+
+const resolveSettingsPage = (page?: string) => {
+  return page && visibleSettingsPages.has(page) ? page : 'general';
+};
 
 export function SidebarNav({
   className,
@@ -112,7 +125,7 @@ export function SidebarNav({
 }
 
 export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
-  const [activeItem, setActiveItem] = useState(defaultPage || useDefaultNav()[0].id);
+  const [activeItem, setActiveItem] = useState(resolveSettingsPage(defaultPage));
   const { t } = useTranslation();
 
   const sidebarNavItems: SidebarNavItem[] = [
@@ -172,29 +185,6 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
       id: 'template',
       icon: 'FileText'
     },
-    {
-      type: 'label',
-      title: t('settings.ai.title')
-    },
-    {
-      type: 'item',
-      title: t('settings.filter.title'),
-      id: 'filter',
-      icon: 'Filter'
-    },
-    {
-      type: 'item',
-      title: t('settings.ai.autopilot.title'),
-      id: 'autopilot',
-      icon: 'Sparkles'
-    },
-    {
-      type: 'item',
-      title: t('settings.ai.voiceprofiles.title'),
-      id: 'voiceprofile',
-      icon: 'Mic'
-    },
-
     // DISPLAY
     {
       type: 'label',
@@ -232,7 +222,6 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
       id: 'profile',
       icon: 'UserIcon'
     },
-    // Billing tab removed — payment-free build.
     {
       type: 'item',
       title: t('settings.system.title'),
@@ -242,7 +231,7 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
   ];
   useEffect(() => {
     if (defaultPage) {
-      setActiveItem(defaultPage);
+      setActiveItem(resolveSettingsPage(defaultPage));
     }
   }, [defaultPage]);
 
@@ -258,10 +247,6 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
         return <SettingsNotificationsPage />;
       case 'shortcut':
         return <SettingsShortcutPage />;
-      case 'autopilot':
-        return <AutoPilotForm />;
-      case 'voiceprofile':
-        return <ToneProfileForm />;
       case 'general':
         return <SettingsGeneralPage />;
       case 'signature':
@@ -274,15 +259,12 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
         return <SettingsDisplayInboxPage />;
       case 'threadlist':
         return <SettingsThreadListDisplayPage />;
-      case 'filter':
-        return <SettingsFilterPage />;
       case 'label':
         return <LabelForm />;
-      // 'billing' case removed — payment-free build.
       case 'system':
         return <SettingsSystemPage />;
       default:
-        return null;
+        return <SettingsGeneralPage />;
     }
   };
 

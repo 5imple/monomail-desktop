@@ -22,19 +22,7 @@ export const createNavigationCommands = (
       hotkeys: ['MOD+F'],
       action: () => {
         if (dialogState.commandPalette.open) return 'page';
-        openDialog('commandPalette', { pages: ['SEARCH'], aiSearchMode: false });
-        return;
-      }
-    },
-
-    AI_SEARCH: {
-      scope: 'GLOBAL',
-      title: t('command.ai_search'),
-      icon: 'Sparkles',
-      hotkeys: ['MOD+ALT+F', 'MOD+SHIFT+F'],
-      action: () => {
-        if (dialogState.commandPalette.open) return 'page';
-        openDialog('commandPalette', { pages: ['SEARCH'], aiSearchMode: true });
+        openDialog('commandPalette', { pages: ['SEARCH'] });
         return;
       }
     },

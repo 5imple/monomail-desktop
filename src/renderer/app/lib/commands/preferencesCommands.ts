@@ -32,15 +32,6 @@ export const createPreferencesCommands = (
       }
     },
 
-    OPEN_PREFERENCES_BILLING: {
-      scope: 'GLOBAL',
-      title: t('command.open_preferences_billing'),
-      icon: 'Billing',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'billing' });
-      }
-    },
-
     OPEN_PREFERENCES_SIGNATURE: {
       scope: 'GLOBAL',
       title: t('command.open_preferences_signature'),
@@ -103,25 +94,6 @@ export const createPreferencesCommands = (
       icon: 'Label',
       action: (_: any) => {
         openDialog('preference', { defaultPage: 'label' });
-      }
-    },
-
-    // AI Settings Commands
-    OPEN_PREFERENCES_FILTER: {
-      scope: 'GLOBAL',
-      title: t('command.open_preferences_filter'),
-      icon: 'Filter',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'filter' });
-      }
-    },
-
-    OPEN_PREFERENCES_AUTOPILOT: {
-      scope: 'GLOBAL',
-      title: t('command.open_preferences_autopilot'),
-      icon: 'Sparkles',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'autopilot' });
       }
     },
 
@@ -189,15 +161,6 @@ export const createPreferencesCommands = (
       icon: 'Envelope',
       action: (_: any) => {
         openDialog('preference', { defaultPage: 'integration' });
-      }
-    },
-
-    OPEN_AI_SETTINGS: {
-      scope: 'GLOBAL',
-      title: t('command.open_ai_settings'),
-      icon: 'Sparkles',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'autopilot' });
       }
     },
 

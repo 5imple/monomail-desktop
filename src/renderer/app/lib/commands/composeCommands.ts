@@ -145,8 +145,7 @@ export const createComposeCommands = (
         if (dialogState.commandPalette.open) return 'page';
         openDialog('commandPalette', {
           pages: ['SEARCH', 'BOOKMARK_NAME'],
-          searchQuery: globalSearchQuery,
-          aiSearchMode: false
+          searchQuery: globalSearchQuery
         });
         return;
       }

@@ -5,7 +5,6 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-// useBillingAtom import removed — payment-free build.
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { cn } from '@/renderer/app/lib/utils';
@@ -13,16 +12,9 @@ import { cn } from '@/renderer/app/lib/utils';
 interface AuthGuardProps {
   children: React.ReactNode;
   to?: string;
-  successRedirect?: string;
-  requiresSubscription?: boolean;
 }
 
-const AuthGuard: React.FC<AuthGuardProps> = ({
-  children,
-  to,
-  successRedirect,
-  requiresSubscription = true
-}) => {
+const AuthGuard: React.FC<AuthGuardProps> = ({ children, to }) => {
   const { isLoggedIn, isLoading, member, idToken } = useAuth();
   const { spaces, isLoadingSpaces } = useSpaceAtom();
   const { sidebarCollapsed } = useSidebarAtom();

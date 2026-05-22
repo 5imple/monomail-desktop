@@ -42,6 +42,17 @@ async function completeLocalDevAddAccount(linkUrl: string): Promise<boolean> {
       return false;
     }
 
+    const intent = params.get('intent');
+    const code = params.get('code') ?? params.get('completion_code');
+    if (intent && code) {
+      const result = await electronApi.completeAccountLink({ intent, code });
+      if (!result.ok) {
+        toast.error(`Gmail connection failed: ${result.error}`);
+        return false;
+      }
+      return true;
+    }
+
     const accessToken = params.get('token');
     const refreshToken = params.get('refresh_token');
     const expiresInRaw = params.get('expires_in');

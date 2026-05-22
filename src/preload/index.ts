@@ -29,6 +29,8 @@ const api = {
     ipcRenderer.invoke('main:auth:dev-sign-in', args),
   createAccountLinkIntent: (args?: { provider?: string; client?: string }) =>
     ipcRenderer.invoke('main:auth:create-account-link-intent', args),
+  completeAccountLink: (args: { intent: string; code: string }) =>
+    ipcRenderer.invoke('main:auth:complete-account-link', args),
   devAddAccount: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
     ipcRenderer.invoke('main:auth:dev-add-account', args),
   // ---------- P8 Later Queue ----------

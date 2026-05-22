@@ -1,5 +1,4 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
-import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import CatchUpHeader from '@/renderer/app/containers/header/CatchUpHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
@@ -26,9 +25,7 @@ const CatchUpLayout: FC<CatchUpLayoutProps> = () => {
         <section className="flex-1">
           <div className="flex h-full flex-col">
             <div className="flex items-center gap-3 border-b p-3">
-              <Badge sizeVariant={'sm'}>
-                <MonoIcon type={'Sparkles'} className="mr-2" /> AI Draft
-              </Badge>
+              <Badge sizeVariant={'sm'}>Drafts</Badge>
               <div className="text-lg font-medium">3 written while you were away</div>
             </div>
             <div className="relative flex w-full flex-1 flex-col gap-4">

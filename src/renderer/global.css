@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -16,8 +18,6 @@
  * Inter + IBM Plex Mono are loaded so kbd badges, mono labels, and
  * timestamps render in Newton's tracked-uppercase style.
  */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
   --background: 60 9% 98%; /* stone-50 — warm canvas */
@@ -284,7 +284,13 @@
   body {
     @apply bg-transparent text-foreground;
     font-family:
-      Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+      Inter,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      'Helvetica Neue',
+      Arial,
       sans-serif;
     -webkit-font-smoothing: antialiased;
   }

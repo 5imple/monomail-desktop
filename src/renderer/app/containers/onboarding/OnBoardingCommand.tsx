@@ -18,7 +18,6 @@ const OnBoardingCommand: FC<OnBoardingCommandProps> = ({ onContinue }) => {
   const [pages, setPages] = useState<string[]>([]);
   const [pinContact, setPinContact] = useState<string>('');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [aiSearchMode, setAiSearchMode] = useState<boolean>(false);
 
   const trail = useTrail(4, {
     from: { opacity: 0, transform: 'translateY(40px)' },
@@ -73,8 +72,6 @@ const OnBoardingCommand: FC<OnBoardingCommandProps> = ({ onContinue }) => {
                 setSelectedAccountId={setSelectedAccountId}
                 selectedSpaceId={undefined}
                 setSelectedSpaceId={() => {}} // No-op for onboarding
-                aiSearchMode={aiSearchMode}
-                setAiSearchMode={setAiSearchMode}
                 open={open} // Always open during onboarding
                 onOpenChange={() => {}} // No-op for onboarding
               />

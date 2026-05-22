@@ -39,7 +39,6 @@ The build uses the prefix **`MONO_ENV_`** for Vite/Electron (see `electron.vite.
    - **Firebase fields** — From the Firebase console (Web app config), plus **`MONO_ENV_FIREBASE_VAPID_KEY`** if you use web push / FCM in the way this project expects.
    - **`MONO_ENV_MIXPANEL_TOKEN`** — Can be a placeholder if you are not using Mixpanel locally, unless the build fails without it (then use a test project token).
    - **`MONO_ENV_SUPPORT_EMAIL`** — Support address for UI defaults, mailto links, and notification copy (falls back to `support@example.com` if unset).
-   - **`MONO_ENV_BILLING_CHECKOUT_BASE_URL`** — Payment-provider checkout origin only, e.g. `https://your-store.lemonsqueezy.com` (the app appends `/buy/{variantId}`). Leave empty to disable hosted checkout until configured.
    - **`MONO_ENV_COOKIE_DOMAIN`** — Optional. For link-share flows, cookie `domain=` (e.g. `.example.com`). If empty, a value is derived from `MONO_ENV_HOMEPAGE_DOMAIN`.
    - **`MONO_ENV_UTM_SOURCE`** — Optional marketing UTM `utm_source` (default `app`).
    - **`MONO_ENV_CAREERS_URL`** — Optional; if set, printed in the dev console banner.
@@ -48,10 +47,6 @@ The build uses the prefix **`MONO_ENV_`** for Vite/Electron (see `electron.vite.
    - **`MONO_ENV_DISCORD_INVITE_URL`** — Optional Discord invite URL; if empty, those entries are hidden.
 
 **Note:** `.env*` files except `.env.example` are gitignored. Never commit secrets.
-
-### Billing product IDs
-
-Map your payment provider’s product/variant IDs to plan keys in `src/renderer/app/lib/billingUtils.ts` (`productIdToPlan`). The repo ships with an empty map for open-source neutrality; fill it in for your integration.
 
 ## 3. Run in development
 
@@ -71,13 +66,13 @@ Platform-specific packaging uses **electron-builder**; signing and notarization 
 
 ## 5. Common problems
 
-| Symptom | What to check |
-|--------|----------------|
-| Error about **`MONO_ENV_API_URL`** | Ensure `.env.development` exists in the repo root and the variable is set (no quotes needed unless your shell requires them). |
-| Firebase / auth failures | Confirm all `MONO_ENV_FIREBASE_*` values match one Firebase project and that Authentication (and any OAuth providers) are enabled. |
-| `npm install` errors | Use Node 18+; on corporate networks try again or configure npm proxy; delete `node_modules` and `package-lock.json` only as a last resort. |
-| Blank or broken UI after clone | Often missing or wrong env; check the terminal where `electron-vite` runs for build errors. |
+| Symptom                            | What to check                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Error about **`MONO_ENV_API_URL`** | Ensure `.env.development` exists in the repo root and the variable is set (no quotes needed unless your shell requires them).              |
+| Firebase / auth failures           | Confirm all `MONO_ENV_FIREBASE_*` values match one Firebase project and that Authentication (and any OAuth providers) are enabled.         |
+| `npm install` errors               | Use Node 18+; on corporate networks try again or configure npm proxy; delete `node_modules` and `package-lock.json` only as a last resort. |
+| Blank or broken UI after clone     | Often missing or wrong env; check the terminal where `electron-vite` runs for build errors.                                                |
 
 ## 6. Backend and licensing
 
-This repository is the **desktop client** only. Running the full product still requires a compatible **API** and (for some features) cloud functions or third-party billing/analytics accounts. Forks should replace placeholder domains, Firebase project IDs in **`.firebaserc`**, and updater URLs with their own infrastructure.
+This repository is the **desktop client** only. Running the full product still requires a compatible **API** and (for some features) cloud functions or third-party analytics accounts. Forks should replace placeholder domains, Firebase project IDs in **`.firebaserc`**, and updater URLs with their own infrastructure.

@@ -12,10 +12,6 @@ export function getDiscordInviteUrl(): string {
   return import.meta.env.MONO_ENV_DISCORD_INVITE_URL?.trim() || '';
 }
 
-export function getBillingCheckoutOrigin(): string {
-  return import.meta.env.MONO_ENV_BILLING_CHECKOUT_BASE_URL?.trim().replace(/\/$/, '') || '';
-}
-
 export function getBrandEmailDomainForFavicon(): string {
   return import.meta.env.MONO_ENV_BRAND_EMAIL_DOMAIN?.trim() || '';
 }

@@ -1,8 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-// Billing imports removed — payment-free build, space creation
-// always allowed.
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { toast } from 'sonner';
 import SpaceSelectionPage from './SpaceSelectionPage';
 import SpaceAccountPage from './SpaceAccountPage';
@@ -30,8 +27,6 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
   const { t } = useTranslation();
   const { spaces, createSpace, updateSpace, updateAccountToSpace, switchSpace, deleteSpace } =
     useSpaceAtom();
-  // Payment-free build — `getUserPlan` no longer needed; treat as always-pro.
-  const { openDialog } = useDialogs();
 
   const [spaceName, setSpaceName] = useState('');
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
@@ -72,23 +67,10 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
 
   // Handle new space creation
   const handleCreateNew = () => {
-    const canCreate = true;
-
-    if (!canCreate) {
-      handleUpgrade();
-      return;
-    }
-
     setSelectedSpaceId(null);
     setSelectedAccountIds([]);
     // Go directly to accounts page for new space
     setStep('accounts');
-  };
-
-  // Handle upgrade to premium plan
-  const handleUpgrade = () => {
-    onClose();
-    openDialog('preference', { defaultPage: 'billing' });
   };
 
   // Navigation handlers for options page
@@ -195,19 +177,6 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
         // Switch to the updated space
         switchSpace(selectedSpaceId);
       } else {
-        // Payment-free build — space creation always allowed.
-        const canCreate = true;
-
-        if (!canCreate) {
-          toast.error(
-            t('plan_selection.space_limit_reached_message', {
-              count: spaces.length
-            })
-          );
-          handleUpgrade();
-          return;
-        }
-
         // Create new space
         const newSpace = await createSpace({
           id: '',
@@ -241,9 +210,7 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
     updateSpace,
     updateAccountToSpace,
     switchSpace,
-    handleUpgrade,
-    onClose,
-    t
+    onClose
   ]);
 
   // Handle saving account changes and return to options
@@ -312,7 +279,6 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
           setSpaceName={setSpaceName}
           onSelectSpace={handleSelectSpace}
           onCreateNew={handleCreateNew}
-          onUpgrade={handleUpgrade}
           bounce={bounce}
           onKeydown={onKeydown}
         />
