@@ -508,7 +508,15 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       }
     } catch (e) {
       updateMessage(composeDraft);
-      setGlobalDraftWindows([composeDraft]);
+      setGlobalDraftWindows((drafts) => {
+        const draftExists = drafts.some((draftWindow) => draftWindow.id === composeDraft.id);
+        if (draftExists) {
+          return drafts.map((draftWindow) =>
+            draftWindow.id === composeDraft.id ? composeDraft : draftWindow
+          );
+        }
+        return [...drafts, composeDraft];
+      });
       console.error('Error:', e);
       toast.error(t('toast.error.send_mail'));
     } finally {
@@ -1137,9 +1145,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           // Newton elevation: still clearly floating but less chunky than
           // the prior 30% black drop. Refined edge keeps the popout
           // distinct from the document behind it without screaming.
-          isMinimized
-            ? 'shadow-md'
-            : 'shadow-xl shadow-black/10 dark:shadow-black/40',
+          isMinimized ? 'shadow-md' : 'shadow-xl shadow-black/10 dark:shadow-black/40',
           !isMaximized || isMinimized ? 'rounded-t-lg' : 'rounded-none border-0 shadow-none',
 
           // isClosing ? 'duration-0' : 'duration-400',
@@ -1238,11 +1244,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               <div className="flex h-full flex-col">
                 <div className="border-b border-border/40 px-4 pb-3 pt-3">
                   <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                    {replyMessage
-                      ? 'Replying'
-                      : historyMessage
-                        ? 'Forwarding'
-                        : 'New message'}
+                    {replyMessage ? 'Replying' : historyMessage ? 'Forwarding' : 'New message'}
                   </p>
                   <div className="relative">
                     <Input

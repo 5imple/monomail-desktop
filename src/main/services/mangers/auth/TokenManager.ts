@@ -76,6 +76,7 @@ class TokenManager extends EventEmitter {
       const parsed = JSON.parse(plain) as StoredTokens;
       if (!parsed.accessToken || !parsed.refreshToken || !parsed.expiresAt) {
         log.warn('[TokenManager] persisted token blob missing required fields; ignoring');
+        this.store.delete('authEnc');
         return;
       }
       this.tokens = parsed;
@@ -86,6 +87,7 @@ class TokenManager extends EventEmitter {
       );
     } catch (e) {
       log.error('[TokenManager] loadFromDisk failed:', (e as Error).message);
+      this.store.delete('authEnc');
     }
   }
 

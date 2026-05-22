@@ -15,7 +15,7 @@ import {
 } from 'electron';
 import { net } from 'electron';
 
-const ALLOWED_UNSUBSCRIBE_SCHEMES = new Set(['https:', 'http:']);
+const ALLOWED_UNSUBSCRIBE_SCHEMES = new Set(['https:']);
 
 function isSafeUnsubscribeUrl(raw: unknown): raw is string {
   if (typeof raw !== 'string' || raw.length > 2048) return false;

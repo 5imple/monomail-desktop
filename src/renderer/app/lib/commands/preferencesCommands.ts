@@ -106,25 +106,6 @@ export const createPreferencesCommands = (
       }
     },
 
-    // AI Settings Commands
-    OPEN_PREFERENCES_FILTER: {
-      scope: 'GLOBAL',
-      title: t('command.open_preferences_filter'),
-      icon: 'Filter',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'filter' });
-      }
-    },
-
-    OPEN_PREFERENCES_AUTOPILOT: {
-      scope: 'GLOBAL',
-      title: t('command.open_preferences_autopilot'),
-      icon: 'Sparkles',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'autopilot' });
-      }
-    },
-
     // Display Settings Commands
     OPEN_PREFERENCES_ACCOUNT: {
       scope: 'GLOBAL',
@@ -189,15 +170,6 @@ export const createPreferencesCommands = (
       icon: 'Envelope',
       action: (_: any) => {
         openDialog('preference', { defaultPage: 'integration' });
-      }
-    },
-
-    OPEN_AI_SETTINGS: {
-      scope: 'GLOBAL',
-      title: t('command.open_ai_settings'),
-      icon: 'Sparkles',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'autopilot' });
       }
     },
 

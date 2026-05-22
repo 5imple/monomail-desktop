@@ -7,7 +7,15 @@ import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { protocols } from '@/main/utils/contants';
-import { app, BrowserWindow, nativeImage, net, powerSaveBlocker, protocol, session } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  nativeImage,
+  net,
+  powerSaveBlocker,
+  protocol,
+  session
+} from 'electron';
 import log from 'electron-log';
 import * as fs from 'fs';
 import path from 'path';
@@ -133,18 +141,17 @@ export function registerAppEventHandlers() {
 
       const csp = [
         "default-src 'self'",
-        // `googletagmanager.com` removed alongside Firebase Analytics. Kept
-        // amplitude inline-loaded variant.
-        "script-src 'self' https://*.amplitude.com 'unsafe-inline'",
+        // `googletagmanager.com` removed alongside Firebase Analytics.
+        "script-src 'self' https://*.amplitude.com",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com data:",
         // email images are sender-controlled hosts — keep open but stripped
         // schemes (no `*` for protocol). `'self'` covers the custom
         // `monomail-app://` scheme used for the bundled standalone build.
-        "img-src 'self' https: http: data: blob:",
+        "img-src 'self' https: data: blob:",
         'media-src https: blob:',
         `connect-src ${connectAllow}`,
-        "object-src 'self' blob:",
+        "object-src 'none'",
         "worker-src 'self' blob:",
         "child-src 'self' blob:",
         "frame-src 'self' https://*.paddle.com",
@@ -324,7 +331,9 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
       queryParams.forEach((value, key) => {
         // Strip control chars from params too. The renderer is expected to
         // treat them as text, but defensive trimming is cheap.
-        paramsObject[key] = String(value).replace(/[\x00-\x1f\x7f]/g, '').slice(0, 4096);
+        paramsObject[key] = String(value)
+          .replace(/[\x00-\x1f\x7f]/g, '')
+          .slice(0, 4096);
       });
 
       log.info('Handling mailto link:', email, redactParams(paramsObject));
