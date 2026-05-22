@@ -25,7 +25,8 @@
     "build:mac:dev": "npm run set-channel:dev && npm run build:dev && electron-builder --mac",
     "build:mac:prod": "npm run set-channel:prod && npm run build:prod && electron-builder --mac",
     "build:tailwind": "npx tailwindcss -i ./src/renderer/global.css -o ./src/renderer/app/assets/style/tailwind.css --minify",
-    "mock-backend": "node scripts/mock-backend.mjs"
+    "mock-backend": "node scripts/mock-backend.mjs",
+    "test:mock-backend": "node --test scripts/__tests__/queue/*.test.mjs"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.14.0",
