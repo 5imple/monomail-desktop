@@ -341,6 +341,25 @@ const server = createServer(async (req, res) => {
     return send(res, 200, issueTokens());
   }
 
+  if (method === 'POST' && path === '/desktop/unsubscribe') {
+    const body = await readJson(req).catch(() => ({}));
+    const unsubscribeUrl = typeof body.url === 'string' ? body.url : '';
+    try {
+      const parsed = new URL(unsubscribeUrl);
+      if (parsed.protocol !== 'https:') {
+        return send(res, 400, { ok: false, error: 'Only HTTPS unsubscribe URLs are allowed' });
+      }
+    } catch {
+      return send(res, 400, { ok: false, error: 'Invalid unsubscribe URL' });
+    }
+
+    // Production should perform the outbound List-Unsubscribe request here.
+    // The mock does not contact external hosts; it only proves the desktop
+    // sends sender-controlled URLs to the backend proxy instead of fetching
+    // them directly from the user's machine.
+    return send(res, 200, { ok: true, status: 204 });
+  }
+
   // --- Auth refresh ---
   if (method === 'POST' && path === '/auth/refresh') {
     try {
@@ -373,12 +392,6 @@ const server = createServer(async (req, res) => {
       userId: STUB_MEMBER.uid
     };
     return send(res, 200, entry);
-  }
-
-  // --- Billing (ported Cloud Function) ---
-  if (method === 'GET' && path === '/payment/payment-info') {
-    // Return 404 so the client treats this as "no active subscription".
-    return send(res, 404, { error: 'no subscription' });
   }
 
   // --- Share resolver (placeholder) ---

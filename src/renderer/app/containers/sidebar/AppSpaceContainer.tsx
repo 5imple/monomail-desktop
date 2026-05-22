@@ -5,8 +5,6 @@ import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-// Billing util imports removed — payment-free build. Space limits are
-// unlimited; the gating UI below evaluates accordingly.
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import React, { FC, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -21,9 +19,6 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
   const { registerItem, registerAreaRef, unregisterItem, setPivotIndex } =
     useKeyboardNavigationContext();
 
-  // Payment-free build — unlimited spaces, no plan gating.
-  const spaceLimit = Infinity;
-  const canCreateSpace = true;
   const isLimitedPlan = false;
   const BASIC_SPACE_LIMIT = 2;
 
@@ -46,15 +41,10 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
   };
 
   const handleDisabledSpaceClick = (e: React.MouseEvent, spaceId: string) => {
-    // Open billing preferences when clicking on disabled spaces
-    openDialog('preference', { defaultPage: 'billing' });
+    switchSpace(spaceId);
   };
 
   const handleAddSpace = () => {
-    if (!canCreateSpace) {
-      openDialog('preference', { defaultPage: 'billing' });
-      return;
-    }
     openDialog('commandPalette', { pages: ['SPACE'] });
   };
 
@@ -127,9 +117,6 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
           const isDisabled = isLimitedPlan && index >= BASIC_SPACE_LIMIT;
           if (space && !isDisabled) {
             switchSpace(space.id);
-          } else if (space && isDisabled) {
-            // Open billing preferences for disabled spaces
-            openDialog('preference', { defaultPage: 'billing' });
           }
         },
         enabled: index < spaces.length
@@ -165,16 +152,10 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
                 onRightClick={handleSpaceRightClick}
                 spaceId={space.id}
                 tooltip={
-                  isDisabled ? (
-                    <div>
-                      <div className="">{t('settings.billing.upgrade_required')}</div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="mb-0.5">{t('sidebar.change_space')}</div>
-                      <ShortcutKeyboard variant="flat" shortcut={`MOD+${index + 1}`} />
-                    </div>
-                  )
+                  <div>
+                    <div className="mb-0.5">{t('sidebar.change_space')}</div>
+                    <ShortcutKeyboard variant="flat" shortcut={`MOD+${index + 1}`} />
+                  </div>
                 }
                 data-navigation-id={space.id}
               />
@@ -189,25 +170,6 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
           <div className="mr-2 text-sm text-muted-foreground">{t('sidebar.space')}</div>
         </Button>
       </div>
-
-      {/* Space limit indicator */}
-      {/* {spaceLimit !== -1 && (
-        <div className="mx-2 text-center">
-          <div className="text-xs text-muted-foreground">
-            {spaces.length} / {spaceLimit} {t('sidebar.spaces_used')}
-          </div>
-          {!canCreateSpace && (
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto p-0 text-xs underline"
-              onClick={() => openDialog('preference', { defaultPage: 'billing' })}
-            >
-              {t('plan_selection.upgrade')}
-            </Button>
-          )}
-        </div>
-      )} */}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import { SplitCategoryPreferences } from '@/main/api/auth/types';
 import { ToastArgs } from '@/main/models/types/toastTypes';
+import { resolveBackendUrl, tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
@@ -16,6 +17,14 @@ import {
 import { net } from 'electron';
 
 const ALLOWED_UNSUBSCRIBE_SCHEMES = new Set(['https:']);
+
+function parseJsonSafely(raw: string): any {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
 
 function isSafeUnsubscribeUrl(raw: unknown): raw is string {
   if (typeof raw !== 'string' || raw.length > 2048) return false;
@@ -290,12 +299,50 @@ export function registerSystemHandlers() {
     if (!isSafeUnsubscribeUrl(url)) {
       return { ok: false, error: 'Invalid or disallowed URL' };
     }
+
+    const backend = resolveBackendUrl();
+    if (!backend) {
+      return { ok: false, error: 'MONO_ENV_BACKEND_URL is not configured' };
+    }
+
+    const accessToken = tokenManager.getAccessToken();
+    if (!accessToken) {
+      return { ok: false, error: 'You must be signed in before unsubscribing.' };
+    }
+
     try {
-      const res = await net.fetch(url, {
+      const res = await net.fetch(`${backend}/desktop/unsubscribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ url })
       });
-      return { ok: res.ok, status: res.status };
+
+      const raw = await res.text();
+      const body = parseJsonSafely(raw) as {
+        ok?: unknown;
+        status?: unknown;
+        error?: unknown;
+      };
+
+      if (!res.ok) {
+        return {
+          ok: false,
+          status: res.status,
+          error:
+            typeof body.error === 'string'
+              ? body.error
+              : `Backend unsubscribe proxy failed (${res.status})`
+        };
+      }
+
+      return {
+        ok: typeof body.ok === 'boolean' ? body.ok : true,
+        status: typeof body.status === 'number' ? body.status : res.status,
+        error: typeof body.error === 'string' ? body.error : undefined
+      };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
     }

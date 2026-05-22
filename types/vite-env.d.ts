@@ -22,8 +22,6 @@ interface ImportMetaEnv {
   readonly MONO_ENV_PROTOCOL: string;
   /** Shown in UI; mailto targets, notifications, etc. */
   readonly MONO_ENV_SUPPORT_EMAIL: string;
-  /** Origin only, e.g. https://your-store.lemonsqueezy.com — `/buy/{variantId}` is appended */
-  readonly MONO_ENV_BILLING_CHECKOUT_BASE_URL: string;
   /** Cookie `domain=` for link-share sign-in return (e.g. `.example.com`). Optional; derived from homepage if empty. */
   readonly MONO_ENV_COOKIE_DOMAIN: string;
   /** UTM source for marketing links (default `app`) */
@@ -37,8 +35,8 @@ interface ImportMetaEnv {
 
   /**
    * Origin of the on-prem backend (e.g. https://api.example.com). Used for
-   * endpoints that used to live on Firebase Cloud Functions: NPS, billing,
-   * etc. Defaults to MONO_ENV_API_URL when unset, since most deployments
+   * endpoints that used to live on Firebase Cloud Functions: NPS, token
+   * refresh, etc. Defaults to MONO_ENV_API_URL when unset, since most deployments
    * will collocate the legacy "/api/v1" surface and the previously-Functions
    * routes behind the same origin.
    */

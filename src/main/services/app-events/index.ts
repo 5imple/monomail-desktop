@@ -427,9 +427,6 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
             mainWindow.webContents.send(channel, accessToken);
             return;
           }
-          case 'billingUpdated':
-            mainWindow.webContents.send('renderer:auth:billing-updated', paramsObject);
-            return;
           case 'scopeUpdated':
             mainWindow.webContents.send('renderer:auth:scope-updated', paramsObject);
             return;

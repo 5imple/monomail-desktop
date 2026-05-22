@@ -96,6 +96,12 @@ class ApiClient {
    * Makes a network request with retry logic
    */
   private async request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
+    if (!this.baseURL) {
+      return Promise.reject(
+        new Error('Backend not configured: set MONO_ENV_API_URL in .env and restart the app.')
+      );
+    }
+
     const {
       headers,
       body,
@@ -304,9 +310,16 @@ const getApiUrl = () => {
     typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MONO_ENV_API_URL;
   const base = (fromVite || process.env.MONO_ENV_API_URL || '').trim().replace(/\/$/, '');
   if (!base) {
-    throw new Error(
-      'MONO_ENV_API_URL is required (set in .env / electron-vite env). Use the origin only, e.g. https://api.example.com — /api/v1 is appended automatically.'
-    );
+    // Do NOT throw here — throwing at module scope crashes the renderer before
+    // React mounts, producing a blank frosted-glass window with no error shown.
+    // Returning '' lets the app render normally; individual API calls will fail
+    // with a clear "not configured" message the UI can handle.
+    if (typeof console !== 'undefined') {
+      console.warn(
+        '[ApiClient] MONO_ENV_API_URL is not set. Copy .env.example to .env and fill in your backend URL.'
+      );
+    }
+    return '';
   }
   return `${base}/api/v1`;
 };

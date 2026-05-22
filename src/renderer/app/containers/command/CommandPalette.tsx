@@ -57,8 +57,6 @@ interface CommandPaletteProps {
   setSelectedAccountId: (accountId: string) => void; // Add setter for selectedAccountId
   selectedSpaceId?: string; // Add new prop for selectedSpaceId
   setSelectedSpaceId: (spaceId: string | undefined) => void; // Add setter for selectedSpaceId
-  aiSearchMode: boolean;
-  setAiSearchMode: (mode: boolean) => void;
 }
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -78,8 +76,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   setSelectedAccountId,
   selectedSpaceId,
   setSelectedSpaceId,
-  aiSearchMode = false,
-  setAiSearchMode,
   overlay = true
 }) => {
   const { t } = useTranslation();
@@ -88,7 +84,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   const [moveValue, setMoveValue] = useState('');
   const [commandInput, setCommandInput] = useState('');
 
-  const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const { globalSearchQuery } = useGlobalAtom();
   const { activeScopes } = useHotkeyScope();
   const commands = useCommands();
@@ -114,11 +109,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     const x = [...pages];
     x.splice(-1, 1);
     setPages(x);
-    // Reset AI search state when popping back from SEARCH page
-    if (x[x.length - 1] !== 'SEARCH') {
-      setAiSearchMode(false);
-      setAiSearchLoading(false);
-    }
   }, [pages, setPages]);
 
   const ref = useRef<HTMLDivElement | null>(null);
@@ -139,22 +129,15 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
       switch (commandId) {
         case 'SIDEBAR_FAVORITE_ADD':
           setCommandInput(globalSearchQuery);
-          setAiSearchMode(false); // Reset AI search state
-          setAiSearchLoading(false);
           // Updated to start with account selection
           pushPage(['SEARCH', 'BOOKMARK_ACCOUNT']);
           break;
         default:
-          setAiSearchMode(false); // Reset AI search state for other commands
-          setAiSearchLoading(false);
           pushPage([commandId]);
       }
     } else {
       setPages([]);
       setCommandInput('');
-      // Reset AI search states when command is executed
-      setAiSearchMode(false);
-      setAiSearchLoading(false);
       onOpenChange(false);
     }
   };
@@ -168,13 +151,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     setPages([]);
     setReminderValue('');
     setMoveValue('');
-    setAiSearchMode(false);
-    setAiSearchLoading(false);
-  };
-
-  const handleAiSearchStateChange = (isActive: boolean, isLoading: boolean) => {
-    setAiSearchMode(isActive);
-    setAiSearchLoading(isLoading);
   };
 
   const commandListRef = useRef<HTMLDivElement>(null);
@@ -305,13 +281,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
           )}
           ref={ref}
         >
-          <div
-            className={cn(
-              'absolute inset-0 z-[-1] animate-gradient-flow rounded-lg bg-gradient-to-r from-pink-500 via-violet-500 to-cyan-500 to-pink-500 blur-xl transition-all ease-bouncy-in-out',
-              aiSearchLoading ? 'blur-sm duration-1000' : 'blur-lg duration-6000',
-              aiSearchMode ? 'opacity-100' : 'opacity-0 duration-2000'
-            )}
-          ></div>
           <DialogTitle className="hidden"></DialogTitle>
           <Command className={'rounded-xl bg-card transition-transform'}>
             {/* <div className="ml-4 mt-4 flex gap-2">
@@ -343,7 +312,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                 onSelect={() => {
                   bounce();
                 }}
-                bounce={bounce}
                 onKeydown={(e) => {
                   if (e.key === 'Backspace' && searchQuery === '') {
                     e.preventDefault();
@@ -357,8 +325,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                   }
                 }}
                 pushPage={pushPage}
-                onAiSearchStateChange={handleAiSearchStateChange}
-                initialAiSearchMode={aiSearchMode}
               />
             )}
 
@@ -580,7 +546,6 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                         .filter((command) => activeScopes.includes(command.scope))
                         // For commands that come in paired sets, check the condition.
                         .filter((command) => shouldShowGroupedCommand(command))
-                        .filter((command) => command.commandId !== 'AI_SEARCH')
                         .map((command) => (
                           <CommandItem
                             key={command.commandId}

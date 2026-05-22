@@ -1,5 +1,4 @@
 // Updated GlobalComposeCard.tsx
-import aiApi from '@/main/api/ai/aiApi';
 import { apiClient } from '@/main/api/apiClient';
 import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
@@ -9,7 +8,6 @@ import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoAttachment } from '@/main/models/types';
 import { generateUUID } from '@/main/utils'; // Import getUidFromEmail
 import tailwindCSS from '@/renderer/app/assets/style/tailwind.css?raw';
-import AIComposeCard from '@/renderer/app/components/card/compose/AIComposeCard';
 import ComposeCardFooter from '@/renderer/app/components/card/compose/ComposeCardFooter';
 import ComposeCardHeader from '@/renderer/app/components/card/compose/ComposeCardHeader';
 import ReferenceCard from '@/renderer/app/components/card/compose/ReferenceCard';
@@ -37,7 +35,6 @@ import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
 import { cn } from '@/renderer/app/lib/utils';
-// useBillingAtom removed — payment-free build.
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
 import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
@@ -45,7 +42,6 @@ import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
-import { animated, useTransition } from '@react-spring/web';
 import juice from 'juice';
 import { debounce } from 'lodash';
 import React, {
@@ -81,8 +77,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
   const { signatures, getSignatureById } = useSignatureAtom();
-  // Payment-free build — every plan gate evaluates as pro.
-  const hasProAccess = true;
   const { contactArray } = useContactAtom();
   const { openDialog } = useDialogs();
   const { updateDraft, sendDraft, removeDraft } = useDraftAtom();
@@ -94,9 +88,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const { trackEvent } = useUserTrackingData();
-  const [usedAiDraft, setUsedAiDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [isGeneratingSubject, setIsGeneratingSubject] = useState(false);
   const [trackingEnabled, setTrackingEnabled] = useState(true);
 
   const [showCc, setShowCc] = useState(false);
@@ -230,19 +222,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     }, 400);
   }, [draft, isMaximized]);
 
-  const [isAiComposeOpen, setIsAiComposeOpen] = useState(false);
-
-  const aiComposeTransitions = useTransition(isAiComposeOpen, {
-    from: { transform: 'translateY(100%)', opacity: 0 },
-    enter: { transform: 'translateY(0%)', opacity: 1 },
-    leave: { transform: 'translateY(100%)', opacity: 0 },
-    config: { tension: 200, friction: 20 } // Adjust for smoothness
-  });
-
-  const handleAiButtonClick = useCallback(() => {
-    setIsAiComposeOpen((prev) => !prev);
-  }, []);
-
   const handleTrackingChange = useCallback((enabled: boolean) => {
     setTrackingEnabled(enabled);
   }, []);
@@ -269,62 +248,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     },
     [debouncedUpdateDraft]
   );
-
-  const handleGenerateSubject = useCallback(async () => {
-    if (!composeDraft.body || composeDraft.body.trim().length === 0) {
-      toast.error(t('compose_card.subject_generation.no_content_error'));
-      return;
-    }
-
-    const uid = getUidFromEmail(composeDraft.from);
-    if (!uid) {
-      toast.error(t('compose_card.subject_generation.no_account_error'));
-      return;
-    }
-
-    // Check if user has pro access
-    if (!hasProAccess) {
-      openDialog('preference', { defaultPage: 'billing' });
-      return;
-    }
-
-    setIsGeneratingSubject(true);
-
-    try {
-      // Set API active UID
-      apiClient.setApiActiveUid(uid);
-
-      // Strip HTML tags from body content for better AI processing
-      const textContent = composeDraft.body.replace(/<[^>]*>/g, '').trim();
-
-      const response = await aiApi.generateSubject(textContent);
-
-      // Update the subject field
-      handleInputChange('subject', response.subject);
-
-      // Track the event
-      trackEvent('ai_subject_generated', {
-        draft_id: composeDraft.id,
-        body_length: textContent.length,
-        generated_subject_length: response.subject.length
-      });
-    } catch (error) {
-      console.error('Error generating subject:', error);
-      toast.error(t('compose_card.subject_generation.error'));
-    } finally {
-      setIsGeneratingSubject(false);
-    }
-  }, [
-    composeDraft.body,
-    composeDraft.from,
-    composeDraft.id,
-    getUidFromEmail,
-    hasProAccess,
-    openDialog,
-    handleInputChange,
-    trackEvent,
-    t
-  ]);
 
   const handleUploadInlineImage = useCallback(
     async (file: File, uuid: string, draftId: string) => {
@@ -498,8 +421,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           bcc_count: composeDraft.bcc.length,
           subject_length: composeDraft.subject.length,
           body_length: composeDraft.body.length,
-          has_attachments: Object.keys(composeDraft.attachments).length > 0,
-          used_ai_draft: usedAiDraft
+          has_attachments: Object.keys(composeDraft.attachments).length > 0
         });
       } else {
         handleClose();
@@ -705,31 +627,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       }
     },
     [updateMessage]
-  );
-
-  const onAcceptAiResponse = useCallback(
-    (raw: string) => {
-      const stringWithNewlines = raw;
-
-      const htmlParagraphs = stringWithNewlines
-        .split('\n\n')
-        .map((paragraph) => {
-          return `<p>${paragraph.replace(/\n/g, '<br>')}</p>`;
-        })
-        .join('');
-
-      // Append to existing content instead of replacing
-      const existingBody = composeDraft.body || '';
-      const newBody = existingBody ? `${existingBody}${htmlParagraphs}` : htmlParagraphs;
-
-      onBodyChange(newBody);
-      setUsedAiDraft(true);
-      trackEvent('ai_draft_used', {
-        draft_id: composeDraft.id,
-        ai_draft_length: raw.length
-      });
-    },
-    [composeDraft.id, composeDraft.body, onBodyChange, trackEvent]
   );
 
   const onAttachmentChange = useCallback(
@@ -1063,11 +960,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               toggleMinimize();
               return true;
             }
-            if (event.metaKey && event.code === 'KeyJ') {
-              event.preventDefault();
-              handleAiButtonClick();
-              return true;
-            }
             if (event.metaKey && event.code === 'Enter') {
               event.preventDefault();
               handleSendMessage();
@@ -1122,7 +1014,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     handleUploadInlineImage,
     toggleMaximize,
     toggleMinimize,
-    handleAiButtonClick,
     handleSendMessage
   ]);
 
@@ -1230,10 +1121,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                   event.preventDefault();
                   toggleMinimize();
                 }
-                if (event.metaKey && event.code === 'KeyJ') {
-                  event.preventDefault();
-                  handleAiButtonClick();
-                }
               }}
             />
           )}
@@ -1251,10 +1138,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                       ref={subjectRef}
                       variant="transparent"
                       placeholder={t('text_editor.placeholder.subject')}
-                      className={cn(
-                        'h-auto border-none px-0 py-0 text-[18px] font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60',
-                        composeDraft.body && composeDraft.body.trim().length > 0 ? 'pr-10' : ''
-                      )}
+                      className="h-auto border-none px-0 py-0 text-[18px] font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60"
                       value={composeDraft.subject}
                       onChange={(e) => handleInputChange('subject', e.target.value)}
                       onKeyDown={(event) => {
@@ -1271,46 +1155,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                           event.preventDefault();
                           toggleMinimize();
                         }
-                        if (event.metaKey && event.code === 'KeyJ') {
-                          event.preventDefault();
-                          handleAiButtonClick();
-                        }
-
                         if (event.metaKey && event.code === 'Enter') {
                           event.preventDefault();
                           handleSendMessage();
                         }
                       }}
                     />
-                    {composeDraft.body &&
-                      composeDraft.body.trim().length > 0 &&
-                      !replyMessage &&
-                      !historyMessage && (
-                        <Button
-                          onClick={handleGenerateSubject}
-                          disabled={isGeneratingSubject}
-                          className="absolute right-0 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
-                          variant="ghost"
-                          typeVariant="icon"
-                          tooltip={
-                            isGeneratingSubject
-                              ? t('compose_card.subject_generation.generating')
-                              : t('compose_card.subject_generation.tooltip')
-                          }
-                        >
-                          {isGeneratingSubject ? (
-                            <Loader className="h-4 w-4" />
-                          ) : (
-                            // AI affordance — amber secondary-accent. Red
-                            // accent stays reserved for primary actions
-                            // (send, unread, sign-in).
-                            <MonoIcon
-                              type="Sparkles"
-                              className="text-[hsl(var(--secondary-accent))]"
-                            />
-                          )}
-                        </Button>
-                      )}
                   </div>
                 </div>
                 <div className="relative flex-1 pb-4">
@@ -1319,21 +1169,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                     <SignatureSwitcher draft={composeDraft} onSignatureChange={onSignatureChange} />
                   </div>
 
-                  {aiComposeTransitions((style, item) =>
-                    item ? (
-                      <animated.div
-                        style={style}
-                        className="absolute bottom-8 left-0 right-0 flex justify-center"
-                      >
-                        <AIComposeCard
-                          onSave={onAcceptAiResponse}
-                          onClose={() => setIsAiComposeOpen(false)}
-                          uid={getUidFromEmail(composeDraft.from) as string}
-                          draft={composeDraft}
-                        />
-                      </animated.div>
-                    ) : null
-                  )}
                   {historyMessage && (
                     <div className="mt-4 px-3 text-sm">
                       <ReferenceCard
@@ -1362,7 +1197,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               draft={composeDraft}
               draftSaveStatus={draftSaveStatus}
               handleSendMessage={handleSendMessage}
-              handleAiButtonClick={handleAiButtonClick}
               handleFileChange={handleFileChange}
               trackingEnabled={trackingEnabled}
               onTrackingChange={handleTrackingChange}

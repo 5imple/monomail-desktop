@@ -1,4 +1,3 @@
-import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
@@ -204,9 +203,6 @@ export const ThreadListDenseItem = React.memo(
               uniqueItems.add(key);
               displayItems.push(
                 <span key={`draft-${index}`} className="font-semibold text-destructive">
-                  {(item as MonoDraft).isAiGenerated && (
-                    <MonoIcon className="mb-1 mr-1 inline text-destructive" type={'Sparkles'} />
-                  )}
                   Draft
                 </span>
               );
@@ -267,15 +263,9 @@ export const ThreadListDenseItem = React.memo(
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
               {isUnread && (
-                <span
-                  aria-hidden
-                  className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent"
-                />
+                <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
               )}
-              <div
-                ref={setRefs}
-                className={cn('text-left text-sm transition-colors')}
-              >
+              <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
                 {/* Newton dense row: single line, narrower sender column
                     (w-36) compared to compact (w-44), tighter vertical
                     padding (py-2). No avatar in this variant. */}
@@ -310,7 +300,7 @@ export const ThreadListDenseItem = React.memo(
                   <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
                     <span
                       className={cn(
-                        'shrink-0 max-w-[45%] truncate text-[14px] tracking-tight',
+                        'max-w-[45%] shrink-0 truncate text-[14px] tracking-tight',
                         isUnread
                           ? 'font-semibold text-foreground'
                           : 'font-medium text-foreground/80'
@@ -357,10 +347,7 @@ export const ThreadListDenseItem = React.memo(
                     )}
 
                     {Object.keys(currentThread.attachments).length > 0 && (
-                      <MonoIcon
-                        type={'Paperclip'}
-                        className="h-3 w-3 text-muted-foreground"
-                      />
+                      <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground" />
                     )}
 
                     {uniqueLabelIds.length > 0 && (

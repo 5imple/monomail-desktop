@@ -1,4 +1,3 @@
-import aiApi from '@/main/api/ai/aiApi';
 import DOMPurify from 'dompurify';
 import React, { useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -27,10 +26,7 @@ const ThreadSummaryHoverCard: React.FC<ThreadSummaryHoverCardProps> = ({ threadI
       abortControllerRef.current = new AbortController();
 
       try {
-        // Simulate fetching AI summary
-        // const response = await aiApi.summarizeThread(threadId, abortControllerRef.current.signal);
-        // console.log('response: ', response);
-        // setSummary(`### Subject\n- **Point 1**\n- Point 2\n\n[Learn More](https://example.com)`);
+        // Thread summaries are disabled in this build.
       } catch (error) {
         console.error('Failed to fetch summary:', error);
       } finally {

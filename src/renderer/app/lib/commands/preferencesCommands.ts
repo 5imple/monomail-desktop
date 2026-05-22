@@ -32,15 +32,6 @@ export const createPreferencesCommands = (
       }
     },
 
-    OPEN_PREFERENCES_BILLING: {
-      scope: 'GLOBAL',
-      title: t('command.open_preferences_billing'),
-      icon: 'Billing',
-      action: (_: any) => {
-        openDialog('preference', { defaultPage: 'billing' });
-      }
-    },
-
     OPEN_PREFERENCES_SIGNATURE: {
       scope: 'GLOBAL',
       title: t('command.open_preferences_signature'),

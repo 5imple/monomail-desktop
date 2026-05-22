@@ -1,4 +1,3 @@
-import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
@@ -223,9 +222,6 @@ export const ThreadListItem = React.memo(
               uniqueItems.add(key);
               displayItems.push(
                 <span key={`draft-${index}`} className="font-semibold text-destructive">
-                  {(item as MonoDraft).isAiGenerated && (
-                    <MonoIcon className="mb-1 mr-1 inline text-destructive" type={'Sparkles'} />
-                  )}
                   Draft
                 </span>
               );
@@ -578,7 +574,7 @@ export const ThreadListItem = React.memo(
                       <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
                         <span
                           className={cn(
-                            'shrink-0 max-w-[45%] truncate text-[14px] tracking-tight',
+                            'max-w-[45%] shrink-0 truncate text-[14px] tracking-tight',
                             isUnread
                               ? 'font-semibold text-foreground'
                               : 'font-medium text-foreground/80'
@@ -593,10 +589,7 @@ export const ThreadListItem = React.memo(
                         {preference.display.threadList?.showSnippet &&
                           highlightedContent.snippet && (
                             <>
-                              <span
-                                aria-hidden
-                                className="shrink-0 text-muted-foreground/40"
-                              >
+                              <span aria-hidden className="shrink-0 text-muted-foreground/40">
                                 ·
                               </span>
                               <span
@@ -656,10 +649,7 @@ export const ThreadListItem = React.memo(
                         )}
 
                         {Object.keys(currentThread.attachments).length > 0 && (
-                          <MonoIcon
-                            type={'Paperclip'}
-                            className="h-3 w-3 text-muted-foreground"
-                          />
+                          <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground" />
                         )}
 
                         {preference.display.threadList?.showLabels && renderLabels()}

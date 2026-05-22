@@ -3,7 +3,6 @@ import { Navigate, RouteObject } from 'react-router-dom';
 import AppLayout from '@/renderer/app/containers/layout/AppLayout';
 import LinkShareLayout from '@/renderer/app/containers/layout/LinkShareLayout';
 import SignInLayout from '@/renderer/app/containers/layout/SignInLayout';
-// SubscriptionLayout removed — payment-free build.
 import AuthGuard from '@/renderer/app/middlewares/AuthGuard';
 import OnBoardingLayout from '@/renderer/app/containers/layout/OnBoardingLayout';
 import ElectronGuard from '@/renderer/app/middlewares/ElectronGuard';
@@ -17,20 +16,12 @@ const config = {
 };
 
 // Helper function to apply guards conditionally
-const applyGuards = (
-  component: JSX.Element,
-  needsAuth = false,
-  requiresSubscription = true
-): JSX.Element => {
+const applyGuards = (component: JSX.Element, needsAuth = false): JSX.Element => {
   let result = component;
 
   // Apply Auth Guard if needed and enabled
   if (needsAuth && config.enableAuthGuard) {
-    result = (
-      <AuthGuard to="/sign-in" requiresSubscription={requiresSubscription}>
-        {result}
-      </AuthGuard>
-    );
+    result = <AuthGuard to="/sign-in">{result}</AuthGuard>;
   }
 
   // Apply Electron Guard if enabled
@@ -45,17 +36,16 @@ const applyGuards = (
 const baseRoutes: RouteObject[] = [
   {
     path: '/',
-    element: applyGuards(<AppLayout />, true, false)
+    element: applyGuards(<AppLayout />, true)
   },
   {
     path: '/sign-in',
-    element: applyGuards(<SignInLayout />, false, false)
+    element: applyGuards(<SignInLayout />, false)
   },
   {
     path: '/onboarding',
-    element: applyGuards(<OnBoardingLayout />, false, false) // Requires auth but not subscription
+    element: applyGuards(<OnBoardingLayout />, false)
   },
-  // /subscription route removed — payment-free build.
   {
     path: '/share/:id',
     // LinkShareLayout doesn't need ElectronGuard by default

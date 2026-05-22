@@ -1,7 +1,6 @@
 import { Progress } from '@/renderer/app/components/ui/progress';
 import BaseHeader from '@/renderer/app/containers/header/BaseHeader';
 import OnBoardingAddAccounts from '@/renderer/app/containers/onboarding/OnBoardingAddAccounts';
-import OnBoardingAIFilters from '@/renderer/app/containers/onboarding/OnBoardingAIFilters';
 import OnBoardingAppearance from '@/renderer/app/containers/onboarding/OnBoardingAppearance';
 import OnBoardingCommand from '@/renderer/app/containers/onboarding/OnBoardingCommand';
 import { default as OnBoardingCommandTrigger } from '@/renderer/app/containers/onboarding/OnBoardingCommandTrigger';
@@ -18,10 +17,6 @@ import { FC, useState, useEffect, useMemo, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import confetti from 'canvas-confetti';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
-import { AIFilter, useAIFilters } from '@/renderer/app/store/filter/useAIFilters';
-import { AI_FILTER_TEMPLATES } from '@/renderer/app/containers/onboarding/aiFilterExamples';
-import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '@/renderer/app/components/ThemeProvider';
 
 interface OnBoardingLayoutProps {}
@@ -37,7 +32,6 @@ export interface SelectedSpace {
 const STEPS_ALLOWING_BACK = [
   'appearance',
   'space',
-  'ai_filter',
   'add_accounts',
   'pin_contacts',
   'command_trigger',
@@ -57,8 +51,6 @@ const OnBoardingLayout: FC = () => {
   const [selectedSpace, setSelectedSpace] = useState<SelectedSpace | null>(null);
   const { trackEvent } = useUserTrackingData();
   const { spaces, createSpace, loadSpaces, switchSpace } = useSpaceAtom();
-  const { getLabelsForAccount, loadLabels, createLabel, labelsMapByAccount } = useLabelAtom();
-  const { createAIFiltersBatch } = useAIFilters();
 
   const goToNextStep = () => {
     if (currentStep < steps.length - 1) {
@@ -129,75 +121,6 @@ const OnBoardingLayout: FC = () => {
     }, 250);
   };
 
-  // Utility: Create AI filters for all accounts after space creation
-  const createAIFiltersForAccounts = useCallback(
-    async (spaceTemplateId: string, accounts: any[]) => {
-      if (!spaceTemplateId || !accounts?.length) return;
-
-      const filterTemplates =
-        AI_FILTER_TEMPLATES[spaceTemplateId as keyof typeof AI_FILTER_TEMPLATES] ||
-        AI_FILTER_TEMPLATES.work;
-
-      // Process each account
-      for (const account of accounts) {
-        const accountId = account.uid;
-        const filtersToCreate: AIFilter[] = [];
-
-        // Prepare all filters for this account
-        for (const filterTemplate of filterTemplates) {
-          const outputLabelIds: string[] = [];
-
-          // Create/find all labels first
-          for (const labelName of filterTemplate.outputLabels) {
-            const existingLabel = getLabelsForAccount(accountId).find(
-              (l) => l.name.toLowerCase() === labelName.toLowerCase()
-            );
-
-            let labelId = existingLabel?.id;
-            if (!labelId) {
-              try {
-                const color = filterTemplate.color
-                  ? {
-                      backgroundColor: filterTemplate.color.background,
-                      textColor: filterTemplate.color.text
-                    }
-                  : undefined;
-                const newLabel = await createLabel(labelName, accountId, color);
-                labelId = newLabel?.id;
-              } catch (e) {
-                console.error(`Failed to create label '${labelName}' for account ${accountId}:`, e);
-              }
-            }
-            if (labelId) outputLabelIds.push(labelId);
-          }
-
-          // Add to batch if we have valid labels
-          if (outputLabelIds.length > 0) {
-            filtersToCreate.push({
-              id: uuidv4(),
-              name: filterTemplate.name,
-              prompt: filterTemplate.prompt,
-              outputLabels: outputLabelIds,
-              markAsDone: filterTemplate.markAsDone,
-              moveToTrash: filterTemplate.moveToTrash,
-              isActive: true
-            });
-          }
-        }
-
-        // Create all filters for this account at once
-        if (filtersToCreate.length > 0) {
-          try {
-            await createAIFiltersBatch(accountId, filtersToCreate);
-          } catch (e) {
-            console.error(`Failed to create AI filters for account ${accountId}:`, e);
-          }
-        }
-      }
-    },
-    [getLabelsForAccount, createLabel, createAIFiltersBatch]
-  );
-
   // Function to create the space with selected data
   const handleCreateSpace = useCallback(async () => {
     if (!selectedSpace || isCreatingSpace) return;
@@ -227,10 +150,6 @@ const OnBoardingLayout: FC = () => {
         account_count: accounts.length
       });
 
-      // --- AI FILTER CREATION LOGIC ---
-      createAIFiltersForAccounts(selectedSpace.templateId, accounts);
-      // --- END AI FILTER CREATION LOGIC ---
-
       console.log('Space created successfully:', newSpace);
     } catch (error) {
       console.error('Failed to create space during onboarding:', error);
@@ -246,18 +165,7 @@ const OnBoardingLayout: FC = () => {
       goToNextStep();
       setIsCreatingSpace(false);
     }
-  }, [
-    selectedSpace,
-    accounts,
-    isCreatingSpace,
-    trackEvent,
-    switchSpace,
-    loadSpaces,
-    labelsMapByAccount,
-    getLabelsForAccount,
-    createSpace,
-    createAIFiltersForAccounts
-  ]);
+  }, [selectedSpace, accounts, isCreatingSpace, trackEvent, switchSpace, loadSpaces, createSpace]);
 
   // Determine if we should skip space and account steps
   const shouldSkipSpaceSteps = useMemo(
@@ -306,17 +214,6 @@ const OnBoardingLayout: FC = () => {
                 });
                 onContinue();
               }}
-              onBack={onBack}
-            />
-          )
-        },
-        {
-          name: 'ai_filter',
-          component: (onContinue: () => void, onBack?: () => void) => (
-            <OnBoardingAIFilters
-              selectedSpace={selectedSpace}
-              accounts={accounts}
-              onContinue={onContinue}
               onBack={onBack}
             />
           )
@@ -383,9 +280,6 @@ const OnBoardingLayout: FC = () => {
     accounts,
     contactArray,
     isCreatingSpace,
-    labelsMapByAccount,
-    getLabelsForAccount,
-    createAIFiltersForAccounts,
     handleCreateSpace
   ]);
 

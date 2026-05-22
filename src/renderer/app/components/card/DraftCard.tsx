@@ -155,21 +155,11 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
             <div className="flex items-center gap-4 text-sm">
               <div className="w-full min-w-0">
                 <p className="mb-0.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  {draftMessage.isAiGenerated ? (
-                    <>
-                      <MonoIcon
-                        className="mr-1 inline-block h-3 w-3 -translate-y-[1px] text-chart-1"
-                        type={'Sparkles'}
-                      />
-                      AI draft
-                    </>
-                  ) : (
-                    'Draft'
-                  )}
+                  Draft
                   {justSaved && (
                     <span
                       aria-hidden
-                      className="h-1 w-1 shrink-0 rounded-full bg-chart-1 animate-pulse"
+                      className="h-1 w-1 shrink-0 animate-pulse rounded-full bg-chart-1"
                     />
                   )}
                 </p>

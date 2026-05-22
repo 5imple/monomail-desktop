@@ -1,7 +1,6 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 import electronApi from '@/renderer/app/lib/electronApi';
-// Billing imports removed — payment-free build, hasProAccess always true.
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -174,8 +173,6 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       electronApi.setOfflineStatus(true);
       setIsOnline(true);
       setIsOfflineMode(false);
-
-      // Payment-free build — no billing info to refresh on reconnect.
 
       // Auto-sync when coming back online (always allowed).
       if (hasProAccess) {
