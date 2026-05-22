@@ -812,6 +812,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateAccounts = useCallback(async () => {
     try {
+      // renderer:auth:token-changed fires before renderer:auth:add-account, so
+      // monoAuth's mirror already holds the new token. apiClient.idToken is only
+      // refreshed inside fetchData (which does not run for mid-session addAccount),
+      // so we must sync it here before making any API calls.
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const freshToken = await currentUser.getIdToken(false);
+        apiClient.setApiClientIdToken(freshToken);
+        electronApi.setIdToken(freshToken);
+        setAuthState((prev) => ({ ...prev, idToken: freshToken }));
+      }
+
       const monoAccountResponse = await authApi.getMonoAccount();
       const newAccounts = monoAccountResponse.accounts;
 
@@ -821,15 +833,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         member: monoAccountResponse.member || prev.member
       }));
 
+      updateBadgeWithLabelCount(newAccounts.map((a) => a.uid));
+      electronApi.setKnownAccountUids(newAccounts.map((a) => a.uid)).catch(() => {});
+
+      // Register Gmail Cloud Pub/Sub watch for all accounts. The WebSocket push
+      // client only registers watches on connection open, so mid-session account
+      // additions need an explicit call here.
+      for (const account of newAccounts) {
+        mailApi.watchCloudPubSub(account.uid).catch((e) =>
+          console.warn('[addAccount] watchCloudPubSub failed for', account.uid, e)
+        );
+      }
+
       loadSpaces(null);
-
       fetchDataForAccounts(newAccounts);
-
-      // If we have an active space, we need to update it with the new accounts
     } catch (error) {
       console.error('Error fetching accounts: ', error);
     }
-  }, [loadSpaces]);
+  }, [loadSpaces, fetchDataForAccounts]);
   const handleCreateAccount = async () => {
     if (!user) return;
     try {
