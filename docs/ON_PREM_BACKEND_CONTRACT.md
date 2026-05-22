@@ -12,14 +12,14 @@ Cloud-Functions endpoints to the same backend origin.
 
 ## Env vars the desktop client reads
 
-| Var | Required | Default | Used for |
-| --- | --- | --- | --- |
-| `MONO_ENV_API_URL` | yes | – | Existing REST API origin (e.g. `https://api.example.com`). All `apiClient.*` calls live under here, with `/api/v1` appended automatically. |
-| `MONO_ENV_BACKEND_URL` | no | falls back to `MONO_ENV_API_URL` | Origin for NPS, billing, refresh, share, push-WS. Set this if those routes live on a different host. |
-| `MONO_ENV_PUSH_WS_PATH` | no | `/push/ws` | Path on `MONO_ENV_BACKEND_URL` that hosts the WebSocket push channel. |
-| `MONO_ENV_PUBLIC_DOMAIN` | recommended | falls back to `MONO_ENV_FIREBASE_AUTH_DOMAIN` (legacy) | Public-facing domain for share links: `${MONO_ENV_PUBLIC_DOMAIN}/share/{shareId}`. |
-| `MONO_ENV_UPDATE_FEED_URL` | recommended | falls back to `https://storage.googleapis.com/${MONO_ENV_FIREBASE_STORAGE_BUCKET}/releases/` (legacy) | URL of the auto-updater feed (electron-updater generic provider). |
-| `MONO_ENV_HOMEPAGE_DOMAIN` | yes | – | URL of the web sign-in page. The desktop client opens `${MONO_ENV_HOMEPAGE_DOMAIN}/sign-in?client=web-electron`. |
+| Var                        | Required    | Default                                                                                               | Used for                                                                                                                                   |
+| -------------------------- | ----------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MONO_ENV_API_URL`         | yes         | –                                                                                                     | Existing REST API origin (e.g. `https://api.example.com`). All `apiClient.*` calls live under here, with `/api/v1` appended automatically. |
+| `MONO_ENV_BACKEND_URL`     | no          | falls back to `MONO_ENV_API_URL`                                                                      | Origin for NPS, billing, refresh, share, push-WS. Set this if those routes live on a different host.                                       |
+| `MONO_ENV_PUSH_WS_PATH`    | no          | `/push/ws`                                                                                            | Path on `MONO_ENV_BACKEND_URL` that hosts the WebSocket push channel.                                                                      |
+| `MONO_ENV_PUBLIC_DOMAIN`   | recommended | falls back to `MONO_ENV_FIREBASE_AUTH_DOMAIN` (legacy)                                                | Public-facing domain for share links: `${MONO_ENV_PUBLIC_DOMAIN}/share/{shareId}`.                                                         |
+| `MONO_ENV_UPDATE_FEED_URL` | recommended | falls back to `https://storage.googleapis.com/${MONO_ENV_FIREBASE_STORAGE_BUCKET}/releases/` (legacy) | URL of the auto-updater feed (electron-updater generic provider).                                                                          |
+| `MONO_ENV_HOMEPAGE_DOMAIN` | yes         | –                                                                                                     | URL of the web sign-in page. The desktop client opens `${MONO_ENV_HOMEPAGE_DOMAIN}/sign-in?client=web-electron`.                           |
 
 All `MONO_ENV_FIREBASE_*` vars are no longer read by any code.
 
@@ -52,18 +52,51 @@ All `MONO_ENV_FIREBASE_*` vars are no longer read by any code.
 
 ### Add-account flow
 
-Identical, but the URL is `mono-desktop://addAccount?token=…&refresh_token=…&expires_in=…`.
+Before opening the browser, the desktop client asks the backend to create
+a short-lived account-link intent:
+
+```
+POST ${MONO_ENV_BACKEND_URL}/desktop/account-link-intents
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "provider": "gmail", "client": "web-electron" }
+```
+
+Response:
+
+```json
+{ "intent": "<opaque one-time value>", "expiresAt": "2026-05-22T12:00:00.000Z" }
+```
+
+The client then opens:
+
+```
+${MONO_ENV_HOMEPAGE_DOMAIN}/add-account?client=web-electron&provider=gmail&intent=<opaque>
+```
+
+The web page validates the intent server-side, runs Google OAuth, links the
+mailbox to the existing member, then redirects to:
+
+```
+mono-desktop://addAccount?token=…&refresh_token=…&expires_in=…
+```
+
 The desktop client treats this as adding a secondary mailbox to the
-existing session — the token replaces the active session's.
+existing session — the token replaces the active session's. Do not put
+member tokens or bearer tokens in the browser URL; only the opaque intent
+belongs there.
 
 ### `POST ${MONO_ENV_BACKEND_URL}/auth/refresh`
 
 **Request** (`Content-Type: application/json`):
+
 ```json
 { "refreshToken": "<the refresh token>" }
 ```
 
 **Response 200**:
+
 ```json
 {
   "accessToken": "<new access token>",
@@ -71,6 +104,7 @@ existing session — the token replaces the active session's.
   "expiresIn": 3600
 }
 ```
+
 - `refreshToken` is optional. Omit to keep the current refresh token; include
   to rotate it (recommended).
 - `expiresIn` is optional. Defaults to 3600s.
@@ -86,6 +120,7 @@ The client backs off and retries on next API call or scheduled refresh
 ### How the access token is sent
 
 Every existing REST call already does this. No new behaviour:
+
 ```
 Authorization: Bearer <accessToken>
 ```
@@ -122,8 +157,8 @@ handler in `MessageContext.tsx` is unchanged:
     "aAUid": "<account uid this event belongs to>",
     "threadId": "<gmail thread id>",
     "id": "<message id>",
-    "labels": "[INBOX, UNREAD]",                  // bracketed comma-list
-    "verification": "false",                       // "true" | "false"
+    "labels": "[INBOX, UNREAD]", // bracketed comma-list
+    "verification": "false", // "true" | "false"
     "link": "",
     "code": ""
   },
@@ -183,6 +218,7 @@ on the new origin. All require `Authorization: Bearer <accessToken>`.
 Returns the user's NPS history.
 
 **Response 200**:
+
 ```jsonc
 {
   "entries": [
@@ -206,6 +242,7 @@ Returns the user's NPS history.
 Creates an NPS entry.
 
 **Request body** (`Content-Type: application/json`):
+
 ```json
 {
   "score": 9,
@@ -213,6 +250,7 @@ Creates an NPS entry.
   "eventType": "feature_usage"
 }
 ```
+
 Valid `eventType` values: `subscription_renewal`, `feature_usage`,
 `support_interaction`, `onboarding_complete`, `general_feedback`,
 `product_update`, `cancellation_flow`, `third_email`.
@@ -224,11 +262,12 @@ Valid `eventType` values: `subscription_renewal`, `feature_usage`,
 Returns the active subscription + any one-time purchase.
 
 **Response 200**:
+
 ```jsonc
 {
   "subscription": {
     "productName": "Mail Pro",
-    "variantName": "Annual",
+    "variantName": "Annual"
     /* …whatever the legacy Cloud Function returned… */
   },
   "order": null,
@@ -237,6 +276,7 @@ Returns the active subscription + any one-time purchase.
 ```
 
 **Response 404**: client treats as "no active subscription":
+
 ```json
 { "subscription": null, "order": null, "hasOneTimePurchase": false }
 ```
@@ -246,6 +286,7 @@ Returns the active subscription + any one-time purchase.
 ## 4 · Share-link host
 
 `LinkShareDropdownItem.tsx` resolves share URLs as:
+
 ```
 ${MONO_ENV_PUBLIC_DOMAIN}/share/${shareId}
 ```
@@ -280,7 +321,7 @@ precedence over the embedded `app-update.yml`.)
 
 The client passes `X-Mono-Account: <uid>` on most multi-account API
 calls. Your backend's existing `/api/v1/...` surface already supports
-this — no change. The single JWT issued at sign-in is the *user* identity;
+this — no change. The single JWT issued at sign-in is the _user_ identity;
 per-account context is selected via the header.
 
 ---

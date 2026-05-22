@@ -31,6 +31,7 @@ const Router =
     ? HashRouter
     : BrowserRouter;
 import AppRouter from './AppRouter';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import { ThemeProvider } from './components/ThemeProvider';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './context/AuthContext';
@@ -92,7 +93,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                         <HotkeysProvider initiallyActiveScopes={['GLOBAL']}>
                           <HotkeyScopeProvider>
                             <Toaster />
-                            <AppRouter />
+                            <AppErrorBoundary>
+                              <AppRouter />
+                            </AppErrorBoundary>
                           </HotkeyScopeProvider>
                         </HotkeysProvider>
                       </KeyboardNavigationProvider>

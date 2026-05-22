@@ -27,10 +27,13 @@ const api = {
   refreshToken: () => ipcRenderer.invoke('main:auth:refresh'),
   devSignIn: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
     ipcRenderer.invoke('main:auth:dev-sign-in', args),
+  createAccountLinkIntent: (args?: { provider?: string; client?: string }) =>
+    ipcRenderer.invoke('main:auth:create-account-link-intent', args),
+  devAddAccount: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
+    ipcRenderer.invoke('main:auth:dev-add-account', args),
   // ---------- P8 Later Queue ----------
   queueSnooze: (req: any) => ipcRenderer.invoke('main:queue:snooze', req),
-  queueListSnoozed: (accountId: string) =>
-    ipcRenderer.invoke('main:queue:list-snoozed', accountId),
+  queueListSnoozed: (accountId: string) => ipcRenderer.invoke('main:queue:list-snoozed', accountId),
   queueUnsnooze: (snoozeId: string) => ipcRenderer.invoke('main:queue:unsnooze', snoozeId),
   queueRescheduleSnooze: (args: { snoozeId: string; snoozeUntil: string }) =>
     ipcRenderer.invoke('main:queue:reschedule-snooze', args),

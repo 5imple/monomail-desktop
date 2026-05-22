@@ -1,9 +1,30 @@
 import { apiClient } from '@/main/api/apiClient';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
-import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
+import { resolveBackendUrl, tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { createTray, setTrayContextMenu } from '@/main/services/tray';
-import { ipcMain } from 'electron';
+import { ipcMain, net } from 'electron';
+
+function isPlausibleAccessToken(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >= 32 &&
+    value.length <= 8192 &&
+    value.split('.').length === 3
+  );
+}
+
+function isPlausibleRefreshToken(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 16 && value.length <= 8192;
+}
+
+function parseJsonSafely(raw: string): any {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
 
 export function registerAuthHandlers() {
   // Legacy channel — pre-Phase-B the renderer pushed Firebase-issued ID
@@ -63,15 +84,10 @@ export function registerAuthHandlers() {
       args: { accessToken: string; refreshToken: string; expiresInSec?: number }
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       const { accessToken, refreshToken, expiresInSec } = args ?? ({} as typeof args);
-      if (
-        typeof accessToken !== 'string' ||
-        accessToken.length < 32 ||
-        accessToken.length > 8192 ||
-        accessToken.split('.').length !== 3
-      ) {
+      if (!isPlausibleAccessToken(accessToken)) {
         return { ok: false, error: 'access token is missing or malformed' };
       }
-      if (typeof refreshToken !== 'string' || refreshToken.length < 16) {
+      if (!isPlausibleRefreshToken(refreshToken)) {
         return { ok: false, error: 'refresh_token missing or too short' };
       }
       const expSec =
@@ -79,6 +95,99 @@ export function registerAuthHandlers() {
           ? expiresInSec
           : 3600;
       tokenManager.saveTokens({ accessToken, refreshToken, expiresInSec: expSec });
+      return { ok: true };
+    }
+  );
+
+  ipcMain.handle(
+    'main:auth:create-account-link-intent',
+    async (
+      _,
+      args?: { provider?: string; client?: string }
+    ): Promise<
+      | { ok: true; intent: string; expiresAt?: string }
+      | { ok: false; error: string; status?: number }
+    > => {
+      const backend = resolveBackendUrl();
+      if (!backend) return { ok: false, error: 'MONO_ENV_BACKEND_URL is not configured' };
+
+      const accessToken = tokenManager.getAccessToken();
+      if (!accessToken) return { ok: false, error: 'You must be signed in before adding Gmail.' };
+
+      try {
+        const response = await net.fetch(`${backend}/desktop/account-link-intents`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            provider: args?.provider ?? 'gmail',
+            client: args?.client ?? 'web-electron'
+          })
+        });
+
+        const raw = await response.text();
+        const body = parseJsonSafely(raw) as {
+          intent?: unknown;
+          expiresAt?: unknown;
+          error?: unknown;
+        };
+
+        if (!response.ok) {
+          return {
+            ok: false,
+            status: response.status,
+            error:
+              typeof body.error === 'string'
+                ? body.error
+                : `Account linking is unavailable (${response.status})`
+          };
+        }
+
+        if (typeof body.intent !== 'string' || body.intent.length < 16) {
+          return { ok: false, error: 'Account-link intent response is malformed' };
+        }
+
+        return {
+          ok: true,
+          intent: body.intent,
+          expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Account linking failed'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'main:auth:dev-add-account',
+    async (
+      _,
+      args: { accessToken: string; refreshToken: string; expiresInSec?: number }
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const { accessToken, refreshToken, expiresInSec } = args ?? ({} as typeof args);
+      if (!isPlausibleAccessToken(accessToken)) {
+        return { ok: false, error: 'access token is missing or malformed' };
+      }
+      if (!isPlausibleRefreshToken(refreshToken)) {
+        return { ok: false, error: 'refresh_token missing or too short' };
+      }
+
+      const expSec =
+        typeof expiresInSec === 'number' && Number.isFinite(expiresInSec) && expiresInSec > 0
+          ? expiresInSec
+          : 3600;
+      tokenManager.saveTokens({ accessToken, refreshToken, expiresInSec: expSec });
+
+      const mainAppWindow = windowManager.getMainAppWindow();
+      if (mainAppWindow) {
+        mainAppWindow.webContents.send('renderer:auth:add-account', accessToken);
+      }
+
       return { ok: true };
     }
   );

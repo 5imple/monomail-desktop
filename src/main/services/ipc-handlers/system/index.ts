@@ -6,7 +6,13 @@ import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { openLogFolder } from '@/main/utils/helpers';
 import { AudioType } from '@/renderer/app/lib/soundManager';
 import { CommandType } from '@/renderer/app/types';
-import { app, BrowserWindow, BrowserWindowConstructorOptions, ipcMain, nativeTheme } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  BrowserWindowConstructorOptions,
+  ipcMain,
+  nativeTheme
+} from 'electron';
 import { net } from 'electron';
 
 const ALLOWED_UNSUBSCRIBE_SCHEMES = new Set(['https:', 'http:']);
@@ -104,20 +110,17 @@ export function registerSystemHandlers() {
     }
   );
 
-  ipcMain.handle(
-    'main:window:open',
-    (_, rawRoute: unknown = '/', rawOptions?: unknown) => {
-      // Validate the route is an in-app path. A renderer compromise could
-      // otherwise pass `route = 'https://attacker.com'` and have main load
-      // an arbitrary remote page with elevated privileges.
-      const route = isSafeRoute(rawRoute) ? rawRoute : '/';
-      // Strip everything except a known-safe subset of options. The
-      // previous spread allowed the renderer to override `webPreferences`,
-      // `preload`, etc.
-      const options = pickSafeWindowOptions(rawOptions);
-      windowManager.createAppWindow({ route, options });
-    }
-  );
+  ipcMain.handle('main:window:open', (_, rawRoute: unknown = '/', rawOptions?: unknown) => {
+    // Validate the route is an in-app path. A renderer compromise could
+    // otherwise pass `route = 'https://attacker.com'` and have main load
+    // an arbitrary remote page with elevated privileges.
+    const route = isSafeRoute(rawRoute) ? rawRoute : '/';
+    // Strip everything except a known-safe subset of options. The
+    // previous spread allowed the renderer to override `webPreferences`,
+    // `preload`, etc.
+    const options = pickSafeWindowOptions(rawOptions);
+    windowManager.createAppWindow({ route, options });
+  });
   ipcMain.handle('main:window:close', (_, uid: number) => {
     windowManager.closeAppWindow(uid);
   });
@@ -128,13 +131,16 @@ export function registerSystemHandlers() {
     }
   });
 
-  ipcMain.handle('main:renderer:ready', () => {
-    systemManager.setMainLayoutReady(true);
+  ipcMain.handle('main:renderer:ready', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    const appWindow = senderWindow ? windowManager.getAppWindow(senderWindow.id) : null;
+    if (appWindow) {
+      appWindow.markRendererReady();
+    }
+
     const mainWindow = windowManager.getMainAppWindow();
-    // Execute any queued commands
-    if (mainWindow) {
-      mainWindow.triggerCommandQueue();
-      mainWindow.triggerMessageQueue();
+    if (senderWindow && mainWindow && senderWindow.id === mainWindow.id) {
+      systemManager.setMainLayoutReady(true);
     }
   });
 

@@ -80,7 +80,10 @@ class TokenManager extends EventEmitter {
       }
       this.tokens = parsed;
       this.scheduleAutoRefresh();
-      log.info('[TokenManager] loaded persisted tokens (expires in %dms)', parsed.expiresAt - Date.now());
+      log.info(
+        '[TokenManager] loaded persisted tokens (expires in %dms)',
+        parsed.expiresAt - Date.now()
+      );
     } catch (e) {
       log.error('[TokenManager] loadFromDisk failed:', (e as Error).message);
     }
@@ -213,7 +216,10 @@ class TokenManager extends EventEmitter {
       this.refreshTimer = null;
     }
     if (!this.tokens) return;
-    const wait = Math.max(this.tokens.expiresAt - Date.now() - REFRESH_LEAD_MS, MIN_REFRESH_INTERVAL_MS);
+    const wait = Math.max(
+      this.tokens.expiresAt - Date.now() - REFRESH_LEAD_MS,
+      MIN_REFRESH_INTERVAL_MS
+    );
     this.refreshTimer = setTimeout(() => {
       this.refresh().catch((err) => {
         log.error('[TokenManager] auto-refresh failed:', (err as Error).message);
@@ -225,7 +231,7 @@ class TokenManager extends EventEmitter {
   }
 }
 
-function resolveBackendUrl(): string {
+export function resolveBackendUrl(): string {
   const explicit = (import.meta.env.MONO_ENV_BACKEND_URL || '').trim();
   if (explicit) return explicit.replace(/\/$/, '');
   return (import.meta.env.MONO_ENV_API_URL || '').trim().replace(/\/$/, '');

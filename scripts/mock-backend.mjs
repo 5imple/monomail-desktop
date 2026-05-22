@@ -54,10 +54,11 @@ const STUB_ACCOUNTS = [
     email: 'mock.user@example.com',
     profileImageUrl: '',
     primary: true,
-    scopes: ['https://www.googleapis.com/auth/gmail.modify'],
+    scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
     isExpired: false
   }
 ];
+const accountLinkIntents = new Map();
 
 const STUB_PREFERENCE = {
   language: 'en',
@@ -151,6 +152,24 @@ function issueTokens() {
   return { accessToken, refreshToken, expiresIn: TOKEN_TTL_SEC };
 }
 
+function ensureSecondaryAccount() {
+  const existing = STUB_ACCOUNTS.find((account) => account.uid === 'mock-account-secondary');
+  if (existing) return existing;
+
+  const account = {
+    uid: 'mock-account-secondary',
+    displayName: 'Mock Secondary',
+    provider: 'google',
+    email: 'mock.secondary@gmail.com',
+    profileImageUrl: '',
+    primary: false,
+    scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
+    isExpired: false
+  };
+  STUB_ACCOUNTS.push(account);
+  return account;
+}
+
 // ---------- request helpers -------------------------------------------------
 
 function send(res, status, body, headers = {}) {
@@ -228,6 +247,66 @@ const server = createServer(async (req, res) => {
     );
   }
 
+  if (method === 'POST' && path === '/desktop/account-link-intents') {
+    const body = await readJson(req).catch(() => ({}));
+    const provider = typeof body.provider === 'string' ? body.provider : 'gmail';
+    if (provider !== 'gmail') {
+      return send(res, 400, {
+        error: `Provider "${provider}" is not supported by the mock backend`
+      });
+    }
+
+    const intent = `mock-intent-${randomBytes(18).toString('hex')}`;
+    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+    accountLinkIntents.set(intent, { provider, expiresAt, used: false });
+    return send(res, 200, { intent, expiresAt });
+  }
+
+  if (method === 'GET' && path === '/add-account') {
+    const intent = url.searchParams.get('intent');
+    const entry = intent ? accountLinkIntents.get(intent) : null;
+    if (intent && (!entry || entry.used || Date.parse(entry.expiresAt) <= Date.now())) {
+      return send(
+        res,
+        400,
+        '<!doctype html><html><body><h1>Mock add account failed</h1><p>The account-link intent is invalid or expired.</p></body></html>'
+      );
+    }
+
+    if (entry) entry.used = true;
+    const account = ensureSecondaryAccount();
+    const tokens = issueTokens();
+    const deeplink = `${DEEPLINK_PROTOCOL}://addAccount?token=${encodeURIComponent(
+      tokens.accessToken
+    )}&refresh_token=${encodeURIComponent(tokens.refreshToken)}&expires_in=${tokens.expiresIn}`;
+    return send(
+      res,
+      200,
+      `<!doctype html>
+<html>
+<head>
+  <title>Mock Add Gmail</title>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 80px auto; padding: 24px; }
+    h1 { font-size: 22px; letter-spacing: -0.01em; }
+    p { color: #666; line-height: 1.5; }
+    code { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    .btn { display: inline-block; padding: 10px 18px; background: #dc2626; color: #fff; border: none; border-radius: 6px; text-decoration: none; cursor: pointer; font-size: 14px; }
+    .btn:hover { background: #b91c1c; }
+    .small { font-size: 12px; color: #999; margin-top: 32px; }
+  </style>
+</head>
+<body>
+  <h1>Mock Gmail account link</h1>
+  <p>This simulates completing Google OAuth and linking <code>${account.email}</code> to the current desktop session.</p>
+  <a class="btn" href="${deeplink}">Return to Mono Mail</a>
+  <p class="small">The desktop app opened this page with an opaque account-link intent, not a bearer token.</p>
+</body>
+</html>`
+    );
+  }
+
   // --- Auth refresh ---
   if (method === 'POST' && path === '/auth/refresh') {
     try {
@@ -270,7 +349,11 @@ const server = createServer(async (req, res) => {
 
   // --- Share resolver (placeholder) ---
   if (method === 'GET' && path.startsWith('/share/')) {
-    return send(res, 200, '<html><body><h1>Mock share view</h1><p>This would resolve a share token to the actual content in the real backend.</p></body></html>');
+    return send(
+      res,
+      200,
+      '<html><body><h1>Mock share view</h1><p>This would resolve a share token to the actual content in the real backend.</p></body></html>'
+    );
   }
 
   // --- Mono REST API (mounted under /api/v1) ---

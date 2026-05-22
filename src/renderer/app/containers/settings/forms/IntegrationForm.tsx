@@ -18,12 +18,13 @@ import {
 } from '@/renderer/app/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 // useBillingAtom removed — payment-free build.
 import { TooltipPortal } from '@radix-ui/react-tooltip';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
+import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
 
 const IntegrationFormSchema = z.object({
   accounts: z
@@ -44,7 +45,7 @@ export function IntegrationForm() {
   const getUserPlan = () => 'pro';
   const { openDialog } = useDialogs();
   const { t } = useTranslation();
-  const addAccountUrl = `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?client=web-electron`;
+  const [isAddingAccount, setIsAddingAccount] = useState(false);
   const form = useForm<IntegrationFormValues>({
     resolver: zodResolver(IntegrationFormSchema),
     defaultValues: {
@@ -123,6 +124,15 @@ export function IntegrationForm() {
     [accounts, getUserPlan]
   );
 
+  const handleAddAccount = useCallback(async () => {
+    setIsAddingAccount(true);
+    try {
+      await startEmailAccountLink('gmail');
+    } finally {
+      setIsAddingAccount(false);
+    }
+  }, []);
+
   if (!member) return null;
 
   return (
@@ -173,6 +183,7 @@ export function IntegrationForm() {
                                   sizeVariant="sm"
                                   type={'button'}
                                   variant={'secondary'}
+                                  disabled={isAddingAccount}
                                   onClick={() => {
                                     const currentPlan = getUserPlan();
                                     const accountIndex = accounts.findIndex(
@@ -184,7 +195,10 @@ export function IntegrationForm() {
                                       accountIndex >= 2
                                     ) {
                                       openDialog('preference', { defaultPage: 'billing' });
+                                      return;
                                     }
+
+                                    void handleAddAccount();
                                   }}
                                 >
                                   {(() => {
@@ -200,13 +214,7 @@ export function IntegrationForm() {
                                   })() ? (
                                     <>{t('settings.integration.upgrade_plan')}</>
                                   ) : (
-                                    <a
-                                      href={addAccountUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      {t('settings.integration.reconnect')}
-                                    </a>
+                                    <>{t('settings.integration.reconnect')}</>
                                   )}
                                   <MonoIcon type={'ExternalLink'} className="ml-2 h-3.5 w-3.5" />
                                 </Button>
@@ -250,14 +258,16 @@ export function IntegrationForm() {
               {t('settings.integration.add_account')}
             </Button>
           ) : (
-            <Button type="button" variant="secondary" className="mt-2" asChild>
-              <a
-                href={addAccountUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {t('settings.integration.add_account')}
-              </a>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-2"
+              disabled={isAddingAccount}
+              onClick={() => {
+                void handleAddAccount();
+              }}
+            >
+              {t('settings.integration.add_account')}
             </Button>
           )}
         </div>

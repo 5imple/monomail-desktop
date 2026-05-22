@@ -6,6 +6,8 @@ import {
   ComposeCommandArgs,
   PinContactCommandArgs
 } from './types';
+import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
+import { toast } from 'sonner';
 
 interface ComposeCommandDependencies {
   t: (key: string, options?: any) => string;
@@ -51,7 +53,17 @@ export const createComposeCommands = (
       hotkeys: ['C', 'MOD+N'],
       action: (args?: ComposeCommandArgs) => {
         const accountEmail = getAccountEmailById(args?.draft?.from);
-        if (!accountEmail) return;
+        if (!accountEmail) {
+          toast('Connect Gmail before composing a message.', {
+            action: {
+              label: 'Connect Gmail',
+              onClick: () => {
+                void startEmailAccountLink('gmail');
+              }
+            }
+          });
+          return;
+        }
 
         const draft = args?.draft ?? new MonoDraft({ from: accountEmail });
         setGlobalDraftWindows([draft]);

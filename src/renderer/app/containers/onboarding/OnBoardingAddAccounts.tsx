@@ -9,6 +9,7 @@ import {
   TooltipTrigger
 } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
 import { animated, useSpring, useTrail } from '@react-spring/web';
 import { FC, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -89,7 +90,6 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
   const { member, accounts } = useAuth();
   const { t } = useTranslation();
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
-  const addAccountUrl = `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/add-account?client=web-electron`;
 
   const leftTrail = useTrail(5, {
     from: { opacity: 0, transform: 'translateY(40px)' },
@@ -124,7 +124,8 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
   const handleAddAccount = async (providerId: string) => {
     setConnectingProvider(providerId);
     try {
-      await onAddAccount(providerId);
+      onAddAccount(providerId);
+      await startEmailAccountLink(providerId);
     } finally {
       setConnectingProvider(null);
     }
@@ -202,13 +203,16 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
     }
 
     return (
-      <a
-        href={addAccountUrl}
-        target="_blank"
-        rel="noreferrer"
+      <button
+        type="button"
+        className="w-full text-left"
+        disabled={connectingProvider !== null}
+        onClick={() => {
+          void handleAddAccount(provider.id);
+        }}
       >
         {buttonContent}
-      </a>
+      </button>
     );
   };
 
@@ -311,17 +315,15 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
                         sizeVariant="xl"
                         variant={'secondary'}
                         className="w-full"
-                        disabled={accounts.length === 0 || isCreatingSpace}
-                        asChild
+                        disabled={
+                          accounts.length === 0 || isCreatingSpace || connectingProvider !== null
+                        }
+                        onClick={() => {
+                          void handleAddAccount('gmail');
+                        }}
                       >
-                        <a
-                          href={addAccountUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <MonoIcon type="Plus" className="mr-2 h-4 w-4" />
-                          {t('onboarding.add_accounts.connect_another')}
-                        </a>
+                        <MonoIcon type="Plus" className="mr-2 h-4 w-4" />
+                        {t('onboarding.add_accounts.connect_another')}
                       </Button>
                     </div>
                   </animated.div>

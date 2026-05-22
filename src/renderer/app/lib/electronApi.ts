@@ -52,19 +52,16 @@ interface IpcRenderer {
   /**
    * Read the current auth state from main. Returns null when signed out.
    */
-  getAuthState: () => Promise<
-    | {
-        accessToken: string;
-        expiresAt: number;
-        member: {
-          uid: string;
-          email: string;
-          displayName?: string;
-          photoURL?: string;
-        } | null;
-      }
-    | null
-  >;
+  getAuthState: () => Promise<{
+    accessToken: string;
+    expiresAt: number;
+    member: {
+      uid: string;
+      email: string;
+      displayName?: string;
+      photoURL?: string;
+    } | null;
+  } | null>;
 
   /**
    * Clear tokens in main + tear down the WebSocket push channel.
@@ -87,6 +84,17 @@ interface IpcRenderer {
     refreshToken: string;
     expiresInSec?: number;
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  createAccountLinkIntent: (args?: {
+    provider?: string;
+    client?: string;
+  }) => Promise<
+    { ok: true; intent: string; expiresAt?: string } | { ok: false; error: string; status?: number }
+  >;
+  devAddAccount: (args: {
+    accessToken: string;
+    refreshToken: string;
+    expiresInSec?: number;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
 
   // ---------- P8 Later Queue ----------
   // Each method wraps main:queue:* IPC. Responses are always
@@ -100,17 +108,13 @@ interface IpcRenderer {
     snoozeUntil: string;
   }) => Promise<QueueResult<QueueSnoozeRecord>>;
   queueSchedule: (req: QueueScheduleRequest) => Promise<QueueResult<QueueScheduleRecord>>;
-  queueListScheduled: (
-    accountId: string
-  ) => Promise<QueueResult<{ items: QueueScheduleRecord[] }>>;
+  queueListScheduled: (accountId: string) => Promise<QueueResult<{ items: QueueScheduleRecord[] }>>;
   queueCancelSchedule: (scheduleId: string) => Promise<QueueResult<{ ok: boolean }>>;
   queueRescheduleSend: (args: {
     scheduleId: string;
     sendAt: string;
   }) => Promise<QueueResult<QueueScheduleRecord>>;
-  queueSendNow: (
-    scheduleId: string
-  ) => Promise<QueueResult<{ ok: boolean; messageId: string }>>;
+  queueSendNow: (scheduleId: string) => Promise<QueueResult<{ ok: boolean; messageId: string }>>;
   /**
    * Set the app offline
    * @param {boolean} status - Offline status
@@ -381,6 +385,18 @@ const electronApi: IpcRenderer = {
   devSignIn: async (args) => {
     if (isElectron) {
       return window.electronBridge.devSignIn(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  createAccountLinkIntent: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.createAccountLinkIntent(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  devAddAccount: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.devAddAccount(args);
     }
     return { ok: false, error: 'Not in Electron' };
   },

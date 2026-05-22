@@ -124,6 +124,7 @@ class AppWindow extends BrowserWindow {
   private isFirstShow: boolean = true;
   private fullSizeOnCreation: boolean;
   private saveBoundsTimeout: NodeJS.Timeout | null = null;
+  private rendererReady: boolean = false;
 
   constructor({
     route = '/',
@@ -212,6 +213,11 @@ class AppWindow extends BrowserWindow {
     this.webContents.on('preload-error', (_e, preloadPath, err) => {
       log.error(`[AppWindow] preload-error path=${preloadPath} err=${err.message}`);
     });
+    this.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+      if (isMainFrame && !isInPlace) {
+        this.rendererReady = false;
+      }
+    });
 
     this.on('show', () => {
       // Only apply full size animation when showing for the first time
@@ -277,19 +283,8 @@ class AppWindow extends BrowserWindow {
       }
     });
 
-    if (commands || messages) {
-      if (systemManager.getMainLayoutReady()) {
-        for (const command of commands) {
-          this.webContents.send('renderer:command:trigger', command);
-        }
-        for (const message of messages) {
-          this.webContents.send(message.channel, ...message.args);
-        }
-      } else {
-        this.commands.push(...commands);
-        this.messages.push(...messages);
-      }
-    }
+    this.commands.push(...commands);
+    this.messages.push(...messages);
     this.webContents.setBackgroundThrottling(false);
 
     this.webContents.setWindowOpenHandler(({ url }) => {
@@ -464,32 +459,52 @@ class AppWindow extends BrowserWindow {
     this.destroy();
   }
 
+  public markRendererReady() {
+    this.rendererReady = true;
+    this.triggerCommandQueue();
+    this.triggerMessageQueue();
+  }
+
+  private sendCommand(command: CommandType) {
+    this.webContents.send('renderer:command:trigger', command);
+  }
+
+  private sendMessage(message: { channel: string; args: any[] }) {
+    this.webContents.send(message.channel, ...message.args);
+  }
+
   public triggerCommand(command: CommandType) {
     this.show();
-    this.webContents.send('renderer:command:trigger', command);
+    if (!this.rendererReady || this.webContents.isLoadingMainFrame()) {
+      this.commands.push(command);
+      return;
+    }
+    this.sendCommand(command);
   }
 
   public triggerMessage(message: { channel: string; args: any[] }) {
     this.show();
-    this.webContents.send(message.channel, ...message.args);
+    if (!this.rendererReady || this.webContents.isLoadingMainFrame()) {
+      this.messages.push(message);
+      return;
+    }
+    this.sendMessage(message);
   }
 
   public triggerCommandQueue() {
+    if (!this.rendererReady) return;
     this.show();
-    while (this.commands.length > 0) {
-      const command = this.commands.shift();
-      if (command) {
-        this.triggerCommand(command);
-      }
+    const commands = this.commands.splice(0);
+    for (const command of commands) {
+      this.sendCommand(command);
     }
   }
   public triggerMessageQueue() {
+    if (!this.rendererReady) return;
     this.show();
-    while (this.messages.length > 0) {
-      const message = this.messages.shift();
-      if (message) {
-        this.triggerMessage(message);
-      }
+    const messages = this.messages.splice(0);
+    for (const message of messages) {
+      this.sendMessage(message);
     }
   }
 }

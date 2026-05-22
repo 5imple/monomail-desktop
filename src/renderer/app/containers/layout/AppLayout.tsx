@@ -1,5 +1,7 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
+import MonoIcon from '@/renderer/app/components/icons/icons';
 import StatusIndicator from '@/renderer/app/components/StatusIndicator';
+import { Button } from '@/renderer/app/components/ui/button';
 import DialogManager from '@/renderer/app/containers/dialog/DialogManager';
 import AppCalendarPanelContainer from '@/renderer/app/containers/sidebar/AppCalendarPanelContainer';
 import AppMainPanelContainer from '@/renderer/app/containers/sidebar/AppMainPanelContainer';
@@ -28,6 +30,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
   const { setSelectedThreads, selectedThreads } = useThreadAtom();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [startupTimedOut, setStartupTimedOut] = useState(false);
   const { accounts } = useAuth();
   const executeCommand = useExecuteCommand();
   useRegisterHotkeys();
@@ -83,6 +86,19 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
     }
   }, [sidebarLoading]);
 
+  useEffect(() => {
+    if (isLoaded) {
+      setStartupTimedOut(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setStartupTimedOut(true);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
   return (
     <>
       <div
@@ -113,6 +129,46 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                   isLoaded ? 'opacity-100' : 'opacity-0'
                 )}
               />
+            )}
+            {!isLoaded && startupTimedOut && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center p-6">
+                <div className="w-full max-w-md rounded-md border bg-card/95 p-5 shadow-sm">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="rounded-md bg-destructive/10 p-2 text-destructive">
+                      <MonoIcon type="AlertCircle" className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h1 className="text-base font-medium">Mono Mail is still loading</h1>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        The window opened, but the mail shell did not become ready.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      sizeVariant="sm"
+                      onClick={() => {
+                        window.location.reload();
+                      }}
+                    >
+                      Reload
+                    </Button>
+                    {isElectron && (
+                      <Button
+                        type="button"
+                        sizeVariant="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          void electronApi.openLogFolder();
+                        }}
+                      >
+                        Open Logs
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
           <StatusIndicator />

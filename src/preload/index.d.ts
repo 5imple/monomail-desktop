@@ -12,24 +12,32 @@ interface IpcRenderer {
   on: (channel: ValidRendererChannel, callback: (...args: any[]) => void) => () => void;
   off: (channel: ValidRendererChannel, callback: (...args: any[]) => void) => void;
   setIdToken: (token: string | null) => void;
-  getAuthState: () => Promise<
-    | {
-        accessToken: string;
-        expiresAt: number;
-        member: {
-          uid: string;
-          email: string;
-          displayName?: string;
-          photoURL?: string;
-        } | null;
-      }
-    | null
-  >;
+  getAuthState: () => Promise<{
+    accessToken: string;
+    expiresAt: number;
+    member: {
+      uid: string;
+      email: string;
+      displayName?: string;
+      photoURL?: string;
+    } | null;
+  } | null>;
   signOutMain: () => Promise<void>;
   refreshToken: () => Promise<
     { ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }
   >;
   devSignIn: (args: {
+    accessToken: string;
+    refreshToken: string;
+    expiresInSec?: number;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  createAccountLinkIntent: (args?: {
+    provider?: string;
+    client?: string;
+  }) => Promise<
+    { ok: true; intent: string; expiresAt?: string } | { ok: false; error: string; status?: number }
+  >;
+  devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;
     expiresInSec?: number;
