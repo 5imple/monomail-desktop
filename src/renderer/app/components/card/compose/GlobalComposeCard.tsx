@@ -463,7 +463,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         body: optimizeForGmail(parsedHtml)
       });
 
-      handleClose();
       await updateMessage(updatedDraft);
       // Send the draft
       const uid = getUidFromEmail(updatedDraft.from);
@@ -483,6 +482,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           trackingEnabled
         );
 
+        handleClose();
+
         // Increment sent emails count and check if it's the second email
         const sentEmailsCount = await monoLocalStorageDb.incrementSentEmailsCount();
         if (sentEmailsCount === 3) {
@@ -501,6 +502,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           used_ai_draft: usedAiDraft
         });
       } else {
+        handleClose();
         updateMessage(composeDraft);
         executeCommand('COMPOSE_NEW_MESSAGE', { draft: composeDraft });
       }

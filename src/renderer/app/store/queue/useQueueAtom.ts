@@ -104,6 +104,10 @@ interface QueueEvent {
   messageId?: string;
 }
 
+function resolveQueueState(s: QueueState | Promise<QueueState>): QueueState {
+  return s instanceof Promise ? QUEUE_DEFAULT : s;
+}
+
 let pushSubscribed = false;
 
 function ensurePushSubscribed() {
@@ -113,7 +117,8 @@ function ensurePushSubscribed() {
   electronApi.on<QueueEvent>('renderer:queue:event', (data) => {
     if (!data || typeof data !== 'object') return;
     const store = getDefaultStore();
-    const prev = store.get(queueAtom);
+    const rawPrev = store.get(queueAtom);
+    const prev: QueueState = rawPrev instanceof Promise ? QUEUE_DEFAULT : rawPrev;
     switch (data.type) {
       case 'THREAD_UNSNOOZED': {
         if (!data.snoozeId) return;
@@ -160,7 +165,8 @@ function ensurePushSubscribed() {
 // ---- hook -----------------------------------------------------------------
 
 export function useQueueAtom() {
-  const [state, setState] = useAtom(queueAtom);
+  const [rawState, setState] = useAtom(queueAtom);
+  const state: QueueState = rawState instanceof Promise ? QUEUE_DEFAULT : rawState;
   const { accounts } = useAuth();
   const primaryAccountId = accounts[0]?.uid ?? '';
 
@@ -179,18 +185,21 @@ export function useQueueAtom() {
         electronApi.queueListScheduled(primaryAccountId)
       ]);
       if (cancelled) return;
-      setState((prev) => ({
-        snoozed: snoozeRes.ok
-          ? Object.fromEntries(
-              snoozeRes.data.items.map((r) => [r.snoozeId, snoozeRecordToItem(r)])
-            )
-          : prev.snoozed,
-        scheduled: schedRes.ok
-          ? Object.fromEntries(
-              schedRes.data.items.map((r) => [r.scheduleId, scheduleRecordToItem(r)])
-            )
-          : prev.scheduled
-      }));
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
+        return {
+          snoozed: snoozeRes.ok
+            ? Object.fromEntries(
+                snoozeRes.data.items.map((r) => [r.snoozeId, snoozeRecordToItem(r)])
+              )
+            : prev.snoozed,
+          scheduled: schedRes.ok
+            ? Object.fromEntries(
+                schedRes.data.items.map((r) => [r.scheduleId, scheduleRecordToItem(r)])
+              )
+            : prev.scheduled
+        };
+      });
     })();
     return () => {
       cancelled = true;
@@ -210,7 +219,7 @@ export function useQueueAtom() {
       const res = await electronApi.queueSnooze(req);
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = snoozeRecordToItem(res.data);
-      setState((prev) => ({ ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }));
+      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }; });
       return { ok: true as const, item };
     },
     [setState]
@@ -220,7 +229,8 @@ export function useQueueAtom() {
     async (snoozeId: string) => {
       // Optimistic — drop from cache immediately. Server-side delete is
       // best-effort; if it fails the next hydrate will restore the row.
-      setState((prev) => {
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
         const { [snoozeId]: _removed, ...rest } = prev.snoozed;
         return { ...prev, snoozed: rest };
       });
@@ -235,7 +245,7 @@ export function useQueueAtom() {
       const res = await electronApi.queueRescheduleSnooze({ snoozeId, snoozeUntil });
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = snoozeRecordToItem(res.data);
-      setState((prev) => ({ ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }));
+      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }; });
       return { ok: true as const };
     },
     [setState]
@@ -251,7 +261,7 @@ export function useQueueAtom() {
       const res = await electronApi.queueSchedule(req);
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = scheduleRecordToItem(res.data);
-      setState((prev) => ({ ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }));
+      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }; });
       return { ok: true as const, item };
     },
     [setState]
@@ -259,7 +269,8 @@ export function useQueueAtom() {
 
   const cancelSchedule = useCallback(
     async (scheduleId: string) => {
-      setState((prev) => {
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
         const { [scheduleId]: _removed, ...rest } = prev.scheduled;
         return { ...prev, scheduled: rest };
       });
@@ -274,10 +285,7 @@ export function useQueueAtom() {
       const res = await electronApi.queueRescheduleSend({ scheduleId, sendAt });
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = scheduleRecordToItem(res.data);
-      setState((prev) => ({
-        ...prev,
-        scheduled: { ...prev.scheduled, [item.id]: item }
-      }));
+      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }; });
       return { ok: true as const };
     },
     [setState]
@@ -285,7 +293,8 @@ export function useQueueAtom() {
 
   const sendScheduledNow = useCallback(
     async (scheduleId: string) => {
-      setState((prev) => {
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
         const { [scheduleId]: _removed, ...rest } = prev.scheduled;
         return { ...prev, scheduled: rest };
       });

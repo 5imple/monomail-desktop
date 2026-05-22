@@ -1,6 +1,7 @@
 import { apiClient } from '@/main/api/apiClient';
 import mailApi from '@/main/api/mail/mailApi';
 import unsubscribeApi from '@/main/api/unsubscribe/unsubscribeApi';
+import electronApi from '@/renderer/app/lib/electronApi';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { IMonoMessage, MonoMessage } from '@/main/models/message/MonoMessage';
@@ -206,7 +207,15 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
               try {
                 // TODO better solution
                 const inlineImage = item.inlineImages[cid];
+                const ALLOWED_IMAGE_MIMES = new Set([
+                  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'
+                ]);
                 if (inlineImage && accountId) {
+                  if (!ALLOWED_IMAGE_MIMES.has(inlineImage.mimeType)) {
+                    skeleton.remove();
+                    img.remove();
+                    return;
+                  }
                   const inlineAttachment = await mailApi.getAttachmentInline(
                     accountId,
                     item.id,
@@ -440,34 +449,15 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         }
 
         try {
-          // Instead of using postMessageUnsubscribe, we'll make a direct fetch request
           const unsubscribeUrl = currentMessage.listUnsubscribe.url[0];
 
           if (!unsubscribeUrl) {
             throw new Error('No valid unsubscribe URL found');
           }
 
-          // First try GET request (most common for unsubscribe links)
-          // let response = await fetch(unsubscribeUrl, {
-          //   method: 'GET',
-          //   headers: {
-          //     Accept: 'text/html,application/xhtml+xml'
-          //   },
-          //   mode: 'no-cors'
-          // });
-
-          // If GET fails, try POST
-          // if (!response.ok) {
-          const response = await fetch(unsubscribeUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            mode: 'cors'
-          });
-          // }
+          const response = await electronApi.unsubscribeFetch(unsubscribeUrl);
           if (!response.ok) {
-            throw new Error(`Failed to unsubscribe: ${response.statusText}`);
+            throw new Error(`Failed to unsubscribe: ${response.error ?? response.status}`);
           }
 
           apiClient.setApiActiveUid(accountId);

@@ -31,7 +31,7 @@ interface DeleteMemberDialogProps {
 
 const DeleteMemberDialog: FC<DeleteMemberDialogProps> = ({ children, open, onOpenChange }) => {
   const { t } = useTranslation();
-  const billingInfo = { subscription: null, hasOneTimePurchase: false, order: null };
+  const billingInfo: { subscription: { id: string; cancelled: boolean } | null; hasOneTimePurchase: boolean; order: null } = { subscription: null, hasOneTimePurchase: false, order: null };
   const { member, signOut, accounts } = useAuth();
   const { closeDialog } = useDialogs();
   const { exitWorker: exitHistoryWorker } = useSyncHistory();

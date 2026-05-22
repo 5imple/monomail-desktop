@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
+import DOMPurify from 'dompurify';
 import { cn } from '@/renderer/app/lib/utils';
 
 // Define the ref interface
@@ -146,19 +147,22 @@ const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEdit
       return !hasText && !hasImages && !hasTables;
     };
 
-    // Sanitize HTML to remove potentially harmful elements
-    const sanitizeHTML = (html: string): string => {
-      // Create a temporary element to parse the HTML
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = html;
-
-      // Remove scripts and other potentially harmful elements
-      const scripts = tempDiv.querySelectorAll('script, iframe, object, embed');
-      scripts.forEach((el) => el.remove());
-
-      // Return the sanitized HTML
-      return tempDiv.innerHTML;
-    };
+    const sanitizeHTML = (html: string): string =>
+      DOMPurify.sanitize(html, {
+        ALLOWED_TAGS: [
+          'b', 'i', 'em', 'strong', 'u', 's', 'p', 'br', 'span', 'div',
+          'a', 'img', 'table', 'tbody', 'tr', 'td', 'th', 'thead',
+          'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+          'ul', 'ol', 'li', 'blockquote', 'font', 'hr'
+        ],
+        ALLOWED_ATTR: [
+          'href', 'target', 'rel', 'src', 'alt', 'width', 'height',
+          'style', 'class', 'align', 'border', 'cellpadding', 'cellspacing',
+          'colspan', 'rowspan', 'bgcolor', 'color', 'face', 'size', 'title'
+        ],
+        ALLOW_DATA_ATTR: false,
+        ALLOW_UNKNOWN_PROTOCOLS: false
+      });
 
     // Check if a string is a valid URL
     const isValidURL = (text: string): boolean => {

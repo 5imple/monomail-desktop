@@ -120,6 +120,14 @@ class SystemManager {
     return this.settingsStore.get('notificationPreferences') || {};
   }
 
+  setKnownAccountUids(uids: string[]): void {
+    this.settingsStore.set('knownAccountUids', uids);
+  }
+
+  getKnownAccountUids(): string[] {
+    return (this.settingsStore.get('knownAccountUids') as string[] | undefined) ?? [];
+  }
+
   // Existing methods
   setAlertSound(sound: AudioType): void {
     this.alertSound = sound;

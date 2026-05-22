@@ -668,6 +668,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         updateBadgeWithLabelCount(accounts.map((account) => account.uid));
+        electronApi.setKnownAccountUids(accounts.map((account) => account.uid)).catch(() => {});
 
         // Check localStorage for a persisted active space ID
         let activeSpaceId: string | null = null;

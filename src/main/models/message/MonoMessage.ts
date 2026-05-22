@@ -39,6 +39,8 @@ export interface IMonoMessage extends ThreadItemBase {
   inlineImages: Record<string, MonoAttachment>;
   attachments: Record<string, MonoAttachment>;
   payload: MonoMessagePaylod;
+  bodyPlain?: string;
+  bodyHtml?: string;
 }
 
 export class MonoMessage implements ThreadItemBase {
@@ -62,6 +64,8 @@ export class MonoMessage implements ThreadItemBase {
   inlineImages: Record<string, MonoAttachment>;
   attachments: Record<string, MonoAttachment>;
   payload: MonoMessagePaylod;
+  bodyPlain?: string;
+  bodyHtml?: string;
 
   // emailHistory: string[];
 
@@ -90,6 +94,8 @@ export class MonoMessage implements ThreadItemBase {
     this.inlineImages = data.inlineImages ?? {};
     this.attachments = data.attachments ?? {};
     this.payload = data.payload;
+    this.bodyPlain = data.bodyPlain;
+    this.bodyHtml = data.bodyHtml;
   }
 
   /**
@@ -115,7 +121,9 @@ export class MonoMessage implements ThreadItemBase {
       inlineImages: this.inlineImages,
       attachments: this.attachments,
       listUnsubscribe: this.listUnsubscribe,
-      payload: this.payload
+      payload: this.payload,
+      bodyPlain: this.bodyPlain,
+      bodyHtml: this.bodyHtml
     };
   }
 

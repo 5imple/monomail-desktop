@@ -18,6 +18,7 @@ export const validRendererChannel = [
   'renderer:auth:token-changed',
   'renderer:auth:signed-out',
 
+  'renderer:queue:event',
   'renderer:system:deeplink-query',
   'renderer:mailto:compose',
   'renderer:toast:show'

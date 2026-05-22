@@ -136,6 +136,9 @@ const api = {
   getBadgeCount: () => ipcRenderer.invoke('main:badge:get-count'),
   clearBadge: () => ipcRenderer.invoke('main:badge:clear'),
 
+  unsubscribeFetch: (url: string) => ipcRenderer.invoke('main:unsubscribe:fetch', url),
+  setKnownAccountUids: (uids: string[]) =>
+    ipcRenderer.invoke('main:system:set-known-account-uids', uids),
   setSplitCategoryPreferences: (uid: string, preferences: SplitCategoryPreferences) =>
     ipcRenderer.invoke('main:system:set-split-category-preferences', uid, preferences),
   getSplitCategoryPreferences: (uid: string) =>

@@ -3,7 +3,7 @@ import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 import electronApi from '@/renderer/app/lib/electronApi';
 // Billing imports removed — payment-free build, hasProAccess always true.
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface OfflineAction {

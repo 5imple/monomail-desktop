@@ -58,5 +58,5 @@ export function buildSchedulePresets(now: Date = new Date()): SchedulePreset[] {
     { id: 'this-weekend', label: 'This weekend', scheduledFor: weekend.toISOString() },
     { id: 'next-week', label: 'Next Monday', scheduledFor: nextMonday(now).toISOString() },
     { id: 'custom', label: 'Pick a date…', sublabel: 'Open the calendar', scheduledFor: null }
-  ].filter((p): p is SchedulePreset => p !== null);
+  ].filter(Boolean) as SchedulePreset[];
 }

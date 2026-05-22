@@ -7,6 +7,19 @@ import { openLogFolder } from '@/main/utils/helpers';
 import { AudioType } from '@/renderer/app/lib/soundManager';
 import { CommandType } from '@/renderer/app/types';
 import { app, BrowserWindow, BrowserWindowConstructorOptions, ipcMain, nativeTheme } from 'electron';
+import { net } from 'electron';
+
+const ALLOWED_UNSUBSCRIBE_SCHEMES = new Set(['https:', 'http:']);
+
+function isSafeUnsubscribeUrl(raw: unknown): raw is string {
+  if (typeof raw !== 'string' || raw.length > 2048) return false;
+  try {
+    const u = new URL(raw);
+    return ALLOWED_UNSUBSCRIBE_SCHEMES.has(u.protocol);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Whitelisted subset of BrowserWindowConstructorOptions that the renderer
@@ -259,5 +272,26 @@ export function registerSystemHandlers() {
 
   ipcMain.handle('main:system:get-all-split-category-preferences', () => {
     return systemManager.getAllSplitCategoryPreferences();
+  });
+
+  ipcMain.handle('main:system:set-known-account-uids', (_event, uids: unknown) => {
+    if (Array.isArray(uids) && uids.every((u) => typeof u === 'string')) {
+      systemManager.setKnownAccountUids(uids);
+    }
+  });
+
+  ipcMain.handle('main:unsubscribe:fetch', async (_event, url: unknown) => {
+    if (!isSafeUnsubscribeUrl(url)) {
+      return { ok: false, error: 'Invalid or disallowed URL' };
+    }
+    try {
+      const res = await net.fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      return { ok: res.ok, status: res.status };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
   });
 }

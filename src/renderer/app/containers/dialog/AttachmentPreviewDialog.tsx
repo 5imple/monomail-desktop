@@ -93,6 +93,12 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
     }
   }, [attachment, itemId, source]);
 
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
+
   const downloadAttachment = async () => {
     if (!accountId || !blobUrl || !attachment) return;
     try {
@@ -105,8 +111,6 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-
-      URL.revokeObjectURL(blobUrl);
     } catch (e) {
       console.error(e);
       toast.error(t('dialog.attachement_preview.error_downloading'));

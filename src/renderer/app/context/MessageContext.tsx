@@ -290,7 +290,7 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
           break;
 
         default:
-          console.warn('Unknown message type received:', message.messageId);
+          console.warn('Unknown message type received:', messageData.type);
           break;
       }
     },

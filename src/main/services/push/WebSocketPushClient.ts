@@ -1,5 +1,6 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
+import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { handlePushFrame } from '@/main/services/push/pushHandler';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { powerSaveBlocker } from 'electron';
@@ -100,10 +101,13 @@ class WebSocketPushClient {
       // Kick off the per-account Gmail watch the same way the legacy
       // FCM_SERVICE_STARTED path did. Without this, Gmail-backed accounts
       // never publish new-mail events to the backend.
-      const uid = tokenManager.getActiveUid();
-      if (uid) {
+      const knownUids = systemManager.getKnownAccountUids();
+      const uidsToWatch = knownUids.length > 0
+        ? knownUids
+        : (tokenManager.getActiveUid() ? [tokenManager.getActiveUid()!] : []);
+      for (const uid of uidsToWatch) {
         mailApi.watchCloudPubSub(uid).catch((e) =>
-          log.warn('[push] watchCloudPubSub on connect failed:', (e as Error).message)
+          log.warn('[push] watchCloudPubSub on connect failed for %s:', uid, (e as Error).message)
         );
       }
     });

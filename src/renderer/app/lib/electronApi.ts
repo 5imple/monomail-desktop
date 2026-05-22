@@ -292,6 +292,8 @@ interface IpcRenderer {
     value: boolean
   ) => Promise<void>;
   getAllSplitCategoryPreferences: () => Promise<Record<string, SplitCategoryPreferences>>;
+  unsubscribeFetch: (url: string) => Promise<{ ok: boolean; status?: number; error?: string }>;
+  setKnownAccountUids: (uids: string[]) => Promise<void>;
 }
 
 /**
@@ -682,6 +684,15 @@ const electronApi: IpcRenderer = {
       );
       return {};
     }
+  },
+
+  unsubscribeFetch: async (url) => {
+    if (isElectron) return window.electronBridge.unsubscribeFetch(url);
+    return { ok: false, error: 'Not in Electron' };
+  },
+
+  setKnownAccountUids: async (uids) => {
+    if (isElectron) return window.electronBridge.setKnownAccountUids(uids);
   }
 };
 
