@@ -182,7 +182,7 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
     );
   }
 
-  if (loading) return null;
+  if (loading || isLoading) return null;
 
   if (isLoggedIn && member) {
     if (spaces.length === 0) {
