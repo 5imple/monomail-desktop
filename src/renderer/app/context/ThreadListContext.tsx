@@ -12,7 +12,6 @@ interface ThreadListContextType {
   resetThreadsArray: () => void;
   loadingStatus: LoadingStatus;
   threadIds: string[];
-  needPayment: boolean;
   loadMore: () => void;
   hasMore: boolean;
   updateFromMessageSubscribe: (data: any) => void;
@@ -27,7 +26,6 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
   const {
     fetchThreadsHandler,
     threadIds,
-    needPayment,
     resetThreadsArray,
     loadMore,
     hasMore,
@@ -67,7 +65,6 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
       loadingStatus,
       resetThreadsArray,
       threadIds,
-      needPayment,
       loadMore,
       hasMore,
       updateFromMessageSubscribe
@@ -77,7 +74,6 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
       loadingStatus,
       resetThreadsArray,
       threadIds,
-      needPayment,
       loadMore,
       hasMore,
       updateFromMessageSubscribe

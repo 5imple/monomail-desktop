@@ -478,9 +478,6 @@ async function syncThreadsWithPagination(
             shouldRetry = true;
           }
           break;
-        case 402:
-          console.error(`Account ${uid} - Payment Required (402):`, error);
-          break;
         case 400:
           console.error(`Account ${uid} - Next Page Token Error (400):`, error);
           if (retries > 0) {

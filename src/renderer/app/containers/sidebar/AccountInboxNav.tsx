@@ -27,7 +27,6 @@ import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
-// useBillingAtom removed — payment-free build.
 import {
   closestCenter,
   defaultDropAnimationSideEffects,
@@ -85,7 +84,6 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
   const { getAccountNavState, toggleAccountOpen, toggleBookmarksOpen, toggleLabelsOpen } =
     useSidebarAtom();
   const { threadsMap } = useThreadAtom();
-  const getUserPlan = () => 'pro';
 
   // Keyboard navigation integration
   const containerRef = useRef<HTMLDivElement>(null);
@@ -334,7 +332,7 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
       if (e) {
         e.stopPropagation();
       }
-      openDialog('commandPalette', { pages: ['SEARCH'], aiSearchMode: false });
+      openDialog('commandPalette', { pages: ['SEARCH'] });
     },
     [openDialog]
   );
@@ -352,14 +350,8 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
 
   // Callback for account reconnection
   const handleAccountReconnectClick = useCallback(() => {
-    const currentPlan = getUserPlan();
-    const accountIndex = accounts.findIndex((acc) => acc.uid === account?.uid);
-    if (currentPlan === 'free' && accounts.length > 2 && accountIndex >= 2) {
-      openDialog('preference', { defaultPage: 'billing' });
-    } else {
-      openDialog('preference', { defaultPage: 'integration' });
-    }
-  }, [openDialog, accounts, account, getUserPlan]);
+    openDialog('preference', { defaultPage: 'integration' });
+  }, [openDialog]);
 
   // Callback for bookmark search
   const handleBookmarkClick = useCallback(
@@ -476,13 +468,8 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
   const getAccountStatusTooltip = useCallback(() => {
     if (!account) return '';
 
-    const currentPlan = getUserPlan();
-    const accountIndex = accounts.findIndex((acc) => acc.uid === account.uid);
     const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
 
-    if (currentPlan === 'free' && accounts.length > 2 && accountIndex >= 1) {
-      return t('tooltips.account_status.too_many_accounts');
-    }
     if (account.isExpired) {
       return t('tooltips.account_status.authentication_expired');
     }
@@ -496,7 +483,7 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
     }
 
     return t('tooltips.account_status.requires_reconnecting');
-  }, [account, accounts, labelsMapByAccount, getUserPlan, t]);
+  }, [account, labelsMapByAccount, t]);
 
   // Recursive component to render the label tree
   const renderLabelTree = useCallback(
@@ -685,10 +672,7 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
                   {account.email}
                 </span>
               </div>
-              {((getUserPlan() === 'free' &&
-                accounts.length > 2 &&
-                accounts.findIndex((acc) => acc.uid === account.uid) >= 2) ||
-                (Object.keys(labelsMapByAccount).length > 0 && !labelsMapByAccount[account.uid]) ||
+              {((Object.keys(labelsMapByAccount).length > 0 && !labelsMapByAccount[account.uid]) ||
                 account.isExpired ||
                 !account.scopes.some((scope) => scope.includes('https://mail.google.com'))) && (
                 <Tooltip>

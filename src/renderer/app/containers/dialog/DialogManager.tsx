@@ -79,7 +79,6 @@ const DialogManager = () => {
         bookmarkIcon={dialogState.commandPalette.bookmarkIcon}
         pages={dialogState.commandPalette.pages}
         pinContact={dialogState.commandPalette.pinContact}
-        aiSearchMode={dialogState.commandPalette.aiSearchMode || false}
         setPages={(values) => {
           setDialogState((prevState) => ({
             ...prevState,
@@ -124,12 +123,6 @@ const DialogManager = () => {
           setDialogState((prevState) => ({
             ...prevState,
             commandPalette: { ...prevState.commandPalette, selectedSpaceId: values }
-          }));
-        }}
-        setAiSearchMode={(mode) => {
-          setDialogState((prevState) => ({
-            ...prevState,
-            commandPalette: { ...prevState.commandPalette, aiSearchMode: mode }
           }));
         }}
       />

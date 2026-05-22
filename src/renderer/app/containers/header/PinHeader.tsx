@@ -16,7 +16,6 @@ import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { cn } from '@/renderer/app/lib/utils';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpacePinAtom } from '@/renderer/app/store/space/pin/useSpacePinAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -243,7 +242,6 @@ const PinHeader: FC = () => {
   const { activeSpace } = useSpaceAtom();
   const { unpinEmailFromSpace, reorderPinnedEmails } = useSpacePinAtom();
 
-  const { openDialog } = useDialogs();
   const executeCommand = useExecuteCommand();
   const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
   const [activeEmail, setActiveEmail] = useState<PinnedEmailItem | null>(null);
@@ -398,21 +396,7 @@ const PinHeader: FC = () => {
         >
           <ScrollArea className="flex-1">
             <div ref={containerRef} className="flex flex-1 items-center pb-1 pl-1">
-              {trashable ? (
-                <Trash id="trash" />
-              ) : (
-                <div
-                  onClick={() => openDialog('commandPalette', { pages: ['PIN_CONTACT'] })}
-                  className="flex flex-col items-center rounded-md p-2 transition-colors hover:bg-muted"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border">
-                    <MonoIcon type={'Plus'} className="h-4 w-4" />
-                  </div>
-                  <div className="max-w-12 overflow-hidden text-ellipsis">
-                    <span className="whitespace-nowrap text-xs">{t('header.pin.add')}</span>
-                  </div>
-                </div>
-              )}
+              {trashable && <Trash id="trash" />}
 
               {pinnedEmailItems.map((emailItem) => (
                 <SortableEmailContact

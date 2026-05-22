@@ -12,9 +12,7 @@ import {
   DialogTrigger
 } from '@/renderer/app/components/ui/dialog';
 import Loader from '@/renderer/app/components/ui/loader';
-import { Alert, AlertDescription, AlertTitle } from '@/renderer/app/components/ui/alert';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 
 import React, { FC, useState } from 'react';
@@ -31,14 +29,11 @@ interface DeleteMemberDialogProps {
 
 const DeleteMemberDialog: FC<DeleteMemberDialogProps> = ({ children, open, onOpenChange }) => {
   const { t } = useTranslation();
-  const billingInfo: { subscription: { id: string; cancelled: boolean } | null; hasOneTimePurchase: boolean; order: null } = { subscription: null, hasOneTimePurchase: false, order: null };
-  const { member, signOut, accounts } = useAuth();
+  const { member, signOut } = useAuth();
   const { closeDialog } = useDialogs();
   const { exitWorker: exitHistoryWorker } = useSyncHistory();
   const { exitWorker: exitThreadWorker } = useSyncThread();
   const [loading, setLoading] = useState(false);
-
-  const hasActiveSubscription = !!billingInfo.subscription && !billingInfo.subscription.cancelled;
 
   const onDeleteAccount = async () => {
     if (!member) return;
@@ -59,21 +54,6 @@ const DeleteMemberDialog: FC<DeleteMemberDialogProps> = ({ children, open, onOpe
     }
   };
 
-  // Handle opening customer portal for subscription cancellation
-  const handleOpenCustomerPortal = () => {
-    if (!billingInfo.subscription) return;
-
-    const baseUrl = `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/customer`;
-    const params = new URLSearchParams();
-    const userId = member?.primaryUid;
-    if (userId && billingInfo.subscription) {
-      params.append('uid', userId);
-      params.append('type', 'portal');
-      params.append('subscriptionId', billingInfo.subscription.id);
-      window.open(`${baseUrl}?${params.toString()}`, '_blank');
-    }
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -87,29 +67,15 @@ const DeleteMemberDialog: FC<DeleteMemberDialogProps> = ({ children, open, onOpe
             </DialogDescription>
           </DialogHeader>
 
-          {hasActiveSubscription ? (
-            <>
-              <div className="flex">
-                <Button onClick={handleOpenCustomerPortal} variant={'default'} className="ml-auto">
-                  Cancel Subscription
-                </Button>
-              </div>
-            </>
-          ) : (
-            <DialogFooter>
-              <Button onClick={() => onOpenChange(false)} variant={'secondary'}>
-                {t('dialog.delete_member.cancel')}
-              </Button>
-              <Button
-                disabled={loading || hasActiveSubscription}
-                onClick={onDeleteAccount}
-                variant={'destructive'}
-              >
-                {loading && <Loader className="mr-2" />}
-                {t('dialog.delete_member.confirm_delete')}
-              </Button>
-            </DialogFooter>
-          )}
+          <DialogFooter>
+            <Button onClick={() => onOpenChange(false)} variant={'secondary'}>
+              {t('dialog.delete_member.cancel')}
+            </Button>
+            <Button disabled={loading} onClick={onDeleteAccount} variant={'destructive'}>
+              {loading && <Loader className="mr-2" />}
+              {t('dialog.delete_member.confirm_delete')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </DialogPortal>
     </Dialog>

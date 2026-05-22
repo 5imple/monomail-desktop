@@ -14,7 +14,6 @@ export const validRendererChannel = [
   'renderer:auth:sign-in',
   'renderer:auth:add-account',
   'renderer:auth:scope-updated',
-  'renderer:auth:billing-updated',
   'renderer:auth:token-changed',
   'renderer:auth:signed-out',
 

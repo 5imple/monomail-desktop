@@ -16,7 +16,6 @@ import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeInlineAtom } from '@/renderer/app/store/compose/useComposeInlineAtom';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -30,8 +29,6 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import { Button } from '@/renderer/app/components/ui/button';
-// useBillingAtom removed — payment-free build.
 
 interface DisplayPanelProps {
   className?: string;
@@ -60,12 +57,9 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
   const printRef = useRef<HTMLDivElement>(null);
   const promiseResolveRef = useRef<(() => void) | null>(null);
   const [spacerHeight, setSpacerHeight] = useState(0);
-  const { openDialog } = useDialogs();
   const { removeDraft, sendDraftQueue } = useDraftAtom();
   const executeCommand = useExecuteCommand();
   const { inlineDrafts } = useComposeInlineAtom();
-  const getUserPlan = () => 'pro';
-  const hasActiveSubscription = () => true;
   const { trackEvent } = useUserTrackingData();
 
   // Focus tracking
@@ -81,9 +75,6 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
 
   const isOlderThan365Days = thread
     ? differenceInDays(new Date(), new Date(thread.timestamp)) > 365
-    : false;
-  const isOlderThan15Days = thread
-    ? differenceInDays(new Date(), new Date(thread.timestamp)) > 15
     : false;
 
   // Smooth scroll function
@@ -447,15 +438,7 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
           onKeyDown={handleScrollAreaKeyDown}
           tabIndex={0} // Make the scroll area focusable
         >
-          <div
-            className={cn(
-              'flex flex-1 flex-col gap-6 p-5 pt-2',
-              isOlderThan15Days &&
-                (getUserPlan() === 'free' || !hasActiveSubscription()) &&
-                'blur-xl'
-            )}
-            ref={printRef}
-          >
+          <div className={cn('flex flex-1 flex-col gap-6 p-5 pt-2')} ref={printRef}>
             {orderedItems.messages.map((message, index) => {
               const isLastMessage = index === orderedItems.messages.length - 1;
               const relatedDraft = orderedItems.messageDraftMap[message.id];
@@ -503,28 +486,6 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
             ))}
             <div style={{ height: spacerHeight }} />
           </div>
-          {/* TODO */}
-          {isOlderThan15Days && (getUserPlan() === 'free' || !hasActiveSubscription()) && (
-            <div className="absolute bottom-0 left-0 right-0 top-0">
-              <div className="my-4 py-8 text-center">
-                <div className="mb-2 text-sm text-foreground">
-                  {t('display_panel.history_limited', {
-                    day: 15
-                  })}
-                </div>
-                <Button
-                  sizeVariant={'sm'}
-                  variant={'default'}
-                  className="text-xs"
-                  onClick={() => {
-                    openDialog('preference', { defaultPage: 'billing' });
-                  }}
-                >
-                  Upgrade my plan
-                </Button>
-              </div>
-            </div>
-          )}
         </ScrollArea>
         <div
           className={cn(

@@ -32,8 +32,7 @@ export function useDialogs() {
         [dialog]: {
           ...prevState[dialog],
           open: false,
-          // Reset aiSearchMode and selectedSpaceId when closing commandPalette
-          ...(dialog === 'commandPalette' && { aiSearchMode: false, selectedSpaceId: undefined })
+          ...(dialog === 'commandPalette' && { selectedSpaceId: undefined })
         }
       }));
     },

@@ -66,7 +66,6 @@ export interface DialogState {
     pinContact: string;
     selectedAccountId: string; // Added this field for multi-account support
     selectedSpaceId?: string; // Added this field for space context
-    aiSearchMode?: boolean; // Added this field for AI search mode
   };
   pinContact: {
     open: boolean;
@@ -123,8 +122,7 @@ export const dialogStateAtom = atom<DialogState>({
     bookmarkIcon: '',
     pinContact: '',
     selectedAccountId: '', // Initialize with empty string
-    selectedSpaceId: undefined, // Initialize with undefined
-    aiSearchMode: false // Initialize AI search mode as false
+    selectedSpaceId: undefined // Initialize with undefined
   },
   pinContact: {
     open: false

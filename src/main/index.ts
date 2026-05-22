@@ -18,7 +18,7 @@ protocol.registerSchemesAsPrivileged([
       supportFetchAPI: true,
       stream: true,
       corsEnabled: true,
-      allowServiceWorkers: true
+      allowServiceWorkers: false
     }
   }
 ]);

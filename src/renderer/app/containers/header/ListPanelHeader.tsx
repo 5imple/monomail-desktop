@@ -21,7 +21,6 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useDefaultNav, useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 
@@ -45,8 +44,6 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     const { fetchThreadsHandler, resetThreadsArray, loadingStatus } = useThreadList();
     const { aggregatedSyncState } = useSyncHistory();
     const { updateDraft } = useDraftAtom();
-    const getUserPlan = () => 'pro';
-    const billingLoading = false;
     const { openDialog } = useDialogs();
     const { labelsMapByAccount } = useLabelAtom();
 
@@ -56,36 +53,27 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     // Account error detection logic
     const accountsWithErrors = useMemo(() => {
       return accounts.filter((account) => {
-        const currentPlan = getUserPlan();
-        const accountIndex = accounts.findIndex((acc) => acc.uid === account.uid);
-
         // Don't show label-related errors during initial load when labels are still loading
         const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
         const hasLabelError = hasLabelsLoaded && !labelsMapByAccount[account.uid];
 
         return (
-          (currentPlan === 'free' && accounts.length > 2 && accountIndex >= 2) ||
           hasLabelError ||
           account.isExpired ||
           !account.scopes.some((scope) => scope.includes('https://mail.google.com'))
         );
       });
-    }, [accounts, getUserPlan, labelsMapByAccount]);
+    }, [accounts, labelsMapByAccount]);
 
     // Get account status tooltip
     const getAccountStatusTooltip = useCallback(() => {
       if (accountsWithErrors.length === 0) return '';
 
       const errorMessagesSet = new Set<string>();
-      const currentPlan = getUserPlan();
       const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
 
       accountsWithErrors.forEach((account) => {
-        const accountIndex = accounts.findIndex((acc) => acc.uid === account.uid);
-
-        if (currentPlan === 'free' && accounts.length > 2 && accountIndex >= 2) {
-          errorMessagesSet.add(t('tooltips.account_status.too_many_accounts'));
-        } else if (account.isExpired) {
+        if (account.isExpired) {
           errorMessagesSet.add(t('tooltips.account_status.authentication_expired'));
         } else if (hasLabelsLoaded && !labelsMapByAccount[account.uid]) {
           errorMessagesSet.add(t('tooltips.account_status.too_many_requests'));
@@ -97,22 +85,12 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
       });
 
       return Array.from(errorMessagesSet).join('\n');
-    }, [accountsWithErrors, accounts, labelsMapByAccount, getUserPlan, t]);
+    }, [accountsWithErrors, labelsMapByAccount, t]);
 
     // Handle account reconnection
     const handleAccountReconnectClick = useCallback(() => {
-      const currentPlan = getUserPlan();
-      const hasAccountLimitError = accountsWithErrors.some((account) => {
-        const accountIndex = accounts.findIndex((acc) => acc.uid === account.uid);
-        return currentPlan === 'free' && accounts.length > 2 && accountIndex >= 2;
-      });
-
-      if (hasAccountLimitError) {
-        openDialog('preference', { defaultPage: 'billing' });
-      } else {
-        openDialog('preference', { defaultPage: 'integration' });
-      }
-    }, [openDialog, accounts, accountsWithErrors, getUserPlan]);
+      openDialog('preference', { defaultPage: 'integration' });
+    }, [openDialog]);
 
     // Define Gmail categories for title lookup
     const gmailCategories = useMemo(
@@ -224,7 +202,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     return (
       <div ref={ref} className="z-10">
         <ThreadSelectionToast />
-        <div className="drag flex items-end gap-3 px-6 pt-4 pb-3 sm:pt-5">
+        <div className="drag flex items-end gap-3 px-6 pb-3 pt-4 sm:pt-5">
           <div
             className={cn(
               'flex min-w-0 flex-1 items-end gap-3',
@@ -240,9 +218,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
                   itself doesn't need to repeat the folder name. Hidden if
                   there's no scope to communicate. */}
               <p className="mb-0.5 line-clamp-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                {globalSearchQuery && activeItem?.id !== 'search'
-                  ? 'Inbox'
-                  : 'Newton'}
+                {globalSearchQuery && activeItem?.id !== 'search' ? 'Inbox' : 'Newton'}
               </p>
               <h1 className="line-clamp-1 text-[22px] font-medium tracking-tight text-foreground sm:text-[26px]">
                 {scopeLabel}
@@ -264,7 +240,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
               )}
             </Button>
 
-            {accountsWithErrors.length > 0 && !billingLoading && (
+            {accountsWithErrors.length > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

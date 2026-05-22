@@ -4,13 +4,11 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 export type NPSEventType =
-  | 'subscription_renewal'
   | 'feature_usage'
   | 'support_interaction'
   | 'onboarding_complete'
   | 'general_feedback'
   | 'product_update'
-  | 'cancellation_flow'
   | 'third_email';
 
 export interface NPSEntry {

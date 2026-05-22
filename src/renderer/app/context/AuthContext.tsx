@@ -17,14 +17,11 @@ import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { auth } from '@/renderer/app/lib/monoAuth';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
-// useBillingAtom + getCachedBillingInfo removed — payment-free build.
-import { useAutopilotSettings } from '@/renderer/app/store/ai/useAutopilotSettings';
 import { useBookmarkAtom } from '@/renderer/app/store/bookmark/useBookmarkAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
 import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
-import { useAIFilters } from '@/renderer/app/store/filter/useAIFilters';
 import { clearLabelsCache, useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useSharedAtom } from '@/renderer/app/store/shared/useSharedAtom';
 import {
@@ -248,14 +245,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { initializeContacts } = useContactAtom();
   const { fetchAndSetTrackingHistories } = useTrackingAtom();
   const { setTemplates } = useTemplateAtom();
-  const { loadAllFilters } = useAIFilters();
   const { setSignatures } = useSignatureAtom();
   const { updateDraft, resetDrafts } = useDraftAtom();
   const { resetThreadsMap } = useThreadOperationAtom();
-  // Payment-free build — billing state functions are no-ops below.
   const { loadShared, loadSharedForAllAccounts } = useSharedAtom();
   const { loadLabels, loadCachedLabels } = useLabelAtom();
-  const { loadAutopilotSettings } = useAutopilotSettings();
 
   // Use the space hooks
   const { loadSpaces, activeSpace, loadCachedSpaces } = useSpaceAtom();
@@ -373,14 +367,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     fetchAndSetTrackingHistories();
   }, [fetchAndSetTrackingHistories]);
 
-  const fetchBilling = useCallback(
-    async (_token: string) => {
-      // Payment-free build — no subscription to fetch. Kept as a no-op
-      // so call sites (post-sign-in hydration) don't need editing.
-    },
-    []
-  );
-
   const fetchTemplates = useCallback(async () => {
     const response = await templateApi.getTemplates();
     setTemplates(response);
@@ -422,14 +408,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loadLabels();
   }, [loadLabels]);
 
-  const fetchAISettings = useCallback(async () => {
-    loadAutopilotSettings();
-  }, [loadAutopilotSettings]);
-
-  const fetchAIFilters = useCallback(async () => {
-    loadAllFilters();
-  }, [loadAllFilters]);
-
   // Fetch data for multiple accounts (used when switching spaces)
   const fetchDataForAccounts = useCallback(
     async (accounts: MonoAccount[]) => {
@@ -440,10 +418,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           fetchTrackingHistories(),
           fetchDrafts(),
           fetchLabels(),
-          fetchAISettings(),
           fetchTemplates(),
           fetchSignatures(),
-          fetchAIFilters(),
           fetchShared(),
           initializeContacts(accounts)
         ]);
@@ -459,7 +435,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       fetchLabels,
       fetchTemplates,
       fetchShared,
-      fetchAIFilters,
       fetchSignatures,
       resetThreadsMap,
       resetDrafts
@@ -502,7 +477,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        // Payment-free build — no cached billing info to hydrate.
         // Get the current token from main memory/safeStorage. Tokens are never
         // read from renderer IndexedDB.
         let idToken: string;
@@ -658,7 +632,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }));
 
         i18n.changeLanguage(preference.language);
-        fetchBilling(idToken);
 
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         try {
@@ -776,7 +749,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     apiClient.setApiActiveUid(null);
     await electronApi.setIdToken(null);
     await electronApi.setActiveUid(null);
-    // Payment-free build — no billing state to reset.
 
     setAuthState({
       isLoggedIn: false,
@@ -840,9 +812,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // client only registers watches on connection open, so mid-session account
       // additions need an explicit call here.
       for (const account of newAccounts) {
-        mailApi.watchCloudPubSub(account.uid).catch((e) =>
-          console.warn('[addAccount] watchCloudPubSub failed for', account.uid, e)
-        );
+        mailApi
+          .watchCloudPubSub(account.uid)
+          .catch((e) => console.warn('[addAccount] watchCloudPubSub failed for', account.uid, e));
       }
 
       loadSpaces(null);
@@ -997,18 +969,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       removeAddAccountListener();
     };
   }, []);
-
-  useEffect(() => {
-    const removeBillingListener = electronApi.on('renderer:auth:billing-updated', async () => {
-      if (idToken) {
-        await fetchBilling(idToken);
-      }
-    });
-
-    return () => {
-      removeBillingListener();
-    };
-  }, [idToken]);
 
   const contextValue = useMemo(() => {
     return {

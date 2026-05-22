@@ -208,7 +208,10 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                 // TODO better solution
                 const inlineImage = item.inlineImages[cid];
                 const ALLOWED_IMAGE_MIMES = new Set([
-                  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'
+                  'image/jpeg',
+                  'image/png',
+                  'image/gif',
+                  'image/webp'
                 ]);
                 if (inlineImage && accountId) {
                   if (!ALLOWED_IMAGE_MIMES.has(inlineImage.mimeType)) {
@@ -442,44 +445,50 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 
       const uuid = generateUUID();
 
-      const unsubscribePromise = async () => {
+      const unsubscribePromise = async (): Promise<{ mode: 'https' | 'mailto' }> => {
         if (!accountId) throw new Error('No account found');
         if (!currentMessage.listUnsubscribe || !currentMessage.listUnsubscribe.url.length) {
           throw new Error('No unsubscribe URL available.');
         }
 
-        try {
-          const unsubscribeUrl = currentMessage.listUnsubscribe.url[0];
-
-          if (!unsubscribeUrl) {
-            throw new Error('No valid unsubscribe URL found');
+        const unsubscribeUrls = currentMessage.listUnsubscribe.url;
+        const httpsUrl = unsubscribeUrls.find((rawUrl) => {
+          try {
+            return new URL(rawUrl).protocol === 'https:';
+          } catch {
+            return false;
           }
+        });
+        const mailtoUrl = unsubscribeUrls.find((rawUrl) => /^mailto:/i.test(rawUrl));
 
-          const response = await electronApi.unsubscribeFetch(unsubscribeUrl);
+        if (httpsUrl) {
+          const response = await electronApi.unsubscribeFetch(httpsUrl);
           if (!response.ok) {
-            throw new Error(`Failed to unsubscribe: ${response.error ?? response.status}`);
+            console.error('Unsubscribe failed:', response.error ?? response.status);
+            if (!mailtoUrl) {
+              throw new Error(`Failed to unsubscribe: ${response.error ?? response.status}`);
+            }
+          } else {
+            apiClient.setApiActiveUid(accountId);
+            await unsubscribeApi.addUnsubscribedEmail({ email: currentMessage.from.email });
+            setIsUnsubscribed(true);
+            return { mode: 'https' };
           }
-
-          apiClient.setApiActiveUid(accountId);
-          unsubscribeApi.addUnsubscribedEmail({ email: currentMessage.from.email });
-          setIsUnsubscribed(true);
-          return { success: true };
-        } catch (error: any) {
-          console.error('Unsubscribe failed:', error);
-
-          // Check if there's a mailto: URL in the unsubscribe list
-          const mailtoUrl = currentMessage.listUnsubscribe.url.find((url) =>
-            url.startsWith('mailto:')
-          );
-
-          throw error;
         }
+
+        if (mailtoUrl) {
+          window.open(mailtoUrl, '_blank', 'noopener,noreferrer');
+          return { mode: 'mailto' };
+        }
+
+        throw new Error('No supported unsubscribe URL found.');
       };
 
       toast.promise(unsubscribePromise, {
         id: uuid,
         loading: 'Unsubscribing from mailing list',
-        success: (result) => 'Successfully unsubscribed',
+        success: (result) =>
+          result.mode === 'mailto' ? 'Opened unsubscribe email' : 'Successfully unsubscribed',
         error: (err) => `Failed to unsubscribe: ${err.message}`
       });
     };

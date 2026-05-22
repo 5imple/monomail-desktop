@@ -61,8 +61,7 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
 
   const handleSearchClick = useCallback(() => {
     openDialog('commandPalette', {
-      pages: ['SEARCH'],
-      aiSearchMode: false
+      pages: ['SEARCH']
     });
   }, [openDialog]);
 

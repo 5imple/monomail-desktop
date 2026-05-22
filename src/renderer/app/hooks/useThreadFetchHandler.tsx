@@ -20,7 +20,6 @@ import {
 import { DBCustomSearchThreadsMultiUser } from '@/renderer/app/lib/db/thread/customSearch';
 import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
-// useBillingAtom removed — payment-free build.
 import { useThreadListAtom } from '@/renderer/app/store/layout/threadList/useThreadListAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -75,7 +74,6 @@ const useThreadFetchHandler = () => {
 
   // Store activeSpace in a ref to always have the latest value
   const activeSpaceRef = useRef(activeSpace);
-  const [needPayment, setNeedPayment] = useState(false);
   const { syncThreads, abortSync } = useSyncThread();
   const { syncThreadHistory, subscribe: historySubscribe } = useSyncHistory();
   const { subscribe: messageSubscribe } = useMessage();
@@ -629,10 +627,6 @@ const useThreadFetchHandler = () => {
 
                   // Check if we might have more results
 
-                  if (isLimited) {
-                    setNeedPayment(true);
-                    setLoadingStatus('ERROR');
-                  }
                   setHasMore(!isLimited && threads.length === FETCH_THREADS_LIMIT);
                 } else {
                   // No more results
@@ -860,15 +854,6 @@ const useThreadFetchHandler = () => {
                               error?.data?.message
                             );
 
-                            if (statusCode === 402) {
-                              return {
-                                accountId,
-                                threads: [],
-                                hasMore: false,
-                                status: 'payment_required'
-                              };
-                            }
-
                             if (statusCode === 429) {
                               return {
                                 accountId,
@@ -890,16 +875,9 @@ const useThreadFetchHandler = () => {
                         })
                       );
 
-                      const paymentRequiredAccounts = accountsResults.filter(
-                        (result) => result.status === 'payment_required'
-                      );
                       const successfulAccounts = accountsResults.filter(
                         (result) => result.status === 'success'
                       );
-
-                      if (paymentRequiredAccounts.length > 0) {
-                        setNeedPayment(true);
-                      }
 
                       const allThreads = successfulAccounts.flatMap((result) => result.threads);
                       return allThreads.sort((a, b) => b.timestamp - a.timestamp);
@@ -1188,22 +1166,11 @@ const useThreadFetchHandler = () => {
                     try {
                       return await fetchWithRetry(accountId);
                     } catch (error: any) {
-                      // Track payment errors per account
                       const statusCode = error?.status || 500;
                       console.error(
                         `Error fetching threads for account ${accountId}:`,
                         error?.data?.message
                       );
-
-                      if (statusCode === 402) {
-                        // Mark this specific account as needing payment
-                        return {
-                          accountId,
-                          threads: [],
-                          hasMore: false,
-                          status: 'payment_required'
-                        };
-                      }
 
                       if (statusCode === 429) {
                         // Rate limit exceeded even after retries
@@ -1228,9 +1195,6 @@ const useThreadFetchHandler = () => {
                 );
 
                 // Track account statuses
-                const paymentRequiredAccounts = accountsResults.filter(
-                  (result) => result.status === 'payment_required'
-                );
                 const rateLimitedAccounts = accountsResults.filter(
                   (result) => result.status === 'rate_limited'
                 );
@@ -1238,11 +1202,6 @@ const useThreadFetchHandler = () => {
                 const successfulAccounts = accountsResults.filter(
                   (result) => result.status === 'success'
                 );
-
-                // Determine if we need to set payment flag
-                if (paymentRequiredAccounts.length > 0) {
-                  setNeedPayment(true);
-                }
 
                 // Log rate limited accounts for debugging
                 if (rateLimitedAccounts.length > 0) {
@@ -1326,10 +1285,6 @@ const useThreadFetchHandler = () => {
               const statusCode = error?.status || 500;
               console.error('Error fetching threads:', error?.data?.message);
 
-              if (statusCode === 402) {
-                setNeedPayment(true);
-              }
-
               // Even if there was an error, try to show whatever threads we could get
               if (threads && threads.length > 0) {
                 // Still show threads we were able to load
@@ -1394,7 +1349,6 @@ const useThreadFetchHandler = () => {
             // Use await to ensure this completes before continuing
             await fetchThreadsHandler(false);
           }
-          setNeedPayment(false);
         },
         {
           priority: OperationPriority.MEDIUM,
@@ -1416,10 +1370,6 @@ const useThreadFetchHandler = () => {
     (status: number, accountId: string) => {
       enqueueOperation(
         async () => {
-          if (status === 402) {
-            setNeedPayment(true);
-          }
-
           // If we get a 404 error from history sync, we need a full sync
           if (status === 404) {
             setNeedsFullSync((prev) => ({
@@ -1559,7 +1509,6 @@ const useThreadFetchHandler = () => {
     resetThreadsArray,
     setThreadIds,
     threadIds,
-    needPayment,
     fetchThreadsHandler,
     loadMore,
     hasMore,

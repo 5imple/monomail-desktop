@@ -9,8 +9,6 @@ import {
 import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandInput';
 import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-// Billing imports removed — payment-free build.
-import { Button } from '@/renderer/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
 
 interface SpaceSelectionPageProps {
@@ -18,7 +16,6 @@ interface SpaceSelectionPageProps {
   setSpaceName: (name: string) => void;
   onSelectSpace: (spaceId: string) => void;
   onCreateNew: () => void;
-  onUpgrade: () => void;
   bounce: () => void;
   onKeydown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
 }
@@ -28,17 +25,12 @@ const SpaceSelectionPage: React.FC<SpaceSelectionPageProps> = ({
   setSpaceName,
   onSelectSpace,
   onCreateNew,
-  onUpgrade,
   bounce,
   onKeydown
 }) => {
   const { t } = useTranslation();
   const { spaces } = useSpaceAtom();
   const [filteredSpaces, setFilteredSpaces] = useState(spaces);
-
-  // Payment-free build — unlimited spaces.
-  const canCreateSpace = true;
-  const spaceLimit = Infinity;
 
   // Filter spaces based on input
   useEffect(() => {
@@ -60,13 +52,8 @@ const SpaceSelectionPage: React.FC<SpaceSelectionPageProps> = ({
   // Handle continuing to create a new space
   const handleCreateNew = () => {
     if (spaceName.trim()) {
-      if (canCreateSpace) {
-        bounce();
-        onCreateNew();
-      } else {
-        // Show upgrade prompt
-        onUpgrade();
-      }
+      bounce();
+      onCreateNew();
     }
   };
 
@@ -123,33 +110,15 @@ const SpaceSelectionPage: React.FC<SpaceSelectionPageProps> = ({
         {/* Create New Space option */}
         {!filteredSpaces.find((space) => space.name === spaceName) && (
           <CommandGroup heading={t('command_palette.header.create_new_space')} className="p-2">
-            {canCreateSpace ? (
-              <CommandItem
-                disabled={!spaceName.trim()}
-                variant={'raycast'}
-                value={`${spaceName}`}
-                onSelect={handleCreateNew}
-              >
-                <CommandIcon type={'Planet'} />
-                <span>
-                  {t('command_palette.space.selection.create_space', { name: spaceName })}
-                </span>
-              </CommandItem>
-            ) : (
-              <CommandItem
-                variant="raycast"
-                className="py-3"
-                onSelect={() => {
-                  bounce();
-                  onUpgrade();
-                }}
-              >
-                <MonoIcon type={'AlertCircle'} className="mr-2 h-4 w-4" />
-
-                {t('plan_selection.space_limit_reached_message', { count: spaceLimit })}
-                <MonoIcon type={'ExternalLink'} className="ml-2 h-4 w-4" />
-              </CommandItem>
-            )}
+            <CommandItem
+              disabled={!spaceName.trim()}
+              variant={'raycast'}
+              value={`${spaceName}`}
+              onSelect={handleCreateNew}
+            >
+              <CommandIcon type={'Planet'} />
+              <span>{t('command_palette.space.selection.create_space', { name: spaceName })}</span>
+            </CommandItem>
           </CommandGroup>
         )}
       </CommandList>

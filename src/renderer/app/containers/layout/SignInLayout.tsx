@@ -22,23 +22,18 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-// useBillingAtom removed — payment-free build.
 
 interface SignInLayoutProps {}
 
 const SignInLayout: FC<SignInLayoutProps> = () => {
   const { t } = useTranslation();
-  const { signIn, isLoading, signOut, isLoggedIn, preference, member, idToken } = useAuth();
+  const { signIn, isLoading, signOut, isLoggedIn, preference, member } = useAuth();
   const { loading } = useGlobalAtom();
   const { spaces } = useSpaceAtom();
-  // Payment-free build — subscription check is a constant true.
-  const hasActiveSubscription = () => true;
-  const fetchSubscription = async (_token: string) => undefined;
   const [devToken, setDevToken] = useState<string>('');
   const navigate = useNavigate();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [subscriptionChecked, setSubscriptionChecked] = useState(false);
 
   const handleSignIn = useCallback(async () => {
     const rawBaseUrl = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
@@ -168,18 +163,28 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
     fetchAppVersion();
   }, []);
 
-  // Fetch subscription data when user is logged in
-  useEffect(() => {
-    if (isLoggedIn && member && idToken && !subscriptionChecked) {
-      fetchSubscription(idToken).finally(() => {
-        setSubscriptionChecked(true);
-      });
-    }
-  }, [isLoggedIn, member, idToken, fetchSubscription, subscriptionChecked]);
+  // Show a clear setup screen instead of blank when the backend URL is missing.
+  const apiUrlConfigured = !!(import.meta.env.MONO_ENV_API_URL || '').trim();
+  if (!apiUrlConfigured) {
+    return (
+      <div className="no-drag flex h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
+        <div className="max-w-md space-y-3">
+          <h1 className="text-xl font-semibold">Backend not configured</h1>
+          <p className="text-sm text-muted-foreground">
+            Copy{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env.example</code> to{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env</code> and set{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">MONO_ENV_API_URL</code>{' '}
+            to your backend origin, then restart the app.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  if (loading || (isLoggedIn && member && !subscriptionChecked)) return null;
+  if (loading) return null;
 
-  if (isLoggedIn && member && subscriptionChecked) {
+  if (isLoggedIn && member) {
     if (spaces.length === 0) {
       return <Navigate to={'/onboarding'} />;
     }
@@ -240,8 +245,7 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
             </Button>
             {(() => {
               const homepage = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
-              const homepageMisconfigured =
-                !homepage || !/^https?:\/\//i.test(homepage);
+              const homepageMisconfigured = !homepage || !/^https?:\/\//i.test(homepage);
               const showDevAffordances =
                 process.env.NODE_ENV === 'development' || homepageMisconfigured;
               if (!showDevAffordances) return null;
@@ -254,9 +258,9 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
                   )}
                   {homepageMisconfigured && (
                     <p className="text-xs text-muted-foreground">
-                      Set <code>MONO_ENV_HOMEPAGE_DOMAIN</code> to your on-prem sign-in URL
-                      (e.g. <code>https://app.example.com</code>) and rebuild. Until then,
-                      paste a backend-issued access token here to sign in directly.
+                      Set <code>MONO_ENV_HOMEPAGE_DOMAIN</code> to your on-prem sign-in URL (e.g.{' '}
+                      <code>https://app.example.com</code>) and rebuild. Until then, paste a
+                      backend-issued access token here to sign in directly.
                     </p>
                   )}
                   <Textarea

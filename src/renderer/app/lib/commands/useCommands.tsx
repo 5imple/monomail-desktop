@@ -7,7 +7,6 @@ import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-// useBillingAtom removed — payment-free build.
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { CommandType } from '@/renderer/app/types';

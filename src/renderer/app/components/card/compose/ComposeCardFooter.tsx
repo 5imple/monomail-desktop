@@ -13,11 +13,9 @@ import {
 } from '@/renderer/app/components/ui/select';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
-// useBillingAtom removed — payment-free build.
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 
 import React, { useCallback, useRef, useState, useMemo } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
@@ -34,7 +32,6 @@ interface ComposeCardFooterProps {
   handleSendMessage: () => Promise<void>;
   onFromChange: (email: string, uid: string) => void;
   handleFileChange: (fileList: FileList | null) => Promise<void>;
-  handleAiButtonClick: () => void;
   trackingEnabled: boolean;
   onTrackingChange: (enabled: boolean) => void;
   draftSaveStatus: 'INITIALIZED' | 'LOADING' | 'SAVED' | 'ERROR';
@@ -46,15 +43,12 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   draft,
   handleSendMessage,
   handleFileChange,
-  handleAiButtonClick,
   trackingEnabled,
   onTrackingChange,
   sendDisabled,
   onFromChange
 }) => {
   const { t } = useTranslation();
-  // Payment-free build — all plan gates always pass.
-  const hasProAccess = true;
   const { accounts, getUidFromEmail, getAccountByUid } = useAuth();
   const { openDialog } = useDialogs();
   const [from, setFrom] = useState(draft.from);
@@ -78,22 +72,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
     return accounts.filter((account) => !account.isExpired);
   }, [accounts]);
 
-  // Check if user has pro plan for AI features
-  const handleAiAction = useCallback(() => {
-    if (isCurrentAccountExpired) {
-      // Open preferences to reconnect account
-      openDialog('preference', { defaultPage: 'integration' });
-      return;
-    }
-
-    if (!hasProAccess) {
-      // Open billing page if user doesn't have pro access
-      openDialog('preference', { defaultPage: 'billing' });
-      return;
-    }
-    handleAiButtonClick();
-  }, [hasProAccess, isCurrentAccountExpired, openDialog, handleAiButtonClick]);
-
   const handleTrackingToggle = useCallback(
     (checked: boolean) => {
       if (isCurrentAccountExpired) {
@@ -104,7 +82,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
       // Payment-free build — tracking is always available.
       onTrackingChange(checked);
     },
-    [isCurrentAccountExpired, openDialog, hasProAccess, onTrackingChange]
+    [isCurrentAccountExpired, openDialog, onTrackingChange]
   );
   // Handle form submission
   const handleSubmit = async () => {
@@ -148,12 +126,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
       }
     }
   };
-
-  useHotkeys('MOD+J', handleAiAction, { preventDefault: true, scopes: ['GLOBAL_COMPOSE'] }, [
-    handleAiAction,
-    hasProAccess,
-    isCurrentAccountExpired
-  ]);
 
   const getAccountReconnectTooltip = useCallback(() => {
     return t('tooltips.account_status.authentication_expired');
@@ -224,33 +196,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
               <MonoIcon type="ScrollText" className="h-4 w-4" />
             </Button>
           </TemplateSwitcher> */}
-          {/* {(billingInfo.subscriptions.length > 0 || import.meta.env.DEV) && ( */}
-          <Button
-            className={cn(
-              isCurrentAccountExpired
-                ? 'cursor-not-allowed text-muted-foreground/50'
-                : hasProAccess
-                  ? // AI affordance uses amber (secondary-accent) so red
-                    // stays reserved for primary actions.
-                    'text-muted-foreground hover:text-[hsl(var(--secondary-accent))]'
-                  : 'cursor-not-allowed text-muted-foreground/50'
-            )}
-            onClick={handleAiAction}
-            variant="ghost"
-            typeVariant="icon"
-            shortcut={'MOD+J'}
-            tooltip={
-              isCurrentAccountExpired
-                ? getAccountReconnectTooltip()
-                : hasProAccess
-                  ? t('compose_card.footer.mono_ai')
-                  : t('settings.billing.upgrade_required')
-            }
-            disabled={false} // Keep enabled to allow clicking for various redirects
-          >
-            <MonoIcon type="Sparkles" />
-          </Button>
-
           <div className="ml-1">
             <Tooltip>
               <TooltipTrigger className="flex items-center gap-2">
@@ -275,7 +220,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
               <TooltipContent>{t('compose_card.footer.use_tracker')}</TooltipContent>
             </Tooltip>
           </div>
-          {/* )} */}
         </div>
         <div className="ml-auto flex gap-2">
           <div className="flex w-full items-center justify-end gap-2">
@@ -391,7 +335,10 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         toast.error('Could not determine sending account');
         return;
       }
-      const bodyPlain = (draft.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const bodyPlain = (draft.body || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       const res = await scheduleDraft({
         draftId: draft.id,
         accountId,

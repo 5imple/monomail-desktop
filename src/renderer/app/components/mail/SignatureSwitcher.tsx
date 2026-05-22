@@ -13,7 +13,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/componen
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
-// useBillingAtom removed — payment-free build.
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
 import { NodeViewWrapper } from '@tiptap/react';
 import { useEffect, useState } from 'react';
@@ -102,7 +101,6 @@ const SignatureSwitcher = ({
             <TooltipTrigger asChild>
               <PopoverTrigger asChild>
                 {/* <Button
-              // disabled={!billingInfo.subscription}
               className="-ml-4 mt-1 cursor-pointer text-sm opacity-0 hover:opacity-100 group-hover:opacity-100"
               variant="ghost"
               typeVariant={'inline'}

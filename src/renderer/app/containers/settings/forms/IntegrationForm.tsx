@@ -21,9 +21,7 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useEffect, useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-// useBillingAtom removed — payment-free build.
 import { TooltipPortal } from '@radix-ui/react-tooltip';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
 
 const IntegrationFormSchema = z.object({
@@ -42,8 +40,6 @@ type IntegrationFormValues = z.infer<typeof IntegrationFormSchema>;
 
 export function IntegrationForm() {
   const { member, accounts, updateAccounts } = useAuth();
-  const getUserPlan = () => 'pro';
-  const { openDialog } = useDialogs();
   const { t } = useTranslation();
   const [isAddingAccount, setIsAddingAccount] = useState(false);
   const form = useForm<IntegrationFormValues>({
@@ -92,12 +88,6 @@ export function IntegrationForm() {
 
   const getAccountStatusTooltip = useCallback(
     (account: MonoAccount) => {
-      const currentPlan = getUserPlan();
-      const accountIndex = accounts.findIndex((acc) => acc.uid === account.uid);
-      if (currentPlan === 'free' && accounts.length > 2 && accountIndex >= 2) {
-        return t('tooltips.account_status.too_many_accounts');
-      }
-
       if (account.isExpired) {
         return t('tooltips.account_status.authentication_expired');
       }
@@ -108,21 +98,15 @@ export function IntegrationForm() {
 
       return t('tooltips.account_status.requires_reconnecting');
     },
-    [accounts, getUserPlan, t]
+    [t]
   );
 
-  const shouldShowReconnectButton = useCallback(
-    (account: MonoAccount) => {
-      const currentPlan = getUserPlan();
-      const accountIndex = accounts.findIndex((acc) => acc.uid === account.uid);
-      return (
-        (currentPlan === 'free' && accounts.length > 2 && accountIndex >= 2) ||
-        account.isExpired ||
-        !account.scopes.some((scope) => scope.includes('https://mail.google.com'))
-      );
-    },
-    [accounts, getUserPlan]
-  );
+  const shouldShowReconnectButton = useCallback((account: MonoAccount) => {
+    return (
+      account.isExpired ||
+      !account.scopes.some((scope) => scope.includes('https://mail.google.com'))
+    );
+  }, []);
 
   const handleAddAccount = useCallback(async () => {
     setIsAddingAccount(true);
@@ -185,37 +169,10 @@ export function IntegrationForm() {
                                   variant={'secondary'}
                                   disabled={isAddingAccount}
                                   onClick={() => {
-                                    const currentPlan = getUserPlan();
-                                    const accountIndex = accounts.findIndex(
-                                      (acc) => acc.uid === account.uid
-                                    );
-                                    if (
-                                      currentPlan === 'free' &&
-                                      accounts.length > 2 &&
-                                      accountIndex >= 2
-                                    ) {
-                                      openDialog('preference', { defaultPage: 'billing' });
-                                      return;
-                                    }
-
                                     void handleAddAccount();
                                   }}
                                 >
-                                  {(() => {
-                                    const currentPlan = getUserPlan();
-                                    const accountIndex = accounts.findIndex(
-                                      (acc) => acc.uid === account.uid
-                                    );
-                                    return (
-                                      currentPlan === 'free' &&
-                                      accounts.length > 2 &&
-                                      accountIndex >= 2
-                                    );
-                                  })() ? (
-                                    <>{t('settings.integration.upgrade_plan')}</>
-                                  ) : (
-                                    <>{t('settings.integration.reconnect')}</>
-                                  )}
+                                  {t('settings.integration.reconnect')}
                                   <MonoIcon type={'ExternalLink'} className="ml-2 h-3.5 w-3.5" />
                                 </Button>
                               )}
@@ -246,30 +203,17 @@ export function IntegrationForm() {
             </Table>
           </div>
 
-          {getUserPlan() === 'free' && accounts.length >= 2 ? (
-            <Button
-              onClick={() => {
-                openDialog('preference', { defaultPage: 'billing' });
-              }}
-              type="button"
-              variant="secondary"
-              className="mt-2"
-            >
-              {t('settings.integration.add_account')}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="secondary"
-              className="mt-2"
-              disabled={isAddingAccount}
-              onClick={() => {
-                void handleAddAccount();
-              }}
-            >
-              {t('settings.integration.add_account')}
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-2"
+            disabled={isAddingAccount}
+            onClick={() => {
+              void handleAddAccount();
+            }}
+          >
+            {t('settings.integration.add_account')}
+          </Button>
         </div>
       </form>
     </Form>

@@ -83,8 +83,7 @@ export const CACHE_KEYS = {
   USER_INFO: 'cache:user:info',
   USER_PREFERENCE: 'cache:user:preference',
   SPACES: 'cache:space:spaces',
-  LABELS: 'cache:label:labels',
-  BILLING_INFO: 'cache:billing:info'
+  LABELS: 'cache:label:labels'
 } as const;
 
 // Cache TTLs (in milliseconds)
@@ -92,6 +91,5 @@ export const CACHE_TTL = {
   USER_INFO: 24 * 60 * 60 * 1000, // 24 hours
   SPACES: 24 * 60 * 60 * 1000, // 24 hours
   LABELS: 12 * 60 * 60 * 1000, // 12 hours
-  USER_PREFERENCE: 24 * 60 * 60 * 1000, // 24 hours
-  BILLING_INFO: 12 * 60 * 60 * 1000 // 30 minutes
+  USER_PREFERENCE: 24 * 60 * 60 * 1000 // 24 hours
 } as const;

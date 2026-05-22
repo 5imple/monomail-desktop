@@ -1,5 +1,4 @@
 import { apiClient } from '@/main/api/apiClient';
-import aiSearch from '@/main/api/gmail/aiSearch';
 import attachment from '@/main/api/gmail/attachment';
 import drafts from '@/main/api/gmail/drafts';
 import history from '@/main/api/gmail/history';
@@ -63,7 +62,6 @@ export default {
   ...drafts,
   ...label,
   ...reminder,
-  ...aiSearch,
   watchCloudPubSub,
   stopCloudPubSub,
   stopAllCloudPubSub

@@ -90,6 +90,13 @@ interface IpcRenderer {
   }) => Promise<
     { ok: true; intent: string; expiresAt?: string } | { ok: false; error: string; status?: number }
   >;
+  completeAccountLink: (args: {
+    intent: string;
+    code: string;
+  }) => Promise<
+    | { ok: true; accessToken: string; expiresAt: number }
+    | { ok: false; error: string; status?: number }
+  >;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;
@@ -391,6 +398,12 @@ const electronApi: IpcRenderer = {
   createAccountLinkIntent: async (args) => {
     if (isElectron) {
       return window.electronBridge.createAccountLinkIntent(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  completeAccountLink: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.completeAccountLink(args);
     }
     return { ok: false, error: 'Not in Electron' };
   },

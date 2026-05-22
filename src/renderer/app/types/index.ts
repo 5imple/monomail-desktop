@@ -5,7 +5,6 @@ export type MonoUUID = UUID | string | number | UniqueIdentifier;
 
 export type CommandType =
   | 'SEARCH'
-  | 'AI_SEARCH'
   | 'PIN_CONTACT'
   | 'REMINDER'
   | 'SPACE'
@@ -42,7 +41,6 @@ export type CommandType =
   | 'THREAD_SELECT_STARRED'
   | 'THREAD_SELECT_UNSTARRED'
   | 'OPEN_PREFERENCES'
-  | 'OPEN_PREFERENCES_BILLING'
   | 'OPEN_PREFERENCES_TEMPLATE'
   | 'OPEN_PREFERENCES_SIGNATURE'
   | 'OPEN_PREFERENCES_SHORTCUT'
@@ -53,10 +51,6 @@ export type CommandType =
   | 'OPEN_PREFERENCES_INTEGRATION'
   | 'OPEN_PREFERENCES_COMPOSE'
   | 'OPEN_PREFERENCES_LABEL'
-
-  // AI Settings
-  | 'OPEN_PREFERENCES_FILTER'
-  | 'OPEN_PREFERENCES_AUTOPILOT'
 
   // Display Settings
   | 'OPEN_PREFERENCES_ACCOUNT'
@@ -72,7 +66,6 @@ export type CommandType =
 
   // Category Access
   | 'OPEN_EMAIL_SETTINGS'
-  | 'OPEN_AI_SETTINGS'
   | 'OPEN_DISPLAY_SETTINGS'
   | 'OPEN_FEEDBACK'
   | 'OPEN_LOG_FOLDER'

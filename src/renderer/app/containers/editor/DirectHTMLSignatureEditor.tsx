@@ -150,15 +150,58 @@ const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEdit
     const sanitizeHTML = (html: string): string =>
       DOMPurify.sanitize(html, {
         ALLOWED_TAGS: [
-          'b', 'i', 'em', 'strong', 'u', 's', 'p', 'br', 'span', 'div',
-          'a', 'img', 'table', 'tbody', 'tr', 'td', 'th', 'thead',
-          'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-          'ul', 'ol', 'li', 'blockquote', 'font', 'hr'
+          'b',
+          'i',
+          'em',
+          'strong',
+          'u',
+          's',
+          'p',
+          'br',
+          'span',
+          'div',
+          'a',
+          'img',
+          'table',
+          'tbody',
+          'tr',
+          'td',
+          'th',
+          'thead',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+          'h5',
+          'h6',
+          'ul',
+          'ol',
+          'li',
+          'blockquote',
+          'font',
+          'hr'
         ],
         ALLOWED_ATTR: [
-          'href', 'target', 'rel', 'src', 'alt', 'width', 'height',
-          'style', 'class', 'align', 'border', 'cellpadding', 'cellspacing',
-          'colspan', 'rowspan', 'bgcolor', 'color', 'face', 'size', 'title'
+          'href',
+          'target',
+          'rel',
+          'src',
+          'alt',
+          'width',
+          'height',
+          'style',
+          'class',
+          'align',
+          'border',
+          'cellpadding',
+          'cellspacing',
+          'colspan',
+          'rowspan',
+          'bgcolor',
+          'color',
+          'face',
+          'size',
+          'title'
         ],
         ALLOW_DATA_ATTR: false,
         ALLOW_UNKNOWN_PROTOCOLS: false
@@ -215,13 +258,13 @@ const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEdit
         const selectedText = selection.toString();
 
         // Create a hyperlink with the selected text and pasted URL
-        const hyperlink = createHyperlink(selectedText, text);
+        const hyperlink = sanitizeHTML(createHyperlink(selectedText, text));
 
         // Insert the hyperlink at the current selection
         document.execCommand('insertHTML', false, hyperlink);
       } else if (html) {
         // Process the HTML to ensure it's safe and preserves formatting
-        const processedHTML = processExternalHTML(html);
+        const processedHTML = sanitizeHTML(processExternalHTML(html));
 
         // Insert at the current selection
         document.execCommand('insertHTML', false, processedHTML);
@@ -346,7 +389,7 @@ const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEdit
         }
       });
 
-      return tempDiv.innerHTML;
+      return sanitizeHTML(tempDiv.innerHTML);
     };
 
     // Handle focus to show/hide placeholder

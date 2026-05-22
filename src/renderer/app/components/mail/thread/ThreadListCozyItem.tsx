@@ -1,4 +1,3 @@
-import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/icons';
@@ -104,7 +103,7 @@ const SnoozeButton = React.memo<SnoozeButtonProps>(({ thread }) => {
           typeVariant="inline"
           sizeVariant="xs"
           tabIndex={-1}
-          className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+          className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -275,9 +274,6 @@ export const ThreadListCozyItem = React.memo(
             uniqueItems.add(key);
             displayItems.push(
               <span key={`draft-${index}`} className="font-semibold text-destructive">
-                {(item as MonoDraft).isAiGenerated && (
-                  <MonoIcon className="mb-1 mr-1 inline text-destructive" type={'Sparkles'} />
-                )}
                 Draft
               </span>
             );
@@ -341,10 +337,7 @@ export const ThreadListCozyItem = React.memo(
                 absolute on the row's left edge. Read rows have no bar
                 and lighter sender/subject weight. */}
             {isUnread && (
-              <span
-                aria-hidden
-                className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent"
-              />
+              <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
             )}
             <div
               ref={ref}
@@ -358,9 +351,7 @@ export const ThreadListCozyItem = React.memo(
                 <span
                   className={cn(
                     'min-w-0 truncate text-[14px] tracking-tight',
-                    isUnread
-                      ? 'font-semibold text-foreground'
-                      : 'font-medium text-muted-foreground'
+                    isUnread ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground'
                   )}
                 >
                   {renderSenderNames()}
