@@ -1,0 +1,11 @@
+{
+  "projects": {
+    "default": "your-firebase-dev-project",
+    "dev": "your-firebase-dev-project",
+    "prod": "your-firebase-prod-project",
+    "beta": "your-firebase-prod-project"
+  },
+  "targets": {},
+  "etags": {},
+  "dataconnectEmulatorConfig": {}
+}
