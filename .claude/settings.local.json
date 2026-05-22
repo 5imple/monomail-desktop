@@ -5,7 +5,11 @@
       "Bash(npm run *)",
       "Bash(echo \"PID: $!\")",
       "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(node -e ' *)",
+      "Bash(sudo chown *)",
+      "Bash(dscl . list /Users)",
+      "Bash(git -C /Users/simple/Desktop/Projects/monomail-desktop status)"
     ]
   }
 }
