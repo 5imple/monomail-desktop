@@ -345,6 +345,13 @@ export const ThreadListCozyItem = React.memo(
         ));
       };
 
+      // Done/Trash deletes the thread from threadsMap while its id can still be
+      // in the rendered id list for a frame. The JSX below dereferences
+      // currentThread.items/.id/etc. unguarded, so without this early return a
+      // single stale id throws mid-render and unmounts the whole list — every
+      // email vanishes until a refetch. Render nothing for a missing thread.
+      if (!currentThread) return null;
+
       return (
         <div
           ref={containerRef}
@@ -424,7 +431,7 @@ export const ThreadListCozyItem = React.memo(
                       'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity duration-150',
                       isChecked
                         ? 'opacity-100'
-                        : 'opacity-20 hover:!opacity-100 focus-visible:!opacity-100 group-hover:opacity-60'
+                        : 'opacity-20 hover:!opacity-100 focus-visible:!opacity-100 group-hover:!opacity-100'
                     )}
                   >
                     <div
@@ -432,7 +439,7 @@ export const ThreadListCozyItem = React.memo(
                         'flex h-5 w-5 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,transform] duration-150',
                         isChecked
                           ? 'border-muted-foreground bg-muted-foreground text-background shadow-none'
-                          : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground'
+                          : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground group-hover:scale-105 group-hover:border-muted-foreground/70 group-hover:bg-muted/70 group-hover:text-foreground'
                       )}
                     >
                       <MonoIcon
@@ -440,7 +447,7 @@ export const ThreadListCozyItem = React.memo(
                         className={cn(
                           'stroke-[1.5]',
                           isChecked ? 'h-3.5 w-3.5' : 'h-3 w-3',
-                          isChecked ? 'opacity-100' : 'opacity-80'
+                          isChecked ? 'opacity-100' : 'opacity-80 group-hover:text-foreground'
                         )}
                       />
                     </div>

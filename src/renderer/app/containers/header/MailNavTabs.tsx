@@ -84,7 +84,7 @@ const MailNavTabs = React.memo(() => {
   );
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-center gap-[6px]">
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeId;
         const isLoading = item.id === loadingTabId && !isActive;
@@ -95,18 +95,18 @@ const MailNavTabs = React.memo(() => {
             title={`${item.label} (${item.shortcut})`}
             onClick={() => handleTabClick(item)}
             className={cn(
-              'no-drag relative flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-[13px] transition-colors',
+              'no-drag relative flex h-[32px] min-w-[96px] items-center justify-center gap-[7px] rounded-lg px-[10px] text-[14px] transition-colors',
               isActive
                 ? 'bg-foreground/[0.10] font-normal text-foreground'
                 : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
             )}
           >
-            <InboxIcon symbol={item.icon} size={17} fill={isActive || item.id === 'starred'} />
+            <InboxIcon symbol={item.icon} size={20} />
             <span>{item.label}</span>
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span
                 className={cn(
-                  'min-w-[1ch] text-xs tabular-nums',
+                  'min-w-[1ch] text-[13px] tabular-nums',
                   isActive ? 'text-foreground' : 'text-muted-foreground'
                 )}
               >

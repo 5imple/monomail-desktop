@@ -46,6 +46,7 @@ const SidebarCollapseButton: FC<SidebarCollapseButtonProps> = ({ className }) =>
       className={cn(
         // Only add transition if not loading
         !sidebarLoading && 'transition-all',
+        'h-[36px] w-[36px]',
         className
       )}
       onClick={handleButtonClick}
@@ -57,7 +58,7 @@ const SidebarCollapseButton: FC<SidebarCollapseButtonProps> = ({ className }) =>
       shortcut="MOD+\"
       sizeVariant="sm"
     >
-      <MonoIcon type={iconType} size={18} className="text-muted-foreground" />
+      <MonoIcon type={iconType} size={22} className="text-muted-foreground" />
     </Button>
   );
 };
