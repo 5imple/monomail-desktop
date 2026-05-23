@@ -1,19 +1,8 @@
 import UpdateNotificationCard from '@/renderer/app/components/card/UpdateNotificationCard';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
-import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import React, { useCallback } from 'react';
-
-import WhatsNew from '@/renderer/app/components/ui/whats-new';
 import AppSpaceContainer from '@/renderer/app/containers/sidebar/AppSpaceContainer';
 import CustomizableSidebar from '@/renderer/app/containers/sidebar/CustomizableSidebar';
 import NavItem from '@/renderer/app/containers/sidebar/NavItem';
@@ -22,7 +11,6 @@ import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
-import { getDiscordInviteUrl, getSocialXUrl } from '@/renderer/app/lib/runtimeBranding';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { FC, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -133,93 +121,6 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
         <div id="help-preferences" className={cn('block shrink-0 grow-0')}>
           <div className="relative flex flex-col items-center justify-stretch gap-1.5">
             <UpdateNotificationCard />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  className={cn('absolute bottom-3 left-3 rounded-full')}
-                  variant={'secondary'}
-                  typeVariant={'icon'}
-                  sizeVariant={'sm'}
-                  tooltip={t('sidebar.help_center')}
-                  tooltipSide="right"
-                >
-                  <MonoIcon type={'HelpCircle'} className="h-4 w-4 text-muted-foreground" />
-                  {/* {t('sidebar.help_center')} */}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="dark ml-3 w-60" align="end">
-                <WhatsNew className="" />
-                {getSocialXUrl() ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <a href={getSocialXUrl()} target="_blank" rel="noreferrer">
-                        {t('sidebar.follow_us_x')}
-                        <MonoIcon type={'ExternalLink'} className="ml-2" />
-                      </a>
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-                {getDiscordInviteUrl() ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <a href={getDiscordInviteUrl()} target="_blank" rel="noreferrer">
-                        {t('sidebar.join_discord')}
-                        <MonoIcon type={'ExternalLink'} className="ml-2" />
-                      </a>
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <a
-                    href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/policy`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {t('sidebar.terms_privacy')}
-                    <MonoIcon type={'ExternalLink'} className="ml-2" />
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    openDialog('feedback');
-                  }}
-                >
-                  {t('sidebar.send_feedback')}
-                  <DropdownMenuShortcut>
-                    <ShortcutKeyboard variant={'flat'} shortcut={'G+F'}></ShortcutKeyboard>
-                  </DropdownMenuShortcut>
-                </DropdownMenuItem>
-
-                <DropdownMenuItem
-                  onClick={() => {
-                    openDialog('preference', { defaultPage: 'shortcut' });
-                  }}
-                >
-                  {t('sidebar.keyboard_shortcut')}
-                  <DropdownMenuShortcut>
-                    <ShortcutKeyboard variant={'flat'} shortcut={'?'}></ShortcutKeyboard>
-                  </DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-
-                <DropdownMenuItem asChild>
-                  <a
-                    href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/help`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {t('sidebar.help_center')}
-                  </a>
-                </DropdownMenuItem>
-                {/* <DropdownMenuItem onClick={() => setActivateTour(true)}>
-              Take the tour again
-            </DropdownMenuItem> */}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       </div>
