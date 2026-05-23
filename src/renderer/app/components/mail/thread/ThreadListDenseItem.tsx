@@ -427,8 +427,8 @@ export const ThreadListDenseItem = React.memo(
                       )}
                     </div>
 
-                    {/* Right metadata cluster */}
-                    <div className="relative flex shrink-0 items-center gap-2">
+                    {/* Right metadata cluster — reserves min-w so the hover action bar fits without overlapping snippet text */}
+                    <div className="relative flex min-w-[110px] shrink-0 items-center justify-end gap-2">
                       {uniqueLabelIds.length > 0 && (
                         <div className="flex items-center gap-1.5">
                           {uniqueLabelIds.map((labelId, index) => {
