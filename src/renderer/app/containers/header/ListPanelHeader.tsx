@@ -5,18 +5,15 @@ import { Alert, AlertDescription } from '@/renderer/app/components/ui/alert';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import OfflineIndicator from '@/renderer/app/components/OfflineIndicator';
-import FilterOptionDropdownMenu from '@/renderer/app/containers/filter/FilterOptionDropdownMenu';
 import PinHeader from '@/renderer/app/containers/header/PinHeader';
 import ThreadSelectionToast from '@/renderer/app/containers/list/ThreadSelectionToast';
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useSyncHistory } from '@/renderer/app/context/SyncHistoryContext';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
 import { isElectron } from '@/renderer/app/lib/electronApi';
-import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
-import { useDefaultNav, useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
+import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
@@ -42,9 +39,6 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     const { updateDraft } = useDraftAtom();
     const { openDialog } = useDialogs();
     const { labelsMapByAccount } = useLabelAtom();
-
-    // Get default nav items
-    const defaultNavItems = useDefaultNav();
 
     // Account error detection logic
     const accountsWithErrors = useMemo(() => {
@@ -88,77 +82,6 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
       openDialog('preference', { defaultPage: 'integration' });
     }, [openDialog]);
 
-    // Define Gmail categories for title lookup
-    const gmailCategories = useMemo(
-      () => [
-        {
-          id: 'category:primary',
-          query: 'category:primary',
-          title: t('sidebar.nav.category.inbox')
-        },
-        {
-          id: 'in:all',
-          query: 'in:all -in:trash',
-          title: t('sidebar.nav.all_mail')
-        },
-        {
-          id: 'category:social',
-          query: 'category:social',
-          title: t('sidebar.nav.category.social')
-        },
-        {
-          id: 'category:promotions',
-          query: 'category:promotions',
-          title: t('sidebar.nav.category.promotions')
-        },
-        {
-          id: 'category:updates',
-          query: 'category:updates',
-          title: t('sidebar.nav.category.updates')
-        },
-        { id: 'category:forums', query: 'category:forums', title: t('sidebar.nav.category.forums') }
-      ],
-      [t]
-    );
-
-    // Determine active item using a comprehensive approach
-    const activeItem = useMemo(() => {
-      // First, check if it matches a default mail folder
-      const defaultMatch = defaultNavItems.find((nav) => nav.query === globalSearchQuery);
-      if (defaultMatch) return defaultMatch;
-
-      // Check if it matches a Gmail category
-      const categoryMatch = gmailCategories.find(
-        (category) => category.query === globalSearchQuery
-      );
-      if (categoryMatch) return categoryMatch;
-
-      // For custom searches or other queries
-      if (globalSearchQuery) {
-        // Try to extract label or category from query if present
-        const { field: prefix, label: value } = parseQueryFieldLabel(globalSearchQuery, true);
-        if (prefix && value) {
-          if (prefix === 'in' || prefix === 'is' || prefix === 'category') {
-            return {
-              id: globalSearchQuery,
-              query: globalSearchQuery,
-              title: value.charAt(0).toUpperCase() + value.slice(1)
-            };
-          }
-        }
-
-        // Generic search query
-        return {
-          id: 'search',
-          query: globalSearchQuery,
-          title: t('header.list.searched')
-        };
-      }
-
-      // Fallback case
-      return null;
-    }, [globalSearchQuery, defaultNavItems, gmailCategories, t]);
-
     const handleRefresh = async () => {
       resetThreadsArray();
       fetchThreadsHandler(); // Force refresh
@@ -189,12 +112,6 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     // toolbar buttons on the right. The title block uses more vertical
     // breathing room (px-6 pt-4) than the original compact toolbar so
     // the inbox feels editorial rather than dashboard-y.
-    const scopeLabel = activeItem?.title
-      ? activeItem.title
-      : globalSearchQuery
-        ? t('header.list.searched')
-        : t('header.list.no_inbox_selected');
-
     return (
       <div ref={ref} className="z-10">
         <ThreadSelectionToast />
@@ -208,12 +125,6 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
             )}
           >
             {!isElectron && sidebarCollapsed && <SidebarCollapseButton className="mr-2" />}
-
-            <div className="min-w-0">
-              <p className="mb-0.5 line-clamp-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                {globalSearchQuery && activeItem?.id !== 'search' ? 'Inbox' : 'Newton'}
-              </p>
-            </div>
 
             {accountsWithErrors.length > 0 && (
               <Tooltip>
@@ -237,9 +148,6 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
           <div className="no-drag mb-1 ml-auto flex items-center gap-1.5">
             <OfflineIndicator />
           </div>
-        </div>
-        <div className="no-drag flex items-center justify-end px-[10%] pb-1">
-          <FilterOptionDropdownMenu />
         </div>
         <div id="pin-header" className={cn('no-drag flex items-center px-6')}>
           <PinHeader />

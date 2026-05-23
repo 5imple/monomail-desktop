@@ -6,6 +6,7 @@ import { ThreadListCozyItem } from '@/renderer/app/components/mail/thread/Thread
 import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
+import FilterOptionDropdownMenu from '@/renderer/app/containers/filter/FilterOptionDropdownMenu';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
@@ -187,10 +188,13 @@ function ThreadList({ onScroll }: ThreadListProps) {
       {/* <ThreadListToolbar className="absolute left-2 top-2 z-50" /> */}
       <ScrollArea onScroll={onScroll} className="h-full" id="thread-list">
         <div className="flex h-full w-full flex-col pt-2">
-          {groupedThreads.map((group) => (
+          {groupedThreads.map((group, groupIndex) => (
             <div key={group.label}>
-              <div className="px-[10%] pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                {group.label}
+              <div className="flex items-center justify-between px-[10%] pb-1 pt-3">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                  {group.label}
+                </span>
+                {groupIndex === 0 && <FilterOptionDropdownMenu showLabel />}
               </div>
               {group.ids.map((threadId) => (
                 <MemoizedThreadItem
