@@ -351,15 +351,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
       };
-      await authApi.updateUserPreference(updatedPreference); // Call API to update server-side
-
+      // Persist locally first so settings survive backend absence.
       setAuthState((prev) => ({
         ...prev,
         preference: updatedPreference
       }));
-
-      // Update the cache with the new preference
       await authCache.updateCachedPreference(updatedPreference);
+      // Fire-and-forget backend sync; ignore failures in standalone mode.
+      authApi.updateUserPreference(updatedPreference).catch(() => {});
     },
     [user, preference]
   );
@@ -377,7 +376,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         (userPreference.display.threadList as any).showAttachments === undefined);
 
     if (needsUpdate || missingShowAttachments) {
-      await authApi.updateUserPreference(mergedPreference);
+      authApi.updateUserPreference(mergedPreference).catch(() => {});
     }
     if (isElectron) electronApi.setAlertSound(mergedPreference.notification.alertSound);
 

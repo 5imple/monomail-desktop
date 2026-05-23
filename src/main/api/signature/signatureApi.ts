@@ -1,39 +1,36 @@
 import { apiClient } from '@/main/api/apiClient';
+import { localDataStore } from '@/renderer/app/lib/localDataStore';
 import { IMonoSignature } from '@/renderer/app/store/compose/useSignatureAtom';
 
-/**
- * Get all signatures
- * @returns {Promise<IAccountSignatures>}
- */
-const getSignatures = () => {
-  return apiClient.get<IMonoSignature[]>(`/mono/signature`);
+const LS_KEY = 'signatures';
+
+const getSignatures = async (): Promise<IMonoSignature[]> => {
+  try {
+    const result = await apiClient.get<IMonoSignature[]>(`/mono/signature`);
+    const list = Array.isArray(result) ? result : [];
+    localDataStore.set(LS_KEY, list);
+    return list;
+  } catch {
+    return localDataStore.get<IMonoSignature[]>(LS_KEY) ?? [];
+  }
 };
 
-/**
- * Add a new signature
- * @param {IMonoSignature} signature
- * @returns {Promise<void>}
- */
-const addSignature = (signature: IMonoSignature) => {
-  return apiClient.post(`/mono/signature`, signature);
+const addSignature = async (signature: IMonoSignature): Promise<void> => {
+  const current = localDataStore.get<IMonoSignature[]>(LS_KEY) ?? [];
+  localDataStore.set(LS_KEY, [...current, signature]);
+  apiClient.post(`/mono/signature`, signature).catch(() => {});
 };
 
-/**
- * Update an existing signature
- * @param {IMonoSignature} signature
- * @returns {Promise<void>}
- */
-const updateSignature = (signature: IMonoSignature) => {
-  return apiClient.put(`/mono/signature/${signature.id}`, signature);
+const updateSignature = async (signature: IMonoSignature): Promise<void> => {
+  const current = localDataStore.get<IMonoSignature[]>(LS_KEY) ?? [];
+  localDataStore.set(LS_KEY, current.map((s) => (s.id === signature.id ? signature : s)));
+  apiClient.put(`/mono/signature/${signature.id}`, signature).catch(() => {});
 };
 
-/**
- * Delete a signature
- * @param {string} signatureId
- * @returns {Promise<void>}
- */
-const deleteSignature = (signatureId: string) => {
-  return apiClient.delete(`/mono/signature/${signatureId}`, {});
+const deleteSignature = async (signatureId: string): Promise<void> => {
+  const current = localDataStore.get<IMonoSignature[]>(LS_KEY) ?? [];
+  localDataStore.set(LS_KEY, current.filter((s) => s.id !== signatureId));
+  apiClient.delete(`/mono/signature/${signatureId}`, {}).catch(() => {});
 };
 
 export default {
