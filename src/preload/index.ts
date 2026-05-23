@@ -40,6 +40,10 @@ const api = {
     ipcRenderer.invoke('main:auth:create-account-link-intent', args),
   completeAccountLink: (args: { intent: string; code: string }) =>
     ipcRenderer.invoke('main:auth:complete-account-link', args),
+  removeGoogleAccount: (uid: string) =>
+    ipcRenderer.invoke('main:auth:remove-google-account', uid),
+  getGoogleAccountToken: (uid: string) =>
+    ipcRenderer.invoke('main:auth:get-google-account-token', uid),
   devAddAccount: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
     ipcRenderer.invoke('main:auth:dev-add-account', args),
   // ---------- P8 Later Queue ----------

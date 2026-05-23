@@ -61,6 +61,15 @@ interface IpcRenderer {
       displayName?: string;
       photoURL?: string;
     } | null;
+    provider?: 'google' | 'backend';
+    googleAccounts?: Array<{
+      uid: string;
+      email: string;
+      displayName?: string;
+      photoURL?: string;
+      expiresAt: number;
+      scopes: string[];
+    }>;
   } | null>;
 
   /**
@@ -87,7 +96,11 @@ interface IpcRenderer {
   /** Trigger a full Google OAuth PKCE flow in the system browser. Requires MONO_ENV_GOOGLE_CLIENT_ID. */
   initiateSignIn: () => Promise<{ ok: true } | { ok: false; error: string }>;
   /** Trigger a Google OAuth PKCE flow to add a second account. Requires MONO_ENV_GOOGLE_CLIENT_ID. */
-  initiateAddAccount: () => Promise<{ ok: true; accessToken: string } | { ok: false; error: string }>;
+  initiateAddAccount: () => Promise<
+    { ok: true; accessToken: string } | { ok: false; error: string }
+  >;
+  /** Remove a secondary Google account from local token storage. Returns ok:false if not found or if uid is the primary account. */
+  removeGoogleAccount: (uid: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   createAccountLinkIntent: (args?: {
     provider?: string;
     client?: string;
@@ -101,6 +114,9 @@ interface IpcRenderer {
     | { ok: true; accessToken: string; expiresAt: number }
     | { ok: false; error: string; status?: number }
   >;
+  getGoogleAccountToken: (
+    uid: string
+  ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;
@@ -407,6 +423,10 @@ const electronApi: IpcRenderer = {
     if (isElectron) return window.electronBridge.initiateAddAccount();
     return { ok: false, error: 'Not in Electron' };
   },
+  removeGoogleAccount: async (uid) => {
+    if (isElectron) return window.electronBridge.removeGoogleAccount(uid);
+    return { ok: false, error: 'Not in Electron' };
+  },
   createAccountLinkIntent: async (args) => {
     if (isElectron) {
       return window.electronBridge.createAccountLinkIntent(args);
@@ -416,6 +436,12 @@ const electronApi: IpcRenderer = {
   completeAccountLink: async (args) => {
     if (isElectron) {
       return window.electronBridge.completeAccountLink(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  getGoogleAccountToken: async (uid) => {
+    if (isElectron) {
+      return window.electronBridge.getGoogleAccountToken(uid);
     }
     return { ok: false, error: 'Not in Electron' };
   },

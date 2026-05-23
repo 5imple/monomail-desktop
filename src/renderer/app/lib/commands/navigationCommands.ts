@@ -132,15 +132,5 @@ export const createNavigationCommands = (
         electronApi.openLogFolder();
       }
     },
-
-    OPEN_FEEDBACK: {
-      scope: 'GLOBAL',
-      title: t('command.open_feedback'),
-      hotkeys: ['G+F', 'MOD+G+F'],
-      icon: 'ChatBubble',
-      action: (_: any) => {
-        openDialog('feedback');
-      }
-    }
   };
 };

@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import authApi from '@/main/api/auth/authApi';
 import { MonoAccount } from '@/main/api/auth/types';
+import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import AccountList from '@/renderer/app/components/ui/account-list';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -73,14 +74,24 @@ export function IntegrationForm() {
 
   const handleDisconnectAccount = async (account: MonoAccount) => {
     if (!member) return;
+    const primaryAccount = accounts.find((acc) => acc.uid === member.primaryUid);
+    if (!primaryAccount) return;
     try {
-      const primaryAccount = accounts.find((account) => account.uid === member.primaryUid);
-      if (primaryAccount) {
-        // TODO update space
-        await authApi.unlinkAccountFromUser(account.uid);
-        await updateAccounts();
-        toast.success(`Disconnected ${account.email}`);
+      // Try local removal first (Google accounts in standalone / no-backend mode).
+      // Falls back to the backend unlink API if the account isn't in local token storage.
+      if (isElectron) {
+        const localResult = await electronApi.removeGoogleAccount(account.uid);
+        if (localResult.ok) {
+          // renderer:auth:add-account fires from main to trigger updateAccounts,
+          // but also call directly to guarantee immediate UI update.
+          await updateAccounts();
+          toast.success(`Disconnected ${account.email}`);
+          return;
+        }
       }
+      await authApi.unlinkAccountFromUser(account.uid);
+      await updateAccounts();
+      toast.success(`Disconnected ${account.email}`);
     } catch (e) {
       toast.error(t('toast.error.unlink_account'));
     }

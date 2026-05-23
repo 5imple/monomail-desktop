@@ -21,6 +21,15 @@ interface IpcRenderer {
       displayName?: string;
       photoURL?: string;
     } | null;
+    provider?: 'google' | 'backend';
+    googleAccounts?: Array<{
+      uid: string;
+      email: string;
+      displayName?: string;
+      photoURL?: string;
+      expiresAt: number;
+      scopes: string[];
+    }>;
   } | null>;
   signOutMain: () => Promise<void>;
   refreshToken: () => Promise<
@@ -32,7 +41,9 @@ interface IpcRenderer {
     expiresInSec?: number;
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
   initiateSignIn: () => Promise<{ ok: true } | { ok: false; error: string }>;
-  initiateAddAccount: () => Promise<{ ok: true; accessToken: string } | { ok: false; error: string }>;
+  initiateAddAccount: () => Promise<
+    { ok: true; accessToken: string } | { ok: false; error: string }
+  >;
   createAccountLinkIntent: (args?: {
     provider?: string;
     client?: string;
@@ -46,6 +57,10 @@ interface IpcRenderer {
     | { ok: true; accessToken: string; expiresAt: number }
     | { ok: false; error: string; status?: number }
   >;
+  removeGoogleAccount: (uid: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  getGoogleAccountToken: (
+    uid: string
+  ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;

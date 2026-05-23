@@ -56,18 +56,18 @@ const STUB_ACCOUNTS = [
     primary: true,
     scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
     isExpired: false
-  },
-  {
-    uid: 'mock-account-secondary',
-    displayName: 'Mock User 2',
-    provider: 'google',
-    email: 'mock.user2@example.com',
-    profileImageUrl: '',
-    primary: false,
-    scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
-    isExpired: false
   }
 ];
+const SECONDARY_ACCOUNT = {
+  uid: 'mock-account-secondary',
+  displayName: 'Mock Secondary',
+  provider: 'google',
+  email: 'mock.secondary@gmail.com',
+  profileImageUrl: '',
+  primary: false,
+  scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
+  isExpired: false
+};
 const accountLinkIntents = new Map();
 
 // ---------- Stub inbox content ---------------------------------------------
@@ -100,13 +100,13 @@ function makeStubThread(i, accountId) {
     'Welcome to the platform'
   ];
   const SNIPPETS = [
-    "Wanted to recap what we agreed on yesterday. The hero section should…",
+    'Wanted to recap what we agreed on yesterday. The hero section should…',
     "Attaching the revised contract — call out anything that doesn't track.",
-    "Quick one — are you around for lunch on Thursday? Trying that new place.",
-    "Top stories this week: incident retrospective, mobile beta numbers…",
+    'Quick one — are you around for lunch on Thursday? Trying that new place.',
+    'Top stories this week: incident retrospective, mobile beta numbers…',
     "Your reservation for Saturday is confirmed. We'll see you at 7pm.",
     "Here's the proposed agenda for tomorrow's sync. Add anything I missed.",
-    "We detected elevated p95 latency on the API. Investigation thread inside.",
+    'We detected elevated p95 latency on the API. Investigation thread inside.',
     'Thanks for joining! Here are a few links to get you started.'
   ];
   const sender = SENDERS[i % SENDERS.length];
@@ -159,9 +159,7 @@ function makeStubThread(i, accountId) {
   };
 }
 
-const STUB_THREADS = Array.from({ length: 8 }, (_, i) =>
-  makeStubThread(i, 'mock-account-primary')
-);
+const STUB_THREADS = Array.from({ length: 8 }, (_, i) => makeStubThread(i, 'mock-account-primary'));
 const STUB_THREADS_BY_ID = new Map(STUB_THREADS.map((t) => [t.id, t]));
 const STUB_MESSAGES_BY_ID = new Map(STUB_THREADS.flatMap((t) => t.items.map((m) => [m.id, m])));
 
@@ -289,17 +287,14 @@ function ensureSecondaryAccount() {
   const existing = STUB_ACCOUNTS.find((account) => account.uid === 'mock-account-secondary');
   if (existing) return existing;
 
-  const account = {
-    uid: 'mock-account-secondary',
-    displayName: 'Mock Secondary',
-    provider: 'google',
-    email: 'mock.secondary@gmail.com',
-    profileImageUrl: '',
-    primary: false,
-    scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
-    isExpired: false
-  };
+  const account = { ...SECONDARY_ACCOUNT };
   STUB_ACCOUNTS.push(account);
+  for (const space of mockSpaces.values()) {
+    if (space.default && !space.accountUids.includes(account.uid)) {
+      space.accountUids = [...space.accountUids, account.uid];
+      space.updatedAt = new Date().toISOString();
+    }
+  }
   return account;
 }
 
@@ -418,8 +413,9 @@ const server = createServer(async (req, res) => {
       entry.completionCode = `mock-link-code-${randomBytes(18).toString('hex')}`;
       entry.completionExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
     }
-    const completionCode = entry?.completionCode ?? `mock-link-code-${randomBytes(18).toString('hex')}`;
-    const account = ensureSecondaryAccount();
+    const completionCode =
+      entry?.completionCode ?? `mock-link-code-${randomBytes(18).toString('hex')}`;
+    const account = SECONDARY_ACCOUNT;
     const deeplink = `${DEEPLINK_PROTOCOL}://addAccount?intent=${encodeURIComponent(
       intent || ''
     )}&code=${encodeURIComponent(completionCode)}`;
@@ -472,8 +468,8 @@ const server = createServer(async (req, res) => {
     }
 
     entry.used = true;
-    ensureSecondaryAccount();
-    return send(res, 200, issueTokens());
+    const account = ensureSecondaryAccount();
+    return send(res, 200, { ...issueTokens(), accounts: STUB_ACCOUNTS, linkedAccount: account });
   }
 
   if (method === 'POST' && path === '/desktop/unsubscribe') {
@@ -616,7 +612,13 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { labels: [] });
     }
     if (method === 'GET' && (apiPath === '/mono/spaces' || apiPath === '/spaces')) {
-      return send(res, 200, Array.from(mockSpaces.values()));
+      return send(
+        res,
+        200,
+        Array.from(mockSpaces.values()).map((space) =>
+          space.default ? { ...space, accountUids: STUB_ACCOUNTS.map((a) => a.uid) } : space
+        )
+      );
     }
     if (method === 'POST' && apiPath === '/mono/spaces') {
       const body = await readJson(req).catch(() => ({}));

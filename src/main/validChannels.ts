@@ -36,6 +36,8 @@ export const validMainChannel = [
   'main:auth:initiate-sign-in',
   'main:auth:initiate-add-account',
   'main:auth:create-account-link-intent',
+  'main:auth:complete-account-link',
+  'main:auth:get-google-account-token',
   'main:auth:dev-add-account',
   'main:system:set-offline-status',
   'main:system:set-alert-sound',

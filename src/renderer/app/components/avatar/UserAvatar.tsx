@@ -81,16 +81,6 @@ const UserAvatar: FC<UserAvatarProps> = ({ user, className }) => {
             </DropdownMenuItem>
           ) : null}
 
-          <DropdownMenuItem
-            onClick={() => {
-              openDialog('feedback');
-            }}
-          >
-            {t('sidebar.send_feedback')}
-            <DropdownMenuShortcut>
-              <ShortcutKeyboard variant={'flat'} shortcut={'G+F'}></ShortcutKeyboard>
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {

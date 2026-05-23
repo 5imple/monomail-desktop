@@ -119,7 +119,7 @@ export function useSpaceAtom() {
 
   // Fetch all spaces from the server
   const loadSpaces = useCallback(
-    async (activeSpaceId: string | null) => {
+    async (activeSpaceId: string | null, accountUids?: string[]) => {
       try {
         // Fetch fresh data from server
         console.log('Fetching fresh spaces from server...');
@@ -129,7 +129,15 @@ export function useSpaceAtom() {
           throw new Error('Invalid response from server');
         }
 
-        const monoSpaces: MonoSpace[] = spacesResponse.map(mapApiSpaceToMonoSpace);
+        const monoSpaces: MonoSpace[] = spacesResponse.map((space, index) => {
+          const monoSpace = mapApiSpaceToMonoSpace(space);
+          if (!accountUids?.length || index !== 0) return monoSpace;
+          return {
+            ...monoSpace,
+            accountUids,
+            activeAccountUids: accountUids
+          };
+        });
 
         // Update state with fresh data
         setSpaces(monoSpaces);
@@ -153,7 +161,11 @@ export function useSpaceAtom() {
             // Use functional update to get current activeSpace value
             setActiveSpace((currentActiveSpace) => {
               console.log('currentActiveSpace: ', currentActiveSpace);
-              if (!currentActiveSpace || currentActiveSpace.id !== requestedSpace.id) {
+              if (
+                !currentActiveSpace ||
+                currentActiveSpace.id !== requestedSpace.id ||
+                accountUids?.length
+              ) {
                 console.log('Setting new active space:', requestedSpace.name);
                 return requestedSpace;
               }
@@ -169,7 +181,8 @@ export function useSpaceAtom() {
         setActiveSpace((currentActiveSpace) => {
           if (
             !currentActiveSpace ||
-            !monoSpaces.find((space) => space.id === currentActiveSpace.id)
+            !monoSpaces.find((space) => space.id === currentActiveSpace.id) ||
+            accountUids?.length
           ) {
             const defaultSpace = monoSpaces[0];
             cacheActiveSpaceId(defaultSpace.id);
@@ -182,6 +195,21 @@ export function useSpaceAtom() {
         console.log('Spaces fetched and cached successfully');
       } catch (error) {
         console.error('Failed to fetch spaces from server:', error);
+        // Standalone Google mode: synthesise a local space from the provided account UIDs
+        // so the thread list can resolve accounts without a backend.
+        if (accountUids?.length) {
+          const localSpace: MonoSpace = {
+            id: 'local-space',
+            name: 'Inbox',
+            accountUids,
+            activeAccountUids: accountUids
+          };
+          setSpaces([localSpace]);
+          setActiveSpace(localSpace);
+          await cacheSpaces([localSpace]);
+          await cacheActiveSpaceId(localSpace.id);
+          return;
+        }
         // If we failed to fetch from server, try to load from cache
         setSpaces((currentSpaces) => {
           if (currentSpaces.length === 0) {

@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { UpdateType } from '@/renderer/app/context/MessageContext';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import electronApi from '@/renderer/app/lib/electronApi';
 
 export const syncHistoryStateAtom = atom<
   Record<
@@ -275,13 +276,16 @@ export const SyncHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
       // Get account provider for this uid
       const account = getAccountByUid(uid);
       const provider = account?.provider || 'google'; // Default to google for backward compatibility
+      let syncIdToken = idToken;
+      const accountToken = await electronApi.getGoogleAccountToken(uid);
+      if (accountToken.ok) syncIdToken = accountToken.accessToken;
 
       workerRef.current.postMessage({
         type: 'SYNC_START',
         payload: {
           uid,
           requestId,
-          idToken,
+          idToken: syncIdToken,
           provider
         }
       });

@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
 import { ValidLabel, validLabels } from '@/renderer/app/lib/db/thread';
+import electronApi from '@/renderer/app/lib/electronApi';
 import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 
 export const tokenCacheAtom = atom<Record<string, Record<string, string>>>({});
@@ -507,6 +508,9 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
 
       const cachedToken = tokenCache[uid]?.[query] || '';
       const userPlan = 'pro';
+      let syncIdToken = idToken;
+      const accountToken = await electronApi.getGoogleAccountToken(uid);
+      if (accountToken.ok) syncIdToken = accountToken.accessToken;
 
       // Get category preferences for this specific account
       const categoryPreferences = preference.display.inbox.category?.[uid] || {
@@ -521,7 +525,7 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
         payload: {
           uid,
           requestId,
-          idToken,
+          idToken: syncIdToken,
           query,
           nextPageToken: cachedToken,
           interval,

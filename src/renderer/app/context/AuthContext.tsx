@@ -3,6 +3,7 @@ import authApi from '@/main/api/auth/authApi';
 import {
   MonoAccount,
   MonoMember,
+  GetMonoAccountResponse,
   SupportedLanguage,
   supportedLanguages,
   UserPreference
@@ -45,6 +46,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -116,6 +118,48 @@ export const defaultPreference: UserPreference = {
     openAtLogin: false
   }
 };
+
+type ElectronAuthState = Awaited<ReturnType<typeof electronApi.getAuthState>>;
+
+const buildDirectGoogleAccountResponse = (
+  authState: ElectronAuthState
+): GetMonoAccountResponse | null => {
+  if (!authState?.googleAccounts?.length) return null;
+
+  const primaryUid = authState.member?.uid ?? authState.googleAccounts[0].uid;
+  const accounts: MonoAccount[] = authState.googleAccounts.map((account) => ({
+    uid: account.uid,
+    displayName: account.displayName || account.email,
+    provider: 'google',
+    email: account.email,
+    profileImageUrl: account.photoURL || '',
+    primary: account.uid === primaryUid,
+    scopes: account.scopes,
+    isExpired: account.expiresAt <= Date.now()
+  }));
+
+  const primaryAccount = accounts.find((account) => account.uid === primaryUid) ?? accounts[0];
+  const memberEmail = authState.member?.email ?? primaryAccount.email;
+  const member: MonoMember = {
+    uid: authState.member?.uid ?? primaryAccount.uid,
+    displayName: authState.member?.displayName || primaryAccount.displayName,
+    email: memberEmail,
+    primaryUid: primaryAccount.uid,
+    memberName: memberEmail.split('@')[0],
+    profileImageUrl: authState.member?.photoURL || primaryAccount.profileImageUrl,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    demographics: { role: '', emailUsage: '', discoverySource: '' },
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+
+  return {
+    accounts,
+    relatedMembers: [],
+    member
+  };
+};
+
 const mergeWithDefaultPreference = (
   userPreference: UserPreference,
   accounts: MonoAccount[]
@@ -448,10 +492,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setAuthState((prev) => ({ ...prev, isLoading: true }));
 
         // First, try to use cached data if available
-        const cachedData = await authCache.getCachedData();
+        let cachedData = await authCache.getCachedData();
 
         const cachedSpaces = await loadCachedSpaces();
         const cachedLabels = await loadCachedLabels();
+
+        // Detect stale cache: if the token owner (Google sub) is not in cached accounts,
+        // the cache belongs to a previous session (e.g., mock backend). Discard it so we
+        // don't temporarily flash wrong accounts or fall back to them on error.
+        const tokenState = await electronApi.getAuthState();
+        const tokenMemberUid = tokenState?.member?.uid;
+        if (
+          cachedData &&
+          tokenMemberUid &&
+          !cachedData.accounts.some((a) => a.uid === tokenMemberUid)
+        ) {
+          await authCache.clearCache();
+          await clearSpaceCache();
+          await clearLabelsCache();
+          cachedData = null;
+        }
 
         // If we have both auth cache and spaces cache, we can show cached data immediately
         // BUT we don't set the token yet - we'll wait for a fresh one
@@ -510,57 +570,62 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        let monoAccountResponse;
-        try {
-          monoAccountResponse = await authApi.getMonoAccount();
-        } catch (error) {
-          // Standalone Google OAuth mode: member data lives in TokenManager, not a backend.
-          // Check this first so stale cached mock-backend data doesn't shadow real Google accounts.
-          const authState = await electronApi.getAuthState();
-          if (authState?.member) {
-            const m = authState.member;
-            monoAccountResponse = {
-              accounts: [
-                {
+        const isDirectGoogleAccountResponse = !!tokenState?.googleAccounts?.length;
+        let monoAccountResponse = buildDirectGoogleAccountResponse(tokenState);
+        if (!monoAccountResponse) {
+          try {
+            monoAccountResponse = await authApi.getMonoAccount();
+          } catch (error) {
+            // Standalone Google OAuth mode: member data lives in TokenManager, not a backend.
+            // Check this first so stale cached mock-backend data doesn't shadow real Google accounts.
+            const authState = await electronApi.getAuthState();
+            monoAccountResponse = buildDirectGoogleAccountResponse(authState);
+            if (!monoAccountResponse && authState?.member) {
+              const m = authState.member;
+              monoAccountResponse = {
+                accounts: [
+                  {
+                    uid: m.uid,
+                    displayName: m.displayName || m.email,
+                    provider: 'google' as const,
+                    email: m.email,
+                    profileImageUrl: m.photoURL || '',
+                    primary: true,
+                    scopes: [
+                      'https://mail.google.com',
+                      'https://www.googleapis.com/auth/gmail.modify',
+                      'https://www.googleapis.com/auth/contacts.readonly'
+                    ],
+                    isExpired: false
+                  }
+                ],
+                relatedMembers: [],
+                member: {
                   uid: m.uid,
                   displayName: m.displayName || m.email,
-                  provider: 'google' as const,
                   email: m.email,
+                  primaryUid: m.uid,
+                  memberName: m.email.split('@')[0],
                   profileImageUrl: m.photoURL || '',
-                  primary: true,
-                  scopes: [
-                    'https://mail.google.com',
-                    'https://www.googleapis.com/auth/gmail.modify',
-                    'https://www.googleapis.com/auth/contacts.readonly'
-                  ],
-                  isExpired: false
+                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  demographics: { role: '', emailUsage: '', discoverySource: '' },
+                  createdAt: new Date(),
+                  updatedAt: new Date()
                 }
-              ],
-              relatedMembers: [],
-              member: {
-                uid: m.uid,
-                displayName: m.displayName || m.email,
-                email: m.email,
-                primaryUid: m.uid,
-                memberName: m.email.split('@')[0],
-                profileImageUrl: m.photoURL || '',
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                demographics: { role: '', emailUsage: '', discoverySource: '' },
-                createdAt: new Date(),
-                updatedAt: new Date()
-              }
-            };
-          } else if (cachedData) {
-            console.log('Using cached account data due to API network error');
-            monoAccountResponse = {
-              accounts: cachedData.accounts,
-              relatedMembers: [],
-              member: cachedData.member
-            };
-          } else {
-            throw error;
+              };
+            } else if (!monoAccountResponse && cachedData) {
+              console.log('Using cached account data due to API network error');
+              monoAccountResponse = {
+                accounts: cachedData.accounts,
+                relatedMembers: [],
+                member: cachedData.member ?? undefined
+              };
+            } else if (!monoAccountResponse) {
+              throw error;
+            }
           }
         }
+        if (!monoAccountResponse) throw new Error('No account data available');
 
         const { accounts, relatedMembers, member } = monoAccountResponse;
 
@@ -577,7 +642,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Cache the successful auth data with fresh token
         await authCache.saveAuthData({
           accounts,
-          member,
+          member: member ?? null,
           preference: null, // Will be updated below
           relatedMembers
         });
@@ -657,7 +722,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Update cache with fresh token and preference
         await authCache.saveAuthData({
           accounts,
-          member,
+          member: member ?? null,
           preference,
           relatedMembers
         });
@@ -689,7 +754,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         try {
-          await loadSpaces(activeSpaceId);
+          await loadSpaces(
+            activeSpaceId,
+            isDirectGoogleAccountResponse ? accounts.map((account) => account.uid) : undefined
+          );
         } catch (error) {
           console.error('Failed to load spaces:', error);
         }
@@ -836,57 +904,69 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setAuthState((prev) => ({ ...prev, idToken: freshToken }));
       }
 
-      let monoAccountResponse;
-      try {
-        monoAccountResponse = await authApi.getMonoAccount();
-      } catch (_err) {
-        // Standalone Google OAuth mode: build account from token state
-        const authState = await electronApi.getAuthState();
-        if (authState?.member) {
-          const m = authState.member;
-          monoAccountResponse = {
-            accounts: [
-              {
+      const authState = await electronApi.getAuthState();
+      let monoAccountResponse = buildDirectGoogleAccountResponse(authState);
+      if (!monoAccountResponse) {
+        try {
+          monoAccountResponse = await authApi.getMonoAccount();
+        } catch (_err) {
+          // Standalone Google OAuth mode: build account from token state
+          if (authState?.member) {
+            const m = authState.member;
+            monoAccountResponse = {
+              accounts: [
+                {
+                  uid: m.uid,
+                  displayName: m.displayName || m.email,
+                  provider: 'google' as const,
+                  email: m.email,
+                  profileImageUrl: m.photoURL || '',
+                  primary: true,
+                  scopes: [
+                    'https://mail.google.com',
+                    'https://www.googleapis.com/auth/gmail.modify',
+                    'https://www.googleapis.com/auth/contacts.readonly'
+                  ],
+                  isExpired: false
+                }
+              ],
+              relatedMembers: [],
+              member: {
                 uid: m.uid,
                 displayName: m.displayName || m.email,
-                provider: 'google' as const,
                 email: m.email,
+                primaryUid: m.uid,
+                memberName: m.email.split('@')[0],
                 profileImageUrl: m.photoURL || '',
-                primary: true,
-                scopes: [
-                  'https://mail.google.com',
-                  'https://www.googleapis.com/auth/gmail.modify',
-                  'https://www.googleapis.com/auth/contacts.readonly'
-                ],
-                isExpired: false
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                demographics: { role: '', emailUsage: '', discoverySource: '' },
+                createdAt: new Date(),
+                updatedAt: new Date()
               }
-            ],
-            relatedMembers: [],
-            member: {
-              uid: m.uid,
-              displayName: m.displayName || m.email,
-              email: m.email,
-              primaryUid: m.uid,
-              memberName: m.email.split('@')[0],
-              profileImageUrl: m.photoURL || '',
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              demographics: { role: '', emailUsage: '', discoverySource: '' },
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          };
-        } else {
-          throw _err;
+            };
+          } else {
+            throw _err;
+          }
         }
       }
+      if (!monoAccountResponse) throw new Error('No account data available');
 
       const newAccounts = monoAccountResponse.accounts;
 
       setAuthState((prev) => ({
         ...prev,
         accounts: newAccounts,
-        member: monoAccountResponse.member || prev.member
+        member: monoAccountResponse.member || prev.member,
+        isLoggedIn: true
       }));
+
+      // Keep cache in sync so stale mock data doesn't flash on next startup
+      authCache.saveAuthData({
+        accounts: newAccounts,
+        member: monoAccountResponse.member ?? null,
+        preference: null,
+        relatedMembers: []
+      }).catch(() => {});
 
       updateBadgeWithLabelCount(newAccounts.map((a) => a.uid));
       electronApi.setKnownAccountUids(newAccounts.map((a) => a.uid)).catch(() => {});
@@ -897,7 +977,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .catch((e) => console.warn('[addAccount] watchCloudPubSub failed for', account.uid, e));
       }
 
-      loadSpaces(null);
+      loadSpaces(
+        null,
+        authState?.googleAccounts?.length ? newAccounts.map((account) => account.uid) : undefined
+      );
       fetchDataForAccounts(newAccounts);
     } catch (error) {
       console.error('Error fetching accounts: ', error);
@@ -1006,6 +1089,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [user, accounts, fetchPreference, loadSpaces, fetchDataForAccounts, signOut]);
 
+  // Keep a ref to the latest updateAccounts so the fixed [] listener never holds a stale closure.
+  const updateAccountsRef = useRef(updateAccounts);
+  useEffect(() => {
+    updateAccountsRef.current = updateAccounts;
+  });
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setAuthState((prev) => ({ ...prev, isLoading: true }));
@@ -1024,14 +1113,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const removeAddAccountListener = electronApi.on<string>(
       'renderer:auth:add-account',
       async () => {
-        await updateAccounts();
+        await updateAccountsRef.current();
         toast.success(t('toast.preferences.integration.account_added'));
       }
     );
     const removeAccountScopeUpdateListener = electronApi.on<string>(
       'renderer:auth:scope-updated',
       async () => {
-        await updateAccounts();
+        await updateAccountsRef.current();
         toast.success(t('toast.account.scope_update_success'));
       }
     );

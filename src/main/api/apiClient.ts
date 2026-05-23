@@ -114,7 +114,26 @@ class ApiClient {
     } = options;
 
     const accountUid = uid || this.activeUid;
-    const token = idToken || this.idToken;
+    let token = idToken || this.idToken;
+
+    if (
+      !idToken &&
+      accountUid &&
+      isBrowser &&
+      isElectron &&
+      this.baseURL.startsWith('https://gmail.googleapis.com/')
+    ) {
+      try {
+        const tokenResult = await (window as any).electronBridge?.getGoogleAccountToken(accountUid);
+        if (tokenResult?.ok) token = tokenResult.accessToken;
+      } catch (error) {
+        log.warn(
+          `[ApiClient] Failed to resolve Google token for ${accountUid}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
 
     // Include the account uid in the dedup key — without it, concurrent
     // requests across accounts (e.g. multi-account mailbox sync) would

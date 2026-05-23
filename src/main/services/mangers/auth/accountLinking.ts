@@ -110,7 +110,8 @@ export async function completeAccountLinkWithBackend(args: {
     tokenManager.saveTokens({
       accessToken: completedAccessToken,
       refreshToken,
-      expiresInSec
+      expiresInSec,
+      provider: 'backend'
     });
 
     return {

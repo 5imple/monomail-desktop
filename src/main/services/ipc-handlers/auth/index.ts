@@ -53,7 +53,9 @@ export function registerAuthHandlers() {
     return {
       accessToken: state.accessToken,
       expiresAt: state.expiresAt,
-      member: state.member ?? null
+      member: state.member ?? null,
+      provider: state.provider ?? 'backend',
+      googleAccounts: tokenManager.getGoogleAccounts()
     };
   });
 
@@ -97,8 +99,51 @@ export function registerAuthHandlers() {
         typeof expiresInSec === 'number' && Number.isFinite(expiresInSec) && expiresInSec > 0
           ? expiresInSec
           : 3600;
-      tokenManager.saveTokens({ accessToken, refreshToken, expiresInSec: expSec });
+      tokenManager.saveTokens({
+        accessToken,
+        refreshToken,
+        expiresInSec: expSec,
+        provider: 'backend'
+      });
       return { ok: true };
+    }
+  );
+
+  ipcMain.handle(
+    'main:auth:remove-google-account',
+    async (
+      _,
+      uid: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (typeof uid !== 'string' || !uid) {
+        return { ok: false, error: 'uid is required' };
+      }
+      const removed = tokenManager.removeGoogleAccount(uid);
+      if (!removed) {
+        return { ok: false, error: 'Account not found in local token store' };
+      }
+      const mainAppWindow = windowManager.getMainAppWindow();
+      if (mainAppWindow) {
+        mainAppWindow.webContents.send('renderer:auth:add-account', null);
+      }
+      return { ok: true };
+    }
+  );
+
+  ipcMain.handle(
+    'main:auth:get-google-account-token',
+    async (
+      _,
+      uid: string
+    ): Promise<
+      { ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }
+    > => {
+      try {
+        const token = await tokenManager.getGoogleAccountAccessToken(uid);
+        return { ok: true, ...token };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
     }
   );
 
@@ -221,7 +266,7 @@ export function registerAuthHandlers() {
     async (): Promise<{ ok: true; accessToken: string } | { ok: false; error: string }> => {
       try {
         const tokens = await googleOAuthServer.startFlow({ prompt: 'select_account consent' });
-        tokenManager.saveTokens({
+        tokenManager.saveGoogleAccountTokens({
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
           expiresInSec: tokens.expiresInSec,
@@ -230,8 +275,7 @@ export function registerAuthHandlers() {
             email: tokens.email,
             displayName: tokens.name,
             photoURL: tokens.picture
-          },
-          provider: 'google'
+          }
         });
         const mainAppWindow = windowManager.getMainAppWindow();
         if (mainAppWindow) {
@@ -263,7 +307,12 @@ export function registerAuthHandlers() {
         typeof expiresInSec === 'number' && Number.isFinite(expiresInSec) && expiresInSec > 0
           ? expiresInSec
           : 3600;
-      tokenManager.saveTokens({ accessToken, refreshToken, expiresInSec: expSec });
+      tokenManager.saveTokens({
+        accessToken,
+        refreshToken,
+        expiresInSec: expSec,
+        provider: 'backend'
+      });
 
       const mainAppWindow = windowManager.getMainAppWindow();
       if (mainAppWindow) {
