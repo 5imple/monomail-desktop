@@ -1238,7 +1238,7 @@
       "bcc": "Bcc",
       "cc": "Cc",
       "heading": "Heading",
-      "write_something": "Type or use \"/\" for commands, or \"⌘+J\" to ask AI…",
+      "write_something": "",
       "list": "List",
       "blockquoate": "Empty quote"
     }
