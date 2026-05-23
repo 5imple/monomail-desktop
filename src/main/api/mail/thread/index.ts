@@ -3,7 +3,7 @@ import { IMonoThread } from '@/main/models/thread/MonoThread';
 import {
   transformThread,
   RawGmailThread,
-  RawGmailThreadListResponse,
+  RawGmailThreadListResponse
 } from '@/main/api/mail/transforms';
 
 export interface MailThreadListResponse {
@@ -13,9 +13,14 @@ export interface MailThreadListResponse {
 
 export type MailThreadGetResponse = IMonoThread;
 
-// Metadata headers requested for thread list — enough for list display without
-// downloading message bodies.
-const METADATA_HEADERS = 'Subject,From,To,Date,List-Unsubscribe';
+// Gmail expects metadataHeaders as repeated query params, not a comma list.
+const METADATA_HEADERS = ['Subject', 'From', 'To', 'Cc', 'Bcc', 'Date', 'List-Unsubscribe'];
+
+function buildMetadataParams(): string {
+  const params = new URLSearchParams({ format: 'metadata' });
+  METADATA_HEADERS.forEach((header) => params.append('metadataHeaders', header));
+  return params.toString();
+}
 
 const getThreads = async (
   uid: string,
@@ -43,26 +48,29 @@ const getThreads = async (
   const threads = await Promise.all(
     stubs.map((stub) =>
       gmailApiClient
-        .get<RawGmailThread>(
-          `/threads/${stub.id}?format=metadata&metadataHeaders=${METADATA_HEADERS}`,
-          { signal, uid, idToken }
-        )
+        .get<RawGmailThread>(`/threads/${stub.id}?${buildMetadataParams()}`, {
+          signal,
+          uid,
+          idToken
+        })
         .then((t) => transformThread(t, uid))
-        .catch((): IMonoThread => ({
-          accountId: uid,
-          id: stub.id,
-          historyId: stub.historyId ?? null,
-          labelIds: [],
-          attachments: {},
-          from: [],
-          to: [],
-          cc: [],
-          bcc: [],
-          subject: '',
-          snippet: stub.snippet ?? '',
-          timestamp: Date.now(),
-          items: [],
-        }))
+        .catch(
+          (): IMonoThread => ({
+            accountId: uid,
+            id: stub.id,
+            historyId: stub.historyId ?? null,
+            labelIds: [],
+            attachments: {},
+            from: [],
+            to: [],
+            cc: [],
+            bcc: [],
+            subject: '',
+            snippet: stub.snippet ?? '',
+            timestamp: Date.now(),
+            items: []
+          })
+        )
     )
   );
 
@@ -76,7 +84,7 @@ const getThread = async (
 ): Promise<MailThreadGetResponse> => {
   const raw = await gmailApiClient.get<RawGmailThread>(`/threads/${id}?format=full`, {
     signal,
-    uid,
+    uid
   });
   return transformThread(raw, uid);
 };
@@ -113,5 +121,5 @@ export default {
   getThreads,
   getThread,
   modifyThread,
-  batchModifyThreads,
+  batchModifyThreads
 };
