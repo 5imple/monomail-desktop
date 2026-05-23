@@ -139,7 +139,7 @@ interface ThreadListCozyItemProps {
 
 export const ThreadListCozyItem = React.memo(
   React.forwardRef<HTMLDivElement, ThreadListCozyItemProps>(({ threadId, onClick }, ref) => {
-    const { selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
+    const { activeThreadId, selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
     const { labelsMapByAccount } = useLabelAtom();
     const executeCommand = useExecuteCommand();
     const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
@@ -238,9 +238,9 @@ export const ThreadListCozyItem = React.memo(
     const handleClick = useCallback(
       (e: React.MouseEvent | React.KeyboardEvent) => {
         if (
-          event instanceof KeyboardEvent &&
-          (event.key !== 'Enter' || event.metaKey) &&
-          event.key !== ' '
+          e.nativeEvent instanceof KeyboardEvent &&
+          (e.nativeEvent.key !== 'Enter' || e.nativeEvent.metaKey) &&
+          e.nativeEvent.key !== ' '
         ) {
           return;
         }
@@ -260,6 +260,8 @@ export const ThreadListCozyItem = React.memo(
     // Debugging removed to clean up console
 
     const isUnread = currentThread?.labelIds.includes('UNREAD');
+    const isChecked = selectedThreads.includes(threadId);
+    const isActive = activeThreadId === threadId;
 
     // Newton senders renderer (inlined — identical to ThreadListItem's
     // version). DraggableSender handles dnd-kit drag handles for "Me"
@@ -313,9 +315,11 @@ export const ThreadListCozyItem = React.memo(
       <div
         ref={containerRef}
         onClick={handleClick}
-        aria-pressed={selectedThreads.includes(threadId)}
+        aria-current={isActive ? 'true' : undefined}
+        aria-pressed={isChecked}
         data-thread={threadId}
-        data-thread-focused={selectedThreads.includes(threadId)}
+        data-thread-focused={isActive}
+        data-thread-selected={isChecked}
         tabIndex={0}
         role="button"
         className={cn(
@@ -323,7 +327,7 @@ export const ThreadListCozyItem = React.memo(
           'group relative mx-[10%] rounded-md transition-opacity duration-200',
           'bg-card hover:bg-muted/60 dark:bg-card dark:hover:bg-muted/40',
           currentThread && !isUnread && 'text-muted-foreground',
-          selectedThreads.includes(threadId) &&
+          (isChecked || isActive) &&
             'bg-accent/10 hover:bg-accent/15 dark:bg-accent/15 dark:hover:bg-accent/20',
           opacity == 0 ? 'opacity-0' : 'opacity-100',
           'focus-visible:bg-accent/15'
@@ -342,144 +346,151 @@ export const ThreadListCozyItem = React.memo(
                 ref={ref}
                 className={cn(
                   'flex items-center gap-3 border-b border-border/40 px-3 py-2 text-left text-sm transition-colors',
-                  selectedThreads.includes(threadId) && 'pl-[calc(0.75rem-3px)]'
+                  (isChecked || isActive) && 'pl-[calc(0.75rem-3px)]'
                 )}
               >
-              {/* Hover checkbox */}
-              <button
-                tabIndex={-1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setSelectedThreads((prev) =>
-                    prev.includes(threadId)
-                      ? prev.filter((id) => id !== threadId)
-                      : [...prev, threadId]
-                  );
-                }}
-                className={cn(
-                  'flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-opacity duration-150',
-                  selectedThreads.includes(threadId)
-                    ? 'opacity-100'
-                    : 'opacity-0 group-hover:opacity-100'
-                )}
-              >
-                <MonoIcon
-                  type={selectedThreads.includes(threadId) ? 'CheckCircle' : 'Circle'}
+                {/* Hover checkbox */}
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-label={isChecked ? 'Deselect email' : 'Select email'}
+                  aria-pressed={isChecked}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setSelectedThreads((prev) =>
+                      prev.includes(threadId)
+                        ? prev.filter((id) => id !== threadId)
+                        : [...prev, threadId]
+                    );
+                  }}
                   className={cn(
-                    'h-4 w-4',
-                    selectedThreads.includes(threadId) ? 'text-accent' : 'text-muted-foreground'
-                  )}
-                />
-              </button>
-
-              {/* Avatar */}
-              <RecipientAvatar
-                className="h-8 w-8 shrink-0"
-                recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
-              />
-
-              {/* Sender — fixed column so subject always starts at the same x */}
-              <div className="flex w-40 shrink-0 items-center gap-1.5 overflow-hidden">
-                <span
-                  className={cn(
-                    'truncate text-[13px] tracking-tight',
-                    isUnread
-                      ? 'font-bold text-foreground'
-                      : 'font-semibold text-muted-foreground'
+                    'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,opacity,transform] duration-150',
+                    isChecked
+                      ? 'border-muted-foreground bg-muted-foreground text-background opacity-100 shadow-none'
+                      : 'border-muted-foreground/30 text-muted-foreground/45 opacity-0 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground hover:!opacity-100 focus-visible:!opacity-100 group-hover:opacity-60'
                   )}
                 >
-                  {renderSenderNames()}
-                </span>
-                {currentThread.items.length > 1 && (
-                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {currentThread.items.length}
-                  </span>
-                )}
-              </div>
+                  <MonoIcon
+                    type="Check"
+                    className={cn(
+                      isChecked ? 'h-3.5 w-3.5 stroke-[2.1]' : 'h-3 w-3 stroke-[1.8]',
+                      isChecked ? 'opacity-100' : 'opacity-80'
+                    )}
+                  />
+                </button>
 
-              {/* Subject + snippet — fills remaining space */}
-              <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
-                <span
-                  className={cn(
-                    'shrink-0 truncate text-[13px] tracking-tight',
-                    isUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'
-                  )}
-                  dangerouslySetInnerHTML={{
-                    __html:
-                      !highlightedContent.subject || highlightedContent.subject === ''
-                        ? '(No subject)'
-                        : highlightedContent.subject
-                  }}
+                {/* Avatar */}
+                <RecipientAvatar
+                  className="h-8 w-8 shrink-0"
+                  recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
                 />
-                {highlightedContent.snippet && (
-                  <>
-                    <span aria-hidden className="shrink-0 text-muted-foreground/40">–</span>
-                    <span
-                      className="min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground"
-                      dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
-                    />
-                  </>
-                )}
-              </div>
 
-              {/* Right cluster: labels · star · snooze · date */}
-              <div className="flex shrink-0 items-center gap-2">
-                {uniqueLabelIds.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    {uniqueLabelIds.slice(0, 2).map((labelId, index) => {
-                      const label = accountLabels[labelId];
-                      return label && label.name.length > 0 ? (
-                        <Badge
-                          key={`${labelId}-${index}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            searchNewQuery(`label:${label.name}`, [currentThread.id], false);
-                          }}
-                          className="rounded-sm"
-                          style={{
-                            color: label.color.textColor,
-                            backgroundColor: label.color.backgroundColor
-                          }}
-                          sizeVariant="xs"
-                        >
-                          <span className="whitespace-nowrap">
-                            {label.name.replace('Mono/', '')}
-                          </span>
-                        </Badge>
-                      ) : null;
-                    })}
-                  </div>
-                )}
-
-                {currentThread.labelIds.includes('STARRED') && (
-                  <Button
-                    variant="text"
-                    typeVariant="inline"
-                    sizeVariant="xs"
-                    tabIndex={-1}
-                    className="text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-600"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      executeCommand('THREAD_UNSTAR', { threadIds: [currentThread.id] });
-                    }}
+                {/* Sender — fixed column so subject always starts at the same x */}
+                <div className="flex w-40 shrink-0 items-center gap-1.5 overflow-hidden">
+                  <span
+                    className={cn(
+                      'truncate text-[13px] tracking-tight',
+                      isUnread ? 'font-bold text-foreground' : 'font-semibold text-muted-foreground'
+                    )}
                   >
-                    <MonoIcon type="Star" className="h-3.5 w-3.5" />
-                  </Button>
-                )}
+                    {renderSenderNames()}
+                  </span>
+                  {currentThread.items.length > 1 && (
+                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {currentThread.items.length}
+                    </span>
+                  )}
+                </div>
 
-                {Object.keys(currentThread.attachments).length > 0 && (
-                  <MonoIcon type="Paperclip" className="h-3 w-3 text-muted-foreground" />
-                )}
+                {/* Subject + snippet — fills remaining space */}
+                <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
+                  <span
+                    className={cn(
+                      'shrink-0 truncate text-[13px] tracking-tight',
+                      isUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'
+                    )}
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        !highlightedContent.subject || highlightedContent.subject === ''
+                          ? '(No subject)'
+                          : highlightedContent.subject
+                    }}
+                  />
+                  {highlightedContent.snippet && (
+                    <>
+                      <span aria-hidden className="shrink-0 text-muted-foreground/40">
+                        –
+                      </span>
+                      <span
+                        className="min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground"
+                        dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
+                      />
+                    </>
+                  )}
+                </div>
 
-                <SnoozeButton thread={currentThread} />
+                {/* Right cluster: labels · star · snooze · date */}
+                <div className="flex shrink-0 items-center gap-2">
+                  {uniqueLabelIds.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      {uniqueLabelIds.slice(0, 2).map((labelId, index) => {
+                        const label = accountLabels[labelId];
+                        return label && label.name.length > 0 ? (
+                          <Badge
+                            key={`${labelId}-${index}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              searchNewQuery(`label:${label.name}`, [currentThread.id], false);
+                            }}
+                            className="rounded-sm"
+                            style={{
+                              color: label.color.textColor,
+                              backgroundColor: label.color.backgroundColor
+                            }}
+                            sizeVariant="xs"
+                          >
+                            <span className="whitespace-nowrap">
+                              {label.name.replace('Mono/', '')}
+                            </span>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
 
-                <span className="w-14 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                  {formatListDate(currentThread.timestamp)}
-                </span>
-              </div>
+                  {currentThread.labelIds.includes('STARRED') && (
+                    <Button
+                      variant="text"
+                      typeVariant="inline"
+                      sizeVariant="xs"
+                      tabIndex={-1}
+                      className="text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-600"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        executeCommand('THREAD_UNSTAR', { threadIds: [currentThread.id] });
+                      }}
+                    >
+                      <MonoIcon type="Star" className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+
+                  {Object.keys(currentThread.attachments).length > 0 && (
+                    <MonoIcon type="Paperclip" className="h-3 w-3 text-muted-foreground" />
+                  )}
+
+                  <SnoozeButton thread={currentThread} />
+
+                  <span className="shrink-0 whitespace-nowrap text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {formatListDate(currentThread.timestamp)}
+                  </span>
+                </div>
               </div>
             </div>
           </ThreadItemContextMenu>

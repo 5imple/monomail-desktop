@@ -7,6 +7,7 @@ import AppCalendarPanelContainer from '@/renderer/app/containers/sidebar/AppCale
 import AppMainPanelContainer from '@/renderer/app/containers/sidebar/AppMainPanelContainer';
 import AppSidebarContainer from '@/renderer/app/containers/sidebar/AppSidebarContainer';
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
+import MailNavTabs from '@/renderer/app/containers/header/MailNavTabs';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useRegisterHotkeys } from '@/renderer/app/hooks/useRegisterHotkeys';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
@@ -28,7 +29,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const threadIdParam = searchParams.get('tid');
   const { gmailStatusInvalid, calendarDisplayPanel } = useGlobalAtom();
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
-  const { setSelectedThreads, selectedThreads } = useThreadAtom();
+  const { setActiveThreadId } = useThreadAtom();
   const [isLoaded, setIsLoaded] = useState(false);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
   const { accounts } = useAuth();
@@ -37,9 +38,9 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
 
   useEffect(() => {
     if (threadIdParam) {
-      setSelectedThreads([threadIdParam]);
+      setActiveThreadId(threadIdParam);
     }
-  }, [threadIdParam]);
+  }, [setActiveThreadId, threadIdParam]);
 
   useEffect(() => {
     const handleCommandTrigger = (commandId: CommandType) => {
@@ -107,7 +108,14 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
         )}
       >
         <div className="flex h-full flex-col overflow-hidden">
-          <div className="relative flex h-full overflow-hidden">
+          {/* Unified titlebar — spans the full window width. `drag` allows
+              window dragging across the whole strip; each nav button carries
+              `no-drag` so clicks still fire. Traffic lights sit at x=12,y=16
+              so we reserve pl-20 on the left to avoid overlapping them. */}
+          <div className="drag relative z-50 flex h-11 w-full shrink-0 items-center justify-center bg-background pl-20 pr-4">
+            <MailNavTabs />
+          </div>
+          <div className="relative flex flex-1 overflow-hidden">
             {/* Remove individual transition classes - inherit from parent */}
             <AppSidebarContainer
               className={cn(
@@ -122,14 +130,33 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
               )}
             />
 
-            {calendarDisplayPanel && (
-              <AppCalendarPanelContainer
+            {/* Calendar panel — mirrors sidebar motion: spacer controls layout, absolute panel slides */}
+            <div className="relative">
+              {/* Spacer: expands/collapses to push main panel */}
+              <div
                 className={cn(
-                  'transition-opacity duration-300 ease-out',
-                  isLoaded ? 'opacity-100' : 'opacity-0'
+                  'h-full shrink-0',
+                  !sidebarLoading && 'transition-[width] duration-300 ease-bouncy-in-out',
+                  calendarDisplayPanel ? 'w-[388px]' : 'w-0'
                 )}
               />
-            )}
+              {/* Panel: always mounted, slides in/out from the right */}
+              <div
+                className={cn(
+                  'absolute right-0 top-0 h-full w-[388px]',
+                  !sidebarLoading && 'transition-all duration-300 ease-bouncy-in-out',
+                  calendarDisplayPanel ? 'translate-x-0' : 'translate-x-[388px]',
+                  !calendarDisplayPanel && 'pointer-events-none'
+                )}
+              >
+                <AppCalendarPanelContainer
+                  className={cn(
+                    'transition-opacity duration-300 ease-out',
+                    isLoaded ? 'opacity-100' : 'opacity-0'
+                  )}
+                />
+              </div>
+            </div>
             {!isLoaded && startupTimedOut && (
               <div className="absolute inset-0 z-50 flex items-center justify-center p-6">
                 <div className="w-full max-w-md rounded-md border bg-card/95 p-5 shadow-sm">
@@ -175,7 +202,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
         </div>
         <SidebarCollapseButton
           className={cn(
-            'no-drag fixed left-20 top-[11px] z-50',
+            'no-drag fixed left-20 top-[14px] z-50',
             sidebarCollapsed ? 'left-20' : 'left-[178px]',
             isElectron ?? 'hidden'
             // Remove opacity transition - inherits from parent
