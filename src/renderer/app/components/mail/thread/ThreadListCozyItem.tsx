@@ -2,7 +2,6 @@ import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
-import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -331,73 +330,75 @@ export const ThreadListCozyItem = React.memo(
         )}
       >
         {!currentThread || !isRendering ? (
-          <div className="h-[80.5px] transition-[max-height] duration-300 ease-bouncy-in-out" />
+          <div className="h-[52px] transition-[height] duration-200 ease-bouncy-in-out" />
         ) : (
           <ThreadItemContextMenu thread={currentThread}>
-            {/* Newton signature: 3px red leading bar on unread, sits
-                absolute on the row's left edge. Read rows have no bar
-                and lighter sender/subject weight. */}
             {isUnread && (
               <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
             )}
+            {/* Single-line Newton row: avatar · sender (fixed) · subject – snippet · date */}
             <div
               ref={ref}
               className={cn(
-                'flex items-start gap-3 px-6 py-3 text-left text-sm transition-colors sm:px-8',
+                'flex items-center gap-4 border-b border-border/20 px-8 py-3 text-left text-sm transition-colors',
                 selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
               )}
             >
               {/* Avatar */}
-              <div className="mt-0.5 shrink-0">
-                <RecipientAvatar
-                  className="h-8 w-8"
-                  recipient={
-                    currentThread.from?.[0] ?? { email: '', name: '' }
-                  }
-                />
-              </div>
+              <RecipientAvatar
+                className="h-8 w-8 shrink-0"
+                recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
+              />
 
-              {/* Content column */}
-              <div className="min-w-0 flex-1">
-              {/* Top row: sender names · count · star · labels · time */}
-              <div className="flex items-baseline gap-3">
+              {/* Sender — fixed column so subject always starts at the same x */}
+              <div className="flex w-40 shrink-0 items-center gap-1.5 overflow-hidden">
                 <span
                   className={cn(
-                    'min-w-0 truncate text-[14px] tracking-tight',
-                    isUnread ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground'
+                    'truncate text-[13.5px] tracking-tight',
+                    isUnread
+                      ? 'font-semibold text-foreground'
+                      : 'font-medium text-muted-foreground'
                   )}
                 >
                   {renderSenderNames()}
                 </span>
-
                 {currentThread.items.length > 1 && (
                   <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
                     {currentThread.items.length}
                   </span>
                 )}
+              </div>
 
-                {currentThread.labelIds.includes('STARRED') && (
-                  <Button
-                    variant={'text'}
-                    typeVariant={'inline'}
-                    sizeVariant={'xs'}
-                    className={
-                      'shrink-0 text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-600'
-                    }
-                    tabIndex={-1}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      executeCommand('THREAD_UNSTAR', { threadIds: [currentThread.id] });
-                    }}
-                  >
-                    <MonoIcon type={'Star'} className="h-3.5 w-3.5" />
-                  </Button>
+              {/* Subject + snippet — fills remaining space */}
+              <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
+                <span
+                  className={cn(
+                    'shrink-0 truncate text-[13.5px] tracking-tight',
+                    isUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'
+                  )}
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      !highlightedContent.subject || highlightedContent.subject === ''
+                        ? '(No subject)'
+                        : highlightedContent.subject
+                  }}
+                />
+                {highlightedContent.snippet && (
+                  <>
+                    <span aria-hidden className="shrink-0 text-muted-foreground/40">–</span>
+                    <span
+                      className="min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground"
+                      dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
+                    />
+                  </>
                 )}
+              </div>
 
+              {/* Right cluster: labels · star · snooze · date */}
+              <div className="flex shrink-0 items-center gap-2">
                 {uniqueLabelIds.length > 0 && (
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {uniqueLabelIds.map((labelId, index) => {
+                  <div className="flex items-center gap-1">
+                    {uniqueLabelIds.slice(0, 2).map((labelId, index) => {
                       const label = accountLabels[labelId];
                       return label && label.name.length > 0 ? (
                         <Badge
@@ -412,83 +413,44 @@ export const ThreadListCozyItem = React.memo(
                             color: label.color.textColor,
                             backgroundColor: label.color.backgroundColor
                           }}
-                          sizeVariant={'xs'}
+                          sizeVariant="xs"
                         >
-                          <div className="no-drag flex-1 overflow-hidden text-ellipsis">
-                            <span className="whitespace-nowrap">
-                              {label.name.replace('Mono/', '')}
-                            </span>
-                          </div>
+                          <span className="whitespace-nowrap">
+                            {label.name.replace('Mono/', '')}
+                          </span>
                         </Badge>
                       ) : null;
                     })}
                   </div>
                 )}
 
-                <span className="ml-auto shrink-0 whitespace-nowrap font-mono text-[11px] tabular-nums text-muted-foreground">
+                {currentThread.labelIds.includes('STARRED') && (
+                  <Button
+                    variant="text"
+                    typeVariant="inline"
+                    sizeVariant="xs"
+                    tabIndex={-1}
+                    className="text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-600"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      executeCommand('THREAD_UNSTAR', { threadIds: [currentThread.id] });
+                    }}
+                  >
+                    <MonoIcon type="Star" className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+
+                {Object.keys(currentThread.attachments).length > 0 && (
+                  <MonoIcon type="Paperclip" className="h-3 w-3 text-muted-foreground" />
+                )}
+
+                <SnoozeButton thread={currentThread} />
+
+                <span className="w-14 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
                   {formatListDate(currentThread.timestamp)}
                 </span>
-
-                {/* P8 — Snooze action. Hover-revealed Clock button opens
-                    a Popover with schedule presets. Picking one calls
-                    queueSnooze IPC. Thread visually stays in the inbox
-                    list (server would remove it on a real backend); the
-                    queue entry shows up in the Later tab immediately. */}
-                <SnoozeButton thread={currentThread} />
               </div>
-
-              {/* Subject line */}
-              <div
-                className={cn(
-                  'mt-0.5 line-clamp-1 text-[14px] tracking-tight',
-                  isUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'
-                )}
-                dangerouslySetInnerHTML={{
-                  __html:
-                    !highlightedContent.subject || highlightedContent.subject === ''
-                      ? '(No subject)'
-                      : highlightedContent.subject
-                }}
-              />
-
-              {/* Snippet line */}
-              {highlightedContent.snippet && (
-                <div
-                  className="mt-0.5 line-clamp-1 min-h-[1rem] text-[13px] tracking-tight text-muted-foreground"
-                  dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
-                />
-              )}
-
-              {/* Attachment thumbnails */}
-              {Object.keys(currentThread.attachments).length > 0 && (
-                <div className="mt-2 flex items-center gap-1.5">
-                  {Object.keys(currentThread.attachments)
-                    .slice(0, 2)
-                    .map((id) => (
-                      <AttachmentItem
-                        accountId={currentThread.accountId}
-                        source={id.length === 36 ? 'draft' : 'message'}
-                        itemId={currentThread.id}
-                        preview
-                        key={id}
-                        tabIndex={-1}
-                        attachment={currentThread.attachments[id]}
-                      />
-                    ))}
-
-                  {Object.keys(currentThread.attachments).length > 2 && (
-                    <Button
-                      tabIndex={-1}
-                      variant={'secondary'}
-                      sizeVariant={'sm'}
-                      className="font-mono text-[11px] font-normal"
-                    >
-                      + {Object.keys(currentThread.attachments).length - 2}
-                    </Button>
-                  )}
-                </div>
-              )}
-              </div>{/* end content column */}
             </div>
           </ThreadItemContextMenu>
         )}

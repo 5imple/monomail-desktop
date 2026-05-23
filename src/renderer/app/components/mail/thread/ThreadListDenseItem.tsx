@@ -272,7 +272,7 @@ export const ThreadListDenseItem = React.memo(
                     padding (py-2). No avatar in this variant. */}
                 <div
                   className={cn(
-                    'flex items-center gap-3 px-6 py-2 sm:gap-4 sm:px-8',
+                    'flex items-center gap-4 border-b border-border/20 px-8 py-2.5',
                     selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
                   )}
                 >
