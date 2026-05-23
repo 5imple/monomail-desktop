@@ -1,5 +1,5 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import { Badge } from '@/renderer/app/components/ui/badge';

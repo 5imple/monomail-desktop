@@ -1,5 +1,5 @@
 import { IMonoDraft, MonoDraft } from '@/main/models/draft/MonoDraft';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ContactProfileDropdown from '@/renderer/app/components/mail/ContactProfileDropdown';
 import { Badge } from '@/renderer/app/components/ui/badge';

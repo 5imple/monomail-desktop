@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { ThreadListDenseItem } from '@/renderer/app/components/mail/thread/ThreadListDenseItem';
 import { ThreadListCozyItem } from '@/renderer/app/components/mail/thread/ThreadListCozyItem';
 import { Button } from '@/renderer/app/components/ui/button';

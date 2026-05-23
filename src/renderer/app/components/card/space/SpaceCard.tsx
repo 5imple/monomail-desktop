@@ -1,5 +1,5 @@
 import React, { FC, forwardRef, useEffect, useRef } from 'react';
-import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
+import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { NotificationBadge } from '@/renderer/app/components/ui/notification-badge';
 import {
@@ -168,14 +168,13 @@ const SpaceCard = forwardRef<HTMLButtonElement, SpaceCardProps>(
                 ) : (
                   <div
                     className={cn(
-                      'ml-2 mr-1 flex h-2 w-2 items-center justify-center rounded bg-accent p-1 text-white'
+                      'ml-1 mr-1 flex h-6 w-6 items-center justify-center rounded-md bg-accent text-white shadow-sm'
                     )}
                     style={{
                       backgroundColor: color ? `${color}` : ''
-                      // color: `${color}`
                     }}
                   >
-                    {/* <MonoIcon type={icon as MonoIconType} /> */}
+                    <MonoIcon type={(icon || 'Home') as MonoIconType} size={16} fill />
                   </div>
                 )}
                 <div className="overflow-hidden text-ellipsis text-sm">

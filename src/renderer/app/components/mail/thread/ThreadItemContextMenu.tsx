@@ -1,7 +1,7 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { MonoRecipient } from '@/main/models/types';
-import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
+import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIcon';
 import {
   ContextMenu,
   ContextMenuContent,

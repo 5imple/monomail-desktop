@@ -10,7 +10,7 @@ import { MonoRecipient } from '@/main/models/types';
 import { generateUUID } from '@/main/utils';
 import { CalendarEventCard } from '@/renderer/app/components/card/CalendarEventCard';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import { useTheme } from '@/renderer/app/components/ThemeProvider';
 import { Button } from '@/renderer/app/components/ui/button';

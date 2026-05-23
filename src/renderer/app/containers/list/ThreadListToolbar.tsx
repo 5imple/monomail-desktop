@@ -1,6 +1,6 @@
 import React, { FC, useMemo } from 'react';
 import { Button } from '@/renderer/app/components/ui/button';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { useTranslation } from 'react-i18next';

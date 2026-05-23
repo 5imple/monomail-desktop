@@ -1,4 +1,4 @@
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import {
   DropdownMenuItem,

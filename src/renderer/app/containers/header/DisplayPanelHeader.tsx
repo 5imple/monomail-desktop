@@ -1,5 +1,5 @@
 import { MonoThread } from '@/main/models/thread/MonoThread';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';

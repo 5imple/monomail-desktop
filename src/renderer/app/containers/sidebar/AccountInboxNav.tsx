@@ -1,6 +1,6 @@
 // EnhancedAccountInboxNav.tsx
 import { SearchBookmark } from '@/main/api/bookmark/types';
-import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
+import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
   Collapsible,

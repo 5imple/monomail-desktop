@@ -1,4 +1,4 @@
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 
 // Callers that drop the icon into a styled container (e.g. the Newton
 // attachment chip with its own bg + alignment) pass `className` to override
@@ -7,7 +7,7 @@ export function getAttachmentIcon(mimeType: string, className?: string) {
   const cls = className ?? 'w-4 h-4 mr-1 text-muted-foreground';
   switch (mimeType) {
     case 'application/pdf':
-      return <MonoIcon type="FileMinus" className={className ?? 'w-4 h-4 mr-1 text-destructive'} />;
+      return <MonoIcon type="FileMinus" className={className ?? 'mr-1 h-4 w-4 text-destructive'} />;
     case 'image/jpeg':
     case 'image/png':
     case 'image/gif':

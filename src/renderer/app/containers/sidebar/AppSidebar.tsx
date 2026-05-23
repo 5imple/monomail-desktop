@@ -1,5 +1,5 @@
 import UpdateNotificationCard from '@/renderer/app/components/card/UpdateNotificationCard';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import React, { useCallback } from 'react';

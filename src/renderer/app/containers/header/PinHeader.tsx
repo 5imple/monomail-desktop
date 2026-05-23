@@ -1,5 +1,5 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { groupRingVariants, ringVariants } from '@/renderer/app/components/ui/constants';
 import {
   ContextMenu,

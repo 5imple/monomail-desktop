@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Card, CardContent } from '@/renderer/app/components/ui/card';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { cn } from '@/renderer/app/lib/utils';
 import { parseICS, ICalendarEvent } from '@/renderer/app/lib/icsParser';
 import { toast } from 'sonner';

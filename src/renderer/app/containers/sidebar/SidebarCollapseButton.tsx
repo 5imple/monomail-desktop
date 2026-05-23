@@ -1,4 +1,4 @@
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { cn } from '@/renderer/app/lib/utils';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
@@ -55,9 +55,9 @@ const SidebarCollapseButton: FC<SidebarCollapseButtonProps> = ({ className }) =>
       typeVariant="icon"
       tooltip={tooltipText}
       shortcut="MOD+\"
-      sizeVariant="xs"
+      sizeVariant="sm"
     >
-      <MonoIcon type={iconType} className="h-3.5 w-3.5 text-muted-foreground" />
+      <MonoIcon type={iconType} size={18} className="text-muted-foreground" />
     </Button>
   );
 };

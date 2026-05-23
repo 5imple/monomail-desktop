@@ -1,5 +1,5 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
@@ -468,22 +468,33 @@ export const ThreadListDenseItem = React.memo(
                       </span>
 
                       {/* Hover action bar */}
-                      <div className="absolute right-0 flex items-center gap-2.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                      <div className="absolute right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                         <button
                           type="button"
                           tabIndex={-1}
-                          className="text-muted-foreground transition-colors duration-100 hover:text-foreground"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); executeCommand('THREAD_DONE', { threadIds: [currentThread.id] }); }}
+                          aria-label="Done"
+                          className="flex h-7 items-center justify-center gap-1 rounded-md px-2 text-muted-foreground transition-colors duration-100 hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            executeCommand('THREAD_DONE', { threadIds: [currentThread.id] });
+                          }}
                         >
-                          <MonoIcon type="CheckCircle" className="h-3.5 w-3.5" />
+                          <MonoIcon type="CheckCircle" size={18} fill />
+                          <span className="text-xs font-medium">Done</span>
                         </button>
                         <button
                           type="button"
                           tabIndex={-1}
-                          className="text-muted-foreground transition-colors duration-100 hover:text-foreground"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); executeCommand('THREAD_TRASH', { threadIds: [currentThread.id] }); }}
+                          aria-label="Delete"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-destructive/10 hover:text-destructive"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            executeCommand('THREAD_TRASH', { threadIds: [currentThread.id] });
+                          }}
                         >
-                          <MonoIcon type="Trash" className="h-3.5 w-3.5" />
+                          <MonoIcon type="Trash" size={18} />
                         </button>
                       </div>
                     </div>

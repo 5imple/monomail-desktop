@@ -14,7 +14,7 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useTranslation } from 'react-i18next';
 import React, { memo, useEffect, useState } from 'react';
 import { DBGetMessage } from '@/renderer/app/lib/db/message';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import mailApi from '@/main/api/mail/mailApi';
 import { toast } from 'sonner';
 

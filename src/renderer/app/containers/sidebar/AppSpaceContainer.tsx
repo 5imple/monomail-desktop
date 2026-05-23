@@ -1,5 +1,5 @@
 import SpaceCard from '@/renderer/app/components/card/space/SpaceCard';
-import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
+import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { cn } from '@/renderer/app/lib/utils';

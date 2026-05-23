@@ -1,6 +1,6 @@
 import draftApi from '@/main/api/draft/draftApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Alert, AlertDescription } from '@/renderer/app/components/ui/alert';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';

@@ -1,7 +1,6 @@
 import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoAttachment } from '@/main/models/types';
-import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
@@ -114,11 +113,7 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
         aria-hidden
       >
-        {isDownloading ? (
-          <Loader />
-        ) : (
-          getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
-        )}
+        {isDownloading ? <Loader /> : getAttachmentIcon(attachment.mimeType, 'h-4 w-4')}
       </span>
       <div className="min-w-0 text-left">
         <div className="max-w-64 truncate whitespace-nowrap text-[13px] font-medium tracking-tight text-foreground">

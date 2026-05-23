@@ -1,5 +1,5 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import InboxIcon from '@/renderer/app/components/icons/InboxIcon';
 import StatusIndicator from '@/renderer/app/components/StatusIndicator';
 import { Button } from '@/renderer/app/components/ui/button';
 import DialogManager from '@/renderer/app/containers/dialog/DialogManager';
@@ -123,33 +123,36 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
             <div className="no-drag absolute right-4 flex items-center gap-1">
               <Button
                 variant="ghost"
-                typeVariant="icon"
-                sizeVariant="xxs"
+                sizeVariant="sm"
+                className="h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
                 tooltip="Compose"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
               >
-                <MonoIcon type="Edit" className="h-3 w-3 text-muted-foreground" />
+                <InboxIcon type="Edit" size={18} />
+                <span className="text-xs font-medium">Compose</span>
               </Button>
               <Button
                 variant="ghost"
                 typeVariant="icon"
-                sizeVariant="xxs"
+                sizeVariant="sm"
+                className="text-muted-foreground hover:text-foreground"
                 tooltip="Accounts"
                 onClick={() => openDialog('preference', { defaultPage: 'integration' })}
               >
-                <MonoIcon type="UserIcon" className="h-3 w-3 text-muted-foreground" />
+                <InboxIcon type="UserIcon" size={18} />
               </Button>
               <Button
                 variant="ghost"
                 typeVariant="icon"
-                sizeVariant="xxs"
+                sizeVariant="sm"
+                className={cn(
+                  'hover:text-foreground',
+                  calendarDisplayPanel ? 'text-foreground' : 'text-muted-foreground'
+                )}
                 tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
                 onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
               >
-                <MonoIcon
-                  type="Calendar"
-                  className={cn('h-3 w-3', calendarDisplayPanel ? 'text-foreground' : 'text-muted-foreground')}
-                />
+                <InboxIcon type="Calendar" size={18} fill={calendarDisplayPanel} />
               </Button>
             </div>
           </div>
@@ -200,7 +203,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 <div className="w-full max-w-md rounded-md border bg-card/95 p-5 shadow-sm">
                   <div className="mb-4 flex items-center gap-3">
                     <div className="rounded-md bg-destructive/10 p-2 text-destructive">
-                      <MonoIcon type="AlertCircle" className="h-5 w-5" />
+                      <InboxIcon type="AlertCircle" className="h-5 w-5" />
                     </div>
                     <div>
                       <h1 className="text-base font-medium">Mono Mail is still loading</h1>

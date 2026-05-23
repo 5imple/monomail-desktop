@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import MonoIcon, { type MonoIconType } from '@/renderer/app/components/icons/icons';
+import InboxIcon from '@/renderer/app/components/icons/InboxIcon';
+import type { MaterialSymbol } from 'material-symbols';
 import { cn } from '@/renderer/app/lib/utils';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
@@ -7,7 +8,7 @@ import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 type MailNavItem = {
   id: 'inbox' | 'snooze' | 'starred' | 'sent';
   label: string;
-  icon: MonoIconType;
+  icon: MaterialSymbol;
   shortcut: string;
 } & ({ query: string; layout?: never } | { query?: never; layout: 'LATER' });
 
@@ -20,10 +21,10 @@ const INBOX_CATEGORY_QUERIES = new Set([
 ]);
 
 const NAV_ITEMS: MailNavItem[] = [
-  { id: 'inbox', label: 'Inbox', icon: 'Inbox' as const, query: 'category:primary', shortcut: 'G I' },
-  { id: 'snooze', label: 'Snooze', icon: 'Clock' as const, layout: 'LATER' as const, shortcut: 'G S' },
-  { id: 'starred', label: 'Starred', icon: 'Star' as const, query: 'is:starred', shortcut: 'G T' },
-  { id: 'sent', label: 'Sent', icon: 'Send' as const, query: 'in:sent', shortcut: 'G E' }
+  { id: 'inbox', label: 'Inbox', icon: 'inbox', query: 'category:primary', shortcut: 'G I' },
+  { id: 'snooze', label: 'Later', icon: 'schedule', layout: 'LATER' as const, shortcut: 'G S' },
+  { id: 'starred', label: 'Starred', icon: 'star', query: 'is:starred', shortcut: 'G T' },
+  { id: 'sent', label: 'Sent', icon: 'send', query: 'in:sent', shortcut: 'G E' }
 ];
 
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -69,15 +70,18 @@ const MailNavTabs = React.memo(() => {
     if (activeId) setLoadingTabId(null);
   }, [activeId]);
 
-  const handleTabClick = useCallback((item: MailNavItem) => {
-    setLoadingTabId(item.id);
-    setTimeout(() => setLoadingTabId(null), 1500);
-    if (item.layout) {
-      setActiveLayout(item.layout);
-    } else {
-      searchNewQuery(item.query, undefined, false);
-    }
-  }, [setActiveLayout, searchNewQuery]);
+  const handleTabClick = useCallback(
+    (item: MailNavItem) => {
+      setLoadingTabId(item.id);
+      setTimeout(() => setLoadingTabId(null), 1500);
+      if (item.layout) {
+        setActiveLayout(item.layout);
+      } else {
+        searchNewQuery(item.query, undefined, false);
+      }
+    },
+    [setActiveLayout, searchNewQuery]
+  );
 
   return (
     <div className="flex items-center gap-0.5">
@@ -91,13 +95,13 @@ const MailNavTabs = React.memo(() => {
             title={`${item.label} (${item.shortcut})`}
             onClick={() => handleTabClick(item)}
             className={cn(
-              'no-drag relative flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[13px] transition-colors',
+              'no-drag relative flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-[13px] transition-colors',
               isActive
                 ? 'bg-foreground/[0.10] font-normal text-foreground'
                 : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
             )}
           >
-            <MonoIcon type={item.icon} className="h-3 w-3 shrink-0" />
+            <InboxIcon symbol={item.icon} size={17} fill={isActive || item.id === 'starred'} />
             <span>{item.label}</span>
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span
