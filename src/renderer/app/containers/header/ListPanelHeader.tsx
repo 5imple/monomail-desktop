@@ -214,31 +214,10 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
             {!isElectron && sidebarCollapsed && <SidebarCollapseButton className="mr-2" />}
 
             <div className="min-w-0">
-              {/* Tiny mono "scope" label sits above the title so the title
-                  itself doesn't need to repeat the folder name. Hidden if
-                  there's no scope to communicate. */}
-              <p className="mb-0.5 line-clamp-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                {globalSearchQuery && activeItem?.id !== 'search' ? 'Inbox' : 'Newton'}
-              </p>
               <h1 className="line-clamp-1 text-[22px] font-medium tracking-tight text-foreground sm:text-[26px]">
                 {scopeLabel}
               </h1>
             </div>
-
-            <Button
-              disabled={loadingStatus === 'LOADING'}
-              variant={'ghost'}
-              sizeVariant={'sm'}
-              className="mb-1 text-muted-foreground hover:text-foreground"
-              onClick={handleRefresh}
-              tooltip={t('header.list.refresh') || 'Refresh'}
-            >
-              {aggregatedSyncState.isSyncing || loadingStatus === 'LOADING' ? (
-                <Loader />
-              ) : (
-                <MonoIcon type={'RotateCcw'} className="h-3.5 w-3.5" />
-              )}
-            </Button>
 
             {accountsWithErrors.length > 0 && (
               <Tooltip>
@@ -260,6 +239,20 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
           </div>
 
           <div className="no-drag mb-1 ml-auto flex items-center gap-1.5">
+            <Button
+              disabled={loadingStatus === 'LOADING'}
+              variant={'ghost'}
+              sizeVariant={'sm'}
+              className="text-muted-foreground hover:text-foreground"
+              onClick={handleRefresh}
+              tooltip={t('header.list.refresh') || 'Refresh'}
+            >
+              {aggregatedSyncState.isSyncing || loadingStatus === 'LOADING' ? (
+                <Loader />
+              ) : (
+                <MonoIcon type={'RotateCcw'} className="h-3.5 w-3.5" />
+              )}
+            </Button>
             <OfflineIndicator />
 
             <UserAvatar user={member} />

@@ -125,15 +125,23 @@ export function useLabelAtom() {
     [setLabelsMapByAccount, labelsMapByAccount]
   );
 
-  // Load labels from API and populate labelsMapByAccount
-  const loadLabels = useCallback(async (): Promise<void> => {
+  // Load labels from API and populate labelsMapByAccount.
+  // uids: the list of account UIDs to fetch labels for (pass accounts.map(a => a.uid)).
+  const loadLabels = useCallback(async (uids: string[]): Promise<void> => {
     try {
       // First, try to load from cache for immediate feedback
       await loadCachedLabels();
 
       // Then fetch fresh data from server
       console.log('Fetching fresh labels from server...');
-      const response = await mailApi.getLabels();
+
+      // Fetch labels for each account and merge into a single map
+      const responses = await Promise.all(uids.map((uid) => mailApi.getLabels(uid)));
+      const merged = responses.reduce<{ labels: Record<string, any[]> }>(
+        (acc, r) => ({ labels: { ...acc.labels, ...r.labels } }),
+        { labels: {} }
+      );
+      const response = merged;
 
       // The response is now a map of accountId to labels array
       const newLabelsMap: LabelsMapByAccount = {};
@@ -170,7 +178,7 @@ export function useLabelAtom() {
         console.warn('No cached labels available and server fetch failed');
       }
     }
-  }, [setLabelsMapByAccount, loadCachedLabels]);
+  }, [setLabelsMapByAccount, loadCachedLabels]); // uids is an arg, not a dep
 
   // Update an existing label
   const updateLabel = useCallback(

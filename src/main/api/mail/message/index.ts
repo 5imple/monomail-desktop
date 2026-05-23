@@ -1,19 +1,29 @@
-import { apiClient } from '@/main/api/apiClient';
+import { gmailApiClient } from '@/main/api/apiClient';
 import { MailMessage, MailThreadUpdateResponse } from '@/main/api/mail/types';
+import { transformMessage, RawGmailMessage } from '@/main/api/mail/transforms';
 
 const getMessage = async (uid: string, id: string, signal?: AbortSignal): Promise<MailMessage> => {
-  return await apiClient.get<MailMessage>(`/mail/messages/${id}`, { uid, signal });
+  const raw = await gmailApiClient.get<RawGmailMessage>(`/messages/${id}?format=full`, {
+    uid,
+    signal,
+  });
+  return transformMessage(raw);
 };
 
 const getMessageUnsubscribe = async (uid: string, id: string, signal?: AbortSignal) => {
-  return await apiClient.get<Pick<MailMessage, 'listUnsubscribe' | 'id'>>(
-    `/mail/messages/${id}/unsubscribe`,
+  // Fetch metadata format — only need headers, no body
+  const raw = await gmailApiClient.get<RawGmailMessage>(
+    `/messages/${id}?format=metadata&metadataHeaders=List-Unsubscribe`,
     { uid, signal }
   );
+  const msg = transformMessage(raw);
+  return { id: msg.id, listUnsubscribe: msg.listUnsubscribe };
 };
 
-const postMessageUnsubscribe = async (uid: string, id: string, signal?: AbortSignal) => {
-  return await apiClient.post<void>(`/mail/messages/${id}/unsubscribe`, {}, { uid, signal });
+// Gmail's unsubscribe is handled client-side via the List-Unsubscribe URL/mailto.
+// This stub satisfies call sites that POST to trigger server-side unsubscribe.
+const postMessageUnsubscribe = async (_uid: string, _id: string, _signal?: AbortSignal) => {
+  // No-op for direct Gmail — callers use the URL/mailto from getMessageUnsubscribe.
 };
 
 const modifyMessage = async (
@@ -22,17 +32,17 @@ const modifyMessage = async (
   addLabelIds: string[],
   removeLabelIds: string[],
   signal?: AbortSignal
-) => {
-  const data = { addLabelIds, removeLabelIds };
-  return await apiClient.patch<MailThreadUpdateResponse>(`/mail/messages/${id}/modify`, data, {
-    uid,
-    signal
-  });
+): Promise<MailThreadUpdateResponse> => {
+  return gmailApiClient.post<MailThreadUpdateResponse>(
+    `/messages/${id}/modify`,
+    { addLabelIds, removeLabelIds },
+    { uid, signal }
+  );
 };
 
 export default {
   getMessage,
   getMessageUnsubscribe,
   postMessageUnsubscribe,
-  modifyMessage
+  modifyMessage,
 };

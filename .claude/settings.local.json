@@ -27,7 +27,9 @@
       "Bash(echo \"Dev server PID: $!\")",
       "Bash(pkill -f \"mock-backend.mjs\")",
       "Bash(grep -n \"MESSAGE_ADDED\\\\|mock-thread-\\\\`\\\\|mock-msg-\\\\`\\\\|randomBytes.*toString\" /Users/simple/Desktop/Projects/monomail-desktop/scripts/mock-backend.mjs)",
-      "Bash(curl -s http://localhost:3030/api/v1/mono/preference)"
+      "Bash(curl -s http://localhost:3030/api/v1/mono/preference)",
+      "Bash(pkill -f \"electron.*monomail\")",
+      "Bash(xargs ls)"
     ]
   }
 }

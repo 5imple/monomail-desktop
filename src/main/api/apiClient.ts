@@ -326,6 +326,12 @@ const getApiUrl = () => {
 
 export const apiClient = ApiClient.getInstance(getApiUrl());
 
+// Separate client for direct Gmail API calls. Base URL resolves to
+// https://gmail.googleapis.com/gmail/v1/users/me/<path>.
+// The access token is injected via setApiClientIdToken() in AuthContext
+// whenever the token refreshes.
+export const gmailApiClient = new ApiClient('https://gmail.googleapis.com/gmail/v1/users/me');
+
 /**
  * Set the Mono API token.
  * @param {string} token - The API token to set.

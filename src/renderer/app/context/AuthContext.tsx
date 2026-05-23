@@ -1,4 +1,4 @@
-import { apiClient } from '@/main/api/apiClient';
+import { apiClient, gmailApiClient } from '@/main/api/apiClient';
 import authApi from '@/main/api/auth/authApi';
 import {
   MonoAccount,
@@ -405,8 +405,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [updateDraft]);
 
   const fetchLabels = useCallback(async () => {
-    loadLabels();
-  }, [loadLabels]);
+    loadLabels(accounts.map((a) => a.uid));
+  }, [loadLabels, accounts]);
 
   // Fetch data for multiple accounts (used when switching spaces)
   const fetchDataForAccounts = useCallback(
@@ -492,6 +492,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         // Only update API client after we have confirmed token (fresh or fallback)
         apiClient.setApiClientIdToken(idToken);
+        gmailApiClient.setApiClientIdToken(idToken);
         electronApi.setIdToken(idToken);
 
         // Update auth state with the confirmed token
@@ -513,7 +514,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           monoAccountResponse = await authApi.getMonoAccount();
         } catch (error) {
-          if (cachedData) {
+          // Standalone Google OAuth mode: member data lives in TokenManager, not a backend.
+          // Check this first so stale cached mock-backend data doesn't shadow real Google accounts.
+          const authState = await electronApi.getAuthState();
+          if (authState?.member) {
+            const m = authState.member;
+            monoAccountResponse = {
+              accounts: [
+                {
+                  uid: m.uid,
+                  displayName: m.displayName || m.email,
+                  provider: 'google' as const,
+                  email: m.email,
+                  profileImageUrl: m.photoURL || '',
+                  primary: true,
+                  scopes: [
+                    'https://mail.google.com',
+                    'https://www.googleapis.com/auth/gmail.modify',
+                    'https://www.googleapis.com/auth/contacts.readonly'
+                  ],
+                  isExpired: false
+                }
+              ],
+              relatedMembers: [],
+              member: {
+                uid: m.uid,
+                displayName: m.displayName || m.email,
+                email: m.email,
+                primaryUid: m.uid,
+                memberName: m.email.split('@')[0],
+                profileImageUrl: m.photoURL || '',
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                demographics: { role: '', emailUsage: '', discoverySource: '' },
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }
+            };
+          } else if (cachedData) {
             console.log('Using cached account data due to API network error');
             monoAccountResponse = {
               accounts: cachedData.accounts,
@@ -747,6 +784,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await clearLabelsCache();
     apiClient.setApiClientIdToken(null);
     apiClient.setApiActiveUid(null);
+    gmailApiClient.setApiClientIdToken(null);
+    gmailApiClient.setApiActiveUid(null);
     await electronApi.setIdToken(null);
     await electronApi.setActiveUid(null);
 
@@ -792,11 +831,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (currentUser) {
         const freshToken = await currentUser.getIdToken(false);
         apiClient.setApiClientIdToken(freshToken);
+        gmailApiClient.setApiClientIdToken(freshToken);
         electronApi.setIdToken(freshToken);
         setAuthState((prev) => ({ ...prev, idToken: freshToken }));
       }
 
-      const monoAccountResponse = await authApi.getMonoAccount();
+      let monoAccountResponse;
+      try {
+        monoAccountResponse = await authApi.getMonoAccount();
+      } catch (_err) {
+        // Standalone Google OAuth mode: build account from token state
+        const authState = await electronApi.getAuthState();
+        if (authState?.member) {
+          const m = authState.member;
+          monoAccountResponse = {
+            accounts: [
+              {
+                uid: m.uid,
+                displayName: m.displayName || m.email,
+                provider: 'google' as const,
+                email: m.email,
+                profileImageUrl: m.photoURL || '',
+                primary: true,
+                scopes: [
+                  'https://mail.google.com',
+                  'https://www.googleapis.com/auth/gmail.modify',
+                  'https://www.googleapis.com/auth/contacts.readonly'
+                ],
+                isExpired: false
+              }
+            ],
+            relatedMembers: [],
+            member: {
+              uid: m.uid,
+              displayName: m.displayName || m.email,
+              email: m.email,
+              primaryUid: m.uid,
+              memberName: m.email.split('@')[0],
+              profileImageUrl: m.photoURL || '',
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              demographics: { role: '', emailUsage: '', discoverySource: '' },
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }
+          };
+        } else {
+          throw _err;
+        }
+      }
+
       const newAccounts = monoAccountResponse.accounts;
 
       setAuthState((prev) => ({
@@ -808,9 +891,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       updateBadgeWithLabelCount(newAccounts.map((a) => a.uid));
       electronApi.setKnownAccountUids(newAccounts.map((a) => a.uid)).catch(() => {});
 
-      // Register Gmail Cloud Pub/Sub watch for all accounts. The WebSocket push
-      // client only registers watches on connection open, so mid-session account
-      // additions need an explicit call here.
       for (const account of newAccounts) {
         mailApi
           .watchCloudPubSub(account.uid)

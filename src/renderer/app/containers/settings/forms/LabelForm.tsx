@@ -246,7 +246,7 @@ export const LabelForm = () => {
       );
 
       // Optionally reload labels from the API if you want to ensure fresh data
-      await loadLabels();
+      await loadLabels(accounts.map((a) => a.uid));
     } catch (error) {
       console.error('Error updating labels:', error);
       toast.error(t('toast.error.label_update'));
