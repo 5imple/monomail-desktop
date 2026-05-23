@@ -353,17 +353,18 @@ export const ThreadListDenseItem = React.memo(
                     >
                       <div
                         className={cn(
-                          'flex h-5 w-5 items-center justify-center rounded-full border border-muted-foreground/30 transition-[border-color,transform] duration-150',
-                          !isChecked && 'hover:scale-105 hover:border-muted-foreground/60'
+                          'flex h-5 w-5 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,transform] duration-150',
+                          isChecked
+                            ? 'border-muted-foreground bg-muted-foreground text-background shadow-none'
+                            : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground'
                         )}
                       >
-                        {/* Same icon weight (stroke-[1.2] ≈ Material weight 300, grade 0)
-                            in every state — selection is conveyed by opacity, not stroke. */}
                         <MonoIcon
                           type="Check"
                           className={cn(
-                            'h-3 w-3 stroke-[1.2] text-muted-foreground transition-opacity duration-150',
-                            isChecked ? 'opacity-100' : 'opacity-0'
+                            'stroke-[1.2]',
+                            isChecked ? 'h-3.5 w-3.5' : 'h-3 w-3',
+                            isChecked ? 'opacity-100' : 'opacity-80'
                           )}
                         />
                       </div>
