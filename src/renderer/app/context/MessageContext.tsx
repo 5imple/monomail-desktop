@@ -154,7 +154,7 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       const messageResponse = await mailApi.getMessage(addedMessage.aAUid, addedMessage.id);
 
-      if (messageResponse) {
+      if (messageResponse?.payload) {
         const monoMessage = MonoMessage.fromGmailMessage(messageResponse);
         await DBSaveMessage(addedMessage.aAUid, monoMessage);
         notifySubscribers([

@@ -143,6 +143,12 @@ export function registerAppEventHandlers() {
         'https://api.mixpanel.com',
         'https://*.paddle.com',
         'https://status.cloud.google.com',
+        // Google OAuth + Gmail direct API (Phase 1+)
+        'https://accounts.google.com',
+        'https://oauth2.googleapis.com',
+        'https://www.googleapis.com',
+        'https://gmail.googleapis.com',
+        'https://people.googleapis.com',
         // Vite HMR WebSocket in dev mode
         !app.isPackaged ? 'ws://localhost:*' : ''
       ]

@@ -269,7 +269,7 @@ export function MailLayout({}: MailLayoutProps) {
             id={'thread-list'}
             ref={threadListRef}
             order={1}
-            defaultSize={30}
+            defaultSize={100}
             style={
               fullscreenDisplayPanel
                 ? {

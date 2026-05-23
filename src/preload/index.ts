@@ -10,7 +10,14 @@ import { SplitCategoryPreferences } from '@/main/api/auth/types';
 const api = {
   on: (channel: ValidRendererChannel, callback: (...args: any[]) => void) => {
     if (isValidRendererChannel(channel)) {
-      const subscription = (_event: Electron.IpcRendererEvent, ...args: any[]) => callback(...args);
+      const subscription = (_event: Electron.IpcRendererEvent, ...args: any[]) => {
+        const result: unknown = callback(...args);
+        if (result instanceof Promise) {
+          result.catch((err: unknown) =>
+            console.error('[preload] Unhandled IPC callback error:', err)
+          );
+        }
+      };
       ipcRenderer.on(channel, subscription);
       return () => {
         ipcRenderer.removeListener(channel, subscription);
@@ -27,6 +34,8 @@ const api = {
   refreshToken: () => ipcRenderer.invoke('main:auth:refresh'),
   devSignIn: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
     ipcRenderer.invoke('main:auth:dev-sign-in', args),
+  initiateSignIn: () => ipcRenderer.invoke('main:auth:initiate-sign-in'),
+  initiateAddAccount: () => ipcRenderer.invoke('main:auth:initiate-add-account'),
   createAccountLinkIntent: (args?: { provider?: string; client?: string }) =>
     ipcRenderer.invoke('main:auth:create-account-link-intent', args),
   completeAccountLink: (args: { intent: string; code: string }) =>

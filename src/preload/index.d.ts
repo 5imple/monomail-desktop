@@ -31,6 +31,8 @@ interface IpcRenderer {
     refreshToken: string;
     expiresInSec?: number;
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  initiateSignIn: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  initiateAddAccount: () => Promise<{ ok: true; accessToken: string } | { ok: false; error: string }>;
   createAccountLinkIntent: (args?: {
     provider?: string;
     client?: string;

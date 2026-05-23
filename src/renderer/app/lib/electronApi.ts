@@ -84,6 +84,10 @@ interface IpcRenderer {
     refreshToken: string;
     expiresInSec?: number;
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Trigger a full Google OAuth PKCE flow in the system browser. Requires MONO_ENV_GOOGLE_CLIENT_ID. */
+  initiateSignIn: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Trigger a Google OAuth PKCE flow to add a second account. Requires MONO_ENV_GOOGLE_CLIENT_ID. */
+  initiateAddAccount: () => Promise<{ ok: true; accessToken: string } | { ok: false; error: string }>;
   createAccountLinkIntent: (args?: {
     provider?: string;
     client?: string;
@@ -393,6 +397,14 @@ const electronApi: IpcRenderer = {
     if (isElectron) {
       return window.electronBridge.devSignIn(args);
     }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  initiateSignIn: async () => {
+    if (isElectron) return window.electronBridge.initiateSignIn();
+    return { ok: false, error: 'Not in Electron' };
+  },
+  initiateAddAccount: async () => {
+    if (isElectron) return window.electronBridge.initiateAddAccount();
     return { ok: false, error: 'Not in Electron' };
   },
   createAccountLinkIntent: async (args) => {

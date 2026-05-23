@@ -15,6 +15,12 @@ interface StoredTokens {
     displayName?: string;
     photoURL?: string;
   };
+  /**
+   * Which auth provider issued these tokens. 'google' = PKCE direct OAuth;
+   * undefined / 'backend' = legacy backend-proxied flow. Controls which
+   * refresh endpoint doRefresh() calls.
+   */
+  provider?: 'google' | 'backend';
 }
 
 interface StoreSchema {
@@ -116,6 +122,7 @@ class TokenManager extends EventEmitter {
     expiresInSec?: number;
     expiresAt?: number;
     member?: StoredTokens['member'];
+    provider?: StoredTokens['provider'];
   }): void {
     const expiresAt =
       input.expiresAt ??
@@ -124,7 +131,8 @@ class TokenManager extends EventEmitter {
       accessToken: input.accessToken,
       refreshToken: input.refreshToken,
       expiresAt,
-      member: input.member
+      member: input.member,
+      provider: input.provider ?? this.tokens?.provider
     };
     this.persist();
     this.scheduleAutoRefresh();
@@ -176,7 +184,55 @@ class TokenManager extends EventEmitter {
 
   private async doRefresh(): Promise<StoredTokens> {
     if (!this.tokens) throw new Error('Not signed in');
-    const refreshToken = this.tokens.refreshToken;
+    return this.tokens.provider === 'google'
+      ? this.doGoogleRefresh()
+      : this.doBackendRefresh();
+  }
+
+  private async doGoogleRefresh(): Promise<StoredTokens> {
+    const refreshToken = this.tokens!.refreshToken;
+    const clientId = (import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim();
+    const clientSecret = (import.meta.env.MONO_ENV_GOOGLE_CLIENT_SECRET || '').trim();
+    if (!clientId) throw new Error('MONO_ENV_GOOGLE_CLIENT_ID not configured');
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token'
+    });
+    if (clientSecret) params.set('client_secret', clientSecret);
+
+    const response = await net.fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+
+    if (response.status === 400 || response.status === 401 || response.status === 403) {
+      this.clearTokens('google-refresh-rejected');
+      throw new Error(`Google refresh rejected: ${response.status}`);
+    }
+    if (!response.ok) throw new Error(`Google refresh failed: ${response.status}`);
+
+    const body = (await response.json()) as {
+      access_token: string;
+      expires_in?: number;
+      refresh_token?: string;
+    };
+    if (!body.access_token) throw new Error('Google refresh response missing access_token');
+
+    this.saveTokens({
+      accessToken: body.access_token,
+      refreshToken: body.refresh_token ?? refreshToken,
+      expiresInSec: body.expires_in,
+      member: this.tokens!.member,
+      provider: 'google'
+    });
+    return this.tokens!;
+  }
+
+  private async doBackendRefresh(): Promise<StoredTokens> {
+    const refreshToken = this.tokens!.refreshToken;
     const backend = resolveBackendUrl();
     if (!backend) throw new Error('MONO_ENV_BACKEND_URL not configured');
 
@@ -187,13 +243,10 @@ class TokenManager extends EventEmitter {
     });
 
     if (response.status === 401 || response.status === 403) {
-      // Refresh token revoked or expired — sign out.
       this.clearTokens('refresh-rejected');
       throw new Error(`Refresh rejected: ${response.status}`);
     }
-    if (!response.ok) {
-      throw new Error(`Refresh failed: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`Refresh failed: ${response.status}`);
 
     const body = (await response.json()) as {
       accessToken: string;
@@ -204,10 +257,9 @@ class TokenManager extends EventEmitter {
 
     this.saveTokens({
       accessToken: body.accessToken,
-      // Backends MAY rotate refresh tokens; if not, keep the existing one.
       refreshToken: body.refreshToken ?? refreshToken,
       expiresInSec: body.expiresIn,
-      member: this.tokens.member
+      member: this.tokens!.member
     });
     return this.tokens!;
   }

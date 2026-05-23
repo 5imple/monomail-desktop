@@ -81,9 +81,20 @@ async function completeLocalDevAddAccount(linkUrl: string): Promise<boolean> {
 }
 
 export async function startEmailAccountLink(provider: ProviderId = 'gmail'): Promise<boolean> {
+  // Primary path: PKCE direct Google OAuth when client ID is configured.
+  if (isElectron && (import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim()) {
+    const result = await electronApi.initiateAddAccount();
+    if (!result.ok) {
+      toast.error(`Gmail connection failed: ${result.error}`);
+      return false;
+    }
+    return true;
+  }
+
+  // Dev / legacy path: use MONO_ENV_HOMEPAGE_DOMAIN + backend intents.
   const baseUrl = getHomepageBase();
   if (!baseUrl) {
-    toast.error('Gmail connection is unavailable: MONO_ENV_HOMEPAGE_DOMAIN is not configured.');
+    toast.error('Gmail connection is unavailable: set MONO_ENV_GOOGLE_CLIENT_ID or MONO_ENV_HOMEPAGE_DOMAIN.');
     return false;
   }
 
@@ -101,6 +112,7 @@ export async function startEmailAccountLink(provider: ProviderId = 'gmail'): Pro
     linkUrl.searchParams.set('intent', intent.intent);
 
     if (isLocalDevBase(baseUrl)) {
+      window.open(linkUrl.toString(), '_blank', 'noopener,noreferrer');
       return completeLocalDevAddAccount(linkUrl.toString());
     }
   }

@@ -33,6 +33,8 @@ export const validMainChannel = [
   'main:auth:get-state',
   'main:auth:sign-out',
   'main:auth:refresh',
+  'main:auth:initiate-sign-in',
+  'main:auth:initiate-add-account',
   'main:auth:create-account-link-intent',
   'main:auth:dev-add-account',
   'main:system:set-offline-status',

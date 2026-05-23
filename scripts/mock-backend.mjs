@@ -163,6 +163,7 @@ const STUB_THREADS = Array.from({ length: 8 }, (_, i) =>
   makeStubThread(i, 'mock-account-primary')
 );
 const STUB_THREADS_BY_ID = new Map(STUB_THREADS.map((t) => [t.id, t]));
+const STUB_MESSAGES_BY_ID = new Map(STUB_THREADS.flatMap((t) => t.items.map((m) => [m.id, m])));
 
 const STUB_PREFERENCE = {
   language: 'en',
@@ -170,8 +171,17 @@ const STUB_PREFERENCE = {
   compose: { cancelWindow: 5, fullscreen: false },
   account: { accentColor: {} },
   signature: { includeInReplies: true, includeInForwards: true, includeInNewMessages: true },
-  display: { inbox: { category: {} }, threadList: {} },
-  notifications: {}
+  display: {
+    inbox: { category: {} },
+    threadList: { showAvatar: false, showSnippet: true, showLabels: true, showAttachments: true }
+  },
+  notification: {
+    alertSound: 'Mono',
+    watchNotification: {},
+    marketingEmails: false,
+    securityEmails: true
+  },
+  system: { openAtLogin: false }
 };
 
 // ---------- P8 Later Queue ---------------------------------------------------
@@ -301,7 +311,7 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, {
     'Content-Type': isJson ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': '*',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept, X-Requested-With',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     ...headers
   });
@@ -394,7 +404,7 @@ const server = createServer(async (req, res) => {
   if (method === 'GET' && path === '/add-account') {
     const intent = url.searchParams.get('intent');
     const entry = intent ? accountLinkIntents.get(intent) : null;
-    if (intent && (!entry || entry.used || Date.parse(entry.expiresAt) <= Date.now())) {
+    if (intent && (!entry || Date.parse(entry.expiresAt) <= Date.now())) {
       return send(
         res,
         400,
@@ -402,11 +412,13 @@ const server = createServer(async (req, res) => {
       );
     }
 
-    const completionCode = `mock-link-code-${randomBytes(18).toString('hex')}`;
-    if (entry) {
-      entry.completionCode = completionCode;
+    // Reuse existing code so multiple fetches for the same intent (browser
+    // window open + silent background fetch) always return the same code.
+    if (entry && !entry.completionCode) {
+      entry.completionCode = `mock-link-code-${randomBytes(18).toString('hex')}`;
       entry.completionExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
     }
+    const completionCode = entry?.completionCode ?? `mock-link-code-${randomBytes(18).toString('hex')}`;
     const account = ensureSecondaryAccount();
     const deeplink = `${DEEPLINK_PROTOCOL}://addAccount?intent=${encodeURIComponent(
       intent || ''
@@ -499,6 +511,10 @@ const server = createServer(async (req, res) => {
   }
 
   // --- NPS (ported Cloud Function) ---
+  if (method === 'GET' && path === '/api/release-note') {
+    return send(res, 200, []);
+  }
+
   if (method === 'GET' && path === '/nps/entries') {
     return send(res, 200, { entries: [], totalCount: 0 });
   }
@@ -551,6 +567,9 @@ const server = createServer(async (req, res) => {
       const body = await readJson(req).catch(() => ({}));
       return send(res, 200, { ...STUB_PREFERENCE, ...(body.preference ?? {}) });
     }
+    if (method === 'PUT' && apiPath === '/mono/user/timezone') {
+      return send(res, 200, {});
+    }
 
     // /mail/threads/:id — single thread fetch (e.g. when the user opens
     // a thread in the reader). Must come before the list match below
@@ -567,6 +586,17 @@ const server = createServer(async (req, res) => {
       // Modify/batch-modify routes return void; the unstubbed catch-all
       // already handles them. Leaving here so future changes are
       // intentional.
+    }
+
+    // /mail/messages/:id — single message fetch triggered by MESSAGE_ADDED push events.
+    {
+      const m = apiPath.match(/^\/mail\/messages\/([^/]+)$/);
+      if (m && method === 'GET') {
+        const id = decodeURIComponent(m[1]);
+        const msg = STUB_MESSAGES_BY_ID.get(id);
+        if (!msg) return send(res, 404, { error: 'message not found' });
+        return send(res, 200, msg);
+      }
     }
 
     if (method === 'GET' && apiPath.startsWith('/mail/threads')) {
@@ -862,8 +892,8 @@ wss.on('connection', (ws, req) => {
       data: {
         type: 'MESSAGE_ADDED',
         aAUid: STUB_ACCOUNTS[0].uid,
-        threadId: `mock-thread-${randomBytes(4).toString('hex')}`,
-        id: `mock-msg-${randomBytes(4).toString('hex')}`,
+        threadId: STUB_THREADS[0].id,
+        id: STUB_THREADS[0].items[0].id,
         labels: '[INBOX, UNREAD]',
         verification: 'false',
         link: '',

@@ -36,21 +36,27 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleSignIn = useCallback(async () => {
+    // Primary path: PKCE direct Google OAuth when client ID is configured.
+    if (isElectron && (import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim()) {
+      const result = await electronApi.initiateSignIn();
+      if (!result.ok) {
+        toast.error(`Sign-in failed: ${result.error}`);
+      }
+      return;
+    }
+
+    // Dev / legacy path: use MONO_ENV_HOMEPAGE_DOMAIN.
     const rawBaseUrl = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
     if (!rawBaseUrl) {
       toast.error(
-        'Sign-in unavailable: MONO_ENV_HOMEPAGE_DOMAIN is not configured for this build.'
+        'Sign-in unavailable: set MONO_ENV_GOOGLE_CLIENT_ID (direct OAuth) or MONO_ENV_HOMEPAGE_DOMAIN (backend sign-in page) and rebuild.'
       );
       return;
     }
-    // Reject unschemed values like "localhost" — the main-process
-    // window-open guard would silently deny them and the button would
-    // appear broken. Tell the user instead.
     const baseUrl = /^https?:\/\//i.test(rawBaseUrl) ? rawBaseUrl : '';
     if (!baseUrl) {
       toast.error(
-        `Sign-in unavailable: MONO_ENV_HOMEPAGE_DOMAIN is "${rawBaseUrl}", which must start with http(s)://. ` +
-          'Point this at your on-prem sign-in page and rebuild.'
+        `Sign-in unavailable: MONO_ENV_HOMEPAGE_DOMAIN is "${rawBaseUrl}", which must start with http(s)://.`
       );
       return;
     }
@@ -58,15 +64,7 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
     const signInUrl = `${baseUrl.replace(/\/$/, '')}/sign-in?client=${client}`;
 
     // Dev shortcut: when pointed at localhost, fetch the mock backend's
-    // sign-in HTML directly, pull access + refresh tokens out of the
-    // `mono-desktop://signIn?…` link, and hand them straight to main via
-    // the `dev-sign-in` IPC. Bypasses the system-browser hop + macOS
-    // Launch Services protocol handler (both unreliable in `npm run dev`
-    // because Electron is the generic node_modules binary, not a
-    // registered .app). The IPC funnels into the same `tokenManager.
-    // saveTokens` call as the production deep-link path, so downstream
-    // events (`renderer:auth:token-changed` etc.) fire identically.
-    // Production never enters this branch — the regex below is the gate.
+    // sign-in HTML directly and hand tokens to main via dev-sign-in IPC.
     const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(baseUrl);
     if (isLocalDev) {
       try {
@@ -91,9 +89,7 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
               console.warn('[dev sign-in] mock HTML missing token or refresh_token');
             }
           } else {
-            console.warn(
-              '[dev sign-in] mock response missing mono-desktop://signIn link, falling back'
-            );
+            console.warn('[dev sign-in] mock response missing mono-desktop://signIn link, falling back');
           }
         } else {
           console.warn(`[dev sign-in] mock returned ${res.status}, falling back to browser`);
