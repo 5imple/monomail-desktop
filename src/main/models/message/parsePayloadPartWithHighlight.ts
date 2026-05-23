@@ -169,6 +169,37 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function getPayloadCacheSignature(message: MonoMessage): string {
+  const payloadParts: string[] = [];
+
+  function visitPayload(part: MonoMessage['payload']) {
+    payloadParts.push(
+      [
+        part.partId,
+        part.mimeType,
+        part.body?.attachmentId ?? '',
+        part.body?.size ?? 0,
+        part.body?.data?.length ?? 0,
+        part.parts?.length ?? 0
+      ].join(':')
+    );
+
+    part.parts?.forEach(visitPayload);
+  }
+
+  visitPayload(message.payload);
+
+  const inlineImageSignature = Object.entries(message.inlineImages)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(
+      ([contentId, attachment]) =>
+        `${contentId}:${attachment.attachmentId}:${attachment.mimeType}:${attachment.size}`
+    )
+    .join('|');
+
+  return `${message.historyId ?? ''}:${payloadParts.join('|')}:${inlineImageSignature}`;
+}
+
 /**
  * Modified version of parsePayloadPart to include search highlighting
  * @param {MonoMessage} message - The message object
@@ -180,8 +211,12 @@ export function parsePayloadPartWithHighlight(
   searchQuery: string,
   isDarkMode: boolean
 ) {
-  // Create a cache key based on message ID, search query, and dark mode
-  const cacheKey = `${message.id}-${searchQuery}-${isDarkMode}`;
+  const cacheKey = [
+    message.id,
+    searchQuery,
+    isDarkMode ? 'dark' : 'light',
+    getPayloadCacheSignature(message)
+  ].join(':');
 
   // Check if we have a cached result
   const cachedResult = parsedContentCache.get(cacheKey);

@@ -110,6 +110,19 @@ function parseListUnsubscribe(raw: string): { url: string[]; mailTo: string[] } 
   return { url: urls, mailTo };
 }
 
+function normalizeContentId(value?: string): string {
+  if (!value) return '';
+
+  let normalized = value.trim().replace(/^cid:/i, '').replace(/^<|>$/g, '');
+  try {
+    normalized = decodeURIComponent(normalized);
+  } catch {
+    // Some Content-ID values are not URI-encoded even when they contain %.
+  }
+
+  return normalized.trim().replace(/^<|>$/g, '');
+}
+
 function parseTimezone(dateHeader: string): string {
   const m = dateHeader.match(/([+-]\d{4}|UTC|GMT)\s*$/);
   return m ? m[1] : 'UTC';
@@ -122,8 +135,7 @@ function walkParts(
 ): void {
   const headers = part.headers ?? [];
   const rawCid = getHeader(headers, 'Content-ID');
-  const cid = rawCid.replace(/^<|>$/g, '');
-  const disposition = getHeader(headers, 'Content-Disposition').toLowerCase();
+  const cid = normalizeContentId(rawCid);
   const attachmentId = part.body?.attachmentId;
   const filename = part.filename ?? '';
 
@@ -134,7 +146,7 @@ function walkParts(
       mimeType: part.mimeType ?? '',
       size: part.body?.size ?? 0,
     };
-    if (cid && disposition.startsWith('inline')) {
+    if (cid) {
       inlineImages[cid] = entry;
     } else if (filename) {
       attachments[filename] = entry;

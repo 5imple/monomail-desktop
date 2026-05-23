@@ -6,7 +6,7 @@ import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { IMonoMessage, MonoMessage } from '@/main/models/message/MonoMessage';
 import { parsePayloadPartWithHighlight } from '@/main/models/message/parsePayloadPartWithHighlight';
-import { MonoRecipient } from '@/main/models/types';
+import { MonoAttachment, MonoRecipient } from '@/main/models/types';
 import { generateUUID } from '@/main/utils';
 import { CalendarEventCard } from '@/renderer/app/components/card/CalendarEventCard';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
@@ -50,6 +50,54 @@ interface MessageCardProps {
   onFocusRequest?: () => void;
   handleContactOpen?: (recipient: MonoRecipient) => void;
   style?: React.CSSProperties;
+}
+
+const ALLOWED_INLINE_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+const shouldTransformEmailForDarkMode = false;
+
+function normalizeContentId(value?: string | null): string {
+  if (!value) return '';
+
+  let normalized = value.trim().replace(/^cid:/i, '').replace(/^<|>$/g, '');
+  try {
+    normalized = decodeURIComponent(normalized);
+  } catch {
+    // Some senders use literal percent characters in Content-ID values.
+  }
+
+  return normalized.trim().replace(/^<|>$/g, '');
+}
+
+function findInlineImage(
+  inlineImages: Record<string, MonoAttachment>,
+  contentId?: string | null,
+  attachmentId?: string | null
+): MonoAttachment | null {
+  if (attachmentId) {
+    const attachment = Object.values(inlineImages).find(
+      (inlineImage) => inlineImage.attachmentId === attachmentId
+    );
+    if (attachment) return attachment;
+  }
+
+  const normalizedContentId = normalizeContentId(contentId);
+  if (!normalizedContentId) return null;
+
+  return (
+    inlineImages[normalizedContentId] ??
+    Object.entries(inlineImages).find(
+      ([key]) => normalizeContentId(key) === normalizedContentId
+    )?.[1] ??
+    null
+  );
+}
+
+function toCssLength(value: string | null | undefined, fallback: string): string {
+  if (!value) return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  return /^\d+$/.test(trimmed) ? `${trimmed}px` : trimmed;
 }
 
 const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
@@ -121,13 +169,17 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const [showTrackerPrevention, setShowTrackerPrevention] = useState(false);
     const [trackingLoading, setTrackingLoading] = useState(false);
 
+    const shouldParsePayload = isLastCard || !isCollapsed;
+
     const [parsedPayload, setParsedPayload] = useState<{
       content: string;
       history: string[];
       trackingImagesRemoved?: number;
       trackingDomains?: string[];
     } | null>(
-      isLastCard ? parsePayloadPartWithHighlight(item, globalSearchQuery, isDarkMode) : null
+      shouldParsePayload
+        ? parsePayloadPartWithHighlight(item, globalSearchQuery, shouldTransformEmailForDarkMode)
+        : null
     );
 
     const handleOpenContactPanel = (recipient: MonoRecipient) => {
@@ -143,10 +195,14 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       });
     };
 
-    // Lazy parsing function with dark mode handling
+    // Lazy parsing function with email-document rendering.
     const parseIfNeeded = () => {
       if (!parsedPayload) {
-        const processedContent = parsePayloadPartWithHighlight(item, globalSearchQuery, isDarkMode);
+        const processedContent = parsePayloadPartWithHighlight(
+          item,
+          globalSearchQuery,
+          shouldTransformEmailForDarkMode
+        );
 
         setParsedPayload(processedContent);
       }
@@ -162,14 +218,22 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       };
     }, []);
 
-    // Reprocess content when dark mode changes
+    // Keep the rendered message in sync when metadata-only list data is
+    // replaced by the full Gmail payload. The parser cache key also includes
+    // payload shape, so this reprocesses the HTML instead of reusing an empty
+    // metadata parse.
     useEffect(() => {
-      if (parsedPayload) {
-        const processedContent = parsePayloadPartWithHighlight(item, globalSearchQuery, isDarkMode);
+      setCurrentMessage(item.toPlainObject());
 
-        setParsedPayload(processedContent);
-      }
-    }, [isDarkMode]);
+      setParsedPayload((currentParsedPayload) => {
+        if (!currentParsedPayload && !shouldParsePayload) return null;
+        return parsePayloadPartWithHighlight(
+          item,
+          globalSearchQuery,
+          shouldTransformEmailForDarkMode
+        );
+      });
+    }, [globalSearchQuery, item, shouldParsePayload]);
 
     // Trigger parsing when expanded or scrolled into view
     useEffect(() => {
@@ -180,78 +244,134 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     }, [isCollapsed]);
 
     useEffect(() => {
-      if (!contentRef.current) return;
+      if (!parsedPayload || !accountId) return;
 
-      const images = contentRef.current.querySelectorAll('img[data-attachment-id]');
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(async (entry) => {
-          if (entry.isIntersecting) {
-            const img = entry.target as HTMLImageElement;
-            const attachmentId = img.getAttribute('data-attachment-id');
-            const cid = img.getAttribute('data-content-id');
-            const imgWidth = img.getAttribute('width');
-            const imgHeight = img.getAttribute('height');
+      const roots = [
+        messageContentRef.current,
+        showQuotedContent ? quotedContentRef.current : null
+      ].filter(Boolean) as HTMLDivElement[];
+      if (roots.length === 0) return;
 
-            // Show skeleton on top of the image
-            img.style.display = 'none'; // Hide image initially
+      const abortController = new AbortController();
 
-            const skeleton = document.createElement('div');
-            skeleton.className = `bg-muted-low animate-pulse rounded-md`;
-            skeleton.setAttribute('style', `width: ${imgWidth}px; height: ${imgHeight}px;`);
-            img.parentNode?.insertBefore(skeleton, img); // Insert skeleton before image
-            requestAnimationFrame(updateHeight);
+      const markImageUnavailable = (img: HTMLImageElement, skeleton?: HTMLElement) => {
+        skeleton?.remove();
+        img.dataset.monoInlineState = 'error';
+        img.style.display = 'none';
 
-            if (cid) {
-              try {
-                // TODO better solution
-                const inlineImage = item.inlineImages[cid];
-                const ALLOWED_IMAGE_MIMES = new Set([
-                  'image/jpeg',
-                  'image/png',
-                  'image/gif',
-                  'image/webp'
-                ]);
-                if (inlineImage && accountId) {
-                  if (!ALLOWED_IMAGE_MIMES.has(inlineImage.mimeType)) {
-                    skeleton.remove();
-                    img.remove();
-                    return;
-                  }
-                  const inlineAttachment = await mailApi.getAttachmentInline(
-                    accountId,
-                    item.id,
-                    inlineImage.attachmentId
-                  );
-                  const base64Image = `data:${inlineImage.mimeType};base64,${inlineAttachment.data}`;
+        const fallback = document.createElement('div');
+        fallback.className =
+          'my-2 inline-flex min-h-[72px] max-w-full items-center rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground';
+        fallback.textContent = 'Image unavailable';
+        img.parentNode?.insertBefore(fallback, img.nextSibling);
+        requestAnimationFrame(updateHeight);
+      };
 
-                  img.src = base64Image; // Set image source
-                  img.onload = () => {
-                    skeleton.remove(); // Remove skeleton when image loads
-                    img.style.display = 'block'; // Show the image
+      const loadInlineImage = async (img: HTMLImageElement) => {
+        if (
+          img.dataset.monoInlineState === 'loaded' ||
+          img.dataset.monoInlineState === 'loading' ||
+          img.dataset.monoInlineState === 'error'
+        ) {
+          return;
+        }
 
-                    // Add border to images in dark mode for better visibility
-                    if (isDarkMode) {
-                      img.style.border = '1px solid rgba(255, 255, 255, 0.1)';
-                    }
-                    updateHeight();
-                  };
-                  observer.unobserve(img);
-                }
-              } catch (error) {
-                console.error('Failed to load image', error);
-                skeleton.remove(); // Remove skeleton if the image load fails
-              }
+        const attachmentId = img.getAttribute('data-attachment-id');
+        const contentId = normalizeContentId(
+          img.getAttribute('data-content-id') || img.getAttribute('src')
+        );
+        const inlineImage = findInlineImage(item.inlineImages, contentId, attachmentId);
+
+        if (!inlineImage) return;
+
+        if (!ALLOWED_INLINE_IMAGE_MIMES.has(inlineImage.mimeType)) {
+          img.remove();
+          requestAnimationFrame(updateHeight);
+          return;
+        }
+
+        img.dataset.monoInlineState = 'loading';
+        img.setAttribute('data-attachment-id', inlineImage.attachmentId);
+        if (contentId) img.setAttribute('data-content-id', contentId);
+
+        const skeleton = document.createElement('div');
+        skeleton.className = 'my-2 animate-pulse rounded-md bg-muted-low';
+        skeleton.style.width = toCssLength(img.getAttribute('width') || img.style.width, '100%');
+        skeleton.style.height = toCssLength(
+          img.getAttribute('height') || img.style.height,
+          '120px'
+        );
+
+        img.style.display = 'none';
+        img.parentNode?.insertBefore(skeleton, img);
+        requestAnimationFrame(updateHeight);
+
+        try {
+          const inlineAttachment = await mailApi.getAttachmentInline(
+            accountId,
+            item.id,
+            inlineImage.attachmentId,
+            abortController.signal
+          );
+          if (abortController.signal.aborted) return;
+
+          img.onload = () => {
+            skeleton.remove();
+            img.dataset.monoInlineState = 'loaded';
+            img.style.display = '';
+            img.style.maxWidth = '100%';
+            if (isDarkMode) {
+              img.style.border = '1px solid rgba(24, 24, 27, 0.08)';
             }
+            updateHeight();
+          };
+          img.onerror = () => markImageUnavailable(img, skeleton);
+          img.src = `data:${inlineImage.mimeType};base64,${inlineAttachment.data}`;
+        } catch (error) {
+          if (!abortController.signal.aborted) {
+            console.error('Failed to load inline image', error);
+            markImageUnavailable(img, skeleton);
           }
-        });
+        }
+      };
+
+      const images = roots.flatMap((root) =>
+        Array.from(
+          root.querySelectorAll<HTMLImageElement>('img[data-attachment-id], img[src^="cid:"]')
+        )
+      );
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            const img = entry.target as HTMLImageElement;
+            observer.unobserve(img);
+            void loadInlineImage(img);
+          });
+        },
+        { rootMargin: '200px 0px' }
+      );
+
+      images.forEach((img) => {
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.referrerPolicy = 'no-referrer';
+        observer.observe(img);
       });
 
-      images.forEach((img) => observer.observe(img));
-
       return () => {
-        images.forEach((img) => observer.unobserve(img));
+        abortController.abort();
+        observer.disconnect();
       };
-    }, [contentRef.current, item.id, isDarkMode]);
+    }, [
+      accountId,
+      item.id,
+      item.inlineImages,
+      parsedPayload?.content,
+      showQuotedContent,
+      isDarkMode
+    ]);
 
     const updateHeight = () => {
       if (containerRef.current && contentRef.current) {
@@ -385,31 +505,34 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     }, [parsedPayload, showQuotedContent, isCollapsed]);
 
     useEffect(() => {
-      if (contentRef.current) {
-        const images = contentRef.current.querySelectorAll('img');
+      const roots = [
+        messageContentRef.current,
+        showQuotedContent ? quotedContentRef.current : null
+      ].filter(Boolean) as HTMLDivElement[];
+      if (roots.length === 0) return () => {};
 
-        const onImageLoad = () => {
-          requestAnimationFrame(updateHeight);
-        };
+      const images = roots.flatMap((root) => Array.from(root.querySelectorAll('img')));
 
+      const onImageLoad = () => {
+        requestAnimationFrame(updateHeight);
+      };
+
+      images.forEach((img) => {
+        if (img.complete) {
+          onImageLoad();
+        } else {
+          img.addEventListener('load', onImageLoad);
+          img.addEventListener('error', onImageLoad);
+        }
+      });
+
+      return () => {
         images.forEach((img) => {
-          if (img.complete) {
-            onImageLoad();
-          } else {
-            img.addEventListener('load', onImageLoad);
-            img.addEventListener('error', onImageLoad); // handle errors to ensure callback
-          }
+          img.removeEventListener('load', onImageLoad);
+          img.removeEventListener('error', onImageLoad);
         });
-
-        return () => {
-          images.forEach((img) => {
-            img.removeEventListener('load', onImageLoad);
-            img.removeEventListener('error', onImageLoad);
-          });
-        };
-      }
-      return () => {};
-    }, [contentRef.current]);
+      };
+    }, [parsedPayload?.content, showQuotedContent]);
 
     const transitions = useTransition(aiSuggestions, {
       from: { opacity: 0, transform: 'translateY(20px)' },
@@ -1062,18 +1185,20 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                     )
                   : null}
                 <div className="overflow-hidden px-4 pb-4">
-                  <div
-                    ref={messageContentRef}
-                    className={cn(
-                      'mono-content-reset scale-to-fit',
-                      isDarkMode && 'dark-mode-email',
-                      'relative block origin-top-left cursor-auto select-text'
-                    )}
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        parsedPayload?.content.replaceAll('\r\n', '\n').replaceAll('\r', '\n') || ''
-                    }}
-                  />
+                  <div className="email-document overflow-x-auto rounded-md border border-black/5 bg-white px-4 py-3 text-[#202124]">
+                    <div
+                      ref={messageContentRef}
+                      className={cn(
+                        'mono-content-reset scale-to-fit',
+                        'relative block origin-top-left cursor-auto select-text'
+                      )}
+                      dangerouslySetInnerHTML={{
+                        __html:
+                          parsedPayload?.content.replaceAll('\r\n', '\n').replaceAll('\r', '\n') ||
+                          ''
+                      }}
+                    />
+                  </div>
                 </div>
                 {!isCollapsed && parsedPayload && parsedPayload.history.length > 0 && (
                   <>
@@ -1095,16 +1220,17 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                         showQuotedContent ? 'p-6 pt-0 opacity-100' : 'h-0 opacity-0'
                       )}
                     >
-                      <div
-                        ref={quotedContentRef}
-                        className={cn(
-                          'mono-content-reset scale-to-fit relative block origin-top-left select-text',
-                          isDarkMode && 'dark-mode-email'
-                        )}
-                        dangerouslySetInnerHTML={{
-                          __html: (parsedPayload?.history || []).join('')
-                        }}
-                      />
+                      <div className="email-document overflow-x-auto rounded-md border border-black/5 bg-white px-4 py-3 text-[#202124]">
+                        <div
+                          ref={quotedContentRef}
+                          className={cn(
+                            'mono-content-reset scale-to-fit relative block origin-top-left select-text'
+                          )}
+                          dangerouslySetInnerHTML={{
+                            __html: (parsedPayload?.history || []).join('')
+                          }}
+                        />
+                      </div>
                     </div>
                   </>
                 )}

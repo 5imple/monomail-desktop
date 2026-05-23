@@ -3,6 +3,7 @@ import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
 import { MonoRecipient } from '@/main/models/types';
+import mailApi from '@/main/api/mail/mailApi';
 import { ContactCard } from '@/renderer/app/components/card/ContactCard';
 import { AttachmentCard } from '@/renderer/app/components/card/AttachmentCard';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
@@ -32,14 +33,15 @@ import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOpe
 
 interface DisplayPanelProps {
   className?: string;
+  readerPhase?: 'closed' | 'opening' | 'open' | 'closing';
 }
 
-export const DisplayPanel = ({ className }: DisplayPanelProps) => {
+export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanelProps) => {
   const { globalSearchQuery } = useGlobalAtom();
   const { labelsMapByAccount, getAllLabels } = useLabelAtom();
   const { activeThreadId, threadsMap } = useThreadAtom();
   const { unmarkThreadsAsUnread, addLabelToThread } = useThreadLabelAtom();
-  const { updateThreadState } = useThreadOperationAtom();
+  const { updateThread, updateThreadState } = useThreadOperationAtom();
   const { contactDisplayPanel, setContactDisplayPanel } = useGlobalAtom();
   const { t } = useTranslation();
 
@@ -56,6 +58,8 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
   const titleRef = useRef<HTMLDivElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const promiseResolveRef = useRef<(() => void) | null>(null);
+  const fullThreadFetchesRef = useRef<Set<string>>(new Set());
+  const fullThreadFetchCompletedRef = useRef<Set<string>>(new Set());
   const [spacerHeight, setSpacerHeight] = useState(0);
   const { removeDraft, sendDraftQueue } = useDraftAtom();
   const executeCommand = useExecuteCommand();
@@ -187,8 +191,27 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
     return threadsMap[activeThreadId] || null;
   }, [activeThreadId, threadsMap]);
 
+  const payloadHasBodyData = useCallback((payload: MonoMessage['payload']): boolean => {
+    if (payload.body?.data) return true;
+    return payload.parts?.some(payloadHasBodyData) ?? false;
+  }, []);
+
+  const threadNeedsFullBody = useCallback(
+    (targetThread: MonoThread): boolean => {
+      const messages = targetThread.items.filter(
+        (item): item is MonoMessage => item.type === 'message'
+      );
+
+      return (
+        messages.length === 0 || messages.some((message) => !payloadHasBodyData(message.payload))
+      );
+    },
+    [payloadHasBodyData]
+  );
+
   useEffect(() => {
     if (!stableThread) {
+      if (readerPhase === 'closing') return;
       setDisplayedMessages([]);
       setThread(null);
       return;
@@ -196,6 +219,41 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
 
     if (!scrollAreaRef.current) return;
     displayMessages(stableThread);
+
+    let abortFullThreadFetch: (() => void) | undefined;
+
+    if (threadNeedsFullBody(stableThread) && stableThread.accountId) {
+      const fetchKey = `${stableThread.accountId}:${stableThread.id}:${stableThread.historyId ?? ''}`;
+      if (
+        !fullThreadFetchesRef.current.has(fetchKey) &&
+        !fullThreadFetchCompletedRef.current.has(fetchKey)
+      ) {
+        fullThreadFetchesRef.current.add(fetchKey);
+        const abortController = new AbortController();
+        let completed = false;
+        abortFullThreadFetch = () => abortController.abort();
+
+        mailApi
+          .getThread(stableThread.accountId, stableThread.id, abortController.signal)
+          .then((response) => {
+            if (abortController.signal.aborted) return;
+            const fullThread = MonoThread.fromPlainObject(response);
+            completed = true;
+            updateThread(stableThread.accountId, fullThread);
+          })
+          .catch((error) => {
+            if (!abortController.signal.aborted) {
+              console.error('Failed to fetch full thread body:', error);
+            }
+          })
+          .finally(() => {
+            fullThreadFetchesRef.current.delete(fetchKey);
+            if (completed) {
+              fullThreadFetchCompletedRef.current.add(fetchKey);
+            }
+          });
+      }
+    }
 
     // Call readMessages if:
     // 1. It's a different thread (thread ID changed)
@@ -206,7 +264,9 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
     if (isNewThread || isUnreadThread) {
       readMessages(stableThread);
     }
-  }, [stableThread]);
+
+    return abortFullThreadFetch;
+  }, [stableThread, readerPhase]);
 
   useEffect(() => {
     if (isPrinting && promiseResolveRef.current) {
@@ -403,8 +463,8 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
   return (
     <div
       className={cn(
-        'relative flex h-full flex-col bg-[#111312] transition-all',
-        thread ? '' : 'opacity-0',
+        'relative flex h-full flex-col bg-background text-foreground transition-colors',
+        thread || readerPhase === 'closing' ? '' : 'opacity-0',
         className
       )}
     >
@@ -441,12 +501,11 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
           <div className="mx-auto max-w-[920px] px-6 pb-16">
             {thread && (
               <h1
-                className="mb-5 mt-8 tracking-tight"
+                className="mb-5 mt-8 text-foreground"
                 style={{
                   fontSize: '24px',
                   fontWeight: 650,
-                  letterSpacing: '-0.02em',
-                  color: '#f4f2ed',
+                  letterSpacing: '0',
                   lineHeight: '1.3'
                 }}
               >
