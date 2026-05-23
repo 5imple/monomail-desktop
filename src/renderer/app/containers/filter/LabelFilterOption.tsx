@@ -151,9 +151,7 @@ const LabelFilterOption: FC = () => {
               </>
             )}
           </>
-        ) : (
-          <DropdownMenuItem disabled>{t('filter.no_labels')}</DropdownMenuItem>
-        )}
+        ) : null}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

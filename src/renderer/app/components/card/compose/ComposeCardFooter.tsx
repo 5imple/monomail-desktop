@@ -11,20 +11,18 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/renderer/app/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
-
-import React, { useCallback, useRef, useState, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
-import { Switch } from '@/renderer/app/components/ui/switch';
-import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
 import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
 import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import React, { useCallback, useRef, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 interface ComposeCardFooterProps {
   className?: string;
@@ -36,6 +34,7 @@ interface ComposeCardFooterProps {
   onTrackingChange: (enabled: boolean) => void;
   draftSaveStatus: 'INITIALIZED' | 'LOADING' | 'SAVED' | 'ERROR';
   sendDisabled: boolean;
+  onDiscard: () => void;
 }
 
 const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
@@ -46,17 +45,16 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   trackingEnabled,
   onTrackingChange,
   sendDisabled,
-  onFromChange
+  onFromChange,
+  onDiscard
 }) => {
   const { t } = useTranslation();
   const { accounts, getUidFromEmail, getAccountByUid } = useAuth();
   const { openDialog } = useDialogs();
   const [from, setFrom] = useState(draft.from);
-
   const [isSending, setIsSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Check if current account is expired
   const currentAccount = useMemo(() => {
     if (!draft.from) return null;
     const uid = getUidFromEmail(draft.from);
@@ -67,7 +65,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
     return currentAccount?.isExpired ?? false;
   }, [currentAccount]);
 
-  // Filter accounts to only show non-expired ones in the dropdown
   const availableAccounts = useMemo(() => {
     return accounts.filter((account) => !account.isExpired);
   }, [accounts]);
@@ -78,19 +75,16 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
         openDialog('preference', { defaultPage: 'integration' });
         return;
       }
-
-      // Payment-free build — tracking is always available.
       onTrackingChange(checked);
     },
     [isCurrentAccountExpired, openDialog, onTrackingChange]
   );
-  // Handle form submission
+
   const handleSubmit = async () => {
     if (isCurrentAccountExpired) {
       toast.error(t('toast.error.account_expired'));
       return;
     }
-
     setIsSending(true);
     try {
       await handleSendMessage();
@@ -101,7 +95,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
     setIsSending(false);
   };
 
-  // Modified function to reset file input value after handling files
   const handleFileInputClick = () => {
     if (isCurrentAccountExpired) {
       toast.error(t('toast.error.account_expired'));
@@ -110,17 +103,14 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
     fileInputRef.current?.click();
   };
 
-  // Handle file change with reset
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isCurrentAccountExpired) {
       toast.error(t('toast.error.account_expired'));
       return;
     }
-
     try {
       await handleFileChange(e.target.files);
     } finally {
-      // Reset the file input value to ensure onChange fires even with the same file
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -131,55 +121,136 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
     return t('tooltips.account_status.authentication_expired');
   }, [t]);
 
-  // Function to get the disabled reason for the send button
   const getSendDisabledReason = useCallback(() => {
-    if (isCurrentAccountExpired) {
-      return getAccountReconnectTooltip();
-    }
-    if (draft.to.length === 0) {
-      return t('compose_card.footer.send_disabled.no_recipients');
-    }
-    if (!draft.from) {
-      return t('compose_card.footer.send_disabled.no_sender');
-    }
-    if (sendDisabled) {
-      // This covers draftSaveStatus === 'LOADING'
-      return t('compose_card.footer.send_disabled.saving_draft');
-    }
+    if (isCurrentAccountExpired) return getAccountReconnectTooltip();
+    if (draft.to.length === 0) return t('compose_card.footer.send_disabled.no_recipients');
+    if (!draft.from) return t('compose_card.footer.send_disabled.no_sender');
+    if (sendDisabled) return t('compose_card.footer.send_disabled.saving_draft');
     return t('compose_card.footer.send_now');
-  }, [
-    isCurrentAccountExpired,
-    draft.to.length,
-    draft.from,
-    sendDisabled,
-    getAccountReconnectTooltip,
-    t
-  ]);
+  }, [isCurrentAccountExpired, draft.to.length, draft.from, sendDisabled, getAccountReconnectTooltip, t]);
 
   return (
     <div className={cn('no-drag', className)}>
-      {/* Valid Attachments */}
-
-      {/* Footer Actions */}
-      <CardFooter className="flex items-center gap-3 border-t border-border/40 p-2">
-        <div className="flex items-center">
+      <CardFooter className="flex items-center border-t border-border/40 px-5 py-3">
+        {/* Left: primary text actions */}
+        <div className="flex items-center gap-5">
           <Button
+            variant="text"
             className={cn(
-              'text-muted-foreground',
-              isCurrentAccountExpired && 'cursor-not-allowed text-muted-foreground/50'
+              'font-semibold text-foreground hover:text-foreground/80',
+              (sendDisabled || isSending || isCurrentAccountExpired) && 'text-muted-foreground'
             )}
-            variant="ghost"
-            typeVariant="icon"
-            tooltip={
-              isCurrentAccountExpired
-                ? getAccountReconnectTooltip()
-                : t('compose_card.footer.add_attachment')
-            }
-            onClick={handleFileInputClick}
-            disabled={isCurrentAccountExpired}
+            disabled={sendDisabled || isSending || isCurrentAccountExpired}
+            onClick={handleSubmit}
+            tooltip={getSendDisabledReason()}
+            shortcut={!isCurrentAccountExpired && !sendDisabled && !isSending ? 'MOD+ENTER' : undefined}
           >
-            <MonoIcon type="Paperclip" className="h-4 w-4" />
+            {isSending && <Loader className="mr-1.5 h-3.5 w-3.5" />}
+            {t('compose_card.footer.send_now')}
           </Button>
+
+          <SendLaterButton
+            draft={draft}
+            disabled={sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0}
+          />
+        </div>
+
+        {/* Right: icon actions + from-selector */}
+        <div className="ml-auto flex items-center gap-0.5">
+          {/* From account compact selector */}
+          <Select
+            defaultValue={draft.from}
+            onValueChange={(email) => {
+              const uid = getUidFromEmail(email);
+              setFrom(email);
+              if (uid) onFromChange(email, uid);
+            }}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SelectTrigger
+                  variant="secondary"
+                  className="h-7 max-w-[140px] gap-1 border-0 bg-transparent px-2 text-[12px] text-muted-foreground hover:bg-muted"
+                >
+                  <SelectValue placeholder={from}>
+                    <div className="flex items-center gap-1 overflow-hidden">
+                      {isCurrentAccountExpired && (
+                        <MonoIcon type="AlertCircle" className="shrink-0 text-destructive" />
+                      )}
+                      <span className="truncate">{from}</span>
+                    </div>
+                  </SelectValue>
+                </SelectTrigger>
+              </TooltipTrigger>
+              {isCurrentAccountExpired && (
+                <TooltipContent>
+                  {t('tooltips.account_status.authentication_expired')}
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <SelectContent className="dark">
+              <SelectGroup>
+                {availableAccounts.map((account) => (
+                  <SelectItem key={account.email} value={account.email}>
+                    {account.email}
+                  </SelectItem>
+                ))}
+                {accounts
+                  .filter((account) => account.isExpired)
+                  .map((account) => (
+                    <SelectItem key={account.email} value={account.email} disabled>
+                      <div className="flex w-full items-center justify-between">
+                        <span className="opacity-50">{account.email}</span>
+                        <MonoIcon type="AlertCircle" className="ml-1 h-3 w-3 text-destructive" />
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          {/* Read-receipt tracking toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                sizeVariant="sm"
+                typeVariant="icon"
+                className={cn(
+                  trackingEnabled
+                    ? 'text-accent'
+                    : isCurrentAccountExpired
+                      ? 'text-muted-foreground/50'
+                      : 'text-muted-foreground'
+                )}
+                onClick={() => handleTrackingToggle(!trackingEnabled)}
+                disabled={isCurrentAccountExpired}
+              >
+                <MonoIcon type="CheckCheck" className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('compose_card.footer.use_tracker')}</TooltipContent>
+          </Tooltip>
+
+          {/* Attachment */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                sizeVariant="sm"
+                typeVariant="icon"
+                className={cn(
+                  'text-muted-foreground',
+                  isCurrentAccountExpired && 'cursor-not-allowed text-muted-foreground/50'
+                )}
+                onClick={handleFileInputClick}
+                disabled={isCurrentAccountExpired}
+              >
+                <MonoIcon type="Paperclip" className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('compose_card.footer.add_attachment')}</TooltipContent>
+          </Tooltip>
           <input
             ref={fileInputRef}
             type="file"
@@ -187,124 +258,22 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
             multiple
             onChange={handleFileInputChange}
           />
-          {/* <TemplateSwitcher onTemplateChange={onTemplateChange}>
-            <Button
-              variant="ghost"
-              typeVariant="icon"
-              tooltip={t('compose_card.footer.use_template')}
-            >
-              <MonoIcon type="ScrollText" className="h-4 w-4" />
-            </Button>
-          </TemplateSwitcher> */}
-          <div className="ml-1">
-            <Tooltip>
-              <TooltipTrigger className="flex items-center gap-2">
-                <Switch
-                  size="sm"
-                  checked={trackingEnabled}
-                  onCheckedChange={handleTrackingToggle}
-                  disabled={isCurrentAccountExpired}
-                />
-                <MonoIcon
-                  type="CheckCheck"
-                  className={cn(
-                    'h-4 w-4',
-                    isCurrentAccountExpired
-                      ? 'text-muted-foreground/50'
-                      : trackingEnabled
-                        ? 'text-accent'
-                        : 'text-muted-foreground'
-                  )}
-                />
-              </TooltipTrigger>
-              <TooltipContent>{t('compose_card.footer.use_tracker')}</TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-        <div className="ml-auto flex gap-2">
-          <div className="flex w-full items-center justify-end gap-2">
-            <Select
-              defaultValue={draft.from}
-              onValueChange={(email) => {
-                const uid = getUidFromEmail(email);
-                setFrom(email);
-                if (uid) onFromChange(email, uid);
-              }}
-            >
-              <Tooltip>
-                <TooltipTrigger>
-                  <SelectTrigger variant={'secondary'} className="w-[180px]">
-                    <SelectValue placeholder={from}>
-                      <div className="flex items-center gap-1">
-                        {isCurrentAccountExpired && (
-                          <MonoIcon type="AlertCircle" className="shrink-0 text-destructive" />
-                        )}
-                        <div className="overflow-hidden text-ellipsis">
-                          <span className="whitespace-nowrap">{from}</span>
-                        </div>
-                      </div>
-                    </SelectValue>
-                  </SelectTrigger>{' '}
-                </TooltipTrigger>
-                {isCurrentAccountExpired && (
-                  <TooltipContent>
-                    {t('tooltips.account_status.authentication_expired')}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-              <SelectContent className="dark">
-                <SelectGroup>
-                  {availableAccounts.map((account) => (
-                    <SelectItem key={account.email} value={account.email}>
-                      {account.email}
-                    </SelectItem>
-                  ))}
-                  {/* Show expired accounts but disabled */}
-                  {accounts
-                    .filter((account) => account.isExpired)
-                    .map((account) => (
-                      <SelectItem key={account.email} value={account.email} disabled>
-                        <div className="flex w-full items-center justify-between">
-                          <span className="opacity-50">{account.email}</span>
-                          <MonoIcon type="AlertCircle" className="ml-1 h-3 w-3 text-destructive" />
-                        </div>
-                      </SelectItem>
-                    ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
 
-            <div className={cn('flex items-center gap-2')}>
-              {/* P8 piece 5 — Send Later. Client-only: adds the draft to the
-                  queue atom's scheduledItems with a chosen sendAt. The draft
-                  itself stays as a draft (no actual send fires at scheduled
-                  time — that requires backend pieces 4 + 6). User can find
-                  the entry under the Later tab. */}
-              <SendLaterButton
-                draft={draft}
-                disabled={
-                  sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0
-                }
-              />
+          {/* Discard */}
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button
-                variant="send"
-                disabled={sendDisabled || isSending || isCurrentAccountExpired}
-                onClick={handleSubmit}
-                tooltip={getSendDisabledReason()}
-                shortcut={
-                  !isCurrentAccountExpired && !sendDisabled && !isSending ? 'MOD+ENTER' : undefined
-                }
-                className="flex disabled:pointer-events-auto"
+                variant="ghost"
+                sizeVariant="sm"
+                typeVariant="icon"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={onDiscard}
               >
-                {isSending ? (
-                  <Loader className="mr-2" />
-                ) : (
-                  <MonoIcon type="Send" className="mr-2 mt-0.5 h-4 w-4" />
-                )}
-                {t('compose_card.footer.send_now')}
+                <MonoIcon type="Trash" className="h-4 w-4" />
               </Button>
-            </div>
-          </div>
+            </TooltipTrigger>
+            <TooltipContent>{t('tooltip.discard')}</TooltipContent>
+          </Tooltip>
         </div>
       </CardFooter>
     </div>
@@ -313,13 +282,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 
 export default ComposeCardFooter;
 
-/**
- * Send-Later trigger — small icon button next to Send Now. Opens a
- * popover with schedule presets (In 1 hour, Tomorrow morning, etc.).
- * Picking one stamps the draft into the Later queue's scheduledItems
- * map. No actual send fires; the entry is purely informational until
- * the backend can take ownership of the queue (P8 pieces 4 + 6).
- */
 function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const { scheduleDraft, primaryAccountId } = useQueueAtom();
@@ -356,7 +318,6 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         toast.error(`Couldn't schedule send: ${res.error}`);
         return;
       }
-      // Surface the queue so the user sees their entry land.
       setActiveLayout('LATER');
       toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
     },
@@ -367,17 +328,17 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="secondary"
-          typeVariant="icon"
+          variant="text"
+          sizeVariant="sm"
           disabled={disabled}
           tooltip="Send later"
-          className="h-10 w-10"
+          className="text-muted-foreground hover:text-foreground"
         >
-          <MonoIcon type="Clock" className="h-4 w-4" />
+          Send later
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        align="start"
         side="top"
         sideOffset={6}
         className="w-auto border-none bg-transparent p-0 shadow-none"

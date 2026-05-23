@@ -1,6 +1,7 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/icons';
+import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import { Badge } from '@/renderer/app/components/ui/badge';
@@ -342,10 +343,22 @@ export const ThreadListCozyItem = React.memo(
             <div
               ref={ref}
               className={cn(
-                'px-6 py-3 text-left text-sm transition-colors sm:px-8',
+                'flex items-start gap-3 px-6 py-3 text-left text-sm transition-colors sm:px-8',
                 selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
               )}
             >
+              {/* Avatar */}
+              <div className="mt-0.5 shrink-0">
+                <RecipientAvatar
+                  className="h-8 w-8"
+                  recipient={
+                    currentThread.from?.[0] ?? { email: '', name: '' }
+                  }
+                />
+              </div>
+
+              {/* Content column */}
+              <div className="min-w-0 flex-1">
               {/* Top row: sender names · count · star · labels · time */}
               <div className="flex items-baseline gap-3">
                 <span
@@ -475,6 +488,7 @@ export const ThreadListCozyItem = React.memo(
                   )}
                 </div>
               )}
+              </div>{/* end content column */}
             </div>
           </ThreadItemContextMenu>
         )}

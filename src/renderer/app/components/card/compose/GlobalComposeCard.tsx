@@ -16,12 +16,6 @@ import AttachmentItem from '@/renderer/app/components/mail/attachment/Attachment
 import SignatureSwitcher from '@/renderer/app/components/mail/SignatureSwitcher';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/renderer/app/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
 import { Input } from '@/renderer/app/components/ui/input';
 import Loader from '@/renderer/app/components/ui/loader';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
@@ -84,7 +78,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { sidebarCollapsed } = useSidebarAtom();
   const { activateScope, deactivateScope } = useHotkeyScope();
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(true);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const { trackEvent } = useUserTrackingData();
@@ -1012,12 +1006,9 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     <div
       tabIndex={-1}
       className={cn(
-        'pointer-events-none absolute bottom-0 left-0 right-0 top-0 z-10 origin-bottom content-end transition-all duration-300',
-        !isMaximized || isMinimized ? 'left-4' : ''
+        'pointer-events-none absolute inset-0 z-10 flex origin-bottom items-end transition-all duration-300',
+        !isMaximized || isMinimized ? 'justify-center px-6 pb-6' : ''
       )}
-      style={{
-        willChange: 'left'
-      }}
     >
       <Card
         className={cn(
@@ -1028,7 +1019,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           // the prior 30% black drop. Refined edge keeps the popout
           // distinct from the document behind it without screaming.
           isMinimized ? 'shadow-md' : 'shadow-xl shadow-black/10 dark:shadow-black/40',
-          !isMaximized || isMinimized ? 'rounded-t-lg' : 'rounded-none border-0 shadow-none',
+          !isMaximized || isMinimized ? 'rounded-xl' : 'rounded-none border-0 shadow-none',
 
           // isClosing ? 'duration-0' : 'duration-400',
           isMinimized ? 'max-h-12 min-h-12 min-w-80 max-w-80' : '',
@@ -1041,100 +1032,51 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         }}
       >
         <CardHeader className={cn('justify-center space-y-0 p-0')}>
-          <div
-            onClick={() => isMinimized && toggleMinimize()}
-            className={cn(
-              'flex items-center gap-0.5 border-b border-border/40 p-2 transition-all',
-              isMinimized && 'border-b-0',
-              isMaximized && 'mt-1',
-              isElectron && isMaximized && sidebarCollapsed && 'pl-28'
-            )}
-          >
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant={'ghost'} sizeVariant={'sm'} typeVariant={'icon'}>
-                  <MonoIcon type={'X'} />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => handleCloseButton()}>
-                  <MonoIcon type={'X'} className="mr-2 h-4 w-4" />
-                  <span>{t('tooltip.close')}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDiscard}>
-                  <MonoIcon type={'Trash'} className="mr-2 h-4 w-4" />
-                  <span>{t('tooltip.discard')}</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {!isMinimized ? (
-              <>
-                <Button
-                  onClick={toggleMinimize}
-                  tooltip={t('tooltip.minimize')}
-                  variant={'ghost'}
-                  shortcut={'MOD+SHIFT+M'}
-                  sizeVariant={'sm'}
-                  typeVariant={'icon'}
-                >
-                  <MonoIcon type={'Minus'} />
-                </Button>
-                <div className="ml-auto flex items-center">
-                  <div className="mr-2">{renderDraftStatus}</div>
-                </div>
-              </>
-            ) : (
-              <div className="mb-0.5 ml-1 line-clamp-1 text-sm font-medium">
-                {composeDraft.subject.length > 0 ? composeDraft.subject : '(No subject)'}
-              </div>
-            )}
-          </div>
-          {!isMinimized && (
-            <ComposeCardHeader
-              composeDraft={composeDraft}
-              handleInputChange={handleInputChange}
-              onKeyDown={(event) => {
-                if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
-                  event.preventDefault();
-                  toggleMinimize();
-                }
-              }}
-            />
-          )}
+          <ComposeCardHeader
+            composeDraft={composeDraft}
+            handleInputChange={handleInputChange}
+            onKeyDown={(event) => {
+              if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
+                event.preventDefault();
+                toggleMinimize();
+              }
+            }}
+            onClose={handleCloseButton}
+            onMinimize={toggleMinimize}
+            onMaximize={toggleMaximize}
+            isMinimized={isMinimized}
+            isMaximized={isMaximized}
+            hasElectronPadding={!!(isElectron && isMaximized && sidebarCollapsed)}
+            draftStatus={renderDraftStatus}
+          />
         </CardHeader>
         {!isMinimized && (
           <>
             <CardContent className="no-drag flex-1 overflow-y-scroll p-0">
               <div className="flex h-full flex-col">
-                <div className="border-b border-border/40 px-4 pb-3 pt-3">
-                  <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                    {replyMessage ? 'Replying' : historyMessage ? 'Forwarding' : 'New message'}
-                  </p>
-                  <div className="relative">
-                    <Input
-                      ref={subjectRef}
-                      variant="transparent"
-                      placeholder={t('text_editor.placeholder.subject')}
-                      className="h-auto border-none px-0 py-0 text-[18px] font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60"
-                      value={composeDraft.subject}
-                      onChange={(e) => handleInputChange('subject', e.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          editorRef.current?.focus();
-                        }
-
-                        if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
-                          event.preventDefault();
-                          toggleMinimize();
-                        }
-                        if (event.metaKey && event.code === 'Enter') {
-                          event.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                    />
-                  </div>
+                <div className="px-5 pb-1 pt-3">
+                  <Input
+                    ref={subjectRef}
+                    variant="transparent"
+                    placeholder={t('text_editor.placeholder.subject')}
+                    className="h-auto border-none px-0 py-0 text-[18px] font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60"
+                    value={composeDraft.subject}
+                    onChange={(e) => handleInputChange('subject', e.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        editorRef.current?.focus();
+                      }
+                      if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
+                        event.preventDefault();
+                        toggleMinimize();
+                      }
+                      if (event.metaKey && event.code === 'Enter') {
+                        event.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                  />
                 </div>
                 <div className="relative flex-1 pb-4">
                   {renderEditor}
@@ -1177,6 +1119,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                 composeDraft.to.length === 0 || !composeDraft.from || draftSaveStatus === 'LOADING'
               }
               onFromChange={onFromChange}
+              onDiscard={handleDiscard}
             />
           </>
         )}

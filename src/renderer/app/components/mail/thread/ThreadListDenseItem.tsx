@@ -1,5 +1,6 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import MonoIcon from '@/renderer/app/components/icons/icons';
+import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import { Badge } from '@/renderer/app/components/ui/badge';
@@ -271,12 +272,18 @@ export const ThreadListDenseItem = React.memo(
                     padding (py-2). No avatar in this variant. */}
                 <div
                   className={cn(
-                    'flex items-center gap-4 px-6 py-2 sm:gap-5 sm:px-8',
+                    'flex items-center gap-3 px-6 py-2 sm:gap-4 sm:px-8',
                     selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
                   )}
                 >
+                  {/* Avatar */}
+                  <RecipientAvatar
+                    className="h-8 w-8 shrink-0"
+                    recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
+                  />
+
                   {/* Sender column */}
-                  <div className="flex min-h-6 w-36 shrink-0 items-center gap-2 overflow-hidden">
+                  <div className="flex min-h-6 w-32 shrink-0 items-center gap-2 overflow-hidden">
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <span
                         className={cn(
@@ -314,9 +321,7 @@ export const ThreadListDenseItem = React.memo(
                     />
                     {highlightedContent.snippet && (
                       <>
-                        <span aria-hidden className="shrink-0 text-muted-foreground/40">
-                          ·
-                        </span>
+                        <span aria-hidden className="shrink-0 text-muted-foreground/40">–</span>
                         <span
                           className="hidden min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground sm:inline"
                           dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
@@ -388,7 +393,7 @@ export const ThreadListDenseItem = React.memo(
 
                 {/* Attachment thumbnails — tucked under the subject column */}
                 {Object.keys(currentThread.attachments).length > 0 && (
-                  <div className="pl-[calc(9rem+2rem)] pr-6 sm:pl-[calc(9rem+2.5rem)]">
+                  <div className="pl-[calc(2rem+0.75rem+8rem+1.5rem)] pr-6 sm:pl-[calc(2rem+1rem+8rem+2rem)]">
                     <ScrollArea className="mr-3">
                       <div className="mb-2 flex items-center gap-1.5 p-1">
                         {Object.keys(currentThread.attachments)
