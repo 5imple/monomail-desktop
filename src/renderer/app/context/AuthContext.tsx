@@ -871,11 +871,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signOut = useCallback(async () => {
     try {
-      await Promise.allSettled(
-        accounts.map(async (account) => {
-          await mailApi.stopCloudPubSub(account.uid);
-        })
-      );
+      // stopCloudPubSub is a backend-proxied Gmail watch — not applicable
+      // in standalone Google mode where the history poller handles delivery.
+      const isGoogleMode = accounts.some((a) => a.provider === 'google');
+      if (!isGoogleMode) {
+        await Promise.allSettled(
+          accounts.map(async (account) => {
+            await mailApi.stopCloudPubSub(account.uid);
+          })
+        );
+      }
 
       await auth.signOut();
       await clearLocalAuthState();
@@ -970,10 +975,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       updateBadgeWithLabelCount(newAccounts.map((a) => a.uid));
       electronApi.setKnownAccountUids(newAccounts.map((a) => a.uid)).catch(() => {});
 
-      for (const account of newAccounts) {
-        mailApi
-          .watchCloudPubSub(account.uid)
-          .catch((e) => console.warn('[addAccount] watchCloudPubSub failed for', account.uid, e));
+      if (authState?.provider !== 'google') {
+        for (const account of newAccounts) {
+          mailApi
+            .watchCloudPubSub(account.uid)
+            .catch((e) => console.warn('[addAccount] watchCloudPubSub failed for', account.uid, e));
+        }
       }
 
       loadSpaces(
