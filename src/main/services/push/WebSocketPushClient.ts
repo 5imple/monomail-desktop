@@ -101,14 +101,18 @@ class WebSocketPushClient {
       // Kick off the per-account Gmail watch the same way the legacy
       // FCM_SERVICE_STARTED path did. Without this, Gmail-backed accounts
       // never publish new-mail events to the backend.
-      const knownUids = systemManager.getKnownAccountUids();
-      const uidsToWatch = knownUids.length > 0
-        ? knownUids
-        : (tokenManager.getActiveUid() ? [tokenManager.getActiveUid()!] : []);
-      for (const uid of uidsToWatch) {
-        mailApi.watchCloudPubSub(uid).catch((e) =>
-          log.warn('[push] watchCloudPubSub on connect failed for %s:', uid, (e as Error).message)
-        );
+      // watchCloudPubSub is a backend-proxied Gmail watch — skip in Google
+      // direct mode where the history poller handles change delivery instead.
+      if (tokenManager.getState()?.provider !== 'google') {
+        const knownUids = systemManager.getKnownAccountUids();
+        const uidsToWatch = knownUids.length > 0
+          ? knownUids
+          : (tokenManager.getActiveUid() ? [tokenManager.getActiveUid()!] : []);
+        for (const uid of uidsToWatch) {
+          mailApi.watchCloudPubSub(uid).catch((e) =>
+            log.warn('[push] watchCloudPubSub on connect failed for %s:', uid, (e as Error).message)
+          );
+        }
       }
     });
 

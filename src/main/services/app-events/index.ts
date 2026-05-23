@@ -1,6 +1,7 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { registerIpcHandlers } from '@/main/services/ipc-handlers';
 import { webSocketPushClient } from '@/main/services/push/WebSocketPushClient';
+import { gmailHistoryPoller } from '@/main/services/push/GmailHistoryPoller';
 import { completeAccountLinkWithBackend } from '@/main/services/mangers/auth/accountLinking';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
@@ -95,6 +96,7 @@ export function registerAppEventHandlers() {
 
     updateManager.checkForUpdates();
     webSocketPushClient.start();
+    gmailHistoryPoller.start();
     session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
       if (details.url.includes('lh3.googleusercontent.com')) {
         delete details.requestHeaders['Referer'];
