@@ -9,10 +9,11 @@ import {
 } from '@/renderer/app/lib/db/thread';
 import { useAtom } from 'jotai';
 import { useCallback } from 'react';
-import { threadsMapAtom } from './atoms';
+import { activeThreadIdAtom, threadsMapAtom } from './atoms';
 
 export function useThreadOperationAtom() {
   const [threadsMap, setThreadsMap] = useAtom(threadsMapAtom);
+  const [activeThreadId, setActiveThreadId] = useAtom(activeThreadIdAtom);
 
   const setThreads = useCallback(
     async (
@@ -159,21 +160,30 @@ export function useThreadOperationAtom() {
 
   const resetThreadsMap = () => {
     setThreadsMap({});
+    setActiveThreadId(null);
   };
 
   const removeThreadFromMap = useCallback(
     async (threadId: string) => {
+      if (activeThreadId === threadId) {
+        setActiveThreadId(null);
+      }
+
       setThreadsMap((prev) => {
         const updatedMap = { ...prev };
         delete updatedMap[threadId];
         return updatedMap;
       });
     },
-    [threadsMap]
+    [activeThreadId, setActiveThreadId, threadsMap]
   );
 
   const removeThreadsFromMap = useCallback(
     async (threadIds: string[]) => {
+      if (activeThreadId && threadIds.includes(activeThreadId)) {
+        setActiveThreadId(null);
+      }
+
       setThreadsMap((prev) => {
         const updatedMap = { ...prev };
         for (const threadId of threadIds) {
@@ -182,7 +192,7 @@ export function useThreadOperationAtom() {
         return updatedMap;
       });
     },
-    [threadsMap]
+    [activeThreadId, setActiveThreadId, threadsMap]
   );
 
   // Helper function to group threads by accountId

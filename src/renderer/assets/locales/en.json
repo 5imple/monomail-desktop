@@ -1590,49 +1590,6 @@
       }
     }
   },
-  "nps": {
-    "score_question": "On a scale of 0-10, how likely are you to recommend us?",
-    "not_likely": "Not at all likely",
-    "extremely_likely": "Extremely likely",
-    "promoter": "Promoter",
-    "passive": "Passive",
-    "detractor": "Detractor",
-    "selected_score": "Score: {{score}} ({{category}})",
-    "comment_label": "Tell us more",
-    "comment_placeholder": "What's the main reason for your score?",
-    "submit": "Submit Feedback",
-    "optional": "Optional",
-    "event_type": {
-      "subscription_renewal": {
-        "title": "How was your renewal experience?",
-        "description": "Help us improve our subscription process{{name}}."
-      },
-      "feature_usage": {
-        "title": "Rate this feature",
-        "description": "How likely are you to recommend this feature to others {{name}}?"
-      },
-      "support_interaction": {
-        "title": "Rate your support experience",
-        "description": "How satisfied were you with our support team{{name}}?"
-      },
-      "onboarding_complete": {
-        "title": "How was your onboarding?",
-        "description": "Help us improve the getting started experience{{name}}."
-      },
-      "general_feedback": {
-        "title": "Rate your experience",
-        "description": "How likely are you to recommend our product to others {{name}}?"
-      },
-      "product_update": {
-        "title": "Rate this update",
-        "description": "How do you feel about our latest product updates{{name}}?"
-      },
-      "cancellation_flow": {
-        "title": "Help us improve",
-        "description": "Before you go, help us understand your experience{{name}}."
-      }
-    }
-  },
   "tooltips": {
     "account_status": {
       "too_many_accounts": "Too many accounts connected - upgrade plan or account will be deactivated",

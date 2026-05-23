@@ -1471,49 +1471,6 @@
       }
     }
   },
-  "nps": {
-    "score_question": "0〜10のうち、私たちを他の人に勧める可能性はどのくらいありますか？",
-    "not_likely": "まったく勧めたくない",
-    "extremely_likely": "ぜひ勧めたい",
-    "promoter": "推奨者",
-    "passive": "中立",
-    "detractor": "批判者",
-    "selected_score": "スコア: {{score}}（{{category}}）",
-    "comment_label": "詳しく教えてください",
-    "comment_placeholder": "このスコアをつけた主な理由は何ですか？",
-    "submit": "フィードバックを送信",
-    "optional": "任意",
-    "event_type": {
-      "subscription_renewal": {
-        "title": "更新の体験はいかがでしたか？",
-        "description": "更新プロセスを改善するためにご意見をお聞かせください{{name}}。"
-      },
-      "feature_usage": {
-        "title": "この機能を評価してください",
-        "description": "この機能を他の人に勧める可能性はどのくらいありますか？{{name}}"
-      },
-      "support_interaction": {
-        "title": "サポートの対応を評価してください",
-        "description": "サポートチームにどのくらい満足しましたか？{{name}}"
-      },
-      "onboarding_complete": {
-        "title": "オンボーディング体験はいかがでしたか？",
-        "description": "スタートガイドをより良くするためにご協力ください{{name}}。"
-      },
-      "general_feedback": {
-        "title": "全体的な体験を評価してください",
-        "description": "この製品を他の人に勧める可能性はありますか？{{name}}"
-      },
-      "product_update": {
-        "title": "アップデートのご感想は？",
-        "description": "最新のアップデートについてどう思いましたか？{{name}}"
-      },
-      "cancellation_flow": {
-        "title": "改善のために",
-        "description": "退会前に、ご意見をお聞かせください{{name}}。"
-      }
-    }
-  },
   "tooltips": {
     "account_status": {
       "too_many_accounts": "アカウントの接続数が多すぎます - プランをアップグレードするか、アカウントが無効化されます",

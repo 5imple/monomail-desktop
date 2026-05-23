@@ -1540,49 +1540,6 @@
       }
     }
   },
-  "nps": {
-    "score_question": "0부터 10까지, 저희를 추천할 가능성은 얼마나 되시나요?",
-    "not_likely": "전혀 추천하지 않을 것 같아요",
-    "extremely_likely": "꼭 추천할 거예요",
-    "promoter": "추천자",
-    "passive": "중립",
-    "detractor": "비추천자",
-    "selected_score": "선택한 점수: {{score}} ({{category}})",
-    "comment_label": "더 알려주세요",
-    "comment_placeholder": "이 점수를 주신 가장 큰 이유는 무엇인가요?",
-    "submit": "피드백 제출",
-    "optional": "선택 사항",
-    "event_type": {
-      "subscription_renewal": {
-        "title": "구독 갱신은 어땠나요?",
-        "description": "구독 과정을 개선할 수 있도록 도와주세요 {{name}}."
-      },
-      "feature_usage": {
-        "title": "이 기능은 어떠셨나요?",
-        "description": "이 기능을 다른 사람에게 추천할 가능성은 얼마나 되시나요 {{name}}?"
-      },
-      "support_interaction": {
-        "title": "지원 경험을 평가해주세요",
-        "description": "지원팀의 도움에 얼마나 만족하셨나요 {{name}}?"
-      },
-      "onboarding_complete": {
-        "title": "온보딩은 어땠나요?",
-        "description": "시작 과정을 더 나아지게 도와주세요 {{name}}."
-      },
-      "general_feedback": {
-        "title": "서비스 전반에 대한 평가",
-        "description": "저희 제품을 다른 사람에게 추천할 가능성은 얼마나 되시나요 {{name}}?"
-      },
-      "product_update": {
-        "title": "이번 업데이트는 어땠나요?",
-        "description": "최신 업데이트에 대해 어떻게 느끼셨나요 {{name}}?"
-      },
-      "cancellation_flow": {
-        "title": "더 나아지기 위해",
-        "description": "떠나시기 전에, 경험을 들려주세요 {{name}}."
-      }
-    }
-  },
   "tooltips": {
     "account_status": {
       "too_many_accounts": "너무 많은 계정이 연결됨 - 요금제를 업그레이드하거나 계정이 비활성화됩니다",

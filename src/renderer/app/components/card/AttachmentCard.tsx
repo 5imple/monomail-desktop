@@ -29,7 +29,8 @@ export const AttachmentCard = memo(function AttachmentCard({
 }: AttachmentCardProps) {
   const { t } = useTranslation();
   const { accounts } = useAuth();
-  const { selectedThreads, threadsMap, setThreadsMap, setSelectedThreads } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap, setThreadsMap, setActiveThreadId } =
+    useThreadAtom();
   const { addThread } = useThreadOperationAtom();
   const { trackEvent } = useUserTrackingData();
   const { searchNewQuery } = useGlobalAtom();
@@ -252,7 +253,7 @@ export const AttachmentCard = memo(function AttachmentCard({
             if (fullThread) {
               // Save the thread to the store
               await addThread(accountId, fullThread);
-              setSelectedThreads([thread.id]);
+              setActiveThreadId(thread.id);
               trackEvent('conversation_selected', { thread_id: thread.id });
             }
           } catch (error) {
@@ -260,7 +261,7 @@ export const AttachmentCard = memo(function AttachmentCard({
           }
         }
       } else {
-        setSelectedThreads([thread.id]);
+        setActiveThreadId(thread.id);
         trackEvent('conversation_selected', { thread_id: thread.id });
       }
     };
@@ -271,7 +272,8 @@ export const AttachmentCard = memo(function AttachmentCard({
         <div
           className={cn(
             'cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground hover:text-foreground',
-            selectedThreads.includes(thread.id) && 'font-medium text-foreground'
+            (activeThreadId === thread.id || selectedThreads.includes(thread.id)) &&
+              'font-medium text-foreground'
           )}
           onClick={handleClickThread}
         >

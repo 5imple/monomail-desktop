@@ -1,5 +1,11 @@
 import { useAtom } from 'jotai';
-import { filteredThreadIdsAtom, selectedThreadsAtom, threadIdsAtom, threadsMapAtom } from './atoms';
+import {
+  activeThreadIdAtom,
+  filteredThreadIdsAtom,
+  selectedThreadsAtom,
+  threadIdsAtom,
+  threadsMapAtom
+} from './atoms';
 
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { useCallback } from 'react';
@@ -8,6 +14,7 @@ import { useThreadOperationAtom } from './useThreadOperations';
 
 export function useThreadAtom() {
   const [selectedThreads, setSelectedThreads] = useAtom(selectedThreadsAtom);
+  const [activeThreadId, setActiveThreadId] = useAtom(activeThreadIdAtom);
   const [threadIds, setThreadIds] = useAtom(threadIdsAtom);
   const [threadsMap, setThreadsMap] = useAtom(threadsMapAtom);
   const [filteredThreadIds, setFilteredThreadIds] = useAtom(filteredThreadIdsAtom);
@@ -43,30 +50,37 @@ export function useThreadAtom() {
       const validThreadIds = filteredThreadIds.filter((threadId) => threadsMap[threadId]);
       if (validThreadIds.length === 0) {
         setSelectedThreads([]);
+        setActiveThreadId(null);
         return;
       }
 
-      const lastSelectedThreadId = selectedThreads[selectedThreads.length - 1];
+      const lastSelectedThreadId = selectedThreads[selectedThreads.length - 1] ?? activeThreadId;
       const selectedIndex = validThreadIds.findIndex(
         (threadId) => threadId === lastSelectedThreadId
       );
 
       if (selectedIndex === -1) {
         // If nothing is selected or the selected thread is not valid, select the first valid thread
-        setSelectedThreads([validThreadIds[0]]);
+        setActiveThreadId(validThreadIds[0]);
       } else if (selectedIndex < validThreadIds.length - 1) {
         const nextThreadId = validThreadIds[selectedIndex + 1];
         if (keepPrevious) {
           // Add next thread to the selected threads if keepPrevious is true
           setSelectedThreads([...selectedThreads, nextThreadId]);
         } else {
-          // Replace selectedThreads with the next thread
-          setSelectedThreads([nextThreadId]);
+          setActiveThreadId(nextThreadId);
           // focusThreadById(nextThreadId);
         }
       }
     },
-    [filteredThreadIds, selectedThreads, setSelectedThreads, threadsMap]
+    [
+      activeThreadId,
+      filteredThreadIds,
+      selectedThreads,
+      setActiveThreadId,
+      setSelectedThreads,
+      threadsMap
+    ]
   );
 
   const selectPreviousThread = useCallback(
@@ -75,30 +89,37 @@ export function useThreadAtom() {
       const validThreadIds = filteredThreadIds.filter((threadId) => threadsMap[threadId]);
       if (validThreadIds.length === 0) {
         setSelectedThreads([]);
+        setActiveThreadId(null);
         return;
       }
 
-      const lastSelectedThreadId = selectedThreads[selectedThreads.length - 1];
+      const lastSelectedThreadId = selectedThreads[selectedThreads.length - 1] ?? activeThreadId;
       const selectedIndex = validThreadIds.findIndex(
         (threadId) => threadId === lastSelectedThreadId
       );
 
       if (selectedIndex === -1) {
         // If nothing is selected or the selected thread is not valid, select the first valid thread
-        setSelectedThreads([validThreadIds[0]]);
+        setActiveThreadId(validThreadIds[0]);
       } else if (selectedIndex > 0) {
         const prevThreadId = validThreadIds[selectedIndex - 1];
         if (keepPrevious) {
           // Add previous thread to the selected threads if keepPrevious is true
           setSelectedThreads([...selectedThreads, prevThreadId]);
         } else {
-          // Replace selectedThreads with the previous thread
-          setSelectedThreads([prevThreadId]);
+          setActiveThreadId(prevThreadId);
           // focusThreadById(prevThreadId);
         }
       }
     },
-    [filteredThreadIds, selectedThreads, setSelectedThreads, threadsMap]
+    [
+      activeThreadId,
+      filteredThreadIds,
+      selectedThreads,
+      setActiveThreadId,
+      setSelectedThreads,
+      threadsMap
+    ]
   );
 
   return {
@@ -106,6 +127,8 @@ export function useThreadAtom() {
     setActiveFilters,
     selectedThreads,
     setSelectedThreads,
+    activeThreadId,
+    setActiveThreadId,
     threadsMap,
     setThreadsMap,
     threadIds,

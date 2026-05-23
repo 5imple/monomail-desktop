@@ -61,10 +61,7 @@ const InboxFilterTabs = React.memo(() => {
   };
 
   return (
-    <nav
-      aria-label="Inbox filters"
-      className="no-drag flex items-center gap-1 border-b border-border/60 px-[10%] text-sm"
-    >
+    <nav aria-label="Inbox filters" className="no-drag flex items-center gap-1 px-[10%] text-sm">
       {tabs.map((tab) => {
         const active = mode === tab.id;
         return (
@@ -74,18 +71,10 @@ const InboxFilterTabs = React.memo(() => {
             onClick={() => onPick(tab.id)}
             className={cn(
               'relative px-2 py-2.5 font-medium tracking-tight transition-colors',
-              active
-                ? 'text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
+              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <span className="px-1.5">{tab.label}</span>
-            {active && (
-              <span
-                aria-hidden
-                className="absolute inset-x-1.5 -bottom-px h-px bg-accent"
-              />
-            )}
           </button>
         );
       })}

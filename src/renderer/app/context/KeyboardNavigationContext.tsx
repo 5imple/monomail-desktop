@@ -80,7 +80,7 @@ export const useKeyboardNavigationContext = () => {
 function useNavigationPivotContext(): NavigationPivotContext {
   const { globalSearchQuery } = useGlobalAtom();
   const { globalDraftWindows } = useComposeWindowAtom();
-  const { selectedThreads, filteredThreadIds, threadsMap } = useThreadAtom();
+  const { activeThreadId, filteredThreadIds } = useThreadAtom();
   const { activeSpace } = useSpaceAtom();
 
   const getPivotIndex = useCallback((area: FocusableArea): number => {
@@ -99,7 +99,7 @@ function useNavigationPivotContext(): NavigationPivotContext {
         return true;
 
       case 'thread-list':
-        // Update when selectedThreads change
+        // Update when the active/opened thread or checked threads change
         return true;
 
       case 'message-list':
@@ -120,12 +120,12 @@ function useNavigationPivotContext(): NavigationPivotContext {
       switch (area) {
         case 'message-list':
         case 'display-header':
-          // Disable message-list and display-header when no threads are selected
-          return selectedThreads.length === 0;
+          // Disable message-list and display-header when no thread is open
+          return !activeThreadId;
 
         case 'compose-inline':
-          // Disable compose when no threads are selected
-          return selectedThreads.length === 0;
+          // Disable compose when no thread is open
+          return !activeThreadId;
 
         case 'space-nav':
         case 'sidebar-nav':
@@ -137,7 +137,7 @@ function useNavigationPivotContext(): NavigationPivotContext {
           return false;
       }
     },
-    [selectedThreads.length, filteredThreadIds.length]
+    [activeThreadId, filteredThreadIds.length]
   );
 
   return useMemo(
@@ -156,7 +156,7 @@ export const KeyboardNavigationProvider: React.FC<{ children: React.ReactNode }>
   const pivotContext = useNavigationPivotContext();
   const navigation = useKeyboardNavigation(pivotContext);
   const { globalSearchQuery } = useGlobalAtom();
-  const { selectedThreads } = useThreadAtom();
+  const { activeThreadId, selectedThreads } = useThreadAtom();
   const { activeSpace, spaces } = useSpaceAtom();
 
   // Update space navigation pivot based on active space
@@ -177,12 +177,14 @@ export const KeyboardNavigationProvider: React.FC<{ children: React.ReactNode }>
   }, [globalSearchQuery, navigation.updatePivotByItemId]);
 
   useEffect(() => {
-    // Update thread list pivot based on selected threads
-    if (selectedThreads.length > 0) {
+    // Update thread list pivot based on the open thread, falling back to checked selection.
+    if (activeThreadId) {
+      navigation.updatePivotByItemId('thread-list', activeThreadId);
+    } else if (selectedThreads.length > 0) {
       const lastSelectedThread = selectedThreads[selectedThreads.length - 1];
       navigation.updatePivotByItemId('thread-list', lastSelectedThread);
     }
-  }, [selectedThreads, navigation.updatePivotByItemId]);
+  }, [activeThreadId, selectedThreads, navigation.updatePivotByItemId]);
 
   const contextValue = useMemo(
     () => ({
@@ -205,7 +207,7 @@ export const KeyboardNavigationProvider: React.FC<{ children: React.ReactNode }>
 export const useNavigationPivotControl = () => {
   const { setPivotIndex } = useKeyboardNavigationContext();
   const { globalSearchQuery, setGlobalSearchQuery } = useGlobalAtom();
-  const { selectedThreads, setSelectedThreads, filteredThreadIds } = useThreadAtom();
+  const { activeThreadId, selectedThreads, setActiveThreadId, filteredThreadIds } = useThreadAtom();
   const { activeSpace, switchSpace, spaces } = useSpaceAtom();
 
   /**
@@ -235,10 +237,10 @@ export const useNavigationPivotControl = () => {
    */
   const updateThreadListPivot = useCallback(
     (threadId: string) => {
-      setSelectedThreads([threadId]);
+      setActiveThreadId(threadId);
       // The pivot will be automatically updated via the context
     },
-    [setSelectedThreads]
+    [setActiveThreadId]
   );
 
   /**
@@ -280,7 +282,8 @@ export const useNavigationPivotControl = () => {
     getThreadIndex,
     currentActiveSpace: activeSpace,
     currentQuery: globalSearchQuery,
-    currentSelectedThreads: selectedThreads
+    currentSelectedThreads: selectedThreads,
+    currentActiveThreadId: activeThreadId
   };
 };
 
@@ -289,19 +292,19 @@ export const useNavigationPivotControl = () => {
  */
 export const useNavigationAreaControl = () => {
   const { setAreaDisabled, setAreasDisabled, isAreaDisabled } = useKeyboardNavigationContext();
-  const { selectedThreads, filteredThreadIds } = useThreadAtom();
+  const { activeThreadId, filteredThreadIds } = useThreadAtom();
 
   /**
    * Convenience method to disable message panel when no thread is selected
    */
   const updateMessagePanelState = useCallback(() => {
-    const shouldDisable = selectedThreads.length === 0;
+    const shouldDisable = !activeThreadId;
     setAreasDisabled({
       'message-list': shouldDisable,
       'display-header': shouldDisable,
       'compose-inline': shouldDisable
     });
-  }, [selectedThreads.length, setAreasDisabled]);
+  }, [activeThreadId, setAreasDisabled]);
 
   /**
    * Convenience method to disable thread list when no threads available

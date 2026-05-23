@@ -46,6 +46,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     threadsMap,
     filteredThreadIds,
     selectedThreads,
+    activeThreadId,
     setSelectedThreads,
     selectNextThread,
     selectPreviousThread
@@ -63,6 +64,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     t,
     globalSearchQuery,
     selectedThreads,
+    activeThreadId,
     filteredThreadIds,
     threadsMap,
     setSelectedThreads,

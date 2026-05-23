@@ -97,7 +97,7 @@ interface MailLayoutProps {}
 export function MailLayout({}: MailLayoutProps) {
   const { notificationAlert, setNotificationAlert } = useThreadListAtom();
   const { pinEmailInSpace } = useSpacePinAtom();
-  const { selectedThreads } = useThreadAtom();
+  const { activeThreadId } = useThreadAtom();
   const { preference } = useAuth();
   const { globalSearchQuery, fullscreenDisplayPanel, setFullscreenDisplayPanel } = useGlobalAtom();
 
@@ -171,14 +171,14 @@ export function MailLayout({}: MailLayoutProps) {
   };
 
   useEffect(() => {
-    if (selectedThreads.length === 1) {
+    if (activeThreadId) {
       togglePanels(true);
       setFullscreenDisplayPanel(true);
     } else {
       togglePanels(false);
       setFullscreenDisplayPanel(false);
     }
-  }, [selectedThreads]);
+  }, [activeThreadId]);
 
   const { draftsMapByAccount, setDraftsByThread } = useDraftAtom();
 

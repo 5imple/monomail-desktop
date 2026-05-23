@@ -24,16 +24,17 @@ function ThreadList({ onScroll }: ThreadListProps) {
   const { aggregatedSyncState } = useSyncThread();
   const { preference } = useAuth();
 
-  const { setSelectedThreads, selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, setActiveThreadId, setSelectedThreads, selectedThreads, threadsMap } =
+    useThreadAtom();
   const { activateScope, deactivateScope } = useHotkeyScope();
 
   useEffect(() => {
-    if (selectedThreads.length === 0) {
+    if (selectedThreads.length === 0 && !activeThreadId) {
       deactivateScope('CONVERSATION_SELECTED');
     } else {
       activateScope('CONVERSATION_SELECTED');
     }
-  }, [selectedThreads]);
+  }, [activeThreadId, selectedThreads]);
 
   const observer = useRef<IntersectionObserver | null>(null);
   const lastThreadElementRef = useCallback(
@@ -51,8 +52,16 @@ function ThreadList({ onScroll }: ThreadListProps) {
 
   // Initialize with the first selected thread if there is one
   const [anchorThreadId, setAnchorThreadId] = useState<string | null>(() => {
-    return selectedThreads.length > 0 ? selectedThreads[0] : null;
+    return selectedThreads.length > 0 ? selectedThreads[0] : activeThreadId;
   });
+
+  useEffect(() => {
+    if (selectedThreads.length === 1) {
+      setAnchorThreadId(selectedThreads[0]);
+    } else if (selectedThreads.length === 0) {
+      setAnchorThreadId(activeThreadId);
+    }
+  }, [activeThreadId, selectedThreads]);
 
   // Update anchor when selection changes through keyboard navigation
   const handleItemClick = useCallback(
@@ -108,18 +117,13 @@ function ThreadList({ onScroll }: ThreadListProps) {
           }
         }
 
-        // Handle regular click: Toggle off if clicking the only selected thread
-        if (prevSelected.length === 1 && prevSelected[0] === threadId) {
-          setAnchorThreadId(null);
-          return [];
-        }
-
-        // Regular click - Select only the clicked thread and set as anchor
+        // Regular row click opens the conversation. Selection checkboxes own batch selection.
+        setActiveThreadId(threadId);
         setAnchorThreadId(threadId);
-        return [threadId];
+        return prevSelected;
       });
     },
-    [setSelectedThreads, setAnchorThreadId, anchorThreadId, threadIds]
+    [anchorThreadId, setActiveThreadId, setSelectedThreads, setAnchorThreadId, threadIds]
   );
 
   const deduplicatedThreadIds = useMemo(() => {
@@ -149,7 +153,7 @@ function ThreadList({ onScroll }: ThreadListProps) {
       { label: 'This Week', ids: [] },
       { label: 'Last Week', ids: [] },
       { label: 'This Month', ids: [] },
-      { label: 'Older', ids: [] },
+      { label: 'Older', ids: [] }
     ];
 
     deduplicatedThreadIds.forEach((id) => {

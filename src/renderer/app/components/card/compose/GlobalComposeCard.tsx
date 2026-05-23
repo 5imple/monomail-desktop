@@ -24,7 +24,6 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
-import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
@@ -391,7 +390,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           () => {
             updateMessage(composeDraft);
             executeCommand('COMPOSE_NEW_MESSAGE', { draft: composeDraft });
-            monoLocalStorageDb.decrementSentEmailsCount();
           },
           <span className="inline-flex items-end gap-1">
             Undo <ShortcutKeyboard variant="text" className="gap-0 p-0" shortcut={'MOD+Z'} />
@@ -400,12 +398,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         );
 
         handleClose();
-
-        // Increment sent emails count and check if it's the second email
-        const sentEmailsCount = await monoLocalStorageDb.incrementSentEmailsCount();
-        if (sentEmailsCount === 3) {
-          openDialog('nps', { eventType: 'third_email' });
-        }
 
         trackEvent('email_sent', {
           draft_id: composeDraft.id,

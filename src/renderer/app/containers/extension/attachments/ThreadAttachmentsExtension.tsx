@@ -22,7 +22,7 @@ interface ThreadAttachmentsExtensionProps {}
 export function ThreadAttachmentsExtension({}: ThreadAttachmentsExtensionProps) {
   const { t } = useTranslation();
   const { accounts } = useAuth();
-  const { selectedThreads, threadsMap, setSelectedThreads } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap, setActiveThreadId } = useThreadAtom();
   const [threadAttachments, setThreadAttachments] = useState<
     Record<
       string,
@@ -133,7 +133,7 @@ export function ThreadAttachmentsExtension({}: ThreadAttachmentsExtensionProps) 
 
   // Handle thread selection
   const handleThreadSelection = (threadId: string) => {
-    setSelectedThreads([threadId]);
+    setActiveThreadId(threadId);
     trackEvent('thread_selected_from_attachments', { thread_id: threadId });
   };
 
@@ -271,7 +271,8 @@ export function ThreadAttachmentsExtension({}: ThreadAttachmentsExtensionProps) 
                     type="button"
                     className={cn(
                       'mt-1.5 cursor-pointer truncate text-left transition-colors',
-                      selectedThreads.includes(threadId) && 'text-foreground'
+                      (activeThreadId === threadId || selectedThreads.includes(threadId)) &&
+                        'text-foreground'
                     )}
                     onClick={() => handleThreadSelection(threadId)}
                   >
@@ -279,7 +280,7 @@ export function ThreadAttachmentsExtension({}: ThreadAttachmentsExtensionProps) 
                       <div className="truncate text-[11px] font-medium tracking-tight text-foreground/80 hover:text-foreground">
                         {thread.subject || t('extension.attachments.no_subject', 'No subject')}
                       </div>
-                      <div className="font-mono text-[10px] uppercase tracking-[0.08em] tabular-nums text-muted-foreground">
+                      <div className="font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
                         {formatListDate(thread.timestamp)}
                       </div>
                     </div>

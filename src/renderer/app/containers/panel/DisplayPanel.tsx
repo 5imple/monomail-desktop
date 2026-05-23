@@ -37,7 +37,7 @@ interface DisplayPanelProps {
 export const DisplayPanel = ({ className }: DisplayPanelProps) => {
   const { globalSearchQuery } = useGlobalAtom();
   const { labelsMapByAccount, getAllLabels } = useLabelAtom();
-  const { selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, threadsMap } = useThreadAtom();
   const { unmarkThreadsAsUnread, addLabelToThread } = useThreadLabelAtom();
   const { updateThreadState } = useThreadOperationAtom();
   const { contactDisplayPanel, setContactDisplayPanel } = useGlobalAtom();
@@ -111,7 +111,7 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
       smoothScrollBy(-SCROLL_JUMP_SIZE);
     },
     {
-      enabled: isMessageListFocused && selectedThreads.length === 1,
+      enabled: isMessageListFocused && !!activeThreadId,
       preventDefault: true,
       scopes: ['CONVERSATION_DISPLAY']
     }
@@ -124,7 +124,7 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
       smoothScrollBy(SCROLL_JUMP_SIZE);
     },
     {
-      enabled: isMessageListFocused && selectedThreads.length === 1,
+      enabled: isMessageListFocused && !!activeThreadId,
       preventDefault: true,
       scopes: ['CONVERSATION_DISPLAY']
     }
@@ -183,12 +183,18 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
 
   // Create a stable thread reference to prevent unnecessary re-renders of child components
   const stableThread = useMemo(() => {
-    if (selectedThreads.length !== 1) return null;
-    return threadsMap[selectedThreads[0]] || null;
-  }, [selectedThreads, threadsMap]);
+    if (!activeThreadId) return null;
+    return threadsMap[activeThreadId] || null;
+  }, [activeThreadId, threadsMap]);
 
   useEffect(() => {
-    if (!stableThread || !scrollAreaRef.current) return;
+    if (!stableThread) {
+      setDisplayedMessages([]);
+      setThread(null);
+      return;
+    }
+
+    if (!scrollAreaRef.current) return;
     displayMessages(stableThread);
 
     // Call readMessages if:
@@ -375,7 +381,7 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
   };
 
   useEffect(() => {
-    if (selectedThreads.length === 1) {
+    if (activeThreadId) {
       activateScope('CONVERSATION_DISPLAY');
       setIsMessageListFocused(true);
     } else {
@@ -383,7 +389,7 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
       setIsMessageListFocused(false);
     }
     if (scrollAreaRef.current) scrollAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
-  }, [selectedThreads]);
+  }, [activeThreadId]);
 
   const [selectedRecipient, setSelectedRecipient] = useState<MonoRecipient | null>(null);
 
@@ -397,7 +403,7 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
   return (
     <div
       className={cn(
-        'relative flex h-full flex-col transition-all',
+        'relative flex h-full flex-col bg-[#111312] transition-all',
         thread ? '' : 'opacity-0',
         className
       )}
@@ -425,60 +431,64 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
           scrollbarClassName={'opacity-0'}
           style={{
             maskImage:
-              'linear-gradient(0deg, transparent 0%, hsl(var(--card)) 0%, hsl(var(--card)) 99%, transparent 100%)'
+              'linear-gradient(to bottom, transparent, black 16px, black calc(100% - 24px), transparent)'
           }}
           onFocus={handleMessageListFocus}
           onBlur={handleMessageListBlur}
           onKeyDown={handleScrollAreaKeyDown}
           tabIndex={0} // Make the scroll area focusable
         >
-          <div className={cn('flex flex-1 flex-col gap-6 p-5 pt-2')} ref={printRef}>
-            {orderedItems.messages.map((message, index) => {
-              const isLastMessage = index === orderedItems.messages.length - 1;
-              const relatedDraft = orderedItems.messageDraftMap[message.id];
+          <div className="mx-auto max-w-[920px] px-6 pb-16">
+            {thread && (
+              <h1
+                className="mb-5 mt-8 tracking-tight"
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 650,
+                  letterSpacing: '-0.02em',
+                  color: '#f4f2ed',
+                  lineHeight: '1.3'
+                }}
+              >
+                {!thread.subject || thread.subject === '' ? '(No subject)' : thread.subject}
+              </h1>
+            )}
+            <div className={cn('flex flex-1 flex-col gap-3')} ref={printRef}>
+              {orderedItems.messages.map((message, index) => {
+                const isLastMessage = index === orderedItems.messages.length - 1;
+                const relatedDraft = orderedItems.messageDraftMap[message.id];
 
-              return (
-                <MessageCard
-                  ref={(el) => (messageRefs.current[message.id] = el)}
-                  key={message.id}
-                  item={message as MonoMessage}
-                  isLastCard={isLastMessage}
-                  accountId={thread?.accountId}
-                  collapsed={!isLastMessage}
-                  draft={relatedDraft}
-                  contactToggle={contactDisplayPanel}
-                  className={cn('transition-all duration-300 ease-bouncy-in-out')}
-                  style={{
-                    zIndex: `${orderedItems.messages.length - index}`
-                  }}
-                  cardClassName={cn('transition-all h-fit')}
-                  handleContactOpen={handleContactOpen}
-                  isFocused={focusedMessageId === message.id}
-                  onFocusRequest={() => setFocusedMessageId(message.id)}
-                />
-              );
-            })}
-            {orderedItems.unlinkedDrafts.map((draft) => (
-              <div key={draft.id}>
-                {/* {sendDraftQueue.includes(draft.id) ? ( */}
-                <DraftCard
-                  item={draft as MonoDraft}
-                  className={cn('transition-all duration-300 ease-bouncy-in-out')}
-                />
-                {/* ) : (
-                <InlineComposeCard
-                  ref={(el) => {
-                    if ((draft as MonoDraft).messageId) {
-                      inlineDraftRefs.current[(draft as MonoDraft).messageId] = el;
-                    }
-                  }}
-                  draft={draft as MonoDraft}
-                  className={cn('shadow-xl ease-bouncy-in-out')}
-                />
-              )} */}
-              </div>
-            ))}
-            <div style={{ height: spacerHeight }} />
+                return (
+                  <MessageCard
+                    ref={(el) => (messageRefs.current[message.id] = el)}
+                    key={message.id}
+                    item={message as MonoMessage}
+                    isLastCard={isLastMessage}
+                    accountId={thread?.accountId}
+                    collapsed={!isLastMessage}
+                    draft={relatedDraft}
+                    contactToggle={contactDisplayPanel}
+                    className={cn('transition-all duration-300 ease-bouncy-in-out')}
+                    style={{
+                      zIndex: `${orderedItems.messages.length - index}`
+                    }}
+                    cardClassName={cn('transition-all h-fit')}
+                    handleContactOpen={handleContactOpen}
+                    isFocused={focusedMessageId === message.id}
+                    onFocusRequest={() => setFocusedMessageId(message.id)}
+                  />
+                );
+              })}
+              {orderedItems.unlinkedDrafts.map((draft) => (
+                <div key={draft.id}>
+                  <DraftCard
+                    item={draft as MonoDraft}
+                    className={cn('transition-all duration-300 ease-bouncy-in-out')}
+                  />
+                </div>
+              ))}
+              <div style={{ height: spacerHeight }} />
+            </div>
           </div>
         </ScrollArea>
         <div

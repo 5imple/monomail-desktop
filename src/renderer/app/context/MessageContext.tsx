@@ -55,7 +55,7 @@ const MessageContext = createContext<MessageContextType | undefined>(undefined);
 MessageContext.displayName = 'MessageContext';
 
 export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { selectedThreads } = useThreadAtom();
+  const { activeThreadId } = useThreadAtom();
   const { addThread } = useThreadOperationAtom();
   const { searchNewQuery } = useGlobalAtom();
   const { updateDraft } = useDraftAtom();
@@ -217,8 +217,8 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const handleLabelModification = useCallback(
     async (labelMessage: MessageLabelModificationPayload, isAddOperation: boolean) => {
-      // Skip processing if this thread is currently selected
-      if (selectedThreads.length === 1 && selectedThreads.includes(labelMessage.threadId)) {
+      // Skip processing if this thread is currently open in the reading pane.
+      if (activeThreadId === labelMessage.threadId) {
         return;
       }
 
@@ -255,7 +255,7 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
         console.error('Error handling label modification:', e);
       }
     },
-    [selectedThreads, notifySubscribers]
+    [activeThreadId, notifySubscribers]
   );
 
   const handleIncomingMessage = useCallback(

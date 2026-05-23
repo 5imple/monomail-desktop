@@ -93,7 +93,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   const { dialogState } = useDialogs();
 
   // Get thread state (selected threads and thread map) for filtering paired commands.
-  const { selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
 
   // Determine the active page based on the pages array.
   const activePage = pages[pages.length - 1];
@@ -185,7 +185,11 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   // Get the first selected thread (if any) to determine paired command conditions.
   const firstSelectedThread =
-    selectedThreads && selectedThreads.length > 0 ? threadsMap[selectedThreads[0]] : null;
+    selectedThreads && selectedThreads.length > 0
+      ? threadsMap[selectedThreads[0]]
+      : activeThreadId
+        ? threadsMap[activeThreadId]
+        : null;
 
   const groupedCommandIds: Record<string, string[]> = {
     THREAD_MARK: ['THREAD_MARK_READ', 'THREAD_MARK_UNREAD'],
