@@ -19,7 +19,6 @@ import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { CopyButton } from '@/renderer/app/components/ui/copy-button';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
-import { Separator } from '@/renderer/app/components/ui/separator';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
@@ -1172,7 +1171,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                 isFocused && 'shadow-md'
               )}
             >
-              <div className="flex overflow-hidden rounded-lg border bg-card p-1 shadow-sm">
+              <div className="flex gap-2">
                 <Button
                   onClick={() => {
                     setIsCollapsed(false);
@@ -1184,7 +1183,14 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   }}
                   variant={'ghost'}
                   sizeVariant={'sm'}
-                  className="w-24"
+                  className="rounded-full"
+                  style={{
+                    height: '34px',
+                    padding: '0 14px',
+                    backgroundColor: 'rgba(255,255,255,0.035)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: '#aaa7a0'
+                  }}
                   tooltipSide="bottom"
                   tooltip={t('message_card.reply')}
                   shortcut={isLastCard ? 'R' : undefined}
@@ -1192,7 +1198,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   <MonoIcon className="mr-2 shrink-0" type={'Reply'} />
                   {t('message_card.reply')}
                 </Button>
-                <Separator orientation="vertical" className="mx-1" />
                 <Button
                   onClick={() => {
                     setIsCollapsed(false);
@@ -1204,7 +1209,14 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   }}
                   variant={'ghost'}
                   sizeVariant={'sm'}
-                  className="w-24"
+                  className="rounded-full"
+                  style={{
+                    height: '34px',
+                    padding: '0 14px',
+                    backgroundColor: 'rgba(255,255,255,0.035)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: '#aaa7a0'
+                  }}
                   tooltipSide="bottom"
                   tooltip={t('message_card.forward')}
                   shortcut={isLastCard ? 'F' : undefined}

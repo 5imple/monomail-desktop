@@ -97,9 +97,9 @@ interface MailLayoutProps {}
 export function MailLayout({}: MailLayoutProps) {
   const { notificationAlert, setNotificationAlert } = useThreadListAtom();
   const { pinEmailInSpace } = useSpacePinAtom();
-  const { selectedThreads } = useThreadAtom();
+  const { activeThreadId } = useThreadAtom();
   const { preference } = useAuth();
-  const { globalSearchQuery, fullscreenDisplayPanel } = useGlobalAtom();
+  const { globalSearchQuery, fullscreenDisplayPanel, setFullscreenDisplayPanel } = useGlobalAtom();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
@@ -171,12 +171,14 @@ export function MailLayout({}: MailLayoutProps) {
   };
 
   useEffect(() => {
-    if (selectedThreads.length === 1) {
-      togglePanels(true); // Expand both panels
+    if (activeThreadId) {
+      togglePanels(true);
+      setFullscreenDisplayPanel(true);
     } else {
-      togglePanels(false); // Collapse both panels
+      togglePanels(false);
+      setFullscreenDisplayPanel(false);
     }
-  }, [selectedThreads]);
+  }, [activeThreadId]);
 
   const { draftsMapByAccount, setDraftsByThread } = useDraftAtom();
 

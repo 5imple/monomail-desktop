@@ -16,7 +16,7 @@ export const useRegisterHotkeys = (options = {}) => {
   const executeCommand = useExecuteCommand();
   const commands = useCommands();
   const { openDialog } = useDialogs();
-  const { selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
   const { trackEvent } = useUserTrackingData();
   const { undoLastAction, hasUndoActions } = useUndoManager();
   const { t } = useTranslation();
@@ -88,10 +88,14 @@ export const useRegisterHotkeys = (options = {}) => {
     // }
   };
 
-  // Get the first selected thread (if any)
-  const firstSelectedThread = useMemo(() => {
-    return selectedThreads && selectedThreads.length > 0 ? threadsMap[selectedThreads[0]] : null;
-  }, [selectedThreads, threadsMap]);
+  const targetThreadIds = useMemo(
+    () => (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : []),
+    [activeThreadId, selectedThreads]
+  );
+
+  const firstTargetThread = useMemo(() => {
+    return targetThreadIds.length > 0 ? threadsMap[targetThreadIds[0]] : null;
+  }, [targetThreadIds, threadsMap]);
 
   // Register paired command hotkeys
   Object.entries(pairedCommands).forEach(([hotkey, { check, trueCommand, falseCommand }]) => {
@@ -99,15 +103,15 @@ export const useRegisterHotkeys = (options = {}) => {
       hotkey,
       (e) => {
         e.preventDefault();
-        if (!firstSelectedThread || selectedThreads.length === 0) return;
+        if (!firstTargetThread || targetThreadIds.length === 0) return;
 
         // Determine which command to run based on the thread's current state
-        const commandToRun = check(firstSelectedThread) ? trueCommand : falseCommand;
+        const commandToRun = check(firstTargetThread) ? trueCommand : falseCommand;
         trackEvent('hotkey_command_executed', { command: commandToRun });
         executeCommand(commandToRun as CommandType);
       },
       { preventDefault: true, ...options },
-      [firstSelectedThread, selectedThreads, executeCommand, trackEvent]
+      [firstTargetThread, targetThreadIds, executeCommand, trackEvent]
     );
   });
 
@@ -139,8 +143,8 @@ export const useRegisterHotkeys = (options = {}) => {
             useHotkeys(
               hotkey,
               () => {
-                if (selectedThreads.length > 0) {
-                  const thread = threadsMap[selectedThreads[0]];
+                if (targetThreadIds.length > 0) {
+                  const thread = threadsMap[targetThreadIds[0]];
                   if (thread) {
                     const items = thread.items.filter(
                       (item) =>
@@ -167,7 +171,7 @@ export const useRegisterHotkeys = (options = {}) => {
                 }
               },
               { scopes: [command.scope], preventDefault: true, ...options },
-              [executeCommand, selectedThreads, threadsMap, trackEvent, accounts]
+              [executeCommand, targetThreadIds, threadsMap, trackEvent, accounts]
             );
             break;
 
@@ -175,8 +179,8 @@ export const useRegisterHotkeys = (options = {}) => {
             useHotkeys(
               hotkey,
               () => {
-                if (selectedThreads.length > 0) {
-                  const thread = threadsMap[selectedThreads[0]];
+                if (targetThreadIds.length > 0) {
+                  const thread = threadsMap[targetThreadIds[0]];
                   if (thread) {
                     const lastMessage = thread.getLastMessage();
                     if (lastMessage) {
@@ -190,7 +194,7 @@ export const useRegisterHotkeys = (options = {}) => {
                 }
               },
               { scopes: [command.scope], preventDefault: true, ...options },
-              [executeCommand, selectedThreads, threadsMap, trackEvent, accounts]
+              [executeCommand, targetThreadIds, threadsMap, trackEvent, accounts]
             );
             break;
 

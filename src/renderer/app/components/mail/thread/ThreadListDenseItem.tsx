@@ -1,5 +1,6 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import MonoIcon from '@/renderer/app/components/icons/icons';
+import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import { Badge } from '@/renderer/app/components/ui/badge';
@@ -68,7 +69,7 @@ export const ThreadListDenseItem = React.memo(
       const memoizedSearchQuery = useCallback(searchNewQuery, [searchNewQuery]);
 
       const { labelsMapByAccount } = useLabelAtom();
-      const { threadsMap, selectedThreads } = useThreadAtom();
+      const { activeThreadId, threadsMap, selectedThreads, setSelectedThreads } = useThreadAtom();
       const containerRef = useRef<HTMLDivElement | null>(null);
       const itemRef = useRef<HTMLDivElement | null>(null);
       const executeCommand = useExecuteCommand();
@@ -171,9 +172,9 @@ export const ThreadListDenseItem = React.memo(
       const handleClick = useCallback(
         (e: React.MouseEvent | React.KeyboardEvent) => {
           if (
-            event instanceof KeyboardEvent &&
-            (event.key !== 'Enter' || event.metaKey) &&
-            event.key !== ' '
+            e.nativeEvent instanceof KeyboardEvent &&
+            (e.nativeEvent.key !== 'Enter' || e.nativeEvent.metaKey) &&
+            e.nativeEvent.key !== ' '
           ) {
             return;
           }
@@ -191,6 +192,8 @@ export const ThreadListDenseItem = React.memo(
       }, [currentThread?.labelIds]); // Specific dependency on labelIds for reactivity
 
       const isUnread = currentThread?.labelIds.includes('UNREAD');
+      const isChecked = selectedThreads.includes(threadId);
+      const isActive = activeThreadId === threadId;
 
       // Same sender renderer used by the other two row variants.
       const renderSenderNames = () => {
@@ -242,16 +245,18 @@ export const ThreadListDenseItem = React.memo(
         <div
           ref={containerRef}
           onClick={handleClick}
-          aria-pressed={selectedThreads.includes(threadId)}
+          aria-current={isActive ? 'true' : undefined}
+          aria-pressed={isChecked}
           data-thread={threadId}
-          data-thread-focused={selectedThreads.includes(threadId)}
+          data-thread-focused={isActive}
+          data-thread-selected={isChecked}
           tabIndex={0}
           role="button"
           className={cn(
-            'relative transition-opacity duration-200',
+            'group relative mx-[10%] rounded-md transition-opacity duration-200',
             'bg-card hover:bg-muted/60 dark:bg-card dark:hover:bg-muted/40',
             currentThread && !isUnread && 'text-muted-foreground',
-            selectedThreads.includes(threadId) &&
+            (isChecked || isActive) &&
               'bg-accent/10 hover:bg-accent/15 dark:bg-accent/15 dark:hover:bg-accent/20',
             opacity == 0 ? 'opacity-0' : 'opacity-100',
             'focus-visible:bg-accent/10',
@@ -259,167 +264,210 @@ export const ThreadListDenseItem = React.memo(
           )}
         >
           {!currentThread || !isRendering ? (
-            <div className="h-[42px] transition-[height] duration-200 ease-bouncy-in-out" />
+            <div className="h-[36px] transition-[height] duration-200 ease-bouncy-in-out" />
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
-              {isUnread && (
-                <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
-              )}
-              <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
-                {/* Newton dense row: single line, narrower sender column
+              <div className="relative">
+                {isUnread && (
+                  <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
+                )}
+                <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
+                  {/* Newton dense row: single line, narrower sender column
                     (w-36) compared to compact (w-44), tighter vertical
                     padding (py-2). No avatar in this variant. */}
-                <div
-                  className={cn(
-                    'flex items-center gap-4 px-6 py-2 sm:gap-5 sm:px-8',
-                    selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
-                  )}
-                >
-                  {/* Sender column */}
-                  <div className="flex min-h-6 w-36 shrink-0 items-center gap-2 overflow-hidden">
-                    <div className="min-w-0 flex-1 overflow-hidden">
+                  <div
+                    className={cn(
+                      'flex items-center gap-3 border-b border-border/40 px-3 py-1.5',
+                      (isChecked || isActive) && 'pl-[calc(0.75rem-3px)]'
+                    )}
+                  >
+                    {/* Hover checkbox */}
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      aria-label={isChecked ? 'Deselect email' : 'Select email'}
+                      aria-pressed={isChecked}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setSelectedThreads((prev) =>
+                          prev.includes(threadId)
+                            ? prev.filter((id) => id !== threadId)
+                            : [...prev, threadId]
+                        );
+                      }}
+                      className={cn(
+                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,opacity,transform] duration-150',
+                        isChecked
+                          ? 'border-muted-foreground bg-muted-foreground text-background opacity-100 shadow-none'
+                          : 'border-muted-foreground/30 text-muted-foreground/45 opacity-0 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground hover:!opacity-100 focus-visible:!opacity-100 group-hover:opacity-60'
+                      )}
+                    >
+                      <MonoIcon
+                        type="Check"
+                        className={cn(
+                          isChecked ? 'h-3.5 w-3.5 stroke-[2.1]' : 'h-3 w-3 stroke-[1.8]',
+                          isChecked ? 'opacity-100' : 'opacity-80'
+                        )}
+                      />
+                    </button>
+
+                    {/* Avatar */}
+                    <RecipientAvatar
+                      className="h-8 w-8 shrink-0"
+                      recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
+                    />
+
+                    {/* Sender column */}
+                    <div className="flex w-32 shrink-0 items-center gap-2 overflow-hidden">
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <span
+                          className={cn(
+                            'block truncate text-[13px] tracking-tight',
+                            isUnread
+                              ? 'font-bold text-foreground'
+                              : 'font-semibold text-muted-foreground'
+                          )}
+                        >
+                          {renderSenderNames()}
+                        </span>
+                      </div>
+                      {currentThread.items.length > 1 && (
+                        <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                          {currentThread.items.length}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Subject + snippet flow */}
+                    <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
                       <span
                         className={cn(
-                          'block truncate text-[14px] tracking-tight',
+                          'max-w-[45%] shrink-0 truncate text-[13px] tracking-tight',
                           isUnread
                             ? 'font-semibold text-foreground'
-                            : 'font-medium text-muted-foreground'
+                            : 'font-medium text-foreground/80'
                         )}
-                      >
-                        {renderSenderNames()}
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            !highlightedContent.subject || highlightedContent.subject === ''
+                              ? '(No subject)'
+                              : highlightedContent.subject
+                        }}
+                      />
+                      {highlightedContent.snippet && (
+                        <>
+                          <span aria-hidden className="shrink-0 text-muted-foreground/40">
+                            –
+                          </span>
+                          <span
+                            className="hidden min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground sm:inline"
+                            dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
+                          />
+                        </>
+                      )}
+                    </div>
+
+                    {/* Right metadata cluster */}
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      {currentThread.labelIds.includes('STARRED') && (
+                        <Button
+                          variant={'text'}
+                          typeVariant={'inline'}
+                          sizeVariant={'xs'}
+                          tabIndex={-1}
+                          className={
+                            'text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-600'
+                          }
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            executeCommand('THREAD_UNSTAR', { threadIds: [currentThread.id] });
+                          }}
+                        >
+                          <MonoIcon type={'Star'} className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+
+                      {Object.keys(currentThread.attachments).length > 0 && (
+                        <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground" />
+                      )}
+
+                      {uniqueLabelIds.length > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          {uniqueLabelIds.map((labelId, index) => {
+                            const label = accountLabels[labelId];
+                            return label && label.name.length > 0 ? (
+                              <Badge
+                                key={`${labelId}-${index}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  memoizedSearchQuery(`label:${label.name}`, [currentThread.id]);
+                                }}
+                                className="rounded-sm"
+                                style={{
+                                  color: label.color.textColor,
+                                  backgroundColor: label.color.backgroundColor
+                                }}
+                                sizeVariant={'xs'}
+                              >
+                                <div className="no-drag flex-1 overflow-hidden text-ellipsis">
+                                  <span className="whitespace-nowrap">
+                                    {label.name.replace('Mono/', '')}
+                                  </span>
+                                </div>
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+
+                      <span className="shrink-0 whitespace-nowrap text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {formatListDate(currentThread.timestamp)}
                       </span>
                     </div>
-                    {currentThread.items.length > 1 && (
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                        {currentThread.items.length}
-                      </span>
-                    )}
                   </div>
 
-                  {/* Subject + snippet flow */}
-                  <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
-                    <span
-                      className={cn(
-                        'max-w-[45%] shrink-0 truncate text-[14px] tracking-tight',
-                        isUnread
-                          ? 'font-semibold text-foreground'
-                          : 'font-medium text-foreground/80'
-                      )}
-                      dangerouslySetInnerHTML={{
-                        __html:
-                          !highlightedContent.subject || highlightedContent.subject === ''
-                            ? '(No subject)'
-                            : highlightedContent.subject
-                      }}
-                    />
-                    {highlightedContent.snippet && (
-                      <>
-                        <span aria-hidden className="shrink-0 text-muted-foreground/40">
-                          ·
-                        </span>
-                        <span
-                          className="hidden min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground sm:inline"
-                          dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
-                        />
-                      </>
-                    )}
-                  </div>
-
-                  {/* Right metadata cluster */}
-                  <div className="flex shrink-0 items-center gap-2.5">
-                    {currentThread.labelIds.includes('STARRED') && (
-                      <Button
-                        variant={'text'}
-                        typeVariant={'inline'}
-                        sizeVariant={'xs'}
-                        tabIndex={-1}
-                        className={
-                          'text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-600'
-                        }
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          executeCommand('THREAD_UNSTAR', { threadIds: [currentThread.id] });
-                        }}
-                      >
-                        <MonoIcon type={'Star'} className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-
-                    {Object.keys(currentThread.attachments).length > 0 && (
-                      <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground" />
-                    )}
-
-                    {uniqueLabelIds.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        {uniqueLabelIds.map((labelId, index) => {
-                          const label = accountLabels[labelId];
-                          return label && label.name.length > 0 ? (
-                            <Badge
-                              key={`${labelId}-${index}`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                memoizedSearchQuery(`label:${label.name}`, [currentThread.id]);
-                              }}
-                              className="rounded-sm"
-                              style={{
-                                color: label.color.textColor,
-                                backgroundColor: label.color.backgroundColor
-                              }}
-                              sizeVariant={'xs'}
-                            >
-                              <div className="no-drag flex-1 overflow-hidden text-ellipsis">
-                                <span className="whitespace-nowrap">
-                                  {label.name.replace('Mono/', '')}
-                                </span>
-                              </div>
-                            </Badge>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-
-                    <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                      {formatListDate(currentThread.timestamp)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Attachment thumbnails — tucked under the subject column */}
-                {Object.keys(currentThread.attachments).length > 0 && (
-                  <div className="pl-[calc(9rem+2rem)] pr-6 sm:pl-[calc(9rem+2.5rem)]">
-                    <ScrollArea className="mr-3">
-                      <div className="mb-2 flex items-center gap-1.5 p-1">
-                        {Object.keys(currentThread.attachments)
-                          .slice(0, 2)
-                          .map((id) => (
-                            <AttachmentItem
-                              accountId={currentThread.accountId}
-                              source={'message'}
-                              size={'sm'}
-                              itemId={currentThread.id}
-                              key={currentThread.attachments[id].attachmentId}
-                              preview
+                  {/* Attachment thumbnails — tucked under the subject column */}
+                  {Object.keys(currentThread.attachments).length > 0 && (
+                    <div className="pl-[calc(2rem+0.75rem+8rem+1.5rem)] pr-6 sm:pl-[calc(2rem+1rem+8rem+2rem)]">
+                      <ScrollArea className="mr-3">
+                        <div className="mb-2 flex items-center gap-1.5 p-1">
+                          {Object.keys(currentThread.attachments)
+                            .slice(0, 2)
+                            .map((id) => (
+                              <AttachmentItem
+                                accountId={currentThread.accountId}
+                                source={'message'}
+                                size={'sm'}
+                                itemId={currentThread.id}
+                                key={currentThread.attachments[id].attachmentId}
+                                preview
+                                tabIndex={-1}
+                                attachment={currentThread.attachments[id]}
+                              />
+                            ))}
+                          {Object.keys(currentThread.attachments).length > 2 && (
+                            <Button
+                              variant={'secondary'}
+                              sizeVariant={'sm'}
                               tabIndex={-1}
-                              attachment={currentThread.attachments[id]}
-                            />
-                          ))}
-                        {Object.keys(currentThread.attachments).length > 2 && (
-                          <Button
-                            variant={'secondary'}
-                            sizeVariant={'sm'}
-                            tabIndex={-1}
-                            className="font-mono text-[11px] font-normal"
-                          >
-                            + {Object.keys(currentThread.attachments).length - 2}
-                          </Button>
-                        )}
-                      </div>
-                      <ScrollAreaScrollbar orientation={'horizontal'} />
-                    </ScrollArea>
-                  </div>
-                )}
+                              className="font-mono text-[11px] font-normal"
+                            >
+                              + {Object.keys(currentThread.attachments).length - 2}
+                            </Button>
+                          )}
+                        </div>
+                        <ScrollAreaScrollbar orientation={'horizontal'} />
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
               </div>
             </ThreadItemContextMenu>
           )}

@@ -32,7 +32,7 @@ import { useCallback } from 'react';
 
 export function useGlobalAtom() {
   const { setSelectedContacts } = useContactAtom();
-  const { setSelectedThreads } = useThreadAtom();
+  const { setActiveThreadId, setSelectedThreads } = useThreadAtom();
   const [loading, setLoading] = useAtom(loadingAtom);
   const [gmailStatusInvalid, setGmailStatusInvalid] = useAtom(gmailStatusInvalidAtom);
   const [activateTour, setActivateTour] = useAtom(activateTourAtom);
@@ -76,6 +76,7 @@ export function useGlobalAtom() {
     (query: string, threadIds?: string[], addToHistory = true) => {
       setGlobalSearchQuery(query);
       setSelectedThreads(threadIds ?? []);
+      setActiveThreadId(threadIds?.length === 1 ? threadIds[0] : null);
       setSelectedContacts([]);
       setActiveLayout('MAIL');
       if (addToHistory) {
@@ -84,6 +85,7 @@ export function useGlobalAtom() {
     },
     [
       setGlobalSearchQuery,
+      setActiveThreadId,
       setSelectedThreads,
       setSelectedContacts,
       setActiveLayout,

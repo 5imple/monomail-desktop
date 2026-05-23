@@ -2,13 +2,11 @@ import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
-import { NotificationBadge } from '@/renderer/app/components/ui/notification-badge';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { isElectron } from '@/renderer/app/lib/electronApi';
-import { highlightThreadText } from '@/renderer/app/lib/highlightThreadText';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
@@ -30,12 +28,11 @@ interface DisplayPanelHeaderProps {
 
 const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
   ({ thread, handlePrint, isPrinting }, ref) => {
-    const { setSelectedThreads } = useThreadAtom();
+    const { setActiveThreadId } = useThreadAtom();
     const { removeLabelFromThread } = useThreadLabelAtom();
     const { t } = useTranslation();
     const { activateScope, deactivateScope, activeScopes } = useHotkeyScope();
-    const { globalSearchQuery, setFullscreenDisplayPanel, fullscreenDisplayPanel } =
-      useGlobalAtom();
+    const { setFullscreenDisplayPanel, fullscreenDisplayPanel } = useGlobalAtom();
     const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
     const { openDialog } = useDialogs();
     const executeCommand = useExecuteCommand();
@@ -90,26 +87,9 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       };
     }, [thread?.id, registerItem, unregisterItem, registerAreaRef]);
 
-    const highlightedContent = useMemo(() => {
-      if (!thread || !globalSearchQuery) {
-        return {
-          subject: null,
-          snippet: null
-        };
-      }
-
-      return {
-        subject: highlightThreadText(
-          !thread.subject || thread.subject === '' ? '(No subject)' : thread.subject,
-          globalSearchQuery
-        ),
-        snippet: thread.snippet ? highlightThreadText(thread.snippet, globalSearchQuery) : null
-      };
-    }, [thread?.subject, thread?.snippet, globalSearchQuery]);
-
     const handleDone = async () => {
       if (thread) {
-        executeCommand('THREAD_DONE');
+        executeCommand('THREAD_DONE', { threadIds: [thread.id] });
         trackEvent('thread_doned', {
           thread_id: thread.id
         });
@@ -117,7 +97,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     };
     const handleUnDone = async () => {
       if (thread) {
-        executeCommand('THREAD_UNDONE');
+        executeCommand('THREAD_UNDONE', { threadIds: [thread.id] });
         trackEvent('thread_undoned', {
           thread_id: thread.id
         });
@@ -126,14 +106,14 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
 
     const handleStarThread = async () => {
       if (thread) {
-        executeCommand('THREAD_STAR');
+        executeCommand('THREAD_STAR', { threadIds: [thread.id] });
         trackEvent('thread_starred', { thread_id: thread.id });
       }
     };
 
     const handleUnstarThread = async () => {
       if (thread) {
-        executeCommand('THREAD_UNSTAR');
+        executeCommand('THREAD_UNSTAR', { threadIds: [thread.id] });
         trackEvent('thread_unstarred', { thread_id: thread.id });
       }
     };
@@ -149,7 +129,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
 
     const handleClosePanel = async () => {
       if (thread) {
-        setSelectedThreads([]);
+        setActiveThreadId(null);
         setFullscreenDisplayPanel(false);
         trackEvent('panel_closed', { thread_id: thread.id });
       }
@@ -188,12 +168,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     }, [activeScopes]);
 
     useHotkeys(
-      'MOD+ENTER',
-      togglePanelFullscreen,
-      { preventDefault: true, enabled: isNavigationEnabled(), scopes: ['CONVERSATION_DISPLAY'] },
-      [togglePanelFullscreen]
-    );
-    useHotkeys(
       'ESC',
       handleClosePanel,
       { preventDefault: true, enabled: isNavigationEnabled(), scopes: ['CONVERSATION_DISPLAY'] },
@@ -201,16 +175,17 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     );
 
     return (
-      <div className="drag relative border-b border-border/40">
+      <div className="drag relative">
         <div ref={ref} className="w-full">
           <div
             ref={headerContainerRef}
-            className={cn('flex items-center gap-2 px-4 py-2 sm:px-6')}
+            className="relative flex h-11 items-center"
             data-focusable-area="display-header"
           >
+            {/* Back button — absolute left */}
             <div
               className={cn(
-                'flex items-center gap-1',
+                'absolute left-0 flex items-center pl-4',
                 !sidebarLoading && 'transition-all duration-200',
                 sidebarCollapsed && isElectron && fullscreenDisplayPanel ? 'translate-x-[88px]' : ''
               )}
@@ -228,204 +203,150 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
               >
                 <MonoIcon type="ChevronsRight" />
               </Button>
-              <Button
-                ref={fullscreenRef}
-                className="text-muted-foreground hover:text-foreground"
-                tooltip={
-                  fullscreenDisplayPanel ? t('header.display.shrink') : t('header.display.expand')
-                }
-                variant="ghost"
-                shortcut="MOD+ENTER"
-                sizeVariant="sm"
-                typeVariant="icon"
-                onClick={togglePanelFullscreen}
-                data-keyboard-item="fullscreen-toggle"
-              >
-                <MonoIcon type={fullscreenDisplayPanel ? 'Minimize' : 'Maximize'} />
-              </Button>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <span className="mr-2 flex h-full items-center gap-1">
-                {thread && thread.labelIds.some((label) => label.includes('Label_')) && (
+
+            {/* Action buttons — centered */}
+            {thread && thread.id.length < 20 && (
+              <div className="flex w-full items-center justify-center gap-[22px]">
+                <Button
+                  ref={reminderRef}
+                  className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                  tooltip={t('header.display.reminder')}
+                  shortcut="H"
+                  sizeVariant="sm"
+                  variant="ghost"
+                  typeVariant="icon"
+                  onClick={() => {
+                    openDialog('commandPalette', { pages: ['REMINDER'] });
+                    trackEvent('reminder_opened', { thread_id: thread.id });
+                  }}
+                  disabled={!thread}
+                  data-keyboard-item="reminder"
+                >
+                  <MonoIcon type="Clock" />
+                </Button>
+                <Button
+                  ref={labelRef}
+                  className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                  tooltip={t('header.display.label')}
+                  shortcut="L"
+                  sizeVariant="sm"
+                  variant="ghost"
+                  typeVariant="icon"
+                  onClick={() => {
+                    openDialog('commandPalette', { pages: ['LABEL'] });
+                    trackEvent('label_dialog_opened', { thread_id: thread.id });
+                  }}
+                  disabled={!thread}
+                  data-keyboard-item="label"
+                >
+                  <MonoIcon type="Label" />
+                </Button>
+                {thread.labelIds.includes('STARRED') ? (
+                  <Button
+                    ref={starRef}
+                    className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                    tooltip={t('header.display.unstar')}
+                    shortcut="SHIFT+S"
+                    sizeVariant="sm"
+                    variant="ghost"
+                    typeVariant="icon"
+                    onClick={handleUnstarThread}
+                    data-keyboard-item="star-toggle"
+                  >
+                    <MonoIcon type="Star" className="h-4 w-4 text-yellow-500" />
+                  </Button>
+                ) : (
+                  <Button
+                    ref={starRef}
+                    className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                    tooltip={t('header.display.star')}
+                    shortcut="S"
+                    sizeVariant="sm"
+                    variant="ghost"
+                    typeVariant="icon"
+                    onClick={handleStarThread}
+                    data-keyboard-item="star-toggle"
+                  >
+                    <MonoIcon type="Star" className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  ref={doneRef}
+                  className={cn(
+                    'hover:bg-white/[0.06]',
+                    !thread?.labelIds.includes('INBOX')
+                      ? 'text-green-500'
+                      : 'text-[#8c8c88] hover:text-[#f4f2ed]'
+                  )}
+                  tooltip={t('header.display.done')}
+                  shortcut="E"
+                  sizeVariant="sm"
+                  variant="ghost"
+                  typeVariant="icon"
+                  onClick={thread?.labelIds.includes('INBOX') ? handleDone : handleUnDone}
+                  disabled={!thread}
+                  data-keyboard-item="done-toggle"
+                >
+                  <MonoIcon type="CheckCircle" />
+                </Button>
+              </div>
+            )}
+
+            {/* Labels / badges — absolute right */}
+            {thread && (
+              <div className="absolute right-4 flex items-center gap-2">
+                {thread.labelIds.some((label) => label.includes('Label_')) && (
                   <div className="flex items-center gap-1">
-                    {thread.labelIds
-                      .filter((label) => label.includes('Label_'))
-                      .map((labelId, index) => {
-                        const label = threadLabels[labelId];
-                        return label && label.name.length > 0 ? (
-                          <Badge
-                            key={labelId}
-                            className={cn('rounded-sm')}
-                            style={{
-                              color: label.color.textColor || '',
-                              backgroundColor: label.color.backgroundColor || ''
+                    {uniqueLabelIds.map((labelId) => {
+                      const label = threadLabels[labelId];
+                      return label && label.name.length > 0 ? (
+                        <Badge
+                          key={labelId}
+                          className={cn('rounded-sm')}
+                          style={{
+                            color: label.color.textColor || '',
+                            backgroundColor: label.color.backgroundColor || ''
+                          }}
+                          onClick={() => {
+                            openDialog('commandPalette', { pages: ['LABEL'] });
+                            trackEvent('label_dialog_opened', { thread_id: thread.id });
+                          }}
+                          sizeVariant={'xs'}
+                        >
+                          <div className="no-drag flex-1 overflow-hidden text-ellipsis">
+                            <span className="whitespace-nowrap">
+                              {label.name.replace('Mono/', '')}
+                            </span>
+                          </div>
+                          <Button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRemoveLabel(labelId);
                             }}
-                            onClick={() => {
-                              openDialog('commandPalette', { pages: ['LABEL'] });
-                              trackEvent('label_dialog_opened', {
-                                thread_id: thread.id
-                              });
-                            }}
-                            sizeVariant={'xs'}
+                            className="ml-2 shrink-0 text-primary-foreground hover:text-primary-foreground"
+                            style={{ color: label.color.textColor || '' }}
+                            variant={'text'}
+                            typeVariant={'inline'}
                           >
-                            <div className="no-drag flex-1 overflow-hidden text-ellipsis">
-                              <span className="whitespace-nowrap">
-                                {label.name.replace('Mono/', '')}
-                              </span>
-                            </div>
-                            <Button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleRemoveLabel(labelId);
-                              }}
-                              className="ml-2 shrink-0 text-primary-foreground hover:text-primary-foreground"
-                              style={{
-                                color: label.color.textColor || ''
-                              }}
-                              variant={'text'}
-                              typeVariant={'inline'}
-                            >
-                              <MonoIcon type={'X'} className="h-3 w-3" />
-                            </Button>
-                          </Badge>
-                        ) : null;
-                      })}
+                            <MonoIcon type={'X'} className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ) : null;
+                    })}
                   </div>
                 )}
-              </span>
-
-              {thread && thread.labelIds.includes('TRASH') && (
-                <Badge className={cn('rounded-sm')} sizeVariant={'xs'}>
-                  <div className="no-drag flex-1 overflow-hidden text-ellipsis">
-                    <span className="whitespace-nowrap">In Trash</span>
-                  </div>
-                </Badge>
-              )}
-
-              {thread && thread.id.length < 20 && (
-                <>
-                  <Button
-                    ref={reminderRef}
-                    className="text-muted-foreground"
-                    tooltip={t('header.display.reminder')}
-                    shortcut="H"
-                    sizeVariant="sm"
-                    variant="ghost"
-                    typeVariant="icon"
-                    onClick={() => {
-                      openDialog('commandPalette', { pages: ['REMINDER'] });
-                      trackEvent('reminder_opened', {
-                        thread_id: thread.id
-                      });
-                    }}
-                    disabled={!thread}
-                    data-keyboard-item="reminder"
-                  >
-                    <MonoIcon type="Clock" />
-                  </Button>
-                  <Button
-                    ref={labelRef}
-                    className="text-muted-foreground"
-                    tooltip={t('header.display.label')}
-                    shortcut="L"
-                    sizeVariant="sm"
-                    variant="ghost"
-                    typeVariant="icon"
-                    onClick={() => {
-                      openDialog('commandPalette', { pages: ['LABEL'] });
-                      trackEvent('label_dialog_opened', {
-                        thread_id: thread.id
-                      });
-                    }}
-                    disabled={!thread}
-                    data-keyboard-item="label"
-                  >
-                    <MonoIcon type="Label" />
-                  </Button>
-                  {thread &&
-                    (thread.labelIds.includes('STARRED') ? (
-                      <Button
-                        ref={starRef}
-                        className="text-muted-foreground"
-                        tooltip={t('header.display.unstar')}
-                        shortcut="SHIFT+S"
-                        sizeVariant="sm"
-                        variant="ghost"
-                        typeVariant="icon"
-                        onClick={handleUnstarThread}
-                        data-keyboard-item="star-toggle"
-                      >
-                        <MonoIcon type="Star" className="h-4 w-4 text-yellow-500" />
-                      </Button>
-                    ) : (
-                      <Button
-                        ref={starRef}
-                        tooltip={t('header.display.star')}
-                        shortcut="S"
-                        sizeVariant="sm"
-                        variant="ghost"
-                        typeVariant="icon"
-                        onClick={handleStarThread}
-                        data-keyboard-item="star-toggle"
-                      >
-                        <MonoIcon
-                          type="Star"
-                          className="h-4 w-4 text-muted-foreground hover:text-yellow-500"
-                        />
-                      </Button>
-                    ))}
-
-                  <Button
-                    ref={doneRef}
-                    className={cn(
-                      'text-muted-foreground hover:text-green-500',
-                      !thread?.labelIds.includes('INBOX')
-                        ? 'text-green-500'
-                        : 'text-muted-foreground'
-                    )}
-                    tooltip={t('header.display.done')}
-                    shortcut="E"
-                    sizeVariant="sm"
-                    variant="ghost"
-                    typeVariant="icon"
-                    onClick={thread?.labelIds.includes('INBOX') ? handleDone : handleUnDone}
-                    disabled={!thread}
-                    data-keyboard-item="done-toggle"
-                  >
-                    <MonoIcon type="CheckCircle" />
-                  </Button>
-
-                </>
-              )}
-            </div>
+                {thread.labelIds.includes('TRASH') && (
+                  <Badge className={cn('rounded-sm')} sizeVariant={'xs'}>
+                    <div className="no-drag flex-1 overflow-hidden text-ellipsis">
+                      <span className="whitespace-nowrap">In Trash</span>
+                    </div>
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
-          {/* Newton-style reader subject block:
-              - Tiny mono "READING" / "IN TRASH" scope label above (only
-                renders when there's a thread to read).
-              - Hero subject at 22–26px tracking-tight, calm + editorial.
-              - Generous bottom padding so the divider underneath has
-                breathing room before the message stack begins. */}
-          {thread && (
-            <div className="no-drag w-full px-6 pb-4 sm:px-8">
-              <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                {thread.labelIds.includes('TRASH')
-                  ? 'In trash'
-                  : thread.labelIds.includes('UNREAD')
-                    ? 'Reading'
-                    : 'Read'}
-              </p>
-              <h2
-                className="cursor-auto select-text break-words text-[22px] font-medium tracking-tight text-foreground sm:text-[26px]"
-                dangerouslySetInnerHTML={{
-                  __html:
-                    !highlightedContent.subject || highlightedContent.subject === ''
-                      ? '(No subject)'
-                      : highlightedContent.subject
-                }}
-              />
-            </div>
-          )}
         </div>
       </div>
     );

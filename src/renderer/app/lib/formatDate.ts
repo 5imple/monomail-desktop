@@ -25,13 +25,11 @@ export const formatListDate = (
   const now = toZonedTime(new Date(), timeZone);
 
   if (isToday(dt)) {
-    return formatInTimeZone(dt, timeZone, 'hh:mm a');
-  } else if (isYesterday(dt)) {
-    return `yesterday ${formatInTimeZone(dt, timeZone, 'hh:mm a')}`;
+    return formatInTimeZone(dt, timeZone, 'h:mm a');
   } else if (dt.getFullYear() !== now.getFullYear()) {
-    return formatInTimeZone(dt, timeZone, `MMM d, yyyy`);
+    return formatInTimeZone(dt, timeZone, 'MMM d, yyyy');
   } else {
-    return formatInTimeZone(dt, timeZone, `MMM d 'at' h:mma`);
+    return formatInTimeZone(dt, timeZone, 'MMM d');
   }
 };
 

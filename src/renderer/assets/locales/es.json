@@ -1510,49 +1510,6 @@
       }
     }
   },
-  "nps": {
-    "score_question": "Del 0 al 10, ¿qué tan probable es que nos recomiendes?",
-    "not_likely": "Nada probable",
-    "extremely_likely": "Muy probable",
-    "promoter": "Promotor",
-    "passive": "Pasivo",
-    "detractor": "Detractor",
-    "selected_score": "Puntuación: {{score}} ({{category}})",
-    "comment_label": "Cuéntanos más",
-    "comment_placeholder": "¿Cuál es la principal razón de tu puntuación?",
-    "submit": "Enviar opinión",
-    "optional": "Opcional",
-    "event_type": {
-      "subscription_renewal": {
-        "title": "¿Cómo fue la renovación?",
-        "description": "Ayúdanos a mejorar el proceso de renovación {{name}}."
-      },
-      "feature_usage": {
-        "title": "Califica esta función",
-        "description": "¿Qué tan probable es que recomiendes esta función a otros {{name}}?"
-      },
-      "support_interaction": {
-        "title": "Califica tu experiencia con soporte",
-        "description": "¿Qué tan satisfecho estás con nuestro equipo de soporte {{name}}?"
-      },
-      "onboarding_complete": {
-        "title": "¿Cómo fue tu inicio?",
-        "description": "Ayúdanos a mejorar la experiencia inicial {{name}}."
-      },
-      "general_feedback": {
-        "title": "Califica tu experiencia general",
-        "description": "¿Recomendarías nuestro producto a otras personas {{name}}?"
-      },
-      "product_update": {
-        "title": "Califica esta actualización",
-        "description": "¿Qué te han parecido nuestras últimas novedades {{name}}?"
-      },
-      "cancellation_flow": {
-        "title": "Ayúdanos a mejorar",
-        "description": "Antes de irte, cuéntanos cómo fue tu experiencia {{name}}."
-      }
-    }
-  },
   "tooltips": {
     "account_status": {
       "too_many_accounts": "Demasiadas cuentas conectadas - mejora el plan o la cuenta será desactivada",

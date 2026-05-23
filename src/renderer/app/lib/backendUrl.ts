@@ -1,6 +1,6 @@
 /**
  * Resolve the on-prem backend origin. Used for endpoints that used to live
- * on Firebase Cloud Functions (NPS, token refresh, etc.). Prefers MONO_ENV_BACKEND_URL
+ * on backend-adjacent surfaces (token refresh, account linking, etc.). Prefers MONO_ENV_BACKEND_URL
  * and falls back to MONO_ENV_API_URL — most deployments will host both
  * surfaces behind the same origin.
  *

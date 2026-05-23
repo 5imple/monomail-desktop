@@ -1,4 +1,20 @@
 /**
+ * Decode HTML entities that Gmail pre-encodes in snippet/subject fields
+ * (e.g. &#39; → ', &amp; → &, &lt; → <). Must run before escapeHtml so
+ * the caller doesn't see double-encoded output like &amp;#39;.
+ */
+function decodeGmailEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
+/**
  * Escape HTML metacharacters so untrusted input can't introduce markup
  * when the result is later mounted via dangerouslySetInnerHTML.
  */
@@ -27,8 +43,9 @@ function escapeHtml(s: string): string {
 export function highlightThreadText(text: string, searchQuery: string): string {
   if (!text) return '';
 
-  // Always escape first — the return value is treated as HTML by callers.
-  const escapedText = escapeHtml(text);
+  // Decode Gmail's pre-encoded entities first, then re-escape so the output
+  // is safe for dangerouslySetInnerHTML without double-encoding (e.g. &#39;).
+  const escapedText = escapeHtml(decodeGmailEntities(text));
 
   if (!searchQuery) return escapedText;
 

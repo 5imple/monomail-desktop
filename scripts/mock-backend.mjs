@@ -306,7 +306,8 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, {
     'Content-Type': isJson ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept, X-Requested-With',
+    'Access-Control-Allow-Headers':
+      'Authorization, Content-Type, Accept, X-Requested-With, X-Mono-Account',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     ...headers
   });
@@ -506,27 +507,8 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  // --- NPS (ported Cloud Function) ---
   if (method === 'GET' && path === '/api/release-note') {
     return send(res, 200, []);
-  }
-
-  if (method === 'GET' && path === '/nps/entries') {
-    return send(res, 200, { entries: [], totalCount: 0 });
-  }
-  if (method === 'POST' && path === '/nps') {
-    const body = await readJson(req).catch(() => ({}));
-    const entry = {
-      id: randomBytes(6).toString('hex'),
-      score: body.score ?? 0,
-      comment: body.comment ?? '',
-      userEmail: STUB_MEMBER.email,
-      eventType: body.eventType ?? 'general_feedback',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      userId: STUB_MEMBER.uid
-    };
-    return send(res, 200, entry);
   }
 
   // --- Share resolver (placeholder) ---

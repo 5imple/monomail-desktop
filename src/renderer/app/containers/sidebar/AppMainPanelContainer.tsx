@@ -26,7 +26,7 @@ const AppMainPanelContainer: FC<{ className?: string }> = ({ className }) => {
   return (
     <div
       className={cn(
-        'items relative z-0 m-1 flex flex-1 overflow-hidden rounded-lg border bg-card/70 shadow-sm dark:bg-card/60',
+        'items relative z-0 flex flex-1 overflow-hidden bg-card/70 dark:bg-card/60',
         // Only add transition if not loading
         !sidebarLoading && 'transition-all duration-300',
         sidebarCollapsed ? '' : ''

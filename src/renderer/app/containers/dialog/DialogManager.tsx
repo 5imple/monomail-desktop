@@ -6,7 +6,6 @@ import DraftSaveDialog from '@/renderer/app/containers/dialog/DraftSaveDialog';
 import PreferanceDialog from '@/renderer/app/containers/dialog/PreferanceDialog';
 import ReleaseNoteDialog from '@/renderer/app/containers/dialog/ReleaseNoteDialog';
 import SendFeedbackDialog from '@/renderer/app/containers/dialog/SendFeedbackDialog';
-import { NPSDialog } from '@/renderer/app/containers/dialog/NPSDialog';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useReleaseNotesAtom } from '@/renderer/app/store/layout/useReleaseNotesAtom';
 import { useEffect } from 'react';
@@ -125,11 +124,6 @@ const DialogManager = () => {
             commandPalette: { ...prevState.commandPalette, selectedSpaceId: values }
           }));
         }}
-      />
-      <NPSDialog
-        open={dialogState.nps.open}
-        onOpenChange={() => closeDialog('nps')}
-        eventType={dialogState.nps.eventType}
       />
     </>
   );

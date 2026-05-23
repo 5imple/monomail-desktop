@@ -64,7 +64,8 @@ export const ContactCard = memo(function ContactCard({
   const { member, accounts } = useAuth();
   const [selectedRecipient, setSelectedRecipient] = useState<MonoRecipient | null>(recipient);
   const [userSelectedRecipient, setUserSelectedRecipient] = useState<boolean>(false);
-  const { selectedThreads, threadsMap, setThreadsMap, setSelectedThreads } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap, setThreadsMap, setActiveThreadId } =
+    useThreadAtom();
   const [threadsFromSource, setThreadsFromSource] = useState<Record<string, MonoThread>>({});
   const [threadsFromDomain, setThreadsFromDomain] = useState<Record<string, MonoThread>>({});
 
@@ -194,20 +195,20 @@ export const ContactCard = memo(function ContactCard({
     const handleClickThread = () => {
       if (!threadsMap[key]) {
         // Use the thread's accountId instead of member.uid
-        const currentThread = threadsMap[selectedThreads[0]];
+        const currentThread = activeThreadId ? threadsMap[activeThreadId] : null;
         if (currentThread?.accountId) {
           DBGetMessage(currentThread.accountId, thread.items[0].id as unknown as string).then(
             (msg) => {
               // @ts-expect-error: items can include msg
               thread.items = [msg];
               setThreadsMap((prev) => ({ ...prev, [key]: thread }));
-              setSelectedThreads([key]);
+              setActiveThreadId(key);
               trackEvent('conversation_selected', { thread_id: key });
             }
           );
         }
       } else {
-        setSelectedThreads([key]);
+        setActiveThreadId(key);
         trackEvent('conversation_selected', { thread_id: key });
       }
     };
@@ -217,7 +218,7 @@ export const ContactCard = memo(function ContactCard({
         key={key}
         className={cn(
           `flex items-center gap-2 p-2 transition-all`,
-          selectedThreads.includes(thread.id) ? 'border-l-0' : ''
+          activeThreadId === thread.id || selectedThreads.includes(thread.id) ? 'border-l-0' : ''
         )}
         onClick={handleClickThread}
       >
@@ -226,7 +227,8 @@ export const ContactCard = memo(function ContactCard({
             <span
               className={cn(
                 'whitespace-nowrap text-sm',
-                selectedThreads.includes(thread.id) && 'font-semibold'
+                (activeThreadId === thread.id || selectedThreads.includes(thread.id)) &&
+                  'font-semibold'
               )}
             >
               {thread.subject.length > 0 ? thread.subject : t('extension.contact.no_subject')}

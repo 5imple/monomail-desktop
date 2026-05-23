@@ -14,7 +14,7 @@ import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import * as chrono from 'chrono-node';
 import dayjs from 'dayjs';
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getReminderSuggestions } from './getReminderSuggestions';
@@ -37,7 +37,7 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const suggestions = getReminderSuggestions(reminderValue);
-  const { selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
   const { addLabelToThread } = useThreadLabelAtom();
   const { labelsMapByAccount } = useLabelAtom();
   const { closeDialog } = useDialogs();
@@ -45,6 +45,10 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
   const commandListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState(300);
   const [loading, setLoading] = useState(false);
+  const targetThreadIds = useMemo(
+    () => (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : []),
+    [activeThreadId, selectedThreads]
+  );
 
   const handleSelect = async (value: string) => {
     bounce();
@@ -54,10 +58,10 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
     const reminderAt = dayjs(parsedDate).format();
 
     closeDialog('commandPalette');
-    if (selectedThreads.length > 0) {
+    if (targetThreadIds.length > 0) {
       try {
         await Promise.all(
-          selectedThreads.map(async (threadId) => {
+          targetThreadIds.map(async (threadId) => {
             const thread = threadsMap[threadId];
             if (!thread) return;
 

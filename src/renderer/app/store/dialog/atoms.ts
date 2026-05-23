@@ -1,6 +1,5 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoAttachment } from '@/main/models/types';
-import { NPSEventType } from '@/renderer/app/store/account/useNPSAtom';
 import { ReleaseNote } from '@/renderer/app/store/layout/useReleaseNotesAtom';
 import { atom } from 'jotai';
 
@@ -70,10 +69,6 @@ export interface DialogState {
   pinContact: {
     open: boolean;
   };
-  nps: {
-    open: boolean;
-    eventType: NPSEventType;
-  };
 }
 
 export const dialogStateAtom = atom<DialogState>({
@@ -126,9 +121,5 @@ export const dialogStateAtom = atom<DialogState>({
   },
   pinContact: {
     open: false
-  },
-  nps: {
-    open: false,
-    eventType: 'general_feedback'
   }
 });

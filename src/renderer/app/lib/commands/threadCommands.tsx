@@ -9,6 +9,7 @@ interface ThreadCommandDependencies {
   t: (key: string, options?: any) => string;
   globalSearchQuery: string;
   selectedThreads: string[];
+  activeThreadId: string | null;
   filteredThreadIds: string[];
   threadsMap: any;
   setSelectedThreads: (threads: string[]) => void;
@@ -34,6 +35,7 @@ export const createThreadCommands = (
     t,
     globalSearchQuery,
     selectedThreads,
+    activeThreadId,
     filteredThreadIds,
     threadsMap,
     setSelectedThreads,
@@ -52,6 +54,12 @@ export const createThreadCommands = (
     markThreadAsTrash
   } = deps;
 
+  const getTargetThreadIds = (args?: ThreadCommandArgs) =>
+    (
+      args?.threadIds ??
+      (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : [])
+    ).filter((id) => id.length < 20);
+
   return {
     // THREAD_MARK_READ with promise toast
     THREAD_MARK_READ: {
@@ -60,7 +68,7 @@ export const createThreadCommands = (
       hotkeys: ['SHIFT+MOD+U', 'U'],
       icon: 'Envelope',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -129,7 +137,7 @@ export const createThreadCommands = (
       hotkeys: ['SHIFT+MOD+U', 'U'],
       icon: 'EnvelopeOpen',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -198,7 +206,7 @@ export const createThreadCommands = (
       icon: 'Trash',
       hotkeys: ['MOD+Backspace', 'Backspace'],
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -277,7 +285,7 @@ export const createThreadCommands = (
       title: t('command.thread_untrash'),
       icon: 'TrashRestore',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -347,7 +355,7 @@ export const createThreadCommands = (
       hotkeys: ['SHIFT+MOD+L', 'S'],
       icon: 'Star',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -415,7 +423,7 @@ export const createThreadCommands = (
       hotkeys: ['SHIFT+MOD+L', 'S'],
       icon: 'Star',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -483,7 +491,7 @@ export const createThreadCommands = (
       hotkeys: ['CTRL+MOD+A', 'E'],
       icon: 'CheckCircle',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -560,7 +568,7 @@ export const createThreadCommands = (
       hotkeys: ['CTRL+MOD+A', 'E'],
       icon: 'Inbox',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account
@@ -629,7 +637,7 @@ export const createThreadCommands = (
       hotkeys: ['SHIFT+MOD+J', '!'],
       icon: 'AlertCircle',
       action: async (args?: ThreadCommandArgs) => {
-        const threadIds = (args?.threadIds ?? selectedThreads).filter((id) => id.length < 20);
+        const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
 
         // Group threads by account

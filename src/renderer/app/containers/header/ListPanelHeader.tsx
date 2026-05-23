@@ -214,9 +214,9 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
             {!isElectron && sidebarCollapsed && <SidebarCollapseButton className="mr-2" />}
 
             <div className="min-w-0">
-              <h1 className="line-clamp-1 text-[22px] font-medium tracking-tight text-foreground sm:text-[26px]">
-                {scopeLabel}
-              </h1>
+              <p className="mb-0.5 line-clamp-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                {globalSearchQuery && activeItem?.id !== 'search' ? 'Inbox' : 'Newton'}
+              </p>
             </div>
 
             {accountsWithErrors.length > 0 && (
@@ -243,7 +243,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
               disabled={loadingStatus === 'LOADING'}
               variant={'ghost'}
               sizeVariant={'sm'}
-              className="text-muted-foreground hover:text-foreground"
+              className="mb-1 text-muted-foreground hover:text-foreground"
               onClick={handleRefresh}
               tooltip={t('header.list.refresh') || 'Refresh'}
             >

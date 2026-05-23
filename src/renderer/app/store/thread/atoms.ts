@@ -5,6 +5,7 @@ import { atomWithStorage } from 'jotai/utils';
 
 // Persistent atom for selected thread IDs (string[])
 export const selectedThreadsAtom = atom<string[]>([]);
+export const activeThreadIdAtom = atom<string | null>(null);
 export const filteredThreadIdsAtom = atom<string[]>([]);
 export const threadIdsAtom = atom<string[]>([]);
 export const threadsMapAtom = atom<Record<string, MonoThread>>({});
