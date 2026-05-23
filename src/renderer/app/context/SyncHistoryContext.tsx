@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import { UpdateType } from '@/renderer/app/context/MessageContext';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import electronApi from '@/renderer/app/lib/electronApi';
+import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 
 export const syncHistoryStateAtom = atom<
   Record<
@@ -121,9 +121,33 @@ export const SyncHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
     console.log('History sync worker exit completed - all operations stopped');
   }, [setSyncState]);
 
+  const handleWorkerGmailRequest = async (payload: any) => {
+    const requestId = payload?.requestId;
+    if (typeof requestId !== 'string') return;
+
+    const { requestId: _requestId, ...args } = payload;
+    let result;
+    try {
+      result = await electronApi.gmailRequest(args);
+    } catch (error) {
+      result = {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Gmail request failed'
+      };
+    }
+
+    workerRef.current?.postMessage({
+      type: 'MAIL_API_RESPONSE',
+      payload: { requestId, result }
+    });
+  };
+
   // Rest of your implementation...
   const handleWorkerMessage = (type: string, payload: any) => {
     switch (type) {
+      case 'MAIL_API_REQUEST':
+        void handleWorkerGmailRequest(payload);
+        break;
       case 'SYNC_PROGRESS':
         handleSyncProgress(payload);
         break;
@@ -276,9 +300,7 @@ export const SyncHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
       // Get account provider for this uid
       const account = getAccountByUid(uid);
       const provider = account?.provider || 'google'; // Default to google for backward compatibility
-      let syncIdToken = idToken;
-      const accountToken = await electronApi.getGoogleAccountToken(uid);
-      if (accountToken.ok) syncIdToken = accountToken.accessToken;
+      const syncIdToken = isElectron ? 'main-owned-token' : idToken;
 
       workerRef.current.postMessage({
         type: 'SYNC_START',

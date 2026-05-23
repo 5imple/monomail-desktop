@@ -16,13 +16,7 @@ export const calendarDisplayPanelAtom = atomWithStorage<boolean>(
     defaultValue: true
   })
 );
-export const currentSearchQueryAtom = atomWithStorage<string>(
-  'global:search-query',
-  'category:primary',
-  createIndexedDBStorage<string>({
-    defaultValue: 'category:primary'
-  })
-);
+export const currentSearchQueryAtom = atom<string>('category:primary');
 export const searchHistoryAtom = atomWithStorage<string[]>(
   'global:search-history',
   [],

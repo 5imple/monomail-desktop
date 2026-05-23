@@ -13,12 +13,67 @@ interface RequestOptions extends RequestInit {
   idToken?: string;
 }
 
+type GmailBridgeRequest = {
+  method: string;
+  path: string;
+  uid: string;
+  headers?: Record<string, string>;
+  body?: string;
+  responseType?: 'json' | 'blob' | 'text';
+};
+
+type GmailBridgeResult<T = any> =
+  | { ok: true; status: number; data: T }
+  | { ok: false; status?: number; data?: any; error: string };
+
+type WorkerGmailResolver = {
+  resolve: (value: unknown) => void;
+  reject: (reason?: unknown) => void;
+};
+
 // Helper to check if we're in a browser environment
 const isBrowser = typeof window !== 'undefined';
+
+const isWebWorker =
+  !isBrowser &&
+  typeof self !== 'undefined' &&
+  typeof (self as any).postMessage === 'function' &&
+  typeof (self as any).addEventListener === 'function';
 
 // Helper to check if we're in electron
 const isElectron =
   isBrowser && typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+
+let workerGmailListenerAttached = false;
+const workerGmailRequests = new Map<string, WorkerGmailResolver>();
+
+function ensureWorkerGmailResponseListener() {
+  if (!isWebWorker || workerGmailListenerAttached) return;
+  workerGmailListenerAttached = true;
+
+  self.addEventListener('message', (event: MessageEvent) => {
+    const message = event.data;
+    if (message?.type !== 'MAIL_API_RESPONSE') return;
+
+    const { requestId, result } = message.payload ?? {};
+    if (typeof requestId !== 'string') return;
+
+    const pending = workerGmailRequests.get(requestId);
+    if (!pending) return;
+    workerGmailRequests.delete(requestId);
+
+    if (result?.ok) {
+      pending.resolve(result.data);
+      return;
+    }
+
+    pending.reject({
+      status: result?.status ?? 500,
+      data: result?.data,
+      message: result?.error ?? 'Gmail request failed'
+    });
+  });
+}
 
 // Helper to safely check online status
 const isOnline = (): boolean => {
@@ -42,7 +97,7 @@ class ApiClient {
       this.activeUid = activeUid;
     }
 
-    this.isNodeEnvironment = !isBrowser;
+    this.isNodeEnvironment = !isBrowser && !isWebWorker;
 
     // Only set up browser-specific features if we're in a browser
     if (isBrowser) {
@@ -92,6 +147,127 @@ class ApiClient {
     this.activeUid = uid;
   }
 
+  private isGmailApiClient() {
+    return this.baseURL.startsWith('https://gmail.googleapis.com/');
+  }
+
+  private shouldProxyGmailRequest() {
+    return this.isGmailApiClient() && (isWebWorker || isElectron);
+  }
+
+  private toPlainHeaders(headers: HeadersInit | undefined): Record<string, string> {
+    if (!headers) return {};
+    if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+      return Object.fromEntries(headers.entries());
+    }
+    if (Array.isArray(headers)) return Object.fromEntries(headers);
+    return Object.fromEntries(
+      Object.entries(headers).filter(([, value]) => typeof value === 'string')
+    ) as Record<string, string>;
+  }
+
+  private withAbort<T>(promise: Promise<T>, signal?: AbortSignal | null): Promise<T> {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+
+    return new Promise<T>((resolve, reject) => {
+      const abort = () => reject(new DOMException('Aborted', 'AbortError'));
+      signal.addEventListener('abort', abort, { once: true });
+      promise.then(resolve, reject).finally(() => {
+        signal.removeEventListener('abort', abort);
+      });
+    });
+  }
+
+  private normalizeGmailResult<T>(result: GmailBridgeResult<T>): T {
+    if (result.ok) {
+      const maybeBlob = result.data as any;
+      if (
+        maybeBlob &&
+        typeof maybeBlob === 'object' &&
+        typeof maybeBlob.base64 === 'string' &&
+        typeof maybeBlob.type === 'string'
+      ) {
+        const binary = atob(maybeBlob.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: maybeBlob.type }) as T;
+      }
+      return result.data;
+    }
+
+    throw {
+      status: result.status ?? 500,
+      data: result.data,
+      message: result.error
+    };
+  }
+
+  private requestGmailViaElectron<T>(
+    payload: GmailBridgeRequest,
+    signal?: AbortSignal | null
+  ): Promise<T> {
+    const bridge = (window as any).electronBridge;
+    if (!bridge?.gmailRequest) {
+      return Promise.reject(new Error('Gmail bridge is unavailable'));
+    }
+
+    const request = bridge
+      .gmailRequest(payload)
+      .then((result: GmailBridgeResult<T>) => this.normalizeGmailResult(result));
+    return this.withAbort(request, signal);
+  }
+
+  private requestGmailViaWorkerHost<T>(
+    payload: GmailBridgeRequest,
+    signal?: AbortSignal | null
+  ): Promise<T> {
+    ensureWorkerGmailResponseListener();
+
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const request = new Promise<T>((resolve, reject) => {
+      workerGmailRequests.set(requestId, { resolve: resolve as (value: unknown) => void, reject });
+      self.postMessage({
+        type: 'MAIL_API_REQUEST',
+        payload: {
+          requestId,
+          ...payload
+        }
+      });
+    });
+
+    return this.withAbort(request, signal).catch((error) => {
+      workerGmailRequests.delete(requestId);
+      throw error;
+    });
+  }
+
+  private requestGmailViaMain<T>(
+    method: string,
+    path: string,
+    config: RequestInit,
+    responseType: RequestOptions['responseType'],
+    uid?: string | null
+  ): Promise<T> {
+    if (!uid) return Promise.reject(new Error('Gmail account uid is required'));
+
+    const body = typeof config.body === 'string' ? config.body : undefined;
+    const payload: GmailBridgeRequest = {
+      method,
+      path,
+      uid,
+      headers: this.toPlainHeaders(config.headers),
+      body,
+      responseType
+    };
+
+    if (isWebWorker) {
+      return this.requestGmailViaWorkerHost<T>(payload, config.signal);
+    }
+
+    return this.requestGmailViaElectron<T>(payload, config.signal);
+  }
+
   /**
    * Makes a network request with retry logic
    */
@@ -114,9 +290,11 @@ class ApiClient {
     } = options;
 
     const accountUid = uid || this.activeUid;
-    let token = idToken || this.idToken;
+    const shouldProxyGmail = this.shouldProxyGmailRequest();
+    let token = shouldProxyGmail ? null : idToken || this.idToken;
 
     if (
+      !shouldProxyGmail &&
       !idToken &&
       accountUid &&
       isBrowser &&
@@ -211,6 +389,16 @@ class ApiClient {
       try {
         if (isElectron) {
           // log.info(`[ApiClient] ${method} ${url} (attempt ${attempt + 1}/${retries + 1})`);
+        }
+
+        if (shouldProxyGmail) {
+          return await this.requestGmailViaMain<T>(
+            method,
+            url,
+            attemptConfig,
+            responseType,
+            accountUid
+          );
         }
 
         const response = await fetch(`${this.baseURL}${url}`, attemptConfig);

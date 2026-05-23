@@ -61,6 +61,17 @@ interface IpcRenderer {
   getGoogleAccountToken: (
     uid: string
   ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
+  gmailRequest: (args: {
+    method: string;
+    path: string;
+    uid: string;
+    headers?: Record<string, string>;
+    body?: string;
+    responseType?: 'json' | 'blob' | 'text';
+  }) => Promise<
+    | { ok: true; status: number; data: any }
+    | { ok: false; status?: number; data?: any; error: string }
+  >;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;

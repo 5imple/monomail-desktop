@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
 import { ValidLabel, validLabels } from '@/renderer/app/lib/db/thread';
-import electronApi from '@/renderer/app/lib/electronApi';
+import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 
 export const tokenCacheAtom = atom<Record<string, Record<string, string>>>({});
@@ -162,8 +162,32 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
     console.log('Resumed paused syncs due to window regaining focus');
   }, []);
 
+  const handleWorkerGmailRequest = async (payload: any) => {
+    const requestId = payload?.requestId;
+    if (typeof requestId !== 'string') return;
+
+    const { requestId: _requestId, ...args } = payload;
+    let result;
+    try {
+      result = await electronApi.gmailRequest(args);
+    } catch (error) {
+      result = {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Gmail request failed'
+      };
+    }
+
+    workerRef.current?.postMessage({
+      type: 'MAIL_API_RESPONSE',
+      payload: { requestId, result }
+    });
+  };
+
   const handleWorkerMessage = (type: string, payload: any) => {
     switch (type) {
+      case 'MAIL_API_REQUEST':
+        void handleWorkerGmailRequest(payload);
+        break;
       case 'SYNC_PROGRESS':
         handleSyncProgress(payload);
         break;
@@ -508,9 +532,7 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
 
       const cachedToken = tokenCache[uid]?.[query] || '';
       const userPlan = 'pro';
-      let syncIdToken = idToken;
-      const accountToken = await electronApi.getGoogleAccountToken(uid);
-      if (accountToken.ok) syncIdToken = accountToken.accessToken;
+      const syncIdToken = isElectron ? 'main-owned-token' : idToken;
 
       // Get category preferences for this specific account
       const categoryPreferences = preference.display.inbox.category?.[uid] || {
