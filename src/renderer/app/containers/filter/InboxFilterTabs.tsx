@@ -63,7 +63,7 @@ const InboxFilterTabs = React.memo(() => {
   return (
     <nav
       aria-label="Inbox filters"
-      className="no-drag flex items-center gap-1 border-b border-border/60 px-6 text-sm"
+      className="no-drag flex items-center gap-1 border-b border-border/60 px-[10%] text-sm"
     >
       {tabs.map((tab) => {
         const active = mode === tab.id;

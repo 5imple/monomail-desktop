@@ -217,9 +217,6 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
               <p className="mb-0.5 line-clamp-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 {globalSearchQuery && activeItem?.id !== 'search' ? 'Inbox' : 'Newton'}
               </p>
-              <h1 className="line-clamp-1 text-[22px] font-medium tracking-tight text-foreground sm:text-[26px]">
-                {scopeLabel}
-              </h1>
             </div>
 
             {accountsWithErrors.length > 0 && (

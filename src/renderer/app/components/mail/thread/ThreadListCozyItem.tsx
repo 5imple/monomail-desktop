@@ -139,7 +139,7 @@ interface ThreadListCozyItemProps {
 
 export const ThreadListCozyItem = React.memo(
   React.forwardRef<HTMLDivElement, ThreadListCozyItemProps>(({ threadId, onClick }, ref) => {
-    const { selectedThreads, threadsMap } = useThreadAtom();
+    const { selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
     const { labelsMapByAccount } = useLabelAtom();
     const executeCommand = useExecuteCommand();
     const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
@@ -320,7 +320,7 @@ export const ThreadListCozyItem = React.memo(
         role="button"
         className={cn(
           // `group` enables hover-revealed children (e.g. SnoozeButton).
-          'group relative transition-opacity duration-200',
+          'group relative mx-[10%] rounded-md transition-opacity duration-200',
           'bg-card hover:bg-muted/60 dark:bg-card dark:hover:bg-muted/40',
           currentThread && !isUnread && 'text-muted-foreground',
           selectedThreads.includes(threadId) &&
@@ -330,20 +330,49 @@ export const ThreadListCozyItem = React.memo(
         )}
       >
         {!currentThread || !isRendering ? (
-          <div className="h-[52px] transition-[height] duration-200 ease-bouncy-in-out" />
+          <div className="h-[40px] transition-[height] duration-200 ease-bouncy-in-out" />
         ) : (
           <ThreadItemContextMenu thread={currentThread}>
-            {isUnread && (
-              <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
-            )}
-            {/* Single-line Newton row: avatar · sender (fixed) · subject – snippet · date */}
-            <div
-              ref={ref}
-              className={cn(
-                'flex items-center gap-4 border-b border-border/20 px-8 py-3 text-left text-sm transition-colors',
-                selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
+            <div className="relative">
+              {isUnread && (
+                <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
               )}
-            >
+              {/* Single-line Newton row: avatar · sender (fixed) · subject – snippet · date */}
+              <div
+                ref={ref}
+                className={cn(
+                  'flex items-center gap-3 border-b border-border/40 px-3 py-2 text-left text-sm transition-colors',
+                  selectedThreads.includes(threadId) && 'pl-[calc(0.75rem-3px)]'
+                )}
+              >
+              {/* Hover checkbox */}
+              <button
+                tabIndex={-1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setSelectedThreads((prev) =>
+                    prev.includes(threadId)
+                      ? prev.filter((id) => id !== threadId)
+                      : [...prev, threadId]
+                  );
+                }}
+                className={cn(
+                  'flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-opacity duration-150',
+                  selectedThreads.includes(threadId)
+                    ? 'opacity-100'
+                    : 'opacity-0 group-hover:opacity-100'
+                )}
+              >
+                <MonoIcon
+                  type={selectedThreads.includes(threadId) ? 'CheckCircle' : 'Circle'}
+                  className={cn(
+                    'h-4 w-4',
+                    selectedThreads.includes(threadId) ? 'text-accent' : 'text-muted-foreground'
+                  )}
+                />
+              </button>
+
               {/* Avatar */}
               <RecipientAvatar
                 className="h-8 w-8 shrink-0"
@@ -354,10 +383,10 @@ export const ThreadListCozyItem = React.memo(
               <div className="flex w-40 shrink-0 items-center gap-1.5 overflow-hidden">
                 <span
                   className={cn(
-                    'truncate text-[13.5px] tracking-tight',
+                    'truncate text-[13px] tracking-tight',
                     isUnread
-                      ? 'font-semibold text-foreground'
-                      : 'font-medium text-muted-foreground'
+                      ? 'font-bold text-foreground'
+                      : 'font-semibold text-muted-foreground'
                   )}
                 >
                   {renderSenderNames()}
@@ -373,7 +402,7 @@ export const ThreadListCozyItem = React.memo(
               <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
                 <span
                   className={cn(
-                    'shrink-0 truncate text-[13.5px] tracking-tight',
+                    'shrink-0 truncate text-[13px] tracking-tight',
                     isUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'
                   )}
                   dangerouslySetInnerHTML={{
@@ -450,6 +479,7 @@ export const ThreadListCozyItem = React.memo(
                 <span className="w-14 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
                   {formatListDate(currentThread.timestamp)}
                 </span>
+              </div>
               </div>
             </div>
           </ThreadItemContextMenu>

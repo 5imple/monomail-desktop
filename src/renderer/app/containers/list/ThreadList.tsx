@@ -12,7 +12,6 @@ import { useThreadList } from '@/renderer/app/context/ThreadListContext';
 import { useSyncThread } from '@/renderer/app/context/SyncThreadContext';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useTranslation } from 'react-i18next';
-import { ThreadListItem } from '@/renderer/app/components/mail/thread/ThreadListItem';
 
 interface ThreadListProps {
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
@@ -124,43 +123,75 @@ function ThreadList({ onScroll }: ThreadListProps) {
   );
 
   const deduplicatedThreadIds = useMemo(() => {
-    // Use a Set to remove duplicates while preserving order
     const uniqueIds = new Set<string>();
     const result: string[] = [];
-
     threadIds.forEach((id) => {
       if (!uniqueIds.has(id)) {
         uniqueIds.add(id);
         result.push(id);
       }
     });
-
     return result;
   }, [threadIds]);
 
-  // Find the last thread ID that exists in threadsMap
-  const lastValidThreadIndex = useMemo(() => {
+  // Group threads by time period for section headers
+  const groupedThreads = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const dayOfWeek = now.getDay();
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const thisWeekStart = todayStart - daysToMonday * 86400000;
+    const lastWeekStart = thisWeekStart - 7 * 86400000;
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    const buckets: { label: string; ids: string[] }[] = [
+      { label: 'Today', ids: [] },
+      { label: 'This Week', ids: [] },
+      { label: 'Last Week', ids: [] },
+      { label: 'This Month', ids: [] },
+      { label: 'Older', ids: [] },
+    ];
+
+    deduplicatedThreadIds.forEach((id) => {
+      const ts = threadsMap[id]?.timestamp ?? 0;
+      if (ts >= todayStart) buckets[0].ids.push(id);
+      else if (ts >= thisWeekStart) buckets[1].ids.push(id);
+      else if (ts >= lastWeekStart) buckets[2].ids.push(id);
+      else if (ts >= thisMonthStart) buckets[3].ids.push(id);
+      else buckets[4].ids.push(id);
+    });
+
+    return buckets.filter((b) => b.ids.length > 0);
+  }, [deduplicatedThreadIds, threadsMap]);
+
+  // Last valid thread ID for the infinite-scroll observer
+  const lastValidThreadId = useMemo(() => {
     for (let i = deduplicatedThreadIds.length - 1; i >= 0; i--) {
-      if (threadsMap[deduplicatedThreadIds[i]]) {
-        return i;
-      }
+      if (threadsMap[deduplicatedThreadIds[i]]) return deduplicatedThreadIds[i];
     }
-    return -1;
+    return null;
   }, [deduplicatedThreadIds, threadsMap]);
 
   return (
     <>
       {/* <ThreadListToolbar className="absolute left-2 top-2 z-50" /> */}
       <ScrollArea onScroll={onScroll} className="flex-1" id="thread-list">
-        <div className="flex h-full w-full flex-col">
-          {deduplicatedThreadIds.map((threadId, index) => (
-            <ThreadListItem
-              key={threadId}
-              threadId={threadId}
-              onClick={handleItemClick}
-              ref={index === lastValidThreadIndex ? lastThreadElementRef : null}
-              variant={preference.appearance.density}
-            />
+        <div className="flex h-full w-full flex-col pt-2">
+          {groupedThreads.map((group) => (
+            <div key={group.label}>
+              <div className="px-[10%] pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                {group.label}
+              </div>
+              {group.ids.map((threadId) => (
+                <MemoizedThreadItem
+                  key={threadId}
+                  threadId={threadId}
+                  onClick={handleItemClick}
+                  ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
+                  density={preference.appearance.density}
+                />
+              ))}
+            </div>
           ))}
           {!hasMore && loadingStatus === 'DONE' && !aggregatedSyncState.isSyncing && (
             <div className="my-4 py-8 text-center text-sm text-muted-foreground">

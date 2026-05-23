@@ -69,7 +69,7 @@ export const ThreadListDenseItem = React.memo(
       const memoizedSearchQuery = useCallback(searchNewQuery, [searchNewQuery]);
 
       const { labelsMapByAccount } = useLabelAtom();
-      const { threadsMap, selectedThreads } = useThreadAtom();
+      const { threadsMap, selectedThreads, setSelectedThreads } = useThreadAtom();
       const containerRef = useRef<HTMLDivElement | null>(null);
       const itemRef = useRef<HTMLDivElement | null>(null);
       const executeCommand = useExecuteCommand();
@@ -249,7 +249,7 @@ export const ThreadListDenseItem = React.memo(
           tabIndex={0}
           role="button"
           className={cn(
-            'relative transition-opacity duration-200',
+            'relative mx-[10%] rounded-md transition-opacity duration-200',
             'bg-card hover:bg-muted/60 dark:bg-card dark:hover:bg-muted/40',
             currentThread && !isUnread && 'text-muted-foreground',
             selectedThreads.includes(threadId) &&
@@ -260,22 +260,51 @@ export const ThreadListDenseItem = React.memo(
           )}
         >
           {!currentThread || !isRendering ? (
-            <div className="h-[42px] transition-[height] duration-200 ease-bouncy-in-out" />
+            <div className="h-[36px] transition-[height] duration-200 ease-bouncy-in-out" />
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
-              {isUnread && (
-                <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
-              )}
-              <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
+              <div className="relative">
+                {isUnread && (
+                  <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
+                )}
+                <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
                 {/* Newton dense row: single line, narrower sender column
                     (w-36) compared to compact (w-44), tighter vertical
                     padding (py-2). No avatar in this variant. */}
                 <div
                   className={cn(
-                    'flex items-center gap-4 border-b border-border/20 px-8 py-2.5',
-                    selectedThreads.includes(threadId) && 'pl-[calc(2rem-3px)]'
+                    'flex items-center gap-3 border-b border-border/40 px-3 py-1.5',
+                    selectedThreads.includes(threadId) && 'pl-[calc(0.75rem-3px)]'
                   )}
                 >
+                  {/* Hover checkbox */}
+                  <button
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setSelectedThreads((prev) =>
+                        prev.includes(threadId)
+                          ? prev.filter((id) => id !== threadId)
+                          : [...prev, threadId]
+                      );
+                    }}
+                    className={cn(
+                      'flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-opacity duration-150',
+                      selectedThreads.includes(threadId)
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'
+                    )}
+                  >
+                    <MonoIcon
+                      type={selectedThreads.includes(threadId) ? 'CheckCircle' : 'Circle'}
+                      className={cn(
+                        'h-4 w-4',
+                        selectedThreads.includes(threadId) ? 'text-accent' : 'text-muted-foreground'
+                      )}
+                    />
+                  </button>
+
                   {/* Avatar */}
                   <RecipientAvatar
                     className="h-8 w-8 shrink-0"
@@ -283,14 +312,14 @@ export const ThreadListDenseItem = React.memo(
                   />
 
                   {/* Sender column */}
-                  <div className="flex min-h-6 w-32 shrink-0 items-center gap-2 overflow-hidden">
+                  <div className="flex w-32 shrink-0 items-center gap-2 overflow-hidden">
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <span
                         className={cn(
-                          'block truncate text-[14px] tracking-tight',
+                          'block truncate text-[13px] tracking-tight',
                           isUnread
-                            ? 'font-semibold text-foreground'
-                            : 'font-medium text-muted-foreground'
+                            ? 'font-bold text-foreground'
+                            : 'font-semibold text-muted-foreground'
                         )}
                       >
                         {renderSenderNames()}
@@ -307,7 +336,7 @@ export const ThreadListDenseItem = React.memo(
                   <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
                     <span
                       className={cn(
-                        'max-w-[45%] shrink-0 truncate text-[14px] tracking-tight',
+                        'max-w-[45%] shrink-0 truncate text-[13px] tracking-tight',
                         isUnread
                           ? 'font-semibold text-foreground'
                           : 'font-medium text-foreground/80'
@@ -425,6 +454,7 @@ export const ThreadListDenseItem = React.memo(
                     </ScrollArea>
                   </div>
                 )}
+                </div>
               </div>
             </ThreadItemContextMenu>
           )}
