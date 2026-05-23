@@ -202,11 +202,16 @@ const ThreadSelectionToast = () => {
   useEffect(() => {
     if (selectedThreads.length >= 2) {
       // Show toast with actions when 2 or more threads are selected
-      toast(<div className="w-80 flex-1 animate-in slide-in-from-bottom-4 fade-in duration-200">{renderToastContent()}</div>, {
-        id: 'thread-selection-toast',
-        duration: Infinity, // Keep it visible until dismissed
-        position: 'bottom-center'
-      });
+      toast(
+        <div className="w-80 flex-1 duration-200 animate-in fade-in slide-in-from-bottom-4">
+          {renderToastContent()}
+        </div>,
+        {
+          id: 'thread-selection-toast',
+          duration: Infinity, // Keep it visible until dismissed
+          position: 'bottom-center'
+        }
+      );
     } else {
       // Dismiss toast when fewer than 2 threads are selected
       toast.dismiss('thread-selection-toast');

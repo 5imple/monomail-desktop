@@ -178,7 +178,7 @@ class AppWindow extends BrowserWindow {
       minHeight,
       show: false,
       autoHideMenuBar: true,
-      titleBarStyle: 'hidden',
+      titleBarStyle: 'hiddenInset',
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
         sandbox: false,
@@ -187,7 +187,6 @@ class AppWindow extends BrowserWindow {
       // backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackgroundColor : lightBackgroundColor,
       vibrancy: 'fullscreen-ui',
       visualEffectState: 'followWindow',
-      trafficLightPosition: { x: 12, y: 16 },
       ...options
     };
 

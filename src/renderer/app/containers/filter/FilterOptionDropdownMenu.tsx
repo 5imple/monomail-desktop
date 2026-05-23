@@ -154,7 +154,10 @@ const FilterOptionDropdownMenu = React.memo(() => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuPortal>
-        <DropdownMenuContent align="end" className="no-drag dark mr-2 min-w-56 origin-top-right data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 duration-150">
+        <DropdownMenuContent
+          align="end"
+          className="no-drag dark mr-2 min-w-56 origin-top-right duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1"
+        >
           {/* Section for active filters */}
           {activeFilterCategories.length > 0 && (
             <>
@@ -169,9 +172,7 @@ const FilterOptionDropdownMenu = React.memo(() => {
                 />
               ))}
 
-              {inactiveFilterCategories.length > 0 && (
-                <DropdownMenuSeparator className="my-1" />
-              )}
+              {inactiveFilterCategories.length > 0 && <DropdownMenuSeparator className="my-1" />}
             </>
           )}
 
