@@ -388,6 +388,7 @@ export const ThreadListCozyItem = React.memo(
                 <RecipientAvatar
                   className="h-8 w-8 shrink-0"
                   recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
+                  accountId={currentThread.accountId}
                 />
 
                 {/* Sender — fixed column so subject always starts at the same x */}

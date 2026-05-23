@@ -8,100 +8,163 @@ import { FC, useEffect, useState, useRef } from 'react';
 interface RecipientAvatarProps {
   className?: string;
   recipient: MonoRecipient;
+  accountId?: string;
 }
 
-const CACHE_DURATION_MS = 1 * 60 * 60 * 1000; // 1 hour
-const imageCache = new LRUCache<string, HTMLImageElement>({
-  max: 100, // Maximum number of items
-  ttl: CACHE_DURATION_MS // Time-to-live for cache entries
+// Cache resolved photo URLs keyed by email — null means "no People API photo, use fallback"
+const photoUrlCache = new LRUCache<string, string | null>({
+  max: 500,
+  ttl: 24 * 60 * 60 * 1000
 });
 
-const RecipientAvatar: FC<RecipientAvatarProps> = ({ className, recipient }) => {
+// Cache loaded <img> elements for the final resolved URL
+const imageCache = new LRUCache<string, HTMLImageElement>({
+  max: 200,
+  ttl: 60 * 60 * 1000
+});
+
+async function fetchContactPhotoUrl(email: string, accountId: string): Promise<string | null> {
+  if (photoUrlCache.has(email)) return photoUrlCache.get(email)!;
+
+  try {
+    const bridge = (window as any).electronBridge;
+    if (!bridge?.getGoogleAccountToken) return null;
+
+    const tokenResult = await bridge.getGoogleAccountToken(accountId);
+    if (!tokenResult?.ok) return null;
+
+    const url =
+      `https://people.googleapis.com/v1/people:searchContacts` +
+      `?query=${encodeURIComponent(email)}&readMask=photos,emailAddresses&pageSize=1&sources=READ_SOURCE_TYPE_CONTACT&sources=READ_SOURCE_TYPE_DOMAIN_CONTACT`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${tokenResult.accessToken}`, Accept: 'application/json' }
+    });
+
+    if (!res.ok) {
+      photoUrlCache.set(email, null);
+      return null;
+    }
+
+    const data = await res.json();
+    const person = data.results?.[0]?.person;
+    // Prefer non-default (real) photos; skip the grey silhouette default
+    const photo = person?.photos?.find((p: any) => !p.default) ?? null;
+    const photoUrl: string | null = photo?.url ?? null;
+
+    photoUrlCache.set(email, photoUrl);
+    return photoUrl;
+  } catch {
+    photoUrlCache.set(email, null);
+    return null;
+  }
+}
+
+function loadImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+const RecipientAvatar: FC<RecipientAvatarProps> = ({ className, recipient, accountId }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [inView, setInView] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Create an Intersection Observer to detect when the avatar is in view
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
           setInView(true);
-          // Once we've detected it's in view, we can disconnect the observer
           observer.disconnect();
         }
       },
-      {
-        rootMargin: '100px', // Load images 100px before they come into view
-        threshold: 0.1
-      }
+      { rootMargin: '200px', threshold: 0 }
     );
-
-    // Start observing the avatar element
-    if (avatarRef.current) {
-      observer.observe(avatarRef.current);
-    }
-
-    // Clean up the observer when component unmounts
-    return () => {
-      observer.disconnect();
-    };
+    if (avatarRef.current) observer.observe(avatarRef.current);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    // Only load the image when the avatar is in view
-    if (!inView) return;
+    if (!inView || !recipient.email) return;
 
-    const loadImage = async () => {
-      // Check if image is already in cache
-      if (imageCache.has(recipient.email)) {
-        setImageElement(imageCache.get(recipient.email)!);
-        setImageLoaded(true);
+    let cancelled = false;
+
+    const resolve = async () => {
+      const cacheKey = recipient.email;
+
+      // Already have a loaded image for this email
+      if (imageCache.has(cacheKey)) {
+        const cached = imageCache.get(cacheKey)!;
+        if (!cancelled) {
+          setImageSrc(cached.src);
+          setImageLoaded(true);
+        }
         return;
       }
 
-      // If not cached, load and cache the image
-      const img = new Image();
-      img.src = getFaviconFromEmail(recipient.email);
+      // 1. Try Google People API photo
+      if (accountId) {
+        const photoUrl = await fetchContactPhotoUrl(recipient.email, accountId);
+        if (!cancelled && photoUrl) {
+          try {
+            const img = await loadImg(photoUrl);
+            imageCache.set(cacheKey, img);
+            setImageSrc(img.src);
+            setImageLoaded(true);
+            return;
+          } catch {
+            // photo URL didn't load — fall through to favicon
+          }
+        }
+      }
 
-      img.onload = () => {
-        imageCache.set(recipient.email, img); // Cache the image
-        setImageElement(img); // Set the loaded image
-        setImageLoaded(true);
-      };
+      if (cancelled) return;
 
-      img.onerror = () => {
-        // console.error(`Failed to load image for ${recipient.email}`);
-        setImageLoaded(false);
-      };
+      // 2. Fall back to company logo / favicon
+      const faviconUrl = getFaviconFromEmail(recipient.email);
+      try {
+        const img = await loadImg(faviconUrl);
+        if (!cancelled) {
+          imageCache.set(cacheKey, img);
+          setImageSrc(img.src);
+          setImageLoaded(true);
+        }
+      } catch {
+        // No image — show initials
+      }
     };
 
-    loadImage();
-  }, [recipient.email, inView]);
+    resolve();
+    return () => { cancelled = true; };
+  }, [recipient.email, accountId, inView]);
 
   return (
     <Avatar className={cn('rounded-full', className)} ref={avatarRef}>
       <div
         className={cn(
-          'absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center rounded-md bg-gradient-to-t from-muted-low to-secondary text-xs transition-opacity dark:from-background dark:to-secondary',
+          'absolute inset-0 flex items-center justify-center rounded-md bg-gradient-to-t from-muted-low to-secondary text-xs transition-opacity dark:from-background dark:to-secondary',
           imageLoaded ? 'opacity-0' : 'opacity-100'
         )}
       >
-        {recipient && recipient.name.length > 0
+        {recipient.name?.length > 0
           ? recipient.name.slice(0, 1).toUpperCase()
           : recipient.email.slice(0, 1).toUpperCase()}
       </div>
-      {imageElement && inView ? (
+      {imageSrc && (
         <AvatarImage
           className={cn(
-            'select-none bg-gradient-to-t from-muted-low to-secondary object-contain transition-opacity duration-300 dark:from-background dark:to-secondary',
+            'select-none object-cover transition-opacity duration-300',
             imageLoaded ? 'opacity-100' : 'opacity-0'
           )}
-          src={imageElement.src} // Use cached image source
+          src={imageSrc}
           alt={recipient.name?.slice(0, 1)}
         />
-      ) : null}
+      )}
     </Avatar>
   );
 };

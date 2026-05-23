@@ -320,6 +320,7 @@ export const ThreadListDenseItem = React.memo(
                     <RecipientAvatar
                       className="h-8 w-8 shrink-0"
                       recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
+                      accountId={currentThread.accountId}
                     />
 
                     {/* Sender column */}
