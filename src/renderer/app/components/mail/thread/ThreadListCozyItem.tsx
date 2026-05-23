@@ -545,25 +545,24 @@ export const ThreadListCozyItem = React.memo(
                         type="button"
                         tabIndex={-1}
                         aria-label="Done"
-                        className="flex h-7 items-center justify-center gap-1 rounded-md px-2 text-muted-foreground transition-colors duration-100 hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           executeCommand('THREAD_DONE', { threadIds: [currentThread.id] });
                         }}
                       >
-                        <MonoIcon type="CheckCircle" size={18} fill />
-                        <span className="text-xs font-medium">Done</span>
+                        <MonoIcon type="Check" size={18} />
                       </button>
                       <SnoozeButton
                         thread={currentThread}
-                        buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-foreground/10 hover:text-foreground"
+                        buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
                       />
                       <button
                         type="button"
                         tabIndex={-1}
                         aria-label="Delete"
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-destructive/10 hover:text-destructive"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
