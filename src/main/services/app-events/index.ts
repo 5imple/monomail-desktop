@@ -124,26 +124,38 @@ export function registerAppEventHandlers() {
       const backendWs = backendOrigin
         ? backendOrigin.replace(/^https?:\/\//, 'wss://').replace(/^http:/, 'ws:')
         : '';
+      // Derive ws:// from apiOrigin for Vite HMR WebSocket in dev mode.
+      const apiWs = apiOrigin
+        ? apiOrigin.replace(/^https?:\/\//, 'wss://').replace(/^http:/, 'ws:')
+        : '';
       const connectAllow = [
         "'self'",
         'blob:',
         'data:',
-        homepage ? `https://${homepage}` : '',
+        // homepage is already a full URL (e.g. "http://localhost:3030") — use as-is
+        homepage || '',
         apiOrigin || '',
+        apiWs,
         backendOrigin,
         backendWs,
         publicDomain,
         'https://*.amplitude.com',
         'https://api.mixpanel.com',
-        'https://*.paddle.com'
+        'https://*.paddle.com',
+        // Vite HMR WebSocket in dev mode
+        !app.isPackaged ? 'ws://localhost:*' : ''
       ]
         .filter(Boolean)
         .join(' ');
 
+      // In dev mode relax script-src so Vite HMR and inline React work.
+      const scriptSrc = !app.isPackaged
+        ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amplitude.com"
+        : "script-src 'self' https://*.amplitude.com";
+
       const csp = [
         "default-src 'self'",
-        // `googletagmanager.com` removed alongside Firebase Analytics.
-        "script-src 'self' https://*.amplitude.com",
+        scriptSrc,
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com data:",
         // email images are sender-controlled hosts — keep open but stripped

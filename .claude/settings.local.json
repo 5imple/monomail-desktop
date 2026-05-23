@@ -9,7 +9,16 @@
       "Bash(node -e ' *)",
       "Bash(sudo chown *)",
       "Bash(dscl . list /Users)",
-      "Bash(git -C /Users/simple/Desktop/Projects/monomail-desktop status)"
+      "Bash(git -C /Users/simple/Desktop/Projects/monomail-desktop status)",
+      "Bash(node *)",
+      "Bash(pkill -f \"electron-vite dev\")",
+      "Bash(pkill -f \"Electron\")",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s \"http://localhost:5173/@vite/env\")",
+      "Bash(curl -s \"http://localhost:5173/src/main/api/apiClient.ts\")",
+      "Bash(curl -s \"http://localhost:5173/@fs/Users/simple/Desktop/Projects/monomail-desktop/src/main/api/apiClient.ts\")",
+      "Bash(curl -sI \"http://localhost:5173/\")",
+      "Bash(xargs kill -9)"
     ]
   }
 }

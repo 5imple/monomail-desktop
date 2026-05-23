@@ -174,6 +174,8 @@ const STUB_PREFERENCE = {
 const snoozes = new Map();
 /** @type {Map<string, any>} */
 const schedules = new Map();
+/** @type {Map<string, any>} */
+const mockSpaces = new Map();
 /** @type {Set<import('ws').WebSocket>} */
 const wsClients = new Set();
 
@@ -560,26 +562,64 @@ const server = createServer(async (req, res) => {
     if (method === 'GET' && apiPath.startsWith('/label')) {
       return send(res, 200, { labels: [] });
     }
-    if (method === 'GET' && apiPath.startsWith('/space')) {
-      return send(res, 200, { spaces: [] });
+    if (method === 'GET' && (apiPath === '/mono/spaces' || apiPath === '/spaces')) {
+      return send(res, 200, Array.from(mockSpaces.values()));
+    }
+    if (method === 'POST' && apiPath === '/mono/spaces') {
+      const body = await readJson(req).catch(() => ({}));
+      const id = `space-${randomBytes(4).toString('hex')}`;
+      const space = {
+        id,
+        name: body.name || 'My Space',
+        color: body.color || '#4f46e5',
+        icon: body.icon || '🏠',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        pinnedEmails: [],
+        accountUids: body.accountUids || STUB_ACCOUNTS.map((a) => a.uid),
+        default: mockSpaces.size === 0
+      };
+      mockSpaces.set(id, space);
+      return send(res, 200, space);
+    }
+    if (method === 'GET' && apiPath.startsWith('/mono/spaces/')) {
+      const id = apiPath.split('/')[3];
+      const space = mockSpaces.get(id);
+      if (!space) return send(res, 404, { error: 'Space not found' });
+      return send(res, 200, space);
+    }
+    if (method === 'PATCH' && apiPath.startsWith('/mono/spaces/')) {
+      const id = apiPath.split('/')[3];
+      const existing = mockSpaces.get(id);
+      if (!existing) return send(res, 404, { error: 'Space not found' });
+      const body = await readJson(req).catch(() => ({}));
+      const updated = { ...existing, ...body, id, updatedAt: new Date().toISOString() };
+      mockSpaces.set(id, updated);
+      return send(res, 200, updated);
     }
     if (method === 'GET' && apiPath.startsWith('/mono/contact')) {
       return send(res, 200, { contacts: [] });
     }
+    if (method === 'GET' && apiPath.startsWith('/mono/share')) {
+      return send(res, 200, {});
+    }
     if (method === 'GET' && apiPath.startsWith('/mono/pin')) {
       return send(res, 200, { pinnedEmails: [] });
     }
-    if (method === 'GET' && apiPath.startsWith('/bookmark')) {
-      return send(res, 200, { bookmarks: [] });
+    if (method === 'GET' && apiPath.startsWith('/mono/bookmark')) {
+      return send(res, 200, { bookmarks: [], total: 0 });
     }
-    if (method === 'GET' && apiPath.startsWith('/signature')) {
-      return send(res, 200, { signatures: [] });
+    if (method === 'GET' && apiPath.startsWith('/mono/signature')) {
+      return send(res, 200, []);
     }
-    if (method === 'GET' && apiPath.startsWith('/template')) {
-      return send(res, 200, { templates: [] });
+    if (method === 'GET' && apiPath.startsWith('/mono/template')) {
+      return send(res, 200, []);
     }
-    if (method === 'GET' && apiPath.startsWith('/tracking')) {
-      return send(res, 200, { events: [] });
+    if (method === 'GET' && apiPath.startsWith('/track/')) {
+      return send(res, 200, { events: [], histories: [] });
+    }
+    if (method === 'GET' && apiPath.startsWith('/mail/label')) {
+      return send(res, 200, { labels: [] });
     }
     if (method === 'GET' && apiPath.startsWith('/ai-filter')) {
       return send(res, 200, { filters: [] });
@@ -589,6 +629,9 @@ const server = createServer(async (req, res) => {
     }
     if (method === 'POST' && apiPath.startsWith('/gmail/stop')) {
       return send(res, 200, {});
+    }
+    if (method === 'POST' && apiPath === '/mail/watch') {
+      return send(res, 200, { ok: true });
     }
 
     // ---------- P8 Later Queue endpoints ----------------------------------

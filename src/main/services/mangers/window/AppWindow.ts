@@ -229,6 +229,10 @@ class AppWindow extends BrowserWindow {
 
     this.installNavigationGuards();
 
+    if (is.dev) {
+      this.webContents.openDevTools({ mode: 'detach' });
+    }
+
     // Try loading from remote first, with fallback to local
     this.loadContent();
 
