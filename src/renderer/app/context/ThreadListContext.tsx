@@ -22,7 +22,13 @@ const ThreadListContext = createContext<ThreadListContextType | undefined>(undef
 ThreadListContext.displayName = 'ThreadListContext';
 
 export function ThreadListProvider({ children }: { children: React.ReactNode }) {
-  const { threadsMap, setThreadIds } = useThreadAtom();
+  const {
+    threadsMap,
+    setThreadIds,
+    threadIds: rawThreadIds,
+    activeFilters,
+    applyFilters
+  } = useThreadAtom();
   const {
     fetchThreadsHandler,
     threadIds,
@@ -33,6 +39,15 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
   } = useThreadFetchHandler();
 
   const { loadingStatus } = useThreadListAtom();
+
+  // Sync the rendered filteredThreadIds from the raw threadIds + active filters.
+  // This MUST live in the always-mounted provider, not in FilterOptionDropdownMenu:
+  // that dropdown is only rendered when the list is non-empty, so hosting the sync
+  // there deadlocked an empty list (no sync runs → filteredThreadIds stays empty →
+  // list never populates).
+  useEffect(() => {
+    applyFilters();
+  }, [activeFilters, rawThreadIds]);
 
   // Resort threadIds when threadsMap changes
   useEffect(() => {

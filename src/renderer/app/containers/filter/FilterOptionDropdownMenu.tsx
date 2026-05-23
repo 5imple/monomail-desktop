@@ -9,9 +9,8 @@ import {
   DropdownMenuTrigger
 } from '@/renderer/app/components/ui/dropdown-menu';
 import { cn } from '@/renderer/app/lib/utils';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { FilterType } from '@/renderer/app/types';
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import FilterOption from './FilterOption';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -40,13 +39,13 @@ interface FilterOptionDropdownMenuProps {
 const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
   ({ className, showLabel = false }) => {
     const { t } = useTranslation();
-    const { applyFilters, threadIds } = useThreadAtom();
     const { activeFilters, setActiveFilters } = useThreadFilter();
     const { resetThreadsArray, fetchThreadsHandler } = useThreadList();
 
-    useEffect(() => {
-      applyFilters();
-    }, [activeFilters, threadIds]);
+    // The threadIds → filteredThreadIds sync used to live here, but this
+    // component is only mounted when the list is non-empty, which deadlocked an
+    // empty list (no sync → never populates). It now lives in ThreadListProvider,
+    // which is always mounted.
 
     // Define all available filter options
     const allFilterOptions: FilterOptionConfig[] = [
