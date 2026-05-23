@@ -55,9 +55,9 @@ const SidebarCollapseButton: FC<SidebarCollapseButtonProps> = ({ className }) =>
       typeVariant="icon"
       tooltip={tooltipText}
       shortcut="MOD+\"
-      sizeVariant="sm"
+      sizeVariant="xs"
     >
-      <MonoIcon type={iconType} className="text-muted-foreground" />
+      <MonoIcon type={iconType} className="h-3.5 w-3.5 text-muted-foreground" />
     </Button>
   );
 };

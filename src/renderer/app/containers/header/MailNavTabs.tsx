@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import MonoIcon, { type MonoIconType } from '@/renderer/app/components/icons/icons';
 import { cn } from '@/renderer/app/lib/utils';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -8,6 +8,7 @@ type MailNavItem = {
   id: 'inbox' | 'snooze' | 'starred' | 'sent';
   label: string;
   icon: MonoIconType;
+  shortcut: string;
 } & ({ query: string; layout?: never } | { query?: never; layout: 'LATER' });
 
 const INBOX_CATEGORY_QUERIES = new Set([
@@ -19,10 +20,10 @@ const INBOX_CATEGORY_QUERIES = new Set([
 ]);
 
 const NAV_ITEMS: MailNavItem[] = [
-  { id: 'inbox', label: 'Inbox', icon: 'Inbox' as const, query: 'category:primary' },
-  { id: 'snooze', label: 'Snooze', icon: 'Clock' as const, layout: 'LATER' as const },
-  { id: 'starred', label: 'Starred', icon: 'Star' as const, query: 'is:starred' },
-  { id: 'sent', label: 'Sent', icon: 'Send' as const, query: 'in:sent' }
+  { id: 'inbox', label: 'Inbox', icon: 'Inbox' as const, query: 'category:primary', shortcut: 'G I' },
+  { id: 'snooze', label: 'Snooze', icon: 'Clock' as const, layout: 'LATER' as const, shortcut: 'G S' },
+  { id: 'starred', label: 'Starred', icon: 'Star' as const, query: 'is:starred', shortcut: 'G T' },
+  { id: 'sent', label: 'Sent', icon: 'Send' as const, query: 'in:sent', shortcut: 'G E' }
 ];
 
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -40,6 +41,7 @@ const queryMatchesInbox = (normalizedQuery: string) => {
 const MailNavTabs = React.memo(() => {
   const { activeLayout, globalSearchQuery, searchNewQuery, setActiveLayout } = useGlobalAtom();
   const { threadsMap } = useThreadAtom();
+  const [loadingTabId, setLoadingTabId] = useState<string | null>(null);
 
   const inboxUnreadCount = useMemo(
     () =>
@@ -63,40 +65,52 @@ const MailNavTabs = React.memo(() => {
     return null;
   }, [activeLayout, globalSearchQuery]);
 
+  useEffect(() => {
+    if (activeId) setLoadingTabId(null);
+  }, [activeId]);
+
+  const handleTabClick = useCallback((item: MailNavItem) => {
+    setLoadingTabId(item.id);
+    setTimeout(() => setLoadingTabId(null), 1500);
+    if (item.layout) {
+      setActiveLayout(item.layout);
+    } else {
+      searchNewQuery(item.query, undefined, false);
+    }
+  }, [setActiveLayout, searchNewQuery]);
+
   return (
     <div className="flex items-center gap-0.5">
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeId;
+        const isLoading = item.id === loadingTabId && !isActive;
         return (
           <button
             key={item.id}
             type="button"
-            onClick={() => {
-              if (item.layout) {
-                setActiveLayout(item.layout);
-                return;
-              }
-
-              searchNewQuery(item.query, undefined, false);
-            }}
+            title={`${item.label} (${item.shortcut})`}
+            onClick={() => handleTabClick(item)}
             className={cn(
-              'no-drag flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors',
+              'no-drag relative flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[13px] transition-colors',
               isActive
-                ? 'bg-foreground/[0.13] font-semibold text-foreground'
-                : 'font-medium text-muted-foreground/90 hover:bg-foreground/[0.06] hover:text-foreground'
+                ? 'bg-foreground/[0.10] font-normal text-foreground'
+                : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
             )}
           >
-            <MonoIcon type={item.icon} className="h-3.5 w-3.5 shrink-0" />
+            <MonoIcon type={item.icon} className="h-3 w-3 shrink-0" />
             <span>{item.label}</span>
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span
                 className={cn(
-                  'min-w-[1ch] font-mono text-xs tabular-nums',
+                  'min-w-[1ch] text-xs tabular-nums',
                   isActive ? 'text-foreground' : 'text-muted-foreground'
                 )}
               >
                 {inboxUnreadCount}
               </span>
+            )}
+            {isLoading && (
+              <span className="absolute bottom-0.5 left-3 right-3 h-[2px] animate-pulse rounded-full bg-accent" />
             )}
           </button>
         );

@@ -1,14 +1,11 @@
 import draftApi from '@/main/api/draft/draftApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import UserAvatar from '@/renderer/app/components/avatar/UserAvatar';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Alert, AlertDescription } from '@/renderer/app/components/ui/alert';
 import { Button } from '@/renderer/app/components/ui/button';
-import Loader from '@/renderer/app/components/ui/loader';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import OfflineIndicator from '@/renderer/app/components/OfflineIndicator';
 import FilterOptionDropdownMenu from '@/renderer/app/containers/filter/FilterOptionDropdownMenu';
-import InboxFilterTabs from '@/renderer/app/containers/filter/InboxFilterTabs';
 import PinHeader from '@/renderer/app/containers/header/PinHeader';
 import ThreadSelectionToast from '@/renderer/app/containers/list/ThreadSelectionToast';
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
@@ -35,14 +32,13 @@ interface ListPanelHeaderProps {
 const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
   ({ isScrolled }, ref) => {
     const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
-    const { globalSearchQuery, calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
-    const { member, accounts } = useAuth();
+    const { globalSearchQuery } = useGlobalAtom();
+    const { accounts } = useAuth();
     const { t } = useTranslation();
 
     const { fetchAndSetTrackingHistories } = useTrackingAtom();
     // Use our context hook to get fetchThreadsHandler and isLoading
-    const { fetchThreadsHandler, resetThreadsArray, loadingStatus } = useThreadList();
-    const { aggregatedSyncState } = useSyncHistory();
+    const { fetchThreadsHandler, resetThreadsArray } = useThreadList();
     const { updateDraft } = useDraftAtom();
     const { openDialog } = useDialogs();
     const { labelsMapByAccount } = useLabelAtom();
@@ -239,43 +235,12 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
           </div>
 
           <div className="no-drag mb-1 ml-auto flex items-center gap-1.5">
-            <Button
-              disabled={loadingStatus === 'LOADING'}
-              variant={'ghost'}
-              sizeVariant={'sm'}
-              className="mb-1 text-muted-foreground hover:text-foreground"
-              onClick={handleRefresh}
-              tooltip={t('header.list.refresh') || 'Refresh'}
-            >
-              {aggregatedSyncState.isSyncing || loadingStatus === 'LOADING' ? (
-                <Loader />
-              ) : (
-                <MonoIcon type={'RotateCcw'} className="h-3.5 w-3.5" />
-              )}
-            </Button>
             <OfflineIndicator />
-
-            <UserAvatar user={member} />
-
-            <Button
-              onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
-              variant="ghost"
-              typeVariant="icon"
-              tooltip={
-                calendarDisplayPanel ? t('calendar.hide_calendar') : t('calendar.show_calendar')
-              }
-              sizeVariant="sm"
-            >
-              <MonoIcon type="GoogleCalendar" className="text-muted-foreground" />
-            </Button>
-
-            <FilterOptionDropdownMenu />
           </div>
         </div>
-        {/* Newton filter tabs — quick All / Unread / With attachments
-            shortcuts under the title. The full FilterOptionDropdownMenu
-            stays in the toolbar above for advanced filtering. */}
-        <InboxFilterTabs />
+        <div className="no-drag flex items-center justify-end px-[10%] pb-1">
+          <FilterOptionDropdownMenu />
+        </div>
         <div id="pin-header" className={cn('no-drag flex items-center px-6')}>
           <PinHeader />
         </div>

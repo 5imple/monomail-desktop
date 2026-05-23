@@ -122,7 +122,7 @@ const AppSidebarContainer: FC<AppSidebarContainerProps> = ({ className }) => {
           onMouseLeave={handleHoverEnd}
         >
           {/* Visual hint line that appears on hover */}
-          <div className="absolute left-0 top-1/2 h-8 w-0.5 -translate-y-1/2 bg-border opacity-0 transition-opacity duration-200 group-hover:opacity-50" />
+          <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-accent opacity-0 transition-opacity duration-200 group-hover:opacity-70" />
         </div>
       )}
 

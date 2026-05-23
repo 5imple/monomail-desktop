@@ -57,11 +57,12 @@ DraggableSender.displayName = 'DraggableSender';
 interface ThreadListDenseItemProps {
   threadId: string;
   onClick: (e: React.MouseEvent, id: string) => void;
+  index?: number;
 }
 
 export const ThreadListDenseItem = React.memo(
   React.forwardRef<HTMLDivElement, ThreadListDenseItemProps>(
-    ({ threadId, onClick }, forwardedRef) => {
+    ({ threadId, onClick, index = 0 }, forwardedRef) => {
       const [isRendering, setIsRendering] = useState(false);
       const [opacity, setOpacity] = useState(0);
       const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
@@ -72,10 +73,33 @@ export const ThreadListDenseItem = React.memo(
       const { activeThreadId, threadsMap, selectedThreads, setSelectedThreads } = useThreadAtom();
       const containerRef = useRef<HTMLDivElement | null>(null);
       const itemRef = useRef<HTMLDivElement | null>(null);
+      const hasBeenVisibleRef = useRef(false);
       const executeCommand = useExecuteCommand();
 
       // Use direct access to thread instead of memoizing to ensure we always have latest data
       const currentThread = threadsMap[threadId];
+
+      const senderAvatarRecipient = useMemo(() => {
+        if (!currentThread) return { email: '', name: '' };
+
+        const latestSender = [...currentThread.items]
+          .reverse()
+          .find(
+            (item): item is MonoMessage => item.type === 'message' && !!(item as MonoMessage).from
+          )?.from;
+
+        return latestSender ?? currentThread.from?.[0] ?? { email: '', name: '' };
+      }, [currentThread]);
+
+      const senderAccountImageSrc = useMemo(() => {
+        const senderEmail = senderAvatarRecipient.email.trim().toLowerCase();
+        if (!senderEmail) return null;
+
+        return (
+          accounts.find((account) => account.email.trim().toLowerCase() === senderEmail)
+            ?.profileImageUrl ?? null
+        );
+      }, [accounts, senderAvatarRecipient.email]);
 
       const currentAccount = useMemo(
         () => (currentThread ? getAccountByUid(currentThread.accountId) : null),
@@ -169,6 +193,10 @@ export const ThreadListDenseItem = React.memo(
         }
       }, [isRendering]);
 
+      useEffect(() => {
+        if (opacity === 100) hasBeenVisibleRef.current = true;
+      }, [opacity]);
+
       const handleClick = useCallback(
         (e: React.MouseEvent | React.KeyboardEvent) => {
           if (
@@ -249,17 +277,23 @@ export const ThreadListDenseItem = React.memo(
           aria-pressed={isChecked}
           data-thread={threadId}
           data-thread-focused={isActive}
+          style={{
+            transitionDelay:
+              opacity === 0 && !hasBeenVisibleRef.current ? `${Math.min(index, 12) * 20}ms` : '0ms'
+          }}
           data-thread-selected={isChecked}
           tabIndex={0}
           role="button"
           className={cn(
-            'group relative mx-[10%] rounded-md transition-opacity duration-200',
-            'bg-card hover:bg-muted/60 dark:bg-card dark:hover:bg-muted/40',
+            'group relative mx-[10%] rounded-md transition-colors transition-opacity duration-150 duration-200 ease-out',
+            isChecked
+              ? '!bg-foreground/[0.07] ring-1 ring-inset ring-foreground/10 hover:!bg-foreground/[0.07] dark:!bg-foreground/[0.12] dark:ring-foreground/15 dark:hover:!bg-foreground/[0.12]'
+              : isActive
+                ? 'bg-foreground/[0.07] ring-1 ring-inset ring-foreground/10 hover:bg-foreground/[0.07] dark:bg-foreground/[0.12] dark:ring-foreground/15 dark:hover:bg-foreground/[0.12]'
+                : 'bg-card hover:bg-foreground/[0.07] dark:hover:bg-foreground/[0.12]',
             currentThread && !isUnread && 'text-muted-foreground',
-            (isChecked || isActive) &&
-              'bg-accent/10 hover:bg-accent/15 dark:bg-accent/15 dark:hover:bg-accent/20',
             opacity == 0 ? 'opacity-0' : 'opacity-100',
-            'focus-visible:bg-accent/10',
+            'focus-visible:bg-foreground/[0.07] dark:focus-visible:bg-foreground/[0.12]',
             !currentThread && 'hidden'
           )}
         >
@@ -268,18 +302,24 @@ export const ThreadListDenseItem = React.memo(
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
               <div className="relative">
-                {isUnread && (
-                  <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[3px] bg-accent" />
+                {isChecked && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-[3px] left-0 z-20 w-[3px] rounded-r-full bg-muted-foreground/70"
+                  />
+                )}
+                {isUnread && !isChecked && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 z-10 w-1 rounded-r-full bg-accent transition-opacity duration-300"
+                  />
                 )}
                 <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
                   {/* Newton dense row: single line, narrower sender column
                     (w-36) compared to compact (w-44), tighter vertical
                     padding (py-2). No avatar in this variant. */}
                   <div
-                    className={cn(
-                      'flex items-center gap-3 border-b border-border/40 px-3 py-1.5',
-                      (isChecked || isActive) && 'pl-[calc(0.75rem-3px)]'
-                    )}
+                    className={cn('flex items-center gap-3 border-b border-border/40 px-3 py-1.5')}
                   >
                     {/* Hover checkbox */}
                     <button
@@ -294,6 +334,10 @@ export const ThreadListDenseItem = React.memo(
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
+                        if (e.shiftKey) {
+                          onClick(e, threadId);
+                          return;
+                        }
                         setSelectedThreads((prev) =>
                           prev.includes(threadId)
                             ? prev.filter((id) => id !== threadId)
@@ -301,26 +345,36 @@ export const ThreadListDenseItem = React.memo(
                         );
                       }}
                       className={cn(
-                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,opacity,transform] duration-150',
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity duration-150',
                         isChecked
-                          ? 'border-muted-foreground bg-muted-foreground text-background opacity-100 shadow-none'
-                          : 'border-muted-foreground/30 text-muted-foreground/45 opacity-0 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground hover:!opacity-100 focus-visible:!opacity-100 group-hover:opacity-60'
+                          ? 'opacity-100'
+                          : 'opacity-20 hover:!opacity-100 focus-visible:!opacity-100 group-hover:opacity-60'
                       )}
                     >
-                      <MonoIcon
-                        type="Check"
+                      <div
                         className={cn(
-                          isChecked ? 'h-3.5 w-3.5 stroke-[2.1]' : 'h-3 w-3 stroke-[1.8]',
-                          isChecked ? 'opacity-100' : 'opacity-80'
+                          'flex h-5 w-5 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,transform] duration-150',
+                          isChecked
+                            ? 'border-muted-foreground bg-muted-foreground text-background shadow-none'
+                            : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground'
                         )}
-                      />
+                      >
+                        <MonoIcon
+                          type="Check"
+                          className={cn(
+                            isChecked ? 'h-3.5 w-3.5 stroke-[2.1]' : 'h-3 w-3 stroke-[1.8]',
+                            isChecked ? 'opacity-100' : 'opacity-80'
+                          )}
+                        />
+                      </div>
                     </button>
 
                     {/* Avatar */}
                     <RecipientAvatar
                       className="h-8 w-8 shrink-0"
-                      recipient={currentThread.from?.[0] ?? { email: '', name: '' }}
+                      recipient={senderAvatarRecipient}
                       accountId={currentThread.accountId}
+                      preferredImageSrc={senderAccountImageSrc}
                     />
 
                     {/* Sender column */}
@@ -338,7 +392,7 @@ export const ThreadListDenseItem = React.memo(
                         </span>
                       </div>
                       {currentThread.items.length > 1 && (
-                        <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                        <span className="shrink-0 text-[11px] text-muted-foreground/70">
                           {currentThread.items.length}
                         </span>
                       )}
@@ -374,30 +428,7 @@ export const ThreadListDenseItem = React.memo(
                     </div>
 
                     {/* Right metadata cluster */}
-                    <div className="flex shrink-0 items-center gap-2.5">
-                      {currentThread.labelIds.includes('STARRED') && (
-                        <Button
-                          variant={'text'}
-                          typeVariant={'inline'}
-                          sizeVariant={'xs'}
-                          tabIndex={-1}
-                          className={
-                            'text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-600'
-                          }
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            executeCommand('THREAD_UNSTAR', { threadIds: [currentThread.id] });
-                          }}
-                        >
-                          <MonoIcon type={'Star'} className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-
-                      {Object.keys(currentThread.attachments).length > 0 && (
-                        <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground" />
-                      )}
-
+                    <div className="relative flex shrink-0 items-center gap-2">
                       {uniqueLabelIds.length > 0 && (
                         <div className="flex items-center gap-1.5">
                           {uniqueLabelIds.map((labelId, index) => {
@@ -428,9 +459,33 @@ export const ThreadListDenseItem = React.memo(
                         </div>
                       )}
 
-                      <span className="shrink-0 whitespace-nowrap text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {Object.keys(currentThread.attachments).length > 0 && (
+                        <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground/60" />
+                      )}
+
+                      <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-muted-foreground/70 transition-opacity duration-150 group-hover:opacity-0">
                         {formatListDate(currentThread.timestamp)}
                       </span>
+
+                      {/* Hover action bar */}
+                      <div className="absolute right-0 flex items-center gap-2.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          className="text-muted-foreground transition-colors duration-100 hover:text-foreground"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); executeCommand('THREAD_DONE', { threadIds: [currentThread.id] }); }}
+                        >
+                          <MonoIcon type="CheckCircle" className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          className="text-muted-foreground transition-colors duration-100 hover:text-foreground"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); executeCommand('THREAD_TRASH', { threadIds: [currentThread.id] }); }}
+                        >
+                          <MonoIcon type="Trash" className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 

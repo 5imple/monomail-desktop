@@ -14,7 +14,6 @@ import { FilterType } from '@/renderer/app/types';
 import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import FilterOption from './FilterOption';
-import LabelFilterOption from './LabelFilterOption';
 import { Button } from '@/renderer/app/components/ui/button';
 import { useThreadFilter } from '@/renderer/app/store/thread/useThreadFilter';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
@@ -129,11 +128,6 @@ const FilterOptionDropdownMenu = React.memo(() => {
     return allFilterOptions.filter((option) => !isFilterCategoryActive(option.type));
   }, [activeFilters]);
 
-  // Check if label filter is active
-  const isLabelFilterActive = useMemo(() => {
-    return activeFilters.some((filter) => filter.type === 'label');
-  }, [activeFilters]);
-
   const handleClearAll = () => {
     resetThreadsArray();
     setActiveFilters([]);
@@ -160,9 +154,9 @@ const FilterOptionDropdownMenu = React.memo(() => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuPortal>
-        <DropdownMenuContent align="start" className="no-drag dark mr-2 min-w-56">
+        <DropdownMenuContent align="end" className="no-drag dark mr-2 min-w-56 origin-top-right data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 duration-150">
           {/* Section for active filters */}
-          {(activeFilterCategories.length > 0 || isLabelFilterActive) && (
+          {activeFilterCategories.length > 0 && (
             <>
               {activeFilterCategories.map((option) => (
                 <FilterOption
@@ -175,17 +169,14 @@ const FilterOptionDropdownMenu = React.memo(() => {
                 />
               ))}
 
-              {/* Add LabelFilterOption if it's active */}
-              {isLabelFilterActive && <LabelFilterOption />}
-
-              {(inactiveFilterCategories.length > 0 || !isLabelFilterActive) && (
+              {inactiveFilterCategories.length > 0 && (
                 <DropdownMenuSeparator className="my-1" />
               )}
             </>
           )}
 
           {/* Section for inactive filters */}
-          {(inactiveFilterCategories.length > 0 || !isLabelFilterActive) && (
+          {inactiveFilterCategories.length > 0 && (
             <>
               {inactiveFilterCategories.map((option) => (
                 <FilterOption
@@ -197,9 +188,6 @@ const FilterOptionDropdownMenu = React.memo(() => {
                   subOptions={option.subOptions}
                 />
               ))}
-
-              {/* Add LabelFilterOption if it's not active */}
-              {!isLabelFilterActive && <LabelFilterOption />}
             </>
           )}
 

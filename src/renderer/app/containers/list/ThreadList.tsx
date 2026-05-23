@@ -139,6 +139,12 @@ function ThreadList({ onScroll }: ThreadListProps) {
   }, [threadIds]);
 
   // Group threads by time period for section headers
+  const threadIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    deduplicatedThreadIds.forEach((id, i) => map.set(id, i));
+    return map;
+  }, [deduplicatedThreadIds]);
+
   const groupedThreads = useMemo(() => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -177,9 +183,9 @@ function ThreadList({ onScroll }: ThreadListProps) {
   }, [deduplicatedThreadIds, threadsMap]);
 
   return (
-    <>
+    <div className="relative flex-1 min-h-0 overflow-hidden">
       {/* <ThreadListToolbar className="absolute left-2 top-2 z-50" /> */}
-      <ScrollArea onScroll={onScroll} className="flex-1" id="thread-list">
+      <ScrollArea onScroll={onScroll} className="h-full" id="thread-list">
         <div className="flex h-full w-full flex-col pt-2">
           {groupedThreads.map((group) => (
             <div key={group.label}>
@@ -193,11 +199,20 @@ function ThreadList({ onScroll }: ThreadListProps) {
                   onClick={handleItemClick}
                   ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
                   density={preference.appearance.density}
+                  index={threadIndexMap.get(threadId) ?? 0}
                 />
               ))}
             </div>
           ))}
-          {!hasMore && loadingStatus === 'DONE' && !aggregatedSyncState.isSyncing && (
+          {groupedThreads.length === 0 && loadingStatus === 'DONE' && !aggregatedSyncState.isSyncing && (
+            <div className="animate-in fade-in zoom-in-95 flex flex-col items-center justify-center py-24 text-center duration-200">
+              <MonoIcon type="CheckCircle" className="mb-3 h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm font-medium text-muted-foreground">All caught up</p>
+              <p className="mt-1 text-xs text-muted-foreground/60">No emails match the current view</p>
+            </div>
+          )}
+
+          {!hasMore && loadingStatus === 'DONE' && !aggregatedSyncState.isSyncing && groupedThreads.length > 0 && (
             <div className="my-4 py-8 text-center text-sm text-muted-foreground">
               <MonoIcon type={'CheckCircle'} className="mx-auto mb-2" />
               {t('thread_list.up_to_date')}
@@ -222,18 +237,21 @@ function ThreadList({ onScroll }: ThreadListProps) {
           )}
         </div>
       </ScrollArea>
-    </>
+      {(hasMore || loadingStatus === 'LOADING' || aggregatedSyncState.isSyncing) && (
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background to-transparent" />
+      )}
+    </div>
   );
 }
 
 const MemoizedThreadItem = React.forwardRef<
   HTMLDivElement,
-  { threadId: string; onClick: (e: React.MouseEvent, threadId: string) => void; density: string }
->(({ threadId, onClick, density }, ref) => {
+  { threadId: string; onClick: (e: React.MouseEvent, threadId: string) => void; density: string; index: number }
+>(({ threadId, onClick, density, index }, ref) => {
   if (density === 'compact') {
-    return <ThreadListDenseItem ref={ref} threadId={threadId} onClick={onClick} />;
+    return <ThreadListDenseItem ref={ref} threadId={threadId} onClick={onClick} index={index} />;
   } else {
-    return <ThreadListCozyItem ref={ref} threadId={threadId} onClick={onClick} />;
+    return <ThreadListCozyItem ref={ref} threadId={threadId} onClick={onClick} index={index} />;
   }
 });
 

@@ -13,6 +13,7 @@ import { useRegisterHotkeys } from '@/renderer/app/hooks/useRegisterHotkeys';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
+import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
@@ -27,13 +28,14 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const threadIdParam = searchParams.get('tid');
-  const { gmailStatusInvalid, calendarDisplayPanel } = useGlobalAtom();
+  const { gmailStatusInvalid, calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
   const { setActiveThreadId } = useThreadAtom();
   const [isLoaded, setIsLoaded] = useState(false);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
   const { accounts } = useAuth();
   const executeCommand = useExecuteCommand();
+  const { openDialog } = useDialogs();
   useRegisterHotkeys();
 
   useEffect(() => {
@@ -112,8 +114,44 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
               window dragging across the whole strip; each nav button carries
               `no-drag` so clicks still fire. Traffic lights sit at x=12,y=16
               so we reserve pl-20 on the left to avoid overlapping them. */}
-          <div className="drag relative z-50 flex h-11 w-full shrink-0 items-center justify-center bg-background pl-20 pr-4">
-            <MailNavTabs />
+          <div className="drag relative z-50 flex h-11 w-full shrink-0 items-center bg-background pl-20 pr-4">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="pointer-events-auto">
+                <MailNavTabs />
+              </div>
+            </div>
+            <div className="no-drag absolute right-4 flex items-center gap-1">
+              <Button
+                variant="ghost"
+                typeVariant="icon"
+                sizeVariant="xxs"
+                tooltip="Compose"
+                onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
+              >
+                <MonoIcon type="Edit" className="h-3 w-3 text-muted-foreground" />
+              </Button>
+              <Button
+                variant="ghost"
+                typeVariant="icon"
+                sizeVariant="xxs"
+                tooltip="Accounts"
+                onClick={() => openDialog('preference', { defaultPage: 'integration' })}
+              >
+                <MonoIcon type="UserIcon" className="h-3 w-3 text-muted-foreground" />
+              </Button>
+              <Button
+                variant="ghost"
+                typeVariant="icon"
+                sizeVariant="xxs"
+                tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
+                onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
+              >
+                <MonoIcon
+                  type="Calendar"
+                  className={cn('h-3 w-3', calendarDisplayPanel ? 'text-foreground' : 'text-muted-foreground')}
+                />
+              </Button>
+            </div>
           </div>
           <div className="relative flex flex-1 overflow-hidden">
             {/* Remove individual transition classes - inherit from parent */}
@@ -202,7 +240,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
         </div>
         <SidebarCollapseButton
           className={cn(
-            'no-drag fixed left-20 top-[14px] z-50',
+            'no-drag fixed top-[8px] z-50',
             sidebarCollapsed ? 'left-20' : 'left-[178px]',
             isElectron ?? 'hidden'
             // Remove opacity transition - inherits from parent
