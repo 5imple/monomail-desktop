@@ -175,17 +175,6 @@ interface IpcRenderer {
 
   unsubscribeFetch: (url: string) => Promise<{ ok: boolean; status?: number; error?: string }>;
   setKnownAccountUids: (uids: string[]) => Promise<void>;
-  gmailRequest: (args: {
-    method?: string;
-    path?: string;
-    uid?: string;
-    headers?: Record<string, string>;
-    body?: string;
-    responseType?: 'json' | 'blob' | 'text';
-  }) => Promise<
-    | { ok: true; status: number; data: unknown }
-    | { ok: false; status?: number; data?: unknown; error: string }
-  >;
   setSplitCategoryPreferences: (
     uid: string,
     preferences: SplitCategoryPreferences
