@@ -218,8 +218,11 @@ export const createThreadCommands = (
 
         // Define the promise that will handle the trash operation
         const trashPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) => {
+          // Execute for each account's threads.
+          // The map arrow must return the promise (no curly-brace body) — otherwise
+          // Promise.all resolves on [undefined, …] before the Gmail call finishes,
+          // so failures never surface to the toast.
+          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
             markThreadAsTrash(
               accountId,
               accountThreadIds,
@@ -227,8 +230,8 @@ export const createThreadCommands = (
               !isInTrashView,
               false,
               selectNextThread
-            );
-          });
+            )
+          );
 
           await Promise.all(promises);
 

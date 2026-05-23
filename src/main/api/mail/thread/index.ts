@@ -110,10 +110,18 @@ const batchModifyThreads = async (
   removeLabelIds: string[],
   signal?: AbortSignal
 ): Promise<void> => {
-  await gmailApiClient.post<void>(
-    '/messages/batchModify',
-    { ids, addLabelIds, removeLabelIds },
-    { uid, signal }
+  // Gmail has no `/threads/batchModify` endpoint — only `/messages/batchModify`,
+  // which expects message IDs, not thread IDs. Passing thread IDs there either
+  // 404s or silently no-ops, so multi-select archive/trash never actually
+  // applied. Fan out parallel `threads.modify` calls instead.
+  await Promise.all(
+    ids.map((id) =>
+      gmailApiClient.post<void>(
+        `/threads/${id}/modify`,
+        { addLabelIds, removeLabelIds },
+        { uid, signal }
+      )
+    )
   );
 };
 

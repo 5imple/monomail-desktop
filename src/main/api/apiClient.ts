@@ -381,11 +381,16 @@ class ApiClient {
             : typeof config.body === 'string'
               ? config.body
               : undefined;
+        // Forward config.headers so Content-Type reaches the IPC handler.
+        // Without it, POST/PUT/PATCH bodies arrive at Gmail with no MIME type
+        // and the server silently ignores the JSON payload (200 OK, no-op),
+        // which made e.g. thread.modify (trash/done) appear to succeed in the
+        // UI but actually never apply — the row reappeared on refresh.
         const ipcResult = await (window as any).electronBridge?.gmailRequest({
           method,
           path: url,
           uid: accountUid ?? undefined,
-          headers: {},
+          headers: this.toPlainHeaders(config.headers),
           body: bodyStr,
           responseType
         });
