@@ -121,6 +121,22 @@ export function useSpaceAtom() {
   const loadSpaces = useCallback(
     async (activeSpaceId: string | null, accountUids?: string[]) => {
       try {
+        // Standalone Google mode: bypass backend and synthesise a local space from
+        // the provided account UIDs so thread sync resolves accounts without a backend.
+        if (accountUids?.length) {
+          const localSpace: MonoSpace = {
+            id: 'local-space',
+            name: 'Inbox',
+            accountUids,
+            activeAccountUids: accountUids
+          };
+          setSpaces([localSpace]);
+          setActiveSpace(localSpace);
+          await cacheSpaces([localSpace]);
+          await cacheActiveSpaceId(localSpace.id);
+          return;
+        }
+
         // Fetch fresh data from server
         console.log('Fetching fresh spaces from server...');
         const spacesResponse = await spaceApi.fetchSpaces();
@@ -195,21 +211,6 @@ export function useSpaceAtom() {
         console.log('Spaces fetched and cached successfully');
       } catch (error) {
         console.error('Failed to fetch spaces from server:', error);
-        // Standalone Google mode: synthesise a local space from the provided account UIDs
-        // so the thread list can resolve accounts without a backend.
-        if (accountUids?.length) {
-          const localSpace: MonoSpace = {
-            id: 'local-space',
-            name: 'Inbox',
-            accountUids,
-            activeAccountUids: accountUids
-          };
-          setSpaces([localSpace]);
-          setActiveSpace(localSpace);
-          await cacheSpaces([localSpace]);
-          await cacheActiveSpaceId(localSpace.id);
-          return;
-        }
         // If we failed to fetch from server, try to load from cache
         setSpaces((currentSpaces) => {
           if (currentSpaces.length === 0) {

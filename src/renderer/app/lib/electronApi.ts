@@ -7,6 +7,17 @@ import type {
 } from '@/main/api/queue/types';
 
 type QueueResult<T> = { ok: true; data: T } | { ok: false; error: string };
+type GmailBridgeRequest = {
+  method: string;
+  path: string;
+  uid: string;
+  headers?: Record<string, string>;
+  body?: string;
+  responseType?: 'json' | 'blob' | 'text';
+};
+type GmailBridgeResult<T = any> =
+  | { ok: true; status: number; data: T }
+  | { ok: false; status?: number; data?: any; error: string };
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import {
   INativeNotificationOptions,
@@ -117,6 +128,7 @@ interface IpcRenderer {
   getGoogleAccountToken: (
     uid: string
   ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
+  gmailRequest: <T = any>(args: GmailBridgeRequest) => Promise<GmailBridgeResult<T>>;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;
@@ -442,6 +454,12 @@ const electronApi: IpcRenderer = {
   getGoogleAccountToken: async (uid) => {
     if (isElectron) {
       return window.electronBridge.getGoogleAccountToken(uid);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  gmailRequest: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.gmailRequest(args);
     }
     return { ok: false, error: 'Not in Electron' };
   },
