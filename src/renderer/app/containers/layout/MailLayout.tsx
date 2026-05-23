@@ -99,7 +99,7 @@ export function MailLayout({}: MailLayoutProps) {
   const { pinEmailInSpace } = useSpacePinAtom();
   const { selectedThreads } = useThreadAtom();
   const { preference } = useAuth();
-  const { globalSearchQuery, fullscreenDisplayPanel } = useGlobalAtom();
+  const { globalSearchQuery, fullscreenDisplayPanel, setFullscreenDisplayPanel } = useGlobalAtom();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
@@ -172,9 +172,11 @@ export function MailLayout({}: MailLayoutProps) {
 
   useEffect(() => {
     if (selectedThreads.length === 1) {
-      togglePanels(true); // Expand both panels
+      togglePanels(true);
+      setFullscreenDisplayPanel(true);
     } else {
-      togglePanels(false); // Collapse both panels
+      togglePanels(false);
+      setFullscreenDisplayPanel(false);
     }
   }, [selectedThreads]);
 

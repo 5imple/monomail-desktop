@@ -84,7 +84,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { sidebarCollapsed } = useSidebarAtom();
   const { activateScope, deactivateScope } = useHotkeyScope();
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(preference.compose.fullscreen);
+  const [isMaximized, setIsMaximized] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const { trackEvent } = useUserTrackingData();
@@ -862,9 +862,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     [onAttachmentDelete]
   );
 
-  useHotkeys('MOD+SHIFT+F', toggleMaximize, { preventDefault: true, scopes: ['GLOBAL_COMPOSE'] }, [
-    toggleMaximize
-  ]);
   useHotkeys('MOD+ENTER', handleSendMessage, { preventDefault: true }, [handleSendMessage]);
   useHotkeys('MOD+SHIFT+M', toggleMinimize, { preventDefault: true, scopes: ['GLOBAL_COMPOSE'] }, [
     toggleMinimize
@@ -950,11 +947,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               }
             }
 
-            if (event.metaKey && event.shiftKey && event.code === 'KeyF') {
-              event.preventDefault();
-              toggleMaximize();
-              return true;
-            }
             if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
               event.preventDefault();
               toggleMinimize();
@@ -1012,7 +1004,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     composeDraft.id,
     handleInputChange,
     handleUploadInlineImage,
-    toggleMaximize,
     toggleMinimize,
     handleSendMessage
   ]);
@@ -1088,16 +1079,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                 >
                   <MonoIcon type={'Minus'} />
                 </Button>
-                <Button
-                  onClick={toggleMaximize}
-                  tooltip={t('tooltip.maximize')}
-                  variant={'ghost'}
-                  shortcut={'MOD+SHIFT+F'}
-                  sizeVariant={'sm'}
-                  typeVariant={'icon'}
-                >
-                  {isMaximized ? <MonoIcon type={'Minimize'} /> : <MonoIcon type={'Maximize'} />}
-                </Button>
                 <div className="ml-auto flex items-center">
                   <div className="mr-2">{renderDraftStatus}</div>
                 </div>
@@ -1113,10 +1094,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               composeDraft={composeDraft}
               handleInputChange={handleInputChange}
               onKeyDown={(event) => {
-                if (event.metaKey && event.shiftKey && event.code === 'KeyF') {
-                  event.preventDefault();
-                  toggleMaximize();
-                }
                 if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
                   event.preventDefault();
                   toggleMinimize();
@@ -1147,10 +1124,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                           editorRef.current?.focus();
                         }
 
-                        if (event.metaKey && event.shiftKey && event.code === 'KeyF') {
-                          event.preventDefault();
-                          toggleMaximize();
-                        }
                         if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
                           event.preventDefault();
                           toggleMinimize();

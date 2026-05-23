@@ -188,12 +188,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     }, [activeScopes]);
 
     useHotkeys(
-      'MOD+ENTER',
-      togglePanelFullscreen,
-      { preventDefault: true, enabled: isNavigationEnabled(), scopes: ['CONVERSATION_DISPLAY'] },
-      [togglePanelFullscreen]
-    );
-    useHotkeys(
       'ESC',
       handleClosePanel,
       { preventDefault: true, enabled: isNavigationEnabled(), scopes: ['CONVERSATION_DISPLAY'] },
@@ -227,21 +221,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 data-keyboard-item="close-panel"
               >
                 <MonoIcon type="ChevronsRight" />
-              </Button>
-              <Button
-                ref={fullscreenRef}
-                className="text-muted-foreground hover:text-foreground"
-                tooltip={
-                  fullscreenDisplayPanel ? t('header.display.shrink') : t('header.display.expand')
-                }
-                variant="ghost"
-                shortcut="MOD+ENTER"
-                sizeVariant="sm"
-                typeVariant="icon"
-                onClick={togglePanelFullscreen}
-                data-keyboard-item="fullscreen-toggle"
-              >
-                <MonoIcon type={fullscreenDisplayPanel ? 'Minimize' : 'Maximize'} />
               </Button>
             </div>
             <div className="ml-auto flex items-center gap-2">
