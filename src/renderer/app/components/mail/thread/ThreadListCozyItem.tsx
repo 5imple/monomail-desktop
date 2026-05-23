@@ -115,7 +115,7 @@ const SnoozeButton = React.memo<SnoozeButtonProps>(({ thread, buttonClassName })
           tooltip="Snooze"
           aria-label="Snooze"
         >
-          <MonoIcon type="Clock" size={18} />
+          <MonoIcon type="Clock" size={18} weight={300} grade={0} />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -429,17 +429,17 @@ export const ThreadListCozyItem = React.memo(
                   >
                     <div
                       className={cn(
-                        'flex h-5 w-5 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,transform] duration-150',
-                        isChecked
-                          ? 'border-muted-foreground bg-muted-foreground text-background shadow-none'
-                          : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground'
+                        'flex h-5 w-5 items-center justify-center rounded-full border border-muted-foreground/30 transition-[border-color,transform] duration-150',
+                        !isChecked && 'hover:scale-105 hover:border-muted-foreground/60'
                       )}
                     >
+                      {/* Same icon weight (stroke-[1.2] ≈ Material weight 300, grade 0)
+                          in every state — selection is conveyed by opacity, not stroke. */}
                       <MonoIcon
                         type="Check"
                         className={cn(
-                          isChecked ? 'h-3.5 w-3.5 stroke-[2.1]' : 'h-3 w-3 stroke-[1.8]',
-                          isChecked ? 'opacity-100' : 'opacity-80'
+                          'h-3 w-3 stroke-[1.2] text-muted-foreground transition-opacity duration-150',
+                          isChecked ? 'opacity-100' : 'opacity-0'
                         )}
                       />
                     </div>
@@ -552,7 +552,7 @@ export const ThreadListCozyItem = React.memo(
                           executeCommand('THREAD_DONE', { threadIds: [currentThread.id] });
                         }}
                       >
-                        <MonoIcon type="Check" size={18} />
+                        <MonoIcon type="Check" size={18} weight={300} grade={0} />
                       </button>
                       <SnoozeButton
                         thread={currentThread}
@@ -569,7 +569,7 @@ export const ThreadListCozyItem = React.memo(
                           executeCommand('THREAD_TRASH', { threadIds: [currentThread.id] });
                         }}
                       >
-                        <MonoIcon type="Trash" size={18} />
+                        <MonoIcon type="Trash" size={18} weight={300} grade={0} />
                       </button>
                     </div>
                   </div>
