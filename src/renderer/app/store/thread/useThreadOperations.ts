@@ -7,7 +7,7 @@ import {
   DBSaveThread,
   DBSaveThreads
 } from '@/renderer/app/lib/db/thread';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
 import {
   activeThreadIdAtom,
@@ -19,8 +19,12 @@ import {
 export function useThreadOperationAtom() {
   const [threadsMap, setThreadsMap] = useAtom(threadsMapAtom);
   const [activeThreadId, setActiveThreadId] = useAtom(activeThreadIdAtom);
-  const [, setThreadIds] = useAtom(threadIdsAtom);
-  const [, setFilteredThreadIds] = useAtom(filteredThreadIdsAtom);
+  // useSetAtom — setters only, WITHOUT subscribing to the value. Subscribing here
+  // (via useAtom) made every consumer of this hook — AuthContext, the fetch
+  // handler, command hooks — re-render on every threadIds/filteredThreadIds
+  // change, which storms during load and stalls it.
+  const setThreadIds = useSetAtom(threadIdsAtom);
+  const setFilteredThreadIds = useSetAtom(filteredThreadIdsAtom);
 
   const setThreads = useCallback(
     async (
