@@ -1,52 +1,91 @@
 # Getting started (local run)
 
-This app is an **Electron** desktop client. It needs **Node.js** and a filled-in environment file before `npm run dev` will work.
+This app is an **Electron** desktop client that can run in two modes:
+
+- **Standalone Google mode** — connects directly to Gmail via your own Google Cloud OAuth credentials. No backend server needed. See [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md) to create credentials.
+- **On-prem backend mode** — connects to a self-hosted backend. See [ON_PREM_BACKEND_CONTRACT.md](ON_PREM_BACKEND_CONTRACT.md) for the API surface the backend must expose.
+
+---
 
 ## Prerequisites
 
-- **Node.js 18 LTS** or newer (same major version as CI is a safe choice).
+- **Node.js 18 LTS** or newer.
 - **npm** (comes with Node).
 
-Optional but useful:
-
-- A **Firebase** project (Authentication, and related products you enable in code) if you use real sign-in.
-- A **backend API** compatible with what the app expects (`MONO_ENV_API_URL`), or your own fork of the server.
+---
 
 ## 1. Install dependencies
 
 ```bash
-git clone https://github.com/erickim20/monomail-desktop.git
+git clone <repo-url>
 cd monomail-desktop
 npm install
 ```
 
+---
+
 ## 2. Environment variables
 
-The build uses the prefix **`MONO_ENV_`** for Vite/Electron (see `electron.vite.config.ts`).
+The build uses the prefix **`MONO_ENV_`** for all app variables (see `electron.vite.config.ts`). Variables are **baked in at build time** — changing `.env.development` requires restarting `npm run dev`.
 
-1. Copy the example file:
+```bash
+cp .env.example .env.development
+```
 
-   ```bash
-   cp .env.example .env.development
-   ```
+### Standalone Google mode (recommended for local dev)
 
-2. Edit **`.env.development`** and replace every `VALUE` with real settings for your Firebase project, API, and domains.
+Set only these two variables:
 
-   - **`MONO_ENV_API_URL`** — **Required.** Base URL of your API **without** a trailing slash and **without** `/api/v1` (that path is appended in code). Example: `https://api.example.com`
-   - **`MONO_ENV_HOMEPAGE_DOMAIN`** — Your marketing / web origin (e.g. `https://app.example.com`) used for links and some client-side URLs.
-   - **`MONO_ENV_PROTOCOL`** — Custom URL scheme for deep links (e.g. `myapp`). Must match what you configure for OAuth / redirects.
-   - **`MONO_ENV_APP_VERSION`** — Any string the app can read; many places treat versions containing `dev` as non-production (e.g. `1.0.0-dev`).
-   - **Firebase fields** — From the Firebase console (Web app config), plus **`MONO_ENV_FIREBASE_VAPID_KEY`** if you use web push / FCM in the way this project expects.
-   - **`MONO_ENV_MIXPANEL_TOKEN`** — Can be a placeholder if you are not using Mixpanel locally, unless the build fails without it (then use a test project token).
-   - **`MONO_ENV_SUPPORT_EMAIL`** — Support address for UI defaults, mailto links, and notification copy (falls back to `support@example.com` if unset).
-   - **`MONO_ENV_COOKIE_DOMAIN`** — Optional. For link-share flows, cookie `domain=` (e.g. `.example.com`). If empty, a value is derived from `MONO_ENV_HOMEPAGE_DOMAIN`.
-   - **`MONO_ENV_UTM_SOURCE`** — Optional marketing UTM `utm_source` (default `app`).
-   - **`MONO_ENV_CAREERS_URL`** — Optional; if set, printed in the dev console banner.
-   - **`MONO_ENV_BRAND_EMAIL_DOMAIN`** — Optional; if an address contains this substring, favicon loading uses your homepage API route (like the built-in cases for gmail.com, etc.).
-   - **`MONO_ENV_SOCIAL_X_URL`** — Optional full URL for “Follow on X”; if empty, those menu entries are hidden.
-   - **`MONO_ENV_DISCORD_INVITE_URL`** — Optional Discord invite URL; if empty, those entries are hidden.
+```dotenv
+MONO_ENV_GOOGLE_CLIENT_ID=<your-client-id>.apps.googleusercontent.com
+MONO_ENV_GOOGLE_CLIENT_SECRET=<your-client-secret>   # optional
+```
 
-**Note:** `.env*` files except `.env.example` are gitignored. Never commit secrets.
+Leave all other vars blank. See [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md) for how to create these credentials.
+
+### On-prem backend mode
+
+```dotenv
+MONO_ENV_API_URL=https://api.example.com      # base URL, no trailing slash, no /api/v1
+MONO_ENV_BACKEND_URL=https://api.example.com  # usually the same as API_URL
+MONO_ENV_HOMEPAGE_DOMAIN=https://app.example.com
+MONO_ENV_PROTOCOL=mono-desktop                # deep-link scheme for OAuth callbacks
+MONO_ENV_APP_VERSION=1.0.0-dev
+MONO_ENV_SUPPORT_EMAIL=support@example.com
+```
+
+See [ON_PREM_BACKEND_CONTRACT.md](ON_PREM_BACKEND_CONTRACT.md) for the full backend API contract.
+
+### Local development with mock backend
+
+```dotenv
+MONO_ENV_HOMEPAGE_DOMAIN=http://localhost:3030
+MONO_ENV_API_URL=http://localhost:3030
+MONO_ENV_BACKEND_URL=http://localhost:3030
+```
+
+Then run `npm run mock-backend` in a separate terminal.
+
+### Other optional variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MONO_ENV_APP_VERSION` | — | Version string; values containing `dev` enable dev-only UI. |
+| `MONO_ENV_SUPPORT_EMAIL` | `support@example.com` | Support address in UI copy. |
+| `MONO_ENV_COOKIE_DOMAIN` | derived from HOMEPAGE | Cookie `domain=` for link-share flows. |
+| `MONO_ENV_UTM_SOURCE` | `app` | UTM source for marketing links. |
+| `MONO_ENV_CAREERS_URL` | — | If set, shown in dev console banner. |
+| `MONO_ENV_BRAND_EMAIL_DOMAIN` | — | Email domain that triggers custom favicon routing. |
+| `MONO_ENV_SOCIAL_X_URL` | — | "Follow on X" URL; hidden if empty. |
+| `MONO_ENV_DISCORD_INVITE_URL` | — | Discord invite URL; hidden if empty. |
+| `MONO_ENV_PUBLIC_DOMAIN` | — | Public domain for share links. |
+| `MONO_ENV_UPDATE_FEED_URL` | — | Auto-updater feed URL for packaged builds. |
+| `MONO_ENV_PUSH_WS_PATH` | `/push/ws` | WebSocket path on the backend for push frames. |
+| `MONO_ENV_MIXPANEL_TOKEN` | — | Mixpanel project token for analytics. |
+
+> `.env*` files except `.env.example` are gitignored. Never commit secrets.
+
+---
 
 ## 3. Run in development
 
@@ -54,25 +93,24 @@ The build uses the prefix **`MONO_ENV_`** for Vite/Electron (see `electron.vite.
 npm run dev
 ```
 
-This runs **electron-vite** in development mode and loads **`.env.development`** (Vite convention for `development` mode).
+---
 
-## 4. Production-like build (optional)
+## 4. Production build (optional)
 
 ```bash
 npm run build
 ```
 
-Platform-specific packaging uses **electron-builder**; signing and notarization on macOS require Apple credentials in your environment (see Electron Builder docs). Update **`publish`** / **`dev-app-update.yml`** URLs for your own update server if you ship binaries.
+Platform packaging uses **electron-builder**. macOS signing and notarization require Apple credentials. Update `publish` / `dev-app-update.yml` with your own update server URLs before shipping.
+
+---
 
 ## 5. Common problems
 
-| Symptom                            | What to check                                                                                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Error about **`MONO_ENV_API_URL`** | Ensure `.env.development` exists in the repo root and the variable is set (no quotes needed unless your shell requires them).              |
-| Firebase / auth failures           | Confirm all `MONO_ENV_FIREBASE_*` values match one Firebase project and that Authentication (and any OAuth providers) are enabled.         |
-| `npm install` errors               | Use Node 18+; on corporate networks try again or configure npm proxy; delete `node_modules` and `package-lock.json` only as a last resort. |
-| Blank or broken UI after clone     | Often missing or wrong env; check the terminal where `electron-vite` runs for build errors.                                                |
-
-## 6. Backend and licensing
-
-This repository is the **desktop client** only. Running the full product still requires a compatible **API** and (for some features) cloud functions or third-party analytics accounts. Forks should replace placeholder domains, Firebase project IDs in **`.firebaserc`**, and updater URLs with their own infrastructure.
+| Symptom | What to check |
+|---|---|
+| Sign-in button does nothing | `MONO_ENV_GOOGLE_CLIENT_ID` must be set and `npm run dev` restarted after editing `.env.development`. |
+| "Access blocked" or OAuth error | Confirm client ID matches your Google Cloud project and your email is a test user (see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md)). |
+| `Backend not configured` in console | Expected in standalone Google mode — backend errors are non-fatal and can be ignored. |
+| `npm install` errors | Use Node 18+; delete `node_modules` and retry only as a last resort. |
+| Blank UI after clone | Missing env vars; check the terminal where `npm run dev` runs for build errors. |
