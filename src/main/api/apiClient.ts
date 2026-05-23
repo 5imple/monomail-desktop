@@ -370,6 +370,30 @@ class ApiClient {
 
     // Create a promise for the request with retries
     const makeRequest = async (attempt: number = 0): Promise<T> => {
+      // In Electron renderer, route Gmail requests through the main process
+      // via IPC so net.fetch is used instead of browser fetch (which is
+      // blocked by CORS because gmail.googleapis.com doesn't allow
+      // localhost origins in preflight responses).
+      if (isBrowser && isElectron && this.baseURL.startsWith('https://gmail.googleapis.com/')) {
+        const bodyStr =
+          config.body instanceof FormData
+            ? undefined
+            : typeof config.body === 'string'
+              ? config.body
+              : undefined;
+        const ipcResult = await (window as any).electronBridge?.gmailRequest({
+          method,
+          path: url,
+          uid: accountUid ?? undefined,
+          headers: {},
+          body: bodyStr,
+          responseType
+        });
+        if (!ipcResult) return Promise.reject(new Error('Gmail IPC bridge not available'));
+        if (!ipcResult.ok) return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
+        return ipcResult.data as T;
+      }
+
       // Per-attempt AbortController gives us a hard timeout. Without it
       // a stalled connection (server up, no response) hangs forever and
       // can deadlock app shutdown (before-quit awaits pubsub stop, which

@@ -187,7 +187,7 @@ class TokenManager extends EventEmitter {
       (input.expiresInSec != null ? Date.now() + input.expiresInSec * 1000 : Date.now() + 3600_000);
     let googleAccounts =
       input.provider === 'backend'
-        ? undefined
+        ? this.tokens?.googleAccounts // preserve secondary Google accounts across backend token refreshes
         : this.getGoogleAccountsMap(input.provider === 'google');
     if (input.provider === 'google' && input.member) {
       googleAccounts = {

@@ -164,6 +164,14 @@ const api = {
   unsubscribeFetch: (url: string) => ipcRenderer.invoke('main:unsubscribe:fetch', url),
   setKnownAccountUids: (uids: string[]) =>
     ipcRenderer.invoke('main:system:set-known-account-uids', uids),
+  gmailRequest: (args: {
+    method?: string;
+    path?: string;
+    uid?: string;
+    headers?: Record<string, string>;
+    body?: string;
+    responseType?: 'json' | 'blob' | 'text';
+  }) => ipcRenderer.invoke('main:gmail:request', args),
   setSplitCategoryPreferences: (uid: string, preferences: SplitCategoryPreferences) =>
     ipcRenderer.invoke('main:system:set-split-category-preferences', uid, preferences),
   getSplitCategoryPreferences: (uid: string) =>

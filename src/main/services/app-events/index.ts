@@ -104,6 +104,27 @@ export function registerAppEventHandlers() {
     });
 
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      // For Google API responses (Gmail, People, etc.), inject CORS headers so
+      // web workers — which can't reach window.electronBridge — can fetch
+      // directly. The main renderer thread goes through the IPC path instead.
+      const isGoogleApi =
+        details.url.startsWith('https://gmail.googleapis.com/') ||
+        details.url.startsWith('https://www.googleapis.com/') ||
+        details.url.startsWith('https://people.googleapis.com/') ||
+        details.url.startsWith('https://oauth2.googleapis.com/');
+      if (isGoogleApi) {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Access-Control-Allow-Origin': ['*'],
+            'Access-Control-Allow-Methods': ['GET, POST, PATCH, PUT, DELETE, OPTIONS'],
+            'Access-Control-Allow-Headers': ['*'],
+            'Access-Control-Expose-Headers': ['*']
+          }
+        });
+        return;
+      }
+
       // Tightened CSP:
       //   - dropped `default-src *` and `connect-src *` (every directive
       //     fell back to wildcard — the original CSP was effectively off).

@@ -1,5 +1,6 @@
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { ipcMain, net } from 'electron';
+import log from 'electron-log';
 
 type GmailRequestArgs = {
   method?: string;
@@ -112,6 +113,7 @@ export function registerGmailHandlers() {
 
       const data = await readResponseBody(response, args?.responseType ?? 'json');
       if (!response.ok) {
+        log.warn(`[gmail:ipc] ${method} ${url} → ${response.status}`);
         return {
           ok: false,
           status: response.status,
@@ -120,8 +122,10 @@ export function registerGmailHandlers() {
         } satisfies GmailRequestResult;
       }
 
+      log.info(`[gmail:ipc] ${method} ${url} → ${response.status}`);
       return { ok: true, status: response.status, data } satisfies GmailRequestResult;
     } catch (error) {
+      log.error('[gmail:ipc] request failed:', error instanceof Error ? error.message : error);
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'Gmail request failed'
