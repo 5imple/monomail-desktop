@@ -438,7 +438,7 @@ export const ThreadListCozyItem = React.memo(
                       <MonoIcon
                         type="Check"
                         className={cn(
-                          'stroke-[1.2]',
+                          'stroke-[1.5]',
                           isChecked ? 'h-3.5 w-3.5' : 'h-3 w-3',
                           isChecked ? 'opacity-100' : 'opacity-80'
                         )}
