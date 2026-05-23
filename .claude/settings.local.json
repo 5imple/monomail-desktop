@@ -18,7 +18,13 @@
       "Bash(curl -s \"http://localhost:5173/src/main/api/apiClient.ts\")",
       "Bash(curl -s \"http://localhost:5173/@fs/Users/simple/Desktop/Projects/monomail-desktop/src/main/api/apiClient.ts\")",
       "Bash(curl -sI \"http://localhost:5173/\")",
-      "Bash(xargs kill -9)"
+      "Bash(xargs kill -9)",
+      "Bash(pkill -f \"electron-vite\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('build',{}\\).get\\('appId',''\\), d.get\\('name',''\\), d.get\\('productName',''\\)\\)\")",
+      "Bash(pkill -f \"electron\")",
+      "Bash(node scripts/mock-backend.mjs)",
+      "Bash(echo \"Mock backend PID: $!\")",
+      "Bash(echo \"Dev server PID: $!\")"
     ]
   }
 }

@@ -2,14 +2,7 @@ import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
 import { NotificationBadge } from '@/renderer/app/components/ui/notification-badge';
-import LinkShareDropdownItem from '@/renderer/app/containers/dropdown/LinkShareDropdownItem';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
@@ -21,7 +14,6 @@ import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useSharedAtom } from '@/renderer/app/store/shared/useSharedAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { forwardRef, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -34,12 +26,10 @@ interface DisplayPanelHeaderProps {
   isPrinting: boolean;
   handleCollapseAll: () => void;
   handleExpandAll: () => void;
-  contactToggle: boolean;
-  handleContactToggle: () => void;
 }
 
 const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
-  ({ thread, handlePrint, isPrinting, handleContactToggle, contactToggle }, ref) => {
+  ({ thread, handlePrint, isPrinting }, ref) => {
     const { setSelectedThreads } = useThreadAtom();
     const { removeLabelFromThread } = useThreadLabelAtom();
     const { t } = useTranslation();
@@ -50,7 +40,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     const { openDialog } = useDialogs();
     const executeCommand = useExecuteCommand();
     const { trackEvent } = useUserTrackingData();
-    const { isItemPublished } = useSharedAtom();
     const { labelsMapByAccount } = useLabelAtom();
 
     // Keyboard navigation
@@ -60,14 +49,10 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     const headerContainerRef = useRef<HTMLDivElement>(null);
     const closePanelRef = useRef<HTMLButtonElement>(null);
     const fullscreenRef = useRef<HTMLButtonElement>(null);
-    const contactsRef = useRef<HTMLButtonElement>(null);
-    const shareRef = useRef<HTMLButtonElement>(null);
     const reminderRef = useRef<HTMLButtonElement>(null);
     const labelRef = useRef<HTMLButtonElement>(null);
     const starRef = useRef<HTMLButtonElement>(null);
     const doneRef = useRef<HTMLButtonElement>(null);
-    const trashRef = useRef<HTMLButtonElement>(null);
-
     // Register keyboard navigation items
     useEffect(() => {
       // Register the container area
@@ -83,13 +68,10 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
 
       if (thread) {
         navigationItems.push(
-          { id: 'contacts-toggle', ref: contactsRef.current },
-          { id: 'share-thread', ref: shareRef.current },
           { id: 'reminder', ref: reminderRef.current },
           // { id: 'label', ref: labelRef.current },
           { id: 'star-toggle', ref: starRef.current },
-          { id: 'done-toggle', ref: doneRef.current },
-          { id: 'trash-toggle', ref: trashRef.current }
+          { id: 'done-toggle', ref: doneRef.current }
         );
       }
 
@@ -153,20 +135,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       if (thread) {
         executeCommand('THREAD_UNSTAR');
         trackEvent('thread_unstarred', { thread_id: thread.id });
-      }
-    };
-
-    const handleTrashThread = async () => {
-      if (thread) {
-        executeCommand('THREAD_TRASH');
-        trackEvent('thread_trashed', { thread_id: thread.id });
-      }
-    };
-
-    const handleUntrashThread = async () => {
-      if (thread) {
-        executeCommand('THREAD_UNTRASH');
-        trackEvent('thread_untrashed', { thread_id: thread.id });
       }
     };
 
@@ -335,74 +303,8 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 </Badge>
               )}
 
-              {thread && (
-                <div className="relative">
-                  <Button
-                    ref={contactsRef}
-                    className="text-muted-foreground"
-                    tooltip={t('header.display.contacts')}
-                    sizeVariant="sm"
-                    variant="ghost"
-                    typeVariant="icon"
-                    onClick={handleContactToggle}
-                    data-keyboard-item="contacts-toggle"
-                  >
-                    <MonoIcon type={'Id'} className={cn(contactToggle && 'text-foreground')} />
-                  </Button>
-
-                  {contactToggle && (
-                    <NotificationBadge
-                      dot
-                      variant={'default'}
-                      size="sm"
-                      className="absolute right-0.5 top-0.5"
-                    />
-                  )}
-                </div>
-              )}
               {thread && thread.id.length < 20 && (
                 <>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <div className="relative">
-                        <Button
-                          ref={shareRef}
-                          className={cn(
-                            'hover:text-foreground',
-                            isItemPublished(thread.accountId, thread.id, 'thread')
-                              ? 'text-foreground'
-                              : 'text-muted-foreground'
-                          )}
-                          tooltip={t('header.display.share_thread')}
-                          sizeVariant="sm"
-                          variant="ghost"
-                          typeVariant="icon"
-                          data-keyboard-item="share-thread"
-                        >
-                          <MonoIcon type="Share" />
-                        </Button>
-                        {isItemPublished(thread.accountId, thread.id, 'thread') && (
-                          <NotificationBadge
-                            dot
-                            variant={'default'}
-                            size="sm"
-                            className="absolute right-0.5 top-0.5"
-                          />
-                        )}
-                      </div>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <LinkShareDropdownItem
-                        type={'thread'}
-                        accountId={thread.accountId}
-                        itemId={thread.id}
-                      />
-                      <DropdownMenuItem disabled={true} onClick={() => {}}>
-                        <MonoIcon type={'Slack'} className="mr-2 h-3.5 w-3.5" />
-                        {t('header.display.send_to_slack')}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                   <Button
                     ref={reminderRef}
                     className="text-muted-foreground"
@@ -494,34 +396,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                     <MonoIcon type="CheckCircle" />
                   </Button>
 
-                  {thread && !thread.labelIds.includes('TRASH') ? (
-                    <Button
-                      ref={trashRef}
-                      className="text-muted-foreground"
-                      tooltip={t('header.display.trash')}
-                      shortcut="Backspace"
-                      sizeVariant="sm"
-                      variant="ghost"
-                      typeVariant="icon"
-                      onClick={handleTrashThread}
-                      data-keyboard-item="trash-toggle"
-                    >
-                      <MonoIcon type="Trash" className="" />
-                    </Button>
-                  ) : (
-                    <Button
-                      ref={trashRef}
-                      className="text-muted-foreground"
-                      tooltip={t('header.display.untrash')}
-                      sizeVariant="sm"
-                      variant="ghost"
-                      typeVariant="icon"
-                      onClick={handleUntrashThread}
-                      data-keyboard-item="trash-toggle"
-                    >
-                      <MonoIcon type="TrashRestore" className="" />
-                    </Button>
-                  )}
                 </>
               )}
             </div>

@@ -12,7 +12,6 @@ import { CalendarEventCard } from '@/renderer/app/components/card/CalendarEventC
 import DraftCard from '@/renderer/app/components/card/DraftCard';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
-import MessageCardDropdownMenu from '@/renderer/app/components/mail/message/MessageCardDropdownMenu';
 import { useTheme } from '@/renderer/app/components/ThemeProvider';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/renderer/app/components/ui/card';
@@ -629,24 +628,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                       <span className="shrink-0 whitespace-nowrap font-mono text-[11px] tabular-nums">
                         {formatDate(currentMessage.timestamp)}
                       </span>
-                      {!preview && (
-                        <>
-                          <MessageCardDropdownMenu
-                            accountId={accountId}
-                            key={currentMessage.id}
-                            item={item}
-                          >
-                            <Button
-                              variant="ghost"
-                              sizeVariant={'sm'}
-                              typeVariant={'icon'}
-                              disabled={!currentMessage}
-                            >
-                              <MonoIcon type={'Share'} />
-                            </Button>
-                          </MessageCardDropdownMenu>
-                        </>
-                      )}
                     </div>
                   )}
                 </div>

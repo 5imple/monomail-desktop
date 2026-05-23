@@ -14,7 +14,7 @@ export function useTrackingAtom() {
   const fetchAndSetTrackingHistories = async (signal?: AbortSignal) => {
     try {
       const response = await trackingApi.getTrackingHistories();
-      if (response) {
+      if (response?.data && typeof response.data === 'object') {
         setTrackingHistories(response.data);
       }
     } catch (error) {

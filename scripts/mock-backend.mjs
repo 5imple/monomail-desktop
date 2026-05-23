@@ -56,6 +56,16 @@ const STUB_ACCOUNTS = [
     primary: true,
     scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
     isExpired: false
+  },
+  {
+    uid: 'mock-account-secondary',
+    displayName: 'Mock User 2',
+    provider: 'google',
+    email: 'mock.user2@example.com',
+    profileImageUrl: '',
+    primary: false,
+    scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/gmail.modify'],
+    isExpired: false
   }
 ];
 const accountLinkIntents = new Map();
@@ -176,6 +186,19 @@ const snoozes = new Map();
 const schedules = new Map();
 /** @type {Map<string, any>} */
 const mockSpaces = new Map();
+// Pre-seed a default space so the app lands on the inbox (not onboarding) on startup.
+const DEFAULT_SPACE_ID = 'space-default-mock';
+mockSpaces.set(DEFAULT_SPACE_ID, {
+  id: DEFAULT_SPACE_ID,
+  name: 'Inbox',
+  color: '#4f46e5',
+  icon: '📬',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  pinnedEmails: [],
+  accountUids: STUB_ACCOUNTS.map((a) => a.uid),
+  default: true
+});
 /** @type {Set<import('ws').WebSocket>} */
 const wsClients = new Set();
 
@@ -597,6 +620,12 @@ const server = createServer(async (req, res) => {
       mockSpaces.set(id, updated);
       return send(res, 200, updated);
     }
+    if (method === 'GET' && apiPath.startsWith('/mono/sidebar/spaces/')) {
+      return send(res, 200, { items: {}, order: [] });
+    }
+    if (method === 'PUT' && apiPath.startsWith('/mono/sidebar/spaces/')) {
+      return send(res, 200, { items: {}, order: [] });
+    }
     if (method === 'GET' && apiPath.startsWith('/mono/contact')) {
       return send(res, 200, { contacts: [] });
     }
@@ -616,7 +645,7 @@ const server = createServer(async (req, res) => {
       return send(res, 200, []);
     }
     if (method === 'GET' && apiPath.startsWith('/track/')) {
-      return send(res, 200, { events: [], histories: [] });
+      return send(res, 200, { data: {} });
     }
     if (method === 'GET' && apiPath.startsWith('/mail/label')) {
       return send(res, 200, { labels: [] });

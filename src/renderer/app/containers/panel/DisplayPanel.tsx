@@ -385,10 +385,6 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
     if (scrollAreaRef.current) scrollAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
   }, [selectedThreads]);
 
-  const handleContactToggle = () => {
-    setContactDisplayPanel((prev) => !prev);
-  };
-
   const [selectedRecipient, setSelectedRecipient] = useState<MonoRecipient | null>(null);
 
   // Auto-select first recipient from thread (same logic as ContactCard)
@@ -413,8 +409,6 @@ export const DisplayPanel = ({ className }: DisplayPanelProps) => {
         isPrinting={isPrinting}
         handleCollapseAll={handleCollapseAll}
         handleExpandAll={handleExpandAll}
-        contactToggle={contactDisplayPanel}
-        handleContactToggle={handleContactToggle}
       />
       <div
         className={cn(

@@ -142,6 +142,7 @@ export function registerAppEventHandlers() {
         'https://*.amplitude.com',
         'https://api.mixpanel.com',
         'https://*.paddle.com',
+        'https://status.cloud.google.com',
         // Vite HMR WebSocket in dev mode
         !app.isPackaged ? 'ws://localhost:*' : ''
       ]
