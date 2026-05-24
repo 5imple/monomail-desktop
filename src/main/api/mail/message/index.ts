@@ -40,9 +40,25 @@ const modifyMessage = async (
   );
 };
 
+// Direct Gmail send. `raw` is a base64url-encoded RFC822 message; passing
+// `threadId` threads replies/forwards in Gmail without needing In-Reply-To.
+const sendMessage = async (
+  uid: string,
+  raw: string,
+  threadId?: string,
+  signal?: AbortSignal
+): Promise<{ id: string; threadId: string }> => {
+  return gmailApiClient.post<{ id: string; threadId: string }>(
+    '/messages/send',
+    { raw, ...(threadId ? { threadId } : {}) },
+    { uid, signal }
+  );
+};
+
 export default {
   getMessage,
   getMessageUnsubscribe,
   postMessageUnsubscribe,
   modifyMessage,
+  sendMessage,
 };
