@@ -139,7 +139,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           <Button
             onClick={() => setShowCc(!showCc)}
             className={cn(
-              'font-mono text-[10px] uppercase tracking-[0.14em] transition-colors',
+              'font-sans text-[13px] font-medium tracking-normal transition-colors',
               showCc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
             variant="text"
@@ -150,7 +150,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           <Button
             onClick={() => setShowBcc(!showBcc)}
             className={cn(
-              'font-mono text-[10px] uppercase tracking-[0.14em] transition-colors',
+              'font-sans text-[13px] font-medium tracking-normal transition-colors',
               showBcc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
             variant="text"

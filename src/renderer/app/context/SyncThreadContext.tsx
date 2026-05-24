@@ -177,22 +177,6 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
       };
     }
 
-    // DIAGNOSTIC: surface whether the thread worker's Gmail calls actually
-    // succeed (and the exact uid/status/error when they don't).
-    if (!(result as { ok?: boolean })?.ok) {
-      console.warn(
-        '[gmail-bridge] FAIL',
-        args?.method,
-        args?.path,
-        'uid=',
-        args?.uid,
-        'status=',
-        (result as { status?: number })?.status,
-        'err=',
-        (result as { error?: string })?.error
-      );
-    }
-
     workerRef.current?.postMessage({
       type: 'MAIL_API_RESPONSE',
       payload: { requestId, result }
@@ -329,6 +313,13 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
 
       // Clear token cache for completed sync
       updateTokenCache(request.uid, request.query, null);
+
+      // Re-read the cache after completion so the authoritative inbox reconcile
+      // (stale archived threads removed) is reflected in the rendered list.
+      if (request.subscriptionTrigger) {
+        request.subscriptionTrigger();
+      }
+
       activeRequests.current.delete(requestId);
     }
   };

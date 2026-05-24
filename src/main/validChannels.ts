@@ -11,9 +11,7 @@ export const validRendererChannel = [
   'renderer:update:info',
   'renderer:update:available',
 
-  'renderer:auth:sign-in',
   'renderer:auth:add-account',
-  'renderer:auth:scope-updated',
   'renderer:auth:token-changed',
   'renderer:auth:signed-out',
 
@@ -29,16 +27,12 @@ export const isValidRendererChannel = (channel: string): channel is ValidRendere
 };
 
 export const validMainChannel = [
-  'main:auth:set-id-token',
   'main:auth:get-state',
   'main:auth:sign-out',
   'main:auth:refresh',
   'main:auth:initiate-sign-in',
   'main:auth:initiate-add-account',
-  'main:auth:create-account-link-intent',
-  'main:auth:complete-account-link',
   'main:auth:get-google-account-token',
-  'main:auth:dev-add-account',
   'main:gmail:request',
   'main:system:set-offline-status',
   'main:system:set-alert-sound',

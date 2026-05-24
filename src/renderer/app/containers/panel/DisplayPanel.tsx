@@ -463,7 +463,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
   return (
     <div
       className={cn(
-        'relative flex h-full flex-col bg-background text-foreground transition-colors',
+        'relative flex h-full flex-col bg-white text-foreground transition-colors dark:bg-background',
         thread || readerPhase === 'closing' ? '' : 'opacity-0',
         className
       )}

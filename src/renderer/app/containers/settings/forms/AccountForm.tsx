@@ -2,7 +2,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import authApi from '@/main/api/auth/authApi';
 import AccountList from '@/renderer/app/components/ui/account-list';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
@@ -101,14 +100,6 @@ export function AccountForm() {
   async function onSubmit(data: AccountFormValues) {
     if (!member) return;
     try {
-      // Update user preferences
-      await authApi.updateUserPreference({
-        account: {
-          ...localPreference.account,
-          accentColor: data.accentColor
-        }
-      });
-
       // Update the local preference state
       const updatedPreference = {
         ...localPreference,

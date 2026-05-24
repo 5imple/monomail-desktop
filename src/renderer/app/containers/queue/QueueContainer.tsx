@@ -137,8 +137,8 @@ const QueueContainer: FC = () => {
       : 'Going out at the time you scheduled.';
 
   return (
-    <div className="h-full w-full overflow-auto bg-background">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/80 px-6 pt-10 pb-0 backdrop-blur-md sm:px-10">
+    <div className="h-full w-full overflow-auto bg-white dark:bg-background">
+      <header className="sticky top-0 z-10 border-b border-border bg-white/80 px-6 pt-10 pb-0 backdrop-blur-md sm:px-10 dark:bg-background/80">
         <div className="flex items-end justify-between gap-6">
           <div>
             <h2 className="font-sans text-3xl font-medium tracking-tight text-foreground">

@@ -14,12 +14,11 @@ import {
   AlertDialogTitle
 } from '@/renderer/app/components/ui/alert-dialog';
 import Loader from '@/renderer/app/components/ui/loader';
-import { Textarea } from '@/renderer/app/components/ui/textarea';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 
@@ -27,101 +26,23 @@ interface SignInLayoutProps {}
 
 const SignInLayout: FC<SignInLayoutProps> = () => {
   const { t } = useTranslation();
-  const { signIn, isLoading, signOut, isLoggedIn, preference, member } = useAuth();
+  const { isLoading, isLoggedIn, member } = useAuth();
   const { loading } = useGlobalAtom();
   const { spaces } = useSpaceAtom();
-  const [devToken, setDevToken] = useState<string>('');
-  const navigate = useNavigate();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleSignIn = useCallback(async () => {
-    // Primary path: PKCE direct Google OAuth when client ID is configured.
-    if (isElectron && (import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim()) {
-      const result = await electronApi.initiateSignIn();
-      if (!result.ok) {
-        toast.error(`Sign-in failed: ${result.error}`);
-      }
+    // Direct Google OAuth (PKCE) is the only sign-in path.
+    if (!isElectron || !(import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim()) {
+      toast.error('Sign-in unavailable: set MONO_ENV_GOOGLE_CLIENT_ID and rebuild.');
       return;
     }
-
-    // Dev / legacy path: use MONO_ENV_HOMEPAGE_DOMAIN.
-    const rawBaseUrl = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
-    if (!rawBaseUrl) {
-      toast.error(
-        'Sign-in unavailable: set MONO_ENV_GOOGLE_CLIENT_ID (direct OAuth) or MONO_ENV_HOMEPAGE_DOMAIN (backend sign-in page) and rebuild.'
-      );
-      return;
+    const result = await electronApi.initiateSignIn();
+    if (!result.ok) {
+      toast.error(`Sign-in failed: ${result.error}`);
     }
-    const baseUrl = /^https?:\/\//i.test(rawBaseUrl) ? rawBaseUrl : '';
-    if (!baseUrl) {
-      toast.error(
-        `Sign-in unavailable: MONO_ENV_HOMEPAGE_DOMAIN is "${rawBaseUrl}", which must start with http(s)://.`
-      );
-      return;
-    }
-    const client = isElectron ? 'web-electron' : 'web';
-    const signInUrl = `${baseUrl.replace(/\/$/, '')}/sign-in?client=${client}`;
-
-    // Dev shortcut: when pointed at localhost, fetch the mock backend's
-    // sign-in HTML directly and hand tokens to main via dev-sign-in IPC.
-    const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(baseUrl);
-    if (isLocalDev) {
-      try {
-        const res = await fetch(signInUrl);
-        if (res.ok) {
-          const html = await res.text();
-          const linkMatch = html.match(/mono-desktop:\/\/signIn\?([^"'\s]+)/);
-          if (linkMatch) {
-            const params = new URLSearchParams(linkMatch[1]);
-            const accessToken = params.get('token');
-            const refreshToken = params.get('refresh_token');
-            const expiresInRaw = params.get('expires_in');
-            if (accessToken && refreshToken) {
-              const result = await electronApi.devSignIn({
-                accessToken,
-                refreshToken,
-                expiresInSec: expiresInRaw ? Number(expiresInRaw) : undefined
-              });
-              if (result.ok) return;
-              console.warn('[dev sign-in] devSignIn IPC failed:', result.error);
-            } else {
-              console.warn('[dev sign-in] mock HTML missing token or refresh_token');
-            }
-          } else {
-            console.warn('[dev sign-in] mock response missing mono-desktop://signIn link, falling back');
-          }
-        } else {
-          console.warn(`[dev sign-in] mock returned ${res.status}, falling back to browser`);
-        }
-      } catch (err) {
-        console.warn('[dev sign-in] direct fetch failed, falling back to browser:', err);
-      }
-    }
-
-    window.open(signInUrl);
   }, []);
-  const [searchParams] = useSearchParams();
-  const tokenParams = searchParams.get('token');
-
-  const signInWithToken = useCallback(
-    async (token: string) => {
-      try {
-        if (!token) throw new Error('Invalid token received.');
-        await signIn(token);
-      } catch (error: any) {
-        console.error('Error signing in:', error);
-        toast.error(t('toast.error.sign_in'));
-      }
-    },
-    [signIn, t]
-  );
-
-  useEffect(() => {
-    if (tokenParams) {
-      signIn(tokenParams);
-    }
-  }, [tokenParams]);
 
   useEffect(() => {
     electronApi.checkForUpdate();
@@ -140,38 +61,26 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
     electronApi.downloadAndInstallUpdate();
   }, []);
 
-  const handleDevSignIn = useCallback(() => {
-    signInWithToken(devToken);
-  }, [devToken, signInWithToken]);
-
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => {
-    const fetchAppVersion = async () => {
-      try {
-        const version = import.meta.env.MONO_ENV_APP_VERSION;
-
-        setAppVersion(version);
-      } catch (error) {
-        console.error('Failed to fetch app version:', error);
-      }
-    };
-
-    fetchAppVersion();
+    setAppVersion(import.meta.env.MONO_ENV_APP_VERSION);
   }, []);
 
-  // Show a clear setup screen instead of blank when the backend URL is missing.
-  const apiUrlConfigured = !!(import.meta.env.MONO_ENV_API_URL || '').trim();
-  if (!apiUrlConfigured) {
+  // Show a clear setup screen instead of blank when Google OAuth isn't configured.
+  const googleConfigured = !!(import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim();
+  if (!googleConfigured) {
     return (
       <div className="no-drag flex h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
         <div className="max-w-md space-y-3">
-          <h1 className="text-xl font-semibold">Backend not configured</h1>
+          <h1 className="text-xl font-semibold">Google sign-in not configured</h1>
           <p className="text-sm text-muted-foreground">
             Copy{' '}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env.example</code> to{' '}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env</code> and set{' '}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">MONO_ENV_API_URL</code>{' '}
-            to your backend origin, then restart the app.
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+              MONO_ENV_GOOGLE_CLIENT_ID
+            </code>{' '}
+            (and secret), then restart the app.
           </p>
         </div>
       </div>
@@ -239,61 +148,11 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
               )}
               {t('layout.sign_in.sign_in_with_google')}
             </Button>
-            {(() => {
-              const homepage = (import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || '').trim();
-              const homepageMisconfigured = !homepage || !/^https?:\/\//i.test(homepage);
-              const showDevAffordances =
-                process.env.NODE_ENV === 'development' || homepageMisconfigured;
-              if (!showDevAffordances) return null;
-              return (
-                <div className="flex w-80 flex-col gap-2">
-                  {homepageMisconfigured && (
-                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Backend not configured
-                    </p>
-                  )}
-                  {homepageMisconfigured && (
-                    <p className="text-xs text-muted-foreground">
-                      Set <code>MONO_ENV_HOMEPAGE_DOMAIN</code> to your on-prem sign-in URL (e.g.{' '}
-                      <code>https://app.example.com</code>) and rebuild. Until then, paste a
-                      backend-issued access token here to sign in directly.
-                    </p>
-                  )}
-                  <Textarea
-                    value={devToken}
-                    onChange={(e) => setDevToken(e.target.value)}
-                    placeholder="Paste access token"
-                  ></Textarea>
-                  <Button onClick={handleDevSignIn}>Sign in with Token</Button>
-                </div>
-              );
-            })()}
           </div>
           <div>
             <div className="mt-4 text-xs text-muted-foreground">
-              {t('layout.sign_in.agreement')}{' '}
-              <Button variant={'link'} typeVariant={'inline'} asChild>
-                <a
-                  href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/terms`}
-                  target="_blank"
-                  className="text-xs text-primary hover:underline"
-                  rel="noreferrer"
-                >
-                  {t('layout.sign_in.legal')}
-                </a>
-              </Button>{' '}
-              {t('layout.sign_in.and')}{' '}
-              <Button variant={'link'} typeVariant={'inline'} asChild>
-                <a
-                  href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/privacy`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-primary hover:underline"
-                >
-                  {t('layout.sign_in.privacy')}
-                </a>
-              </Button>
-              .
+              {t('layout.sign_in.agreement')} {t('layout.sign_in.legal')} {t('layout.sign_in.and')}{' '}
+              {t('layout.sign_in.privacy')}.
             </div>
           </div>
         </div>

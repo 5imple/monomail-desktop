@@ -30,7 +30,24 @@
       "Bash(curl -s http://localhost:3030/api/v1/mono/preference)",
       "Bash(pkill -f \"electron.*monomail\")",
       "Bash(xargs ls)",
-      "Bash(grep -rn \"fetch\\(\\\\`*https://[a-z.]*googleapis\\\\|fetch\\(\\\\\"https://[a-z.]*googleapis\\\\|googleapis.com\" src/renderer/)"
+      "Bash(grep -rn \"fetch\\(\\\\`*https://[a-z.]*googleapis\\\\|fetch\\(\\\\\"https://[a-z.]*googleapis\\\\|googleapis.com\" src/renderer/)",
+      "Bash(git check-ignore *)",
+      "Bash(timeout 90 bash -c 'until grep -qiE \"ready in|dev server running|build the electron|page reload|vite.*ready\" \"/private/tmp/claude-0/-Users-simple-Desktop-Projects-monomail-desktop/5412e476-e871-4999-8092-66a51a310ecf/tasks/b9fcvhcx4.output\" 2>/dev/null; do sleep 1; done; echo \"=== READY SIGNAL FOUND ===\"')",
+      "Bash(osascript -e 'tell application \"System Events\" to get name of \\(processes whose background only is false\\)')",
+      "Bash(screencapture -x -o /tmp/mono-shot.png)",
+      "Read(//tmp/**)",
+      "Bash(git checkout *)",
+      "Bash(cd *)",
+      "Bash(grep -E \"\\\\.\\(ts|js|mjs\\)$\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"=== eslint exit: $? ===\")",
+      "Bash(grep -n \"updatePreference\\\\|const { i18n, t }\\\\|const { member\" src/renderer/app/containers/settings/forms/ProfileForm.tsx)",
+      "Bash(npm install *)",
+      "Bash(chown -R simple:staff .git)",
+      "Bash(chown -R simple:staff .)",
+      "Bash(git rev-list *)",
+      "Bash(grep -nE \"bg-|background|gradient|#[0-9a-fA-F]{3,6}|stone|gray|white|className=\" src/renderer/app/containers/layout/SignInLayout.tsx)",
+      "Bash(xargs grep -niE \"background|bg-|#[0-9a-f]{3,6}|style=\")"
     ]
   }
 }

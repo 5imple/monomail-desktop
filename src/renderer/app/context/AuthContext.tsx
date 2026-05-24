@@ -1,5 +1,4 @@
 import { apiClient, gmailApiClient } from '@/main/api/apiClient';
-import authApi from '@/main/api/auth/authApi';
 import {
   MonoAccount,
   MonoMember,
@@ -7,14 +6,12 @@ import {
   UserPreference
 } from '@/main/api/auth/types';
 import draftApi from '@/main/api/draft/draftApi';
-import mailApi from '@/main/api/mail/mailApi';
 import signatureApi from '@/main/api/signature/signatureApi';
 import templateApi from '@/main/api/template/templateApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import AccountSelectDialog from '@/renderer/app/containers/dialog/AccountSelectDialog';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
-import { auth } from '@/renderer/app/lib/monoAuth';
+import { auth, MonoUser as User, onAuthStateChanged } from '@/renderer/app/lib/monoAuth';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
 import { useBookmarkAtom } from '@/renderer/app/store/bookmark/useBookmarkAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
@@ -31,11 +28,6 @@ import {
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 import * as amplitude from '@amplitude/analytics-browser';
-import {
-  MonoUser as User,
-  signInWithToken as signInWithCustomToken,
-  onAuthStateChanged
-} from '@/renderer/app/lib/monoAuth';
 import mixpanel from 'mixpanel-browser';
 import React, {
   createContext,
@@ -49,7 +41,6 @@ import React, {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { UAParser } from 'ua-parser-js';
 import { authCache } from './AuthCache';
 
 interface AuthContextType {
@@ -60,7 +51,6 @@ interface AuthContextType {
   preference: UserPreference;
   isLoading: boolean;
   idToken: string | null;
-  signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateAccounts: () => Promise<void>;
   getUidFromEmail: (email: string) => string | undefined;
@@ -70,7 +60,7 @@ interface AuthContextType {
 
 export const defaultPreference: UserPreference = {
   appearance: {
-    theme: 'system',
+    theme: 'pure-light',
     density: 'compact'
   },
   compose: {
@@ -134,16 +124,11 @@ const buildDirectGoogleAccountResponse = (
     email: memberEmail,
     primaryUid: primaryAccount.uid,
     memberName: memberEmail.split('@')[0],
-    profileImageUrl: authState.member?.photoURL || primaryAccount.profileImageUrl,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    demographics: { role: '', emailUsage: '', discoverySource: '' },
-    createdAt: new Date(),
-    updatedAt: new Date()
+    profileImageUrl: authState.member?.photoURL || primaryAccount.profileImageUrl
   };
 
   return {
     accounts,
-    relatedMembers: [],
     member
   };
 };
@@ -235,8 +220,6 @@ interface AuthState {
   preference: UserPreference;
   isLoading: boolean;
   idToken: string | null;
-  needSelectAccount: boolean;
-  relatedMembers: Array<MonoMember>;
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -247,23 +230,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     member: null,
     preference: defaultPreference,
     isLoading: true,
-    idToken: null,
-    needSelectAccount: false,
-    relatedMembers: []
+    idToken: null
   });
 
   // Extract destructured variables for convenience
-  const {
-    isLoggedIn,
-    user,
-    accounts,
-    member,
-    preference,
-    isLoading,
-    idToken,
-    needSelectAccount,
-    relatedMembers
-  } = authState;
+  const { isLoggedIn, user, accounts, member, preference, isLoading, idToken } = authState;
 
   const { t } = useTranslation();
 
@@ -333,33 +304,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
       };
-      // Persist locally first so settings survive backend absence.
+      // Preferences are local-only in Gmail-direct mode — persist to the cache.
       setAuthState((prev) => ({
         ...prev,
         preference: updatedPreference
       }));
       await authCache.updateCachedPreference(updatedPreference);
-      // Fire-and-forget backend sync; ignore failures in standalone mode.
-      authApi.updateUserPreference(updatedPreference).catch(() => {});
     },
     [user, preference]
   );
 
   const fetchPreference = useCallback(async (accounts: MonoAccount[]) => {
-    const userPreference = await authApi.getUserPreference();
+    // Gmail-direct mode: preferences live in the local cache, not a backend.
+    const cached = await authCache.getCachedData();
+    const userPreference = cached?.preference ?? defaultPreference;
 
-    const { mergedPreference, needsUpdate } = mergeWithDefaultPreference(userPreference, accounts);
+    const { mergedPreference } = mergeWithDefaultPreference(userPreference, accounts);
 
-    // Ensure we persist newly introduced fields (e.g., showAttachments) on load
-    const missingShowAttachments =
-      !(userPreference.display && (userPreference.display.threadList as any)) ||
-      (userPreference.display &&
-        (userPreference.display.threadList as any) &&
-        (userPreference.display.threadList as any).showAttachments === undefined);
+    await authCache.updateCachedPreference(mergedPreference);
 
-    if (needsUpdate || missingShowAttachments) {
-      authApi.updateUserPreference(mergedPreference).catch(() => {});
-    }
     if (isElectron) electronApi.setAlertSound(mergedPreference.notification.alertSound);
 
     if (isElectron) {
@@ -479,8 +442,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const cachedLabels = await loadCachedLabels();
 
         // Detect stale cache: if the token owner (Google sub) is not in cached accounts,
-        // the cache belongs to a previous session (e.g., mock backend). Discard it so we
-        // don't temporarily flash wrong accounts or fall back to them on error.
+        // the cache belongs to a previous session. Discard it so we don't temporarily
+        // flash wrong accounts or fall back to them on error.
         const tokenState = await electronApi.getAuthState();
         const tokenMemberUid = tokenState?.member?.uid;
         if (
@@ -497,21 +460,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // If we have both auth cache and spaces cache, we can show cached data immediately
         // BUT we don't set the token yet - we'll wait for a fresh one
         if (cachedData && cachedData.accounts.length > 0 && cachedSpaces) {
-          console.log('Using cached auth and spaces data while fetching fresh token');
-
-          const needSelectAccount =
-            !!cachedData.relatedMembers && cachedData.relatedMembers.length > 0;
-
           setAuthState((prev) => ({
             ...prev,
             user,
-            // NOTE: Don't set idToken here - we'll wait for fresh token
-            accounts: needSelectAccount ? [] : cachedData.accounts, // Don't load accounts if selection is needed
+            accounts: cachedData.accounts,
             member: cachedData.member,
             preference: cachedData.preference || defaultPreference,
-            isLoggedIn: !needSelectAccount, // Only set logged in if no account selection needed
-            needSelectAccount,
-            relatedMembers: cachedData.relatedMembers || []
+            isLoggedIn: true
           }));
         }
 
@@ -522,7 +477,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           idToken = await user.getIdToken(false);
           confirmedIdToken = idToken;
-          console.log('Successfully obtained auth token from main');
         } catch (error) {
           console.warn('Failed to get auth token from main:', error);
           throw error;
@@ -531,81 +485,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Only update API client after we have confirmed token (fresh or fallback)
         apiClient.setApiClientIdToken(idToken);
         gmailApiClient.setApiClientIdToken(idToken);
-        electronApi.setIdToken(idToken);
 
         // Update auth state with the confirmed token
         if (cachedData && cachedData.accounts.length > 0 && cachedSpaces) {
-          const needSelectAccount =
-            cachedData.relatedMembers && cachedData.relatedMembers.length > 0;
-
-          if (!needSelectAccount) {
-            // Update with fresh token instead of cached one
-            setAuthState((prev) => ({
-              ...prev,
-              idToken, // Use the fresh/confirmed token, not cached
-              isLoading: false
-            }));
-          }
+          setAuthState((prev) => ({
+            ...prev,
+            idToken,
+            isLoading: false
+          }));
         }
 
-        const isDirectGoogleAccountResponse = !!tokenState?.googleAccounts?.length;
-        let monoAccountResponse = buildDirectGoogleAccountResponse(tokenState);
+        const monoAccountResponse = buildDirectGoogleAccountResponse(tokenState);
         if (!monoAccountResponse) {
-          try {
-            monoAccountResponse = await authApi.getMonoAccount();
-          } catch (error) {
-            // Standalone Google OAuth mode: member data lives in TokenManager, not a backend.
-            // Check this first so stale cached mock-backend data doesn't shadow real Google accounts.
-            const authState = await electronApi.getAuthState();
-            monoAccountResponse = buildDirectGoogleAccountResponse(authState);
-            if (!monoAccountResponse && authState?.member) {
-              const m = authState.member;
-              monoAccountResponse = {
-                accounts: [
-                  {
-                    uid: m.uid,
-                    displayName: m.displayName || m.email,
-                    provider: 'google' as const,
-                    email: m.email,
-                    profileImageUrl: m.photoURL || '',
-                    primary: true,
-                    scopes: [
-                      'https://mail.google.com',
-                      'https://www.googleapis.com/auth/gmail.modify',
-                      'https://www.googleapis.com/auth/contacts.readonly'
-                    ],
-                    isExpired: false
-                  }
-                ],
-                relatedMembers: [],
-                member: {
-                  uid: m.uid,
-                  displayName: m.displayName || m.email,
-                  email: m.email,
-                  primaryUid: m.uid,
-                  memberName: m.email.split('@')[0],
-                  profileImageUrl: m.photoURL || '',
-                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  demographics: { role: '', emailUsage: '', discoverySource: '' },
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-                }
-              };
-            } else if (!monoAccountResponse && cachedData) {
-              console.log('Using cached account data due to API network error');
-              monoAccountResponse = {
-                accounts: cachedData.accounts,
-                relatedMembers: [],
-                member: cachedData.member ?? undefined
-              };
-            } else if (!monoAccountResponse) {
-              throw error;
-            }
-          }
+          throw new Error('No Google account available');
         }
-        if (!monoAccountResponse) throw new Error('No account data available');
 
-        const { accounts, relatedMembers, member } = monoAccountResponse;
+        const { accounts, member } = monoAccountResponse;
 
         // Update state with fresh data
         setAuthState((prev) => ({
@@ -613,7 +508,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           user,
           idToken,
           accounts,
-          relatedMembers,
           member: member || null
         }));
 
@@ -621,8 +515,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await authCache.saveAuthData({
           accounts,
           member: member ?? null,
-          preference: null, // Will be updated below
-          relatedMembers
+          preference: null // Will be updated below
         });
 
         if (member && !isDevelopment()) {
@@ -637,19 +530,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             $connected_emails: accounts.map((account) => account.email)
           });
 
-          if (member.demographics) {
-            mixpanel.people.set({
-              $demographics_role: member.demographics.role,
-              $demographics_email_usage: member.demographics.emailUsage,
-              $demographics_discovery_source: member.demographics.discoverySource
-            });
-          }
-
           amplitude.setUserId(member.uid);
           // Set user properties in Amplitude
           const identifyObj = new amplitude.Identify();
 
-          // Add user properties that match your Mixpanel implementation
           identifyObj.set('name', member.displayName);
           identifyObj.set('email', member.email);
           identifyObj.set('member_name', member.memberName);
@@ -659,12 +543,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             'connected_emails',
             accounts.map((account) => account.email)
           );
-          // Add demographic properties if available
-          if (member.demographics) {
-            identifyObj.set('demographics_role', member.demographics.role);
-            identifyObj.set('demographics_email_usage', member.demographics.emailUsage);
-            identifyObj.set('demographics_discovery_source', member.demographics.discoverySource);
-          }
 
           // Send the identify call
           amplitude.identify(identifyObj);
@@ -677,20 +555,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           });
         }
 
-        if (relatedMembers.length > 0) {
-          setAuthState((prev) => ({
-            ...prev,
-            needSelectAccount: true
-          }));
-          return;
-        }
-
         let preference;
         try {
           preference = await fetchPreference(accounts);
         } catch (error) {
           if (cachedData?.preference) {
-            console.log('Using cached preference due to API network error');
             preference = cachedData.preference;
           } else {
             preference = defaultPreference;
@@ -701,8 +570,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await authCache.saveAuthData({
           accounts,
           member: member ?? null,
-          preference,
-          relatedMembers
+          preference
         });
 
         // Update state with preference
@@ -710,13 +578,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ...prev,
           preference
         }));
-
-        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        try {
-          await authApi.updateUserTimezone(timezone);
-        } catch (error) {
-          console.warn('Failed to update timezone:', error);
-        }
 
         updateBadgeWithLabelCount(accounts.map((account) => account.uid));
         electronApi.setKnownAccountUids(accounts.map((account) => account.uid)).catch(() => {});
@@ -732,7 +593,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           await loadSpaces(
             activeSpaceId,
-            isDirectGoogleAccountResponse ? accounts.map((account) => account.uid) : undefined
+            accounts.map((account) => account.uid)
           );
         } catch (error) {
           console.error('Failed to load spaces:', error);
@@ -743,23 +604,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         setAuthState((prev) => ({
           ...prev,
-          isLoggedIn: true,
-          needSelectAccount: false
+          isLoggedIn: true
         }));
       } catch (error) {
-        const isFirebaseNetworkError =
+        const isNetworkError =
           error instanceof Error &&
           (error.message.includes('network error') ||
             error.message.includes('network-request-failed') ||
-            error.message.includes('A network error') ||
-            error.message.includes('Firebase: Error (auth/network-request-failed)'));
+            error.message.includes('A network error'));
 
-        // Retry logic for Firebase network errors
-        if (isFirebaseNetworkError && retryCount < maxRetries) {
-          console.log(
-            `Firebase network error detected. Retrying (${retryCount + 1}/${maxRetries})...`
-          );
-
+        // Retry logic for transient network errors
+        if (isNetworkError && retryCount < maxRetries) {
           // Exponential backoff: 1s, 2s, 4s, etc.
           const backoffTime = Math.pow(2, retryCount) * 1000;
 
@@ -775,19 +630,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (confirmedIdToken && (await authCache.hasCachedCredentials())) {
           const cachedData = await authCache.getCachedData();
           if (cachedData) {
-            const needSelectAccount =
-              !!cachedData.relatedMembers && cachedData.relatedMembers.length > 0;
             setAuthState((prev) => ({
               ...prev,
-              isLoggedIn: !needSelectAccount,
+              isLoggedIn: true,
               user: user,
               idToken: confirmedIdToken,
-              accounts: needSelectAccount ? [] : cachedData.accounts,
+              accounts: cachedData.accounts,
               member: cachedData.member,
               preference: cachedData.preference || defaultPreference,
-              isLoading: false,
-              needSelectAccount,
-              relatedMembers: cachedData.relatedMembers || []
+              isLoading: false
             }));
             return;
           }
@@ -799,28 +650,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
         await signOut();
       } finally {
-        // Only set loading to false if it hasn't been set to false already
-        // setAuthState((prev) => ({
-        //   ...prev,
-        //   isLoading: prev.isLoading
-        // }));
+        // no-op
       }
     },
     [activeSpace, loadSpaces, fetchDataForAccounts]
   );
-
-  const signIn = useCallback(async (token: string) => {
-    setAuthState((prev) => ({ ...prev, isLoading: true }));
-    try {
-      await signInWithCustomToken(auth, token);
-    } catch (error) {
-      console.error('An error occurred during sign-in.', error);
-      toast.error(
-        'An error occurred during sign-in: ' + (error instanceof Error ? error.message : '')
-      );
-      setAuthState((prev) => ({ ...prev, isLoading: false }));
-    }
-  }, []);
 
   const clearLocalAuthState = useCallback(async () => {
     await authCache.clearCache();
@@ -830,7 +664,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     apiClient.setApiActiveUid(null);
     gmailApiClient.setApiClientIdToken(null);
     gmailApiClient.setApiActiveUid(null);
-    await electronApi.setIdToken(null);
     await electronApi.setActiveUid(null);
 
     setAuthState({
@@ -840,25 +673,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       member: null,
       preference: defaultPreference,
       isLoading: false,
-      idToken: null,
-      needSelectAccount: false,
-      relatedMembers: []
+      idToken: null
     });
   }, []);
 
   const signOut = useCallback(async () => {
     try {
-      // stopCloudPubSub is a backend-proxied Gmail watch — not applicable
-      // in standalone Google mode where the history poller handles delivery.
-      const isGoogleMode = accounts.some((a) => a.provider === 'google');
-      if (!isGoogleMode) {
-        await Promise.allSettled(
-          accounts.map(async (account) => {
-            await mailApi.stopCloudPubSub(account.uid);
-          })
-        );
-      }
-
       await auth.signOut();
       await clearLocalAuthState();
     } catch (error) {
@@ -868,7 +688,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
       await clearLocalAuthState();
     }
-  }, [accounts, clearLocalAuthState]);
+  }, [clearLocalAuthState]);
 
   const updateAccounts = useCallback(async () => {
     try {
@@ -881,55 +701,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const freshToken = await currentUser.getIdToken(false);
         apiClient.setApiClientIdToken(freshToken);
         gmailApiClient.setApiClientIdToken(freshToken);
-        electronApi.setIdToken(freshToken);
         setAuthState((prev) => ({ ...prev, idToken: freshToken }));
       }
 
       const authState = await electronApi.getAuthState();
-      let monoAccountResponse = buildDirectGoogleAccountResponse(authState);
-      if (!monoAccountResponse) {
-        try {
-          monoAccountResponse = await authApi.getMonoAccount();
-        } catch (_err) {
-          // Standalone Google OAuth mode: build account from token state
-          if (authState?.member) {
-            const m = authState.member;
-            monoAccountResponse = {
-              accounts: [
-                {
-                  uid: m.uid,
-                  displayName: m.displayName || m.email,
-                  provider: 'google' as const,
-                  email: m.email,
-                  profileImageUrl: m.photoURL || '',
-                  primary: true,
-                  scopes: [
-                    'https://mail.google.com',
-                    'https://www.googleapis.com/auth/gmail.modify',
-                    'https://www.googleapis.com/auth/contacts.readonly'
-                  ],
-                  isExpired: false
-                }
-              ],
-              relatedMembers: [],
-              member: {
-                uid: m.uid,
-                displayName: m.displayName || m.email,
-                email: m.email,
-                primaryUid: m.uid,
-                memberName: m.email.split('@')[0],
-                profileImageUrl: m.photoURL || '',
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                demographics: { role: '', emailUsage: '', discoverySource: '' },
-                createdAt: new Date(),
-                updatedAt: new Date()
-              }
-            };
-          } else {
-            throw _err;
-          }
-        }
-      }
+      const monoAccountResponse = buildDirectGoogleAccountResponse(authState);
       if (!monoAccountResponse) throw new Error('No account data available');
 
       const newAccounts = monoAccountResponse.accounts;
@@ -941,136 +717,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isLoggedIn: true
       }));
 
-      // Keep cache in sync so stale mock data doesn't flash on next startup
-      authCache.saveAuthData({
-        accounts: newAccounts,
-        member: monoAccountResponse.member ?? null,
-        preference: null,
-        relatedMembers: []
-      }).catch(() => {});
+      // Keep cache in sync so stale data doesn't flash on next startup
+      authCache
+        .saveAuthData({
+          accounts: newAccounts,
+          member: monoAccountResponse.member ?? null,
+          preference: null
+        })
+        .catch(() => {});
 
       updateBadgeWithLabelCount(newAccounts.map((a) => a.uid));
       electronApi.setKnownAccountUids(newAccounts.map((a) => a.uid)).catch(() => {});
 
-      if (authState?.provider !== 'google') {
-        for (const account of newAccounts) {
-          mailApi
-            .watchCloudPubSub(account.uid)
-            .catch((e) => console.warn('[addAccount] watchCloudPubSub failed for', account.uid, e));
-        }
-      }
-
       loadSpaces(
         null,
-        authState?.googleAccounts?.length ? newAccounts.map((account) => account.uid) : undefined
+        newAccounts.map((account) => account.uid)
       );
       fetchDataForAccounts(newAccounts);
     } catch (error) {
       console.error('Error fetching accounts: ', error);
     }
   }, [loadSpaces, fetchDataForAccounts]);
-  const handleCreateAccount = async () => {
-    if (!user) return;
-    try {
-      setAuthState((prev) => ({
-        ...prev,
-        needSelectAccount: false,
-        isLoading: true
-      }));
-
-      // Collect device information using the same method from SignInContent
-      const collectDeviceInfo = () => {
-        const parser = new UAParser();
-        const result = parser.getResult();
-
-        return {
-          browser: `${result.browser.name || 'Unknown'} ${result.browser.version || ''}`,
-          os: `${result.os.name || 'Unknown'} ${result.os.version || ''}`,
-          device: result.device.vendor
-            ? `${result.device.vendor} ${result.device.model}`
-            : 'Desktop',
-          language: navigator.language,
-          platform: navigator.platform,
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        };
-      };
-
-      // Get device info
-      const deviceInfo = collectDeviceInfo();
-
-      // Pass device info to createMember
-      const monoAccountResponse = await authApi.createMember(deviceInfo);
-      if (!monoAccountResponse.member) throw new Error('No member found');
-
-      setAuthState((prev) => ({
-        ...prev,
-        relatedMembers: monoAccountResponse.relatedMembers,
-        accounts: monoAccountResponse.accounts,
-        member: monoAccountResponse.member || null
-      }));
-
-      await fetchPreference(monoAccountResponse.accounts);
-      await loadSpaces(null);
-      await fetchDataForAccounts(monoAccountResponse.accounts);
-
-      setAuthState((prev) => ({
-        ...prev,
-        isLoggedIn: true,
-        isLoading: false
-      }));
-    } catch (error) {
-      console.error('Error during account creation: ', error);
-      toast.error(
-        'Error during account creation: ' + (error instanceof Error ? error.message : '')
-      );
-      await signOut();
-    } finally {
-      setAuthState((prev) => ({
-        ...prev,
-        isLoading: false
-      }));
-    }
-  };
-
-  const handleSignIn = useCallback(async () => {
-    if (!user) return;
-    try {
-      setAuthState((prev) => ({
-        ...prev,
-        needSelectAccount: false,
-        isLoading: true
-      }));
-
-      await fetchPreference(accounts);
-
-      let activeSpaceId: string | null = null;
-      try {
-        activeSpaceId = await getCachedActiveSpaceId();
-      } catch (error) {
-        console.error('Failed to read active space from localStorage:', error);
-      }
-
-      // Fetch spaces
-      await loadSpaces(activeSpaceId);
-      // If a space is active, fetch data for its accounts
-      fetchDataForAccounts(accounts);
-
-      setAuthState((prev) => ({
-        ...prev,
-        isLoggedIn: true,
-        isLoading: false
-      }));
-    } catch (error) {
-      console.error('Error during authentication: ', error);
-      toast.error('Error during authentication: ' + (error instanceof Error ? error.message : ''));
-      await signOut();
-    } finally {
-      setAuthState((prev) => ({
-        ...prev,
-        isLoading: false
-      }));
-    }
-  }, [user, accounts, fetchPreference, loadSpaces, fetchDataForAccounts, signOut]);
 
   // Keep a ref to the latest updateAccounts so the fixed [] listener never holds a stale closure.
   const updateAccountsRef = useRef(updateAccounts);
@@ -1089,10 +756,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAuthState((prev) => ({ ...prev, isLoading: false }));
     });
 
-    const removeSignInListener = electronApi.on<string>('renderer:auth:sign-in', async (token) => {
-      await signIn(token);
-    });
-
     const removeAddAccountListener = electronApi.on<string>(
       'renderer:auth:add-account',
       async () => {
@@ -1100,24 +763,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         toast.success(t('toast.preferences.integration.account_added'));
       }
     );
-    const removeAccountScopeUpdateListener = electronApi.on<string>(
-      'renderer:auth:scope-updated',
-      async () => {
-        await updateAccountsRef.current();
-        toast.success(t('toast.account.scope_update_success'));
-      }
-    );
 
-    // Phase-B: token refresh lives in the main-process TokenManager, which
-    // schedules a refresh ~60s before each access token expires. The
-    // renderer just listens for `renderer:auth:token-changed` (handled
-    // inside monoAuth) and re-flows the new token through React state via
-    // `onAuthStateChanged` above.
+    // Token refresh lives in the main-process TokenManager, which schedules a
+    // refresh ~60s before each access token expires. The renderer just listens
+    // for `renderer:auth:token-changed` (handled inside monoAuth) and re-flows
+    // the new token through React state via `onAuthStateChanged` above.
 
     return () => {
       unsubscribeAuth();
-      removeSignInListener();
-      removeAccountScopeUpdateListener();
       removeAddAccountListener();
     };
   }, []);
@@ -1128,7 +781,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       user,
       isLoading,
       idToken,
-      signIn,
       signOut,
       member,
       accounts,
@@ -1143,7 +795,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     user,
     isLoading,
     idToken,
-    signIn,
     signOut,
     member,
     accounts,
@@ -1155,19 +806,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     fetchDrafts
   ]);
 
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-      <AccountSelectDialog
-        accounts={accounts}
-        member={member}
-        relatedMembers={relatedMembers}
-        open={needSelectAccount}
-        onCreateAccount={handleCreateAccount}
-        onSignIn={handleSignIn}
-      />
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = (): AuthContextType => {

@@ -106,7 +106,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
     <>
       <div
         className={cn(
-          'no-drag h-screen bg-gradient-to-tr from-background/90 to-background/80 backdrop-blur-lg'
+          'no-drag h-screen bg-white dark:bg-background'
         )}
       >
         <div className="flex h-full flex-col overflow-hidden">
@@ -114,7 +114,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
               window dragging across the whole strip; each nav button carries
               `no-drag` so clicks still fire. Traffic lights sit at x=12,y=16
               so we reserve an explicit left gutter to avoid rem-scale drift. */}
-          <div className="drag relative z-50 flex h-[52px] w-full shrink-0 items-center bg-background pl-[92px] pr-[16px]">
+          <div className="drag relative z-50 flex h-[52px] w-full shrink-0 items-center bg-white pl-[92px] pr-[16px] dark:bg-background">
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="pointer-events-auto">
                 <MailNavTabs />

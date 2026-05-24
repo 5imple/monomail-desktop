@@ -75,7 +75,7 @@ ${careers ? `\n  ${careers}` : ''}
 console.info(logo);
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <ThemeProvider defaultTheme={'light'} storageKey="ui-theme">
+  <ThemeProvider defaultTheme={'pure-light'} storageKey="ui-theme">
     <InternetConnection>
       <UndoProvider>
         <AuthProvider>

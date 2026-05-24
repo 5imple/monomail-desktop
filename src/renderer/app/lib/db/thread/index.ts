@@ -247,6 +247,109 @@ export async function DBPurgeStubThreads(uid: string): Promise<number> {
   return removed;
 }
 
+/**
+ * Strip a single Gmail label token of stray brackets/quotes/whitespace.
+ * Backend push frames deliver labels as bracket-wrapped strings (e.g.
+ * `"[INBOX, UNREAD]"` or `"[TRASH]"`); a naive comma-split turns those into
+ * malformed labels like `"[TRASH]"` that then evade every `includes('TRASH')`
+ * filter, so trashed threads never leave the inbox.
+ */
+export function normalizeLabelToken(raw: string): string {
+  return String(raw).replace(/[[\]"']/g, '').trim();
+}
+
+/** Normalize a labels value (string | array | bracketed CSV) into clean ids. */
+export function normalizeGmailLabels(input: string | string[] | null | undefined): string[] {
+  if (!input) return [];
+  const tokens = Array.isArray(input) ? input : String(input).split(',');
+  const out: string[] = [];
+  for (const token of tokens) {
+    const clean = normalizeLabelToken(token);
+    if (clean && !out.includes(clean)) out.push(clean);
+  }
+  return out;
+}
+
+/**
+ * One-time repair: normalize already-corrupted labelIds (e.g. `[TRASH]`) on
+ * cached threads and messages so the TRASH/SPAM filters work again. Returns the
+ * number of records fixed. Safe to call repeatedly.
+ */
+export async function DBNormalizeCachedLabels(uid: string): Promise<number> {
+  const db = await initDB(uid);
+  const tx = db.transaction(['threads', 'messages'], 'readwrite');
+  let fixed = 0;
+  for (const storeName of ['threads', 'messages'] as const) {
+    const store = tx.objectStore(storeName);
+    const all = await store.getAll();
+    for (const rec of all) {
+      if (!rec || !Array.isArray(rec.labelIds)) continue;
+      const norm = normalizeGmailLabels(rec.labelIds);
+      const changed =
+        norm.length !== rec.labelIds.length || norm.some((l, i) => l !== rec.labelIds[i]);
+      if (changed) {
+        rec.labelIds = norm;
+        await store.put(rec);
+        fixed++;
+      }
+    }
+  }
+  await tx.done;
+  return fixed;
+}
+
+/**
+ * Authoritative inbox reconcile. After a full sync of the inbox/primary view
+ * returns Gmail's current set, strip the INBOX label from cached threads that
+ * are still shown in that view but were NOT returned by Gmail — i.e. they were
+ * archived / moved out of the inbox elsewhere. Without this the cache only ever
+ * grows: the full sync upserts and never removes, so archived threads linger in
+ * the inbox forever and the app drifts from Gmail.
+ *
+ * `presentIds` MUST be the complete Gmail result for the view (all pages). The
+ * thread stays cached (for All Mail / other views); only INBOX is removed.
+ */
+export async function DBReconcileInboxMembership(
+  uid: string,
+  presentIds: Set<string>,
+  query: string
+): Promise<number> {
+  const preference = (await authCache.getCachedData())?.preference;
+  if (!preference) return 0;
+  const isPrimaryView = query === 'category:primary';
+
+  const db = await initDB(uid);
+  const tx = db.transaction(['threads', 'messages'], 'readwrite');
+  const threadsStore = tx.objectStore('threads');
+  const messagesStore = tx.objectStore('messages');
+  const all = await threadsStore.getAll();
+
+  let pruned = 0;
+  for (const rec of all) {
+    if (!rec || !Array.isArray(rec.labelIds) || !rec.labelIds.includes('INBOX')) continue;
+    if (presentIds.has(rec.id)) continue;
+    // Only touch threads that actually belong to the synced view (for primary,
+    // this also skips github threads, which Gmail's primary query excludes).
+    const inSyncedView = isPrimaryView
+      ? isPrimaryThread(rec as unknown as MonoThread, preference)
+      : true;
+    if (!inSyncedView) continue;
+
+    rec.labelIds = rec.labelIds.filter((l: string) => l !== 'INBOX');
+    await threadsStore.put(rec);
+    for (const itemId of rec.items ?? []) {
+      const msg = await messagesStore.get(itemId);
+      if (msg && Array.isArray(msg.labelIds) && msg.labelIds.includes('INBOX')) {
+        msg.labelIds = msg.labelIds.filter((l: string) => l !== 'INBOX');
+        await messagesStore.put(msg);
+      }
+    }
+    pruned++;
+  }
+  await tx.done;
+  return pruned;
+}
+
 export async function DBGetThreadsByLabel(
   uid: string,
   label: ValidLabel | string,

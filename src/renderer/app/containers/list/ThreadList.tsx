@@ -249,7 +249,7 @@ function ThreadList({ onScroll }: ThreadListProps) {
         </div>
       </ScrollArea>
       {(hasMore || loadingStatus === 'LOADING' || aggregatedSyncState.isSyncing) && (
-        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background to-transparent" />
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent dark:from-background" />
       )}
     </div>
   );

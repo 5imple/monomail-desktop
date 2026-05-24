@@ -129,7 +129,7 @@ export function registerGmailHandlers() {
 
       const data = await readResponseBody(response, args?.responseType ?? 'json');
       if (!response.ok) {
-        log.warn(`[gmail:ipc] request failed: ${method} ${response.status}`);
+        log.warn(`[gmail:ipc] FAIL ${method} ${args?.path} uid=${uid} status=${response.status}`);
         return {
           ok: false,
           status: response.status,
@@ -140,7 +140,10 @@ export function registerGmailHandlers() {
 
       return { ok: true, status: response.status, data } satisfies GmailRequestResult;
     } catch (error) {
-      log.error('[gmail:ipc] request failed:', error instanceof Error ? error.message : error);
+      log.error(
+        `[gmail:ipc] ERROR ${args?.method} ${args?.path} uid=${args?.uid}:`,
+        error instanceof Error ? error.message : error
+      );
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'Gmail request failed'
