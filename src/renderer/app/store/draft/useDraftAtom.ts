@@ -54,7 +54,7 @@ export function useDraftAtom() {
         // Fetch the message from Gmail API
         const fetchedMessage = await mailApi.getMessage(uid, messageId);
 
-        if (fetchedMessage) {
+        if (fetchedMessage?.payload) {
           // Convert to MonoMessage format
           const monoMessage = MonoMessage.fromPlainObject(
             MonoMessage.fromGmailMessage(fetchedMessage).toPlainObject()

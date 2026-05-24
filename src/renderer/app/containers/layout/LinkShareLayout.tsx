@@ -64,12 +64,15 @@ const LinkShareLayout: FC<LinkShareLayoutProps> = () => {
       let messages: MonoMessage[] = [];
 
       if (response.sharedDataType === 'MESSAGE') {
-        messages = [MonoMessage.fromGmailMessage(response.sharedEmailData as GmailMessage)]; // Single message wrapped in an array
-        setSubject((response.sharedEmailData as GmailMessage).subject);
+        const sharedMessage = response.sharedEmailData as GmailMessage;
+        messages = sharedMessage?.payload ? [MonoMessage.fromGmailMessage(sharedMessage)] : [];
+        setSubject(sharedMessage.subject);
       } else if (response.sharedDataType === 'THREAD') {
         const threadMessages = response.sharedEmailData as GmailThreadGetResponse;
-        // Parse all thread messages
-        messages = threadMessages.messages.map((message) => MonoMessage.fromGmailMessage(message));
+        // Parse all thread messages that have a usable payload
+        messages = threadMessages.messages
+          .filter((message) => message?.payload)
+          .map((message) => MonoMessage.fromGmailMessage(message));
         setSubject((response.sharedEmailData as GmailThreadGetResponse).subject);
       }
 

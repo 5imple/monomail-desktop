@@ -230,8 +230,11 @@ export function transformThread(raw: RawGmailThread, accountId: string): IMonoTh
     return result;
   };
 
-  // Cast MailMessage to GmailMessage — they are structurally identical
-  const items = messages.map((m) => MonoMessage.fromGmailMessage(m as any));
+  // Cast MailMessage to GmailMessage — they are structurally identical.
+  // Skip any without a payload — fromGmailMessage requires it and throws otherwise.
+  const items = messages
+    .filter((m) => (m as any)?.payload)
+    .map((m) => MonoMessage.fromGmailMessage(m as any));
 
   return {
     accountId,
