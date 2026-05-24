@@ -72,6 +72,15 @@ interface IpcRenderer {
     | { ok: true; status: number; data: any }
     | { ok: false; status?: number; data?: any; error: string }
   >;
+  peopleRequest: (args: {
+    path: string;
+    uid: string;
+    headers?: Record<string, string>;
+    responseType?: 'json' | 'blob' | 'text';
+  }) => Promise<
+    | { ok: true; status: number; data: any }
+    | { ok: false; status?: number; data?: any; error: string }
+  >;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;

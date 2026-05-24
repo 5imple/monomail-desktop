@@ -2,6 +2,7 @@ import { LRUCache } from 'lru-cache';
 import { MonoRecipient } from '@/main/models/types';
 import { Avatar, AvatarImage } from '@/renderer/app/components/ui/avatar';
 import { DBGetContactByEmail } from '@/renderer/app/lib/db/contact';
+import electronApi from '@/renderer/app/lib/electronApi';
 import { getFaviconFromEmail } from '@/renderer/app/lib/faviconUtils';
 import { cn } from '@/renderer/app/lib/utils';
 import { FC, useEffect, useState, useRef } from 'react';
@@ -22,6 +23,11 @@ const photoUrlCache = new LRUCache<string, string | false>({
 // Cache loaded <img> elements for the final resolved URL
 const imageCache = new LRUCache<string, HTMLImageElement>({
   max: 200,
+  ttl: 60 * 60 * 1000
+});
+
+const failedImageUrlCache = new LRUCache<string, true>({
+  max: 500,
   ttl: 60 * 60 * 1000
 });
 
@@ -58,27 +64,23 @@ async function fetchPeoplePhotoUrl(email: string, accountId: string): Promise<st
   if (photoUrlCache.has(cacheKey)) return photoUrlCache.get(cacheKey) || null;
 
   try {
-    const bridge = (window as any).electronBridge;
-    if (!bridge?.getGoogleAccountToken) return null;
-
-    const tokenResult = await bridge.getGoogleAccountToken(accountId);
-    if (!tokenResult?.ok) return null;
-
     const encodedEmail = encodeURIComponent(email);
-    const urls = [
-      `https://people.googleapis.com/v1/people:searchContacts?query=${encodedEmail}&readMask=photos,emailAddresses&pageSize=1&sources=READ_SOURCE_TYPE_CONTACT&sources=READ_SOURCE_TYPE_DOMAIN_CONTACT`,
-      `https://people.googleapis.com/v1/otherContacts:search?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1`,
-      `https://people.googleapis.com/v1/people:searchDirectoryPeople?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1&sources=DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE`
+    const paths = [
+      `/people:searchContacts?query=${encodedEmail}&readMask=photos,emailAddresses&pageSize=1&sources=READ_SOURCE_TYPE_CONTACT&sources=READ_SOURCE_TYPE_DOMAIN_CONTACT`,
+      `/otherContacts:search?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1`,
+      `/people:searchDirectoryPeople?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1&sources=DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE`
     ];
 
-    for (const url of urls) {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${tokenResult.accessToken}`, Accept: 'application/json' }
+    for (const path of paths) {
+      const result = await electronApi.peopleRequest<any>({
+        uid: accountId,
+        path,
+        headers: { Accept: 'application/json' }
       });
 
-      if (!res.ok) continue;
+      if (!result.ok) continue;
 
-      const data = await res.json();
+      const data = result.data;
       const people = [
         ...(data.results?.map((result: any) => result.person).filter(Boolean) ?? []),
         ...(data.people ?? []),
@@ -107,10 +109,17 @@ async function fetchPeoplePhotoUrl(email: string, accountId: string): Promise<st
 }
 
 function loadImg(src: string): Promise<HTMLImageElement> {
+  if (failedImageUrlCache.has(src)) {
+    return Promise.reject(new Error('Image URL recently failed to load'));
+  }
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => {
+      failedImageUrlCache.set(src, true);
+      reject(new Error('Image failed to load'));
+    };
     img.src = src;
   });
 }

@@ -292,8 +292,9 @@ export function MailLayout({}: MailLayoutProps) {
   }, [preference.notification.watchNotification]);
 
   const isReaderMounted = readerPanelPhase !== 'closed';
-  const isReaderFullscreen = fullscreenDisplayPanel || isReaderMounted;
+  const isReaderFullscreen = Boolean(activeThreadId) || fullscreenDisplayPanel;
   const isReaderSettledOpen = readerPanelPhase === 'open';
+  const isResizeHandleEnabled = isGroupedPanelExpanded && !isReaderFullscreen;
 
   return (
     <>
@@ -335,9 +336,15 @@ export function MailLayout({}: MailLayoutProps) {
           </ResizablePanel>
 
           {/* Grouped Panels Handle */}
-          {isGroupedPanelExpanded && !isReaderFullscreen && (
-            <ResizableHandle onDragging={(dragging) => setIsDraggingHandle(dragging)} />
-          )}
+          <ResizableHandle
+            disabled={!isResizeHandleEnabled}
+            tabIndex={isResizeHandleEnabled ? 0 : -1}
+            aria-hidden={!isResizeHandleEnabled}
+            onDragging={(dragging) => setIsDraggingHandle(dragging)}
+            className={cn(
+              !isResizeHandleEnabled && 'w-0 bg-transparent after:w-0 after:content-none'
+            )}
+          />
 
           {/* DISPLAY PANEL */}
           <ResizablePanel

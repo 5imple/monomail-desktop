@@ -23,6 +23,17 @@ import * as fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
+const stripResponseHeaders = (
+  headers: Record<string, string[]> | undefined,
+  namesToStrip: string[]
+) => {
+  const normalizedNames = new Set(namesToStrip.map((name) => name.toLowerCase()));
+
+  return Object.fromEntries(
+    Object.entries(headers ?? {}).filter(([name]) => !normalizedNames.has(name.toLowerCase()))
+  );
+};
+
 export function registerAppEventHandlers() {
   app.whenReady().then(() => {
     protocols.forEach((protocol) => {
@@ -115,9 +126,16 @@ export function registerAppEventHandlers() {
         details.url.startsWith('https://people.googleapis.com/') ||
         details.url.startsWith('https://oauth2.googleapis.com/');
       if (isGoogleApi) {
+        const responseHeaders = stripResponseHeaders(details.responseHeaders, [
+          'Access-Control-Allow-Origin',
+          'Access-Control-Allow-Methods',
+          'Access-Control-Allow-Headers',
+          'Access-Control-Expose-Headers'
+        ]);
+
         callback({
           responseHeaders: {
-            ...details.responseHeaders,
+            ...responseHeaders,
             'Access-Control-Allow-Origin': ['*'],
             'Access-Control-Allow-Methods': ['GET, POST, PATCH, PUT, DELETE, OPTIONS'],
             'Access-Control-Allow-Headers': ['*'],

@@ -18,6 +18,12 @@ type GmailBridgeRequest = {
 type GmailBridgeResult<T = any> =
   | { ok: true; status: number; data: T }
   | { ok: false; status?: number; data?: any; error: string };
+type PeopleBridgeRequest = {
+  path: string;
+  uid: string;
+  headers?: Record<string, string>;
+  responseType?: 'json' | 'blob' | 'text';
+};
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import {
   INativeNotificationOptions,
@@ -129,6 +135,7 @@ interface IpcRenderer {
     uid: string
   ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
   gmailRequest: <T = any>(args: GmailBridgeRequest) => Promise<GmailBridgeResult<T>>;
+  peopleRequest: <T = any>(args: PeopleBridgeRequest) => Promise<GmailBridgeResult<T>>;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;
@@ -460,6 +467,12 @@ const electronApi: IpcRenderer = {
   gmailRequest: async (args) => {
     if (isElectron) {
       return window.electronBridge.gmailRequest(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  peopleRequest: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.peopleRequest(args);
     }
     return { ok: false, error: 'Not in Electron' };
   },

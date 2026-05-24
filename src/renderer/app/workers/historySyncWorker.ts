@@ -52,6 +52,16 @@ interface SyncError {
 // Track active sync operations
 const activeSyncs = new Map<string, AbortController>();
 
+function getErrorStatus(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null;
+
+  const status = (error as { status?: unknown }).status;
+  if (typeof status === 'number') return status;
+
+  const dataStatus = (error as { data?: { status?: unknown } }).data?.status;
+  return typeof dataStatus === 'number' ? dataStatus : null;
+}
+
 // Listen for messages from main thread
 self.addEventListener('message', async (event) => {
   const { type, payload } = event.data;
@@ -455,7 +465,9 @@ async function processHistoryItems(uid: string, history: GmailHistory[]): Promis
               }
             }
           } catch (error) {
-            console.error('Error processing added message:', error);
+            if (getErrorStatus(error) !== 404) {
+              console.error('Error processing added message:', error);
+            }
           }
 
           return await p;

@@ -55,6 +55,7 @@ interface MessageCardProps {
 const ALLOWED_INLINE_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
 const shouldTransformEmailForDarkMode = false;
+const failedRemoteImageUrls = new Set<string>();
 
 function normalizeContentId(value?: string | null): string {
   if (!value) return '';
@@ -531,6 +532,60 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           img.removeEventListener('load', onImageLoad);
           img.removeEventListener('error', onImageLoad);
         });
+      };
+    }, [parsedPayload?.content, showQuotedContent]);
+
+    useEffect(() => {
+      const roots = [
+        messageContentRef.current,
+        showQuotedContent ? quotedContentRef.current : null
+      ].filter(Boolean) as HTMLDivElement[];
+      if (roots.length === 0) return () => {};
+
+      const markRemoteImageUnavailable = (img: HTMLImageElement, src: string) => {
+        if (img.dataset.monoRemoteImageState === 'error') return;
+
+        failedRemoteImageUrls.add(src);
+        img.dataset.monoRemoteImageState = 'error';
+        img.removeAttribute('src');
+        img.style.display = 'none';
+
+        const fallback = document.createElement('div');
+        fallback.className =
+          'my-2 inline-flex min-h-[72px] max-w-full items-center rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground';
+        fallback.textContent = 'Image unavailable';
+        img.parentNode?.insertBefore(fallback, img.nextSibling);
+        requestAnimationFrame(updateHeight);
+      };
+
+      const images = roots.flatMap((root) =>
+        Array.from(
+          root.querySelectorAll<HTMLImageElement>(
+            'img[src^="http://"], img[src^="https://"], img[src^="//"]'
+          )
+        )
+      );
+
+      const cleanups = images.map((img) => {
+        const src = img.getAttribute('src');
+        if (!src) return () => {};
+
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.referrerPolicy = 'no-referrer';
+
+        if (failedRemoteImageUrls.has(src)) {
+          markRemoteImageUnavailable(img, src);
+          return () => {};
+        }
+
+        const handleError = () => markRemoteImageUnavailable(img, src);
+        img.addEventListener('error', handleError, { once: true });
+        return () => img.removeEventListener('error', handleError);
+      });
+
+      return () => {
+        cleanups.forEach((cleanup) => cleanup());
       };
     }, [parsedPayload?.content, showQuotedContent]);
 

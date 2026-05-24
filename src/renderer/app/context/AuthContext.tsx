@@ -403,11 +403,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const fetchBookmarks = useCallback(async () => {
-    fetchAndSetBookmarks();
+    await fetchAndSetBookmarks();
   }, [fetchAndSetBookmarks]);
 
   const fetchTrackingHistories = useCallback(async () => {
-    fetchAndSetTrackingHistories();
+    await fetchAndSetTrackingHistories();
   }, [fetchAndSetTrackingHistories]);
 
   const fetchTemplates = useCallback(async () => {
@@ -448,7 +448,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [updateDraft]);
 
   const fetchLabels = useCallback(async () => {
-    loadLabels(accounts.map((a) => a.uid));
+    await loadLabels(accounts.map((a) => a.uid));
   }, [loadLabels, accounts]);
 
   // Fetch data for multiple accounts (used when switching spaces)

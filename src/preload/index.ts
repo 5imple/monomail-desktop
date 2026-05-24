@@ -51,6 +51,12 @@ const api = {
     body?: string;
     responseType?: 'json' | 'blob' | 'text';
   }) => ipcRenderer.invoke('main:gmail:request', args),
+  peopleRequest: (args: {
+    path: string;
+    uid: string;
+    headers?: Record<string, string>;
+    responseType?: 'json' | 'blob' | 'text';
+  }) => ipcRenderer.invoke('main:people:request', args),
   devAddAccount: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
     ipcRenderer.invoke('main:auth:dev-add-account', args),
   // ---------- P8 Later Queue ----------

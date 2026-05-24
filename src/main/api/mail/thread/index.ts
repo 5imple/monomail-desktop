@@ -103,6 +103,14 @@ const modifyThread = async (
   );
 };
 
+const trashThread = async (uid: string, id: string, signal?: AbortSignal): Promise<void> => {
+  await gmailApiClient.post<void>(`/threads/${id}/trash`, undefined, { uid, signal });
+};
+
+const untrashThread = async (uid: string, id: string, signal?: AbortSignal): Promise<void> => {
+  await gmailApiClient.post<void>(`/threads/${id}/untrash`, undefined, { uid, signal });
+};
+
 const batchModifyThreads = async (
   uid: string,
   ids: string[],
@@ -128,6 +136,8 @@ const batchModifyThreads = async (
 export default {
   getThreads,
   getThread,
+  trashThread,
+  untrashThread,
   modifyThread,
   batchModifyThreads
 };
