@@ -2,7 +2,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import authApi from '@/main/api/auth/authApi';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Avatar, AvatarFallback, AvatarImage } from '@/renderer/app/components/ui/avatar';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -48,7 +47,7 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export function ProfileForm() {
-  const { member, accounts, signIn } = useAuth();
+  const { member, accounts } = useAuth();
 
   const [appVersion, setAppVersion] = useState(import.meta.env.MONO_ENV_APP_VERSION);
   const { t } = useTranslation();
@@ -61,24 +60,11 @@ export function ProfileForm() {
     mode: 'onChange'
   });
 
-  async function onSubmit(data: ProfileFormValues) {
+  async function onSubmit(_data: ProfileFormValues) {
     if (!member) return;
-    try {
-      await authApi.updateUserProfile({
-        displayName: data.displayName
-      });
-      if (data.primary_email != member.email) {
-        const account = accounts.find((account) => account.email === data.primary_email);
-        if (account) {
-          const response = await authApi.updatePrimaryAccount(account.uid);
-          if (response && response.token) signIn(response.token);
-        }
-      }
-      toast.success(t('toast.preferences.updated'));
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      toast.error(t('toast.error.preference_update'));
-    }
+    // Display name and primary account are sourced from the connected Google
+    // account in Gmail-direct mode; there is no backend to persist edits to.
+    toast.success(t('toast.preferences.updated'));
   }
 
   return (
@@ -172,22 +158,6 @@ export function ProfileForm() {
         <Button type="submit">{t('settings.buttons.save_changes')}</Button>
         <Separator />
         <div className="flex justify-end gap-3 text-end">
-          <a
-            className="text-xs text-muted-foreground"
-            href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/terms`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t('settings.footer.terms')}
-          </a>
-          <a
-            className="text-xs text-muted-foreground"
-            href={`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/policy`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t('settings.footer.privacy')}
-          </a>
           <span className="text-xs text-muted-foreground">{appVersion}</span>
         </div>
       </form>

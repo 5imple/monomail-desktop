@@ -17,7 +17,7 @@ import {
   DBSaveMessage,
   DBUpdateMessageLabels
 } from '@/renderer/app/lib/db/message';
-import { DBGetThread } from '@/renderer/app/lib/db/thread';
+import { DBGetThread, normalizeGmailLabels } from '@/renderer/app/lib/db/thread';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -223,7 +223,7 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
 
       try {
-        const labelArray = labelMessage.labels.split(',');
+        const labelArray = normalizeGmailLabels(labelMessage.labels);
 
         await DBUpdateMessageLabels(
           labelMessage.aAUid,

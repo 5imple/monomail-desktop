@@ -62,7 +62,8 @@ export interface MonoAccount {
   isExpired: boolean;
 }
 
-// Mono user interface
+// Local signed-in profile, derived from the Google account. Not a server-side
+// "Mono account" — just the fields the UI needs to render the active member.
 export interface MonoMember {
   uid: string;
   displayName: string;
@@ -70,19 +71,10 @@ export interface MonoMember {
   primaryUid: string;
   memberName: string;
   profileImageUrl: string;
-  timezone: string;
-  demographics: {
-    role: string;
-    emailUsage: string;
-    discoverySource: string;
-  };
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 // Response type with modified structure
 export type GetMonoAccountResponse = {
   member?: MonoMember;
   accounts: MonoAccount[];
-  relatedMembers: Array<MonoMember>;
 };

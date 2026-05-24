@@ -30,7 +30,7 @@ const ListPanel: FC<ListPanelProps> = ({}) => {
   };
   return (
     <ThreadListProvider>
-      <div className="no-drag flex h-screen flex-col bg-card/70 dark:bg-card/60">
+      <div className="no-drag flex h-screen flex-col bg-white dark:bg-background">
         <ListPanelHeader isScrolled={isScrolled} ref={threadListHeaderRef} />
         <div className="relative">
           {currentAlerts.length > 0 && (

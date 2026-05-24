@@ -1,4 +1,5 @@
 import { apiClient } from '@/main/api/apiClient';
+import log from 'electron-log';
 import { UserPreference } from '@/main/api/auth/types/user';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoThread } from '@/main/models/thread/MonoThread';
@@ -13,6 +14,7 @@ import {
   DBGetAllThreadsMultiUser,
   DBGetThread,
   DBGetThreadsByLabelMultiUser,
+  DBNormalizeCachedLabels,
   DBPurgeStubThreads,
   isPrimaryThread,
   ValidLabel,
@@ -626,6 +628,12 @@ const useThreadFetchHandler = () => {
                   loadMore ? lastTimestampsRef.current[queryKey] : undefined
                 );
               }
+
+              log.info(
+                `[INBOX-DIAG] displaying ${threads.length} for "${currentQuery}": ${threads
+                  .map((t) => `${t.id}:${(t.subject || '').slice(0, 28)}:[${t.labelIds.join('|')}]`)
+                  .join(' || ')}`
+              );
 
               if (!abortController.signal.aborted) {
                 const isLimited = checkThreadAge(threads);
@@ -1490,35 +1498,41 @@ const useThreadFetchHandler = () => {
     };
   }, [activeSpace, updateFromMessageSubscribe]);
 
-  // One-time-per-account cleanup: drop stale `mock-*` stub threads left in the
-  // cache by an earlier backend/mock build so they stop shadowing real Gmail
-  // (and stop reappearing after a delete). If anything was removed, reload the
-  // list so the inbox reflects the cleaned cache immediately.
-  const purgedStubUidsRef = useRef<Set<string>>(new Set());
+  // One-time-per-account cache reconcile:
+  //  1. drop stale `mock-*` stub threads from an earlier backend/mock build, and
+  //  2. normalize corrupted label ids (e.g. `[TRASH]` written by naive parsing
+  //     of bracketed push frames) so TRASH/SPAM filters work and trashed threads
+  //     leave the inbox.
+  // If anything changed, reload the list so the inbox reflects the clean cache.
+  const reconciledUidsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const toPurge = accounts
+    const toReconcile = accounts
       .map((acc) => acc.uid)
-      .filter((uid) => uid && !purgedStubUidsRef.current.has(uid));
-    if (toPurge.length === 0) return;
-    toPurge.forEach((uid) => purgedStubUidsRef.current.add(uid));
+      .filter((uid) => uid && !reconciledUidsRef.current.has(uid));
+    if (toReconcile.length === 0) return;
+    toReconcile.forEach((uid) => reconciledUidsRef.current.add(uid));
 
     enqueueOperation(
       async () => {
         let removed = 0;
-        for (const uid of toPurge) {
+        let normalized = 0;
+        for (const uid of toReconcile) {
           try {
             removed += await DBPurgeStubThreads(uid);
+            normalized += await DBNormalizeCachedLabels(uid);
           } catch (e) {
-            console.warn('[cache] stub purge failed for', uid, e);
+            log.warn('[cache] reconcile failed for', uid, e);
           }
         }
-        if (removed > 0) {
-          console.log(`[cache] purged ${removed} stale stub thread(s)`);
+        if (removed > 0 || normalized > 0) {
+          log.info(
+            `[cache] reconciled: purged ${removed} stub thread(s), normalized labels on ${normalized} record(s)`
+          );
           resetThreadsArray();
           await fetchThreadsHandler(false);
         }
       },
-      { priority: OperationPriority.HIGH, type: 'purge-stub-threads', batch: false }
+      { priority: OperationPriority.HIGH, type: 'reconcile-cache', batch: false }
     );
   }, [accounts, enqueueOperation, resetThreadsArray, fetchThreadsHandler]);
 

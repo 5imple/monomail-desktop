@@ -6,7 +6,18 @@ import { MonoThread } from '@/main/models/thread/MonoThread';
 import { convertToAccurateQuery } from '@/renderer/app/lib/convertToAccurateQuery';
 import { parseQueryFieldLabel } from '@/renderer/app/lib/queryUtils';
 import { DBSaveSyncHistoryMeta } from '@/renderer/app/lib/db/history';
-import { DBSaveThreads, ValidLabel, validLabels } from '@/renderer/app/lib/db/thread';
+import {
+  DBReconcileInboxMembership,
+  DBSaveThreads,
+  ValidLabel,
+  validLabels
+} from '@/renderer/app/lib/db/thread';
+
+// Inbox/primary views whose cache we reconcile against Gmail on a clean sync.
+const RECONCILE_QUERIES = ['category:primary', 'in:inbox'];
+// Accumulates every thread id Gmail returns across all pages of a sync request,
+// so on completion we can remove cached threads Gmail no longer returns.
+const syncedThreadIds = new Map<string, Set<string>>();
 import { SplitCategoryPreferences } from '@/main/api/auth/types';
 
 export type UserPlan = 'free' | 'plus' | 'plus_onetime' | 'pro';
@@ -317,11 +328,6 @@ async function syncThreadsWithPagination(
       idToken
     );
 
-    // DIAGNOSTIC: confirm the full sync is actually pulling real Gmail threads.
-    console.log(
-      `[threadSync] uid=${uid} q="${q}" fetched=${threadResponse?.threads?.length ?? 0} hasMore=${!!threadResponse?.nextPageToken}`
-    );
-
     // If request is aborted during this process, do not proceed
     // Before returning, save the current state to pausedSyncs if this was a pause operation
     const pausedSync = pausedSyncs.get(requestId);
@@ -334,6 +340,14 @@ async function syncThreadsWithPagination(
     }
 
     const threads = threadResponse.threads.map((thread) => MonoThread.fromPlainObject(thread));
+
+    // Track every id Gmail returns for this sync so completion can reconcile
+    // the cache (remove threads Gmail no longer returns for this view).
+    if (RECONCILE_QUERIES.includes(query)) {
+      const acc = syncedThreadIds.get(requestId) ?? new Set<string>();
+      for (const t of threads) acc.add(t.id);
+      syncedThreadIds.set(requestId, acc);
+    }
 
     // Check if sync should stop for no_sub users when first thread is over 15 days
     if (shouldLimitSyncFor15Days(userPlan) && threads.length > 0) {
@@ -457,6 +471,25 @@ async function syncThreadsWithPagination(
     } else {
       // Send completion message
       if (!abortController.signal.aborted) {
+        // Authoritative reconcile: the accumulated set is now Gmail's complete
+        // result for this view, so remove the INBOX label from cached threads
+        // Gmail no longer returns (archived/moved elsewhere) before we report
+        // completion and the renderer re-reads the cache.
+        if (RECONCILE_QUERIES.includes(query)) {
+          try {
+            const acc = syncedThreadIds.get(requestId) ?? new Set<string>();
+            const pruned = await DBReconcileInboxMembership(uid, acc, query);
+            if (pruned > 0) {
+              console.log(
+                `[sync] reconciled "${query}": removed INBOX from ${pruned} archived thread(s)`
+              );
+            }
+          } catch (e) {
+            console.warn('[sync] inbox reconcile failed:', e);
+          }
+        }
+        syncedThreadIds.delete(requestId);
+
         activeSyncs.delete(requestId);
         activeRequests.delete(requestId); // Clean up request tracking
         activeTimeouts.delete(requestId); // Clean up any timeout tracking
@@ -523,6 +556,7 @@ async function syncThreadsWithPagination(
         // Track this timeout so we can cancel it during pause/abort
         activeTimeouts.set(requestId, timeoutId);
       } else {
+        syncedThreadIds.delete(requestId);
         activeSyncs.delete(requestId);
         activeRequests.delete(requestId); // Clean up request tracking
         activeTimeouts.delete(requestId); // Clean up any timeout tracking
