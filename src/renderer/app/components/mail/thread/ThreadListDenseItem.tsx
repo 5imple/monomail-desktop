@@ -233,7 +233,7 @@ export const ThreadListDenseItem = React.memo(
             if (!uniqueItems.has(key)) {
               uniqueItems.add(key);
               displayItems.push(
-                <span key={`draft-${index}`} className="font-semibold text-destructive">
+                <span key={`draft-${index}`} className="font-medium text-destructive">
                   Draft
                 </span>
               );
@@ -315,12 +315,7 @@ export const ThreadListDenseItem = React.memo(
                     className="absolute inset-y-[3px] left-0 z-20 w-[3px] rounded-r-full bg-muted-foreground/70"
                   />
                 )}
-                {isUnread && !isChecked && (
-                  <span
-                    aria-hidden
-                    className="absolute inset-y-0 left-0 z-10 w-1 rounded-r-full bg-accent transition-opacity duration-300"
-                  />
-                )}
+                {/* Unread is indicated by the bold font only — no left accent bar. */}
                 <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
                   {/* Newton dense row: single line, narrower sender column
                     (w-36) compared to compact (w-44), tighter vertical
@@ -387,13 +382,19 @@ export const ThreadListDenseItem = React.memo(
 
                     {/* Sender column */}
                     <div className="flex w-32 shrink-0 items-center gap-2 overflow-hidden">
+                      {isUnread && (
+                        <span
+                          aria-hidden
+                          className="h-2 w-2 shrink-0 rounded-full bg-blue-500"
+                        />
+                      )}
                       <div className="min-w-0 flex-1 overflow-hidden">
                         <span
                           className={cn(
                             'block truncate text-[13px] tracking-tight',
                             isUnread
-                              ? 'font-bold text-foreground'
-                              : 'font-semibold text-muted-foreground'
+                              ? 'font-semibold text-foreground'
+                              : 'font-medium text-muted-foreground'
                           )}
                         >
                           {renderSenderNames()}
@@ -412,8 +413,8 @@ export const ThreadListDenseItem = React.memo(
                         className={cn(
                           'max-w-[45%] shrink-0 truncate text-[13px] tracking-tight',
                           isUnread
-                            ? 'font-semibold text-foreground'
-                            : 'font-medium text-foreground/80'
+                            ? 'font-medium text-foreground'
+                            : 'font-normal text-foreground/80'
                         )}
                         dangerouslySetInnerHTML={{
                           __html:
