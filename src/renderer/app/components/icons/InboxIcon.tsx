@@ -8,7 +8,7 @@ import { cn } from '@/renderer/app/lib/utils';
 export type { MonoIconType };
 export type InboxIconType = MonoIconType | MaterialSymbol;
 
-interface InboxIconProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> {
+export interface InboxIconProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> {
   type?: InboxIconType;
   symbol?: MaterialSymbol;
   fill?: boolean;

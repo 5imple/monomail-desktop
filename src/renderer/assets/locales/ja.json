@@ -335,11 +335,6 @@
       "primary_account": {
         "tooltip": "Mono へのログインに使用するアカウント",
         "title": "プライマリアカウント"
-      },
-      "delete_account": {
-        "title": "アカウントを削除",
-        "description": "Mono アカウントと関連データを完全に削除します。Google 上のメール・連絡先は削除されません。",
-        "button": "Mono アカウントを削除"
       }
     },
     "billing": {
@@ -908,12 +903,6 @@
       "next_page": "次へ",
       "download": "ダウンロード"
     },
-    "delete_member": {
-      "title": "Mono アカウントを削除しますか？",
-      "description": "Mono アカウントと関連ユーザーデータを完全に削除します。Google 上のメールと連絡先は削除されません。",
-      "cancel": "キャンセル",
-      "confirm_delete": "アカウントを完全に削除"
-    },
     "draft_discard": {
       "title": "下書きを破棄しますか？",
       "description": "この下書きを永久に削除しますか？",
@@ -1324,7 +1313,6 @@
       "file_upload_network": "ファイルアップロードでネットワークエラー",
       "attachment_preview": "添付プレビューでエラー",
       "attachment_download": "添付ダウンロードでエラー",
-      "delete_account": "アカウント削除でエラー",
       "permission_required": "この操作には権限が必要です",
       "feedback_send": "フィードバック送信でエラー",
       "feedback_invalid_attachment": "無効な添付を削除してください",

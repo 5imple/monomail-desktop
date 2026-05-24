@@ -26,7 +26,6 @@ import { Input } from '@/renderer/app/components/ui/input';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -60,8 +59,7 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export function ProfileForm() {
-  const { member, accounts, preference, signIn, updatePreference, signOut } = useAuth();
-  const { openDialog, closeDialog } = useDialogs();
+  const { member, accounts, preference, signIn, updatePreference } = useAuth();
 
   const [appVersion, setAppVersion] = useState(import.meta.env.MONO_ENV_APP_VERSION);
   const { i18n, t } = useTranslation();
@@ -224,21 +222,6 @@ export function ProfileForm() {
         />
 
         <Button type="submit">{t('settings.buttons.save_changes')}</Button>
-        <Separator />
-        <div className="">
-          <div className="text-sm text-muted-foreground">
-            {t('settings.profile.delete_account.description')}
-          </div>
-          <Button
-            type={'button'}
-            variant={'secondary'}
-            onClick={() => openDialog('deleteAccount')}
-            className="mt-3 text-destructive hover:text-destructive"
-          >
-            {t('settings.profile.delete_account.button')}
-          </Button>
-        </div>
-
         <Separator />
         <div className="flex justify-end gap-3 text-end">
           <a

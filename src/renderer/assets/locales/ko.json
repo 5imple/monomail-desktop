@@ -336,11 +336,6 @@
       "primary_account": {
         "tooltip": "모노메일 로그인용 기본 계정",
         "title": "기본 계정"
-      },
-      "delete_account": {
-        "title": "계정 삭제",
-        "description": "모노메일 계정 및 관련 사용자 데이터가 영구적으로 삭제됩니다. Google에 저장된 이메일 및 연락처는 삭제되지 않습니다.",
-        "button": "모노메일 계정 삭제"
       }
     },
     "billing": {
@@ -994,12 +989,6 @@
       "next_page": "다음 페이지",
       "download": "다운로드"
     },
-    "delete_member": {
-      "title": "모노메일 계정을 삭제할까요?",
-      "description": "모노메일 계정과 관련된 모든 사용자 데이터가 영구적으로 삭제됩니다. Google에 저장된 이메일 및 연락처는 삭제되지 않습니다.",
-      "cancel": "취소",
-      "confirm_delete": "계정 영구 삭제"
-    },
     "draft_discard": {
       "title": "임시 저장된 메일을 삭제할까요?",
       "description": "이 초안은 완전히 삭제되며 복구할 수 없습니다.",
@@ -1393,7 +1382,6 @@
       "file_upload_network": "네트워크 오류로 인해 파일 업로드에 실패했습니다",
       "attachment_preview": "첨부파일 미리보기 중 오류가 발생했습니다",
       "attachment_download": "첨부파일 다운로드 중 오류가 발생했습니다",
-      "delete_account": "계정 삭제 중 오류가 발생했습니다",
       "permission_required": "이 요청에는 권한이 필요합니다",
       "feedback_send": "피드백 전송 중 오류가 발생했습니다",
       "feedback_invalid_attachment": "제출 전 잘못된 첨부파일을 제거해 주세요",

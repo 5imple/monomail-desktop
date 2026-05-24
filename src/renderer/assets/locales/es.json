@@ -339,11 +339,6 @@
       "primary_account": {
         "tooltip": "Cuenta para iniciar sesión en Mono",
         "title": "Cuenta principal"
-      },
-      "delete_account": {
-        "title": "Eliminar cuenta",
-        "description": "Eliminar permanentemente tu cuenta de Mono y datos asociados. Los correos en Google no se eliminarán.",
-        "button": "Eliminar cuenta Mono"
       }
     },
     "billing": {
@@ -929,12 +924,6 @@
       "next_page": "Siguiente",
       "download": "Descargar"
     },
-    "delete_member": {
-      "title": "¿Eliminar cuenta Mono?",
-      "description": "Eliminar permanentemente tu cuenta y datos.",
-      "cancel": "Cancelar",
-      "confirm_delete": "Eliminar permanentemente"
-    },
     "draft_discard": {
       "title": "¿Descartar borrador?",
       "description": "El borrador se eliminará.",
@@ -1358,7 +1347,6 @@
       "file_upload_network": "Error de red al subir",
       "attachment_preview": "Error al previsualizar adjunto",
       "attachment_download": "Error al descargar adjunto",
-      "delete_account": "Error al eliminar cuenta",
       "permission_required": "Permiso requerido",
       "feedback_send": "Error al enviar comentarios",
       "feedback_invalid_attachment": "Elimina archivos no válidos",
