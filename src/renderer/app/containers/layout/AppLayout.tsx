@@ -123,13 +123,13 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
             <div className="no-drag absolute right-[16px] flex items-center gap-[6px]">
               <Button
                 variant="ghost"
+                typeVariant="icon"
                 sizeVariant="sm"
-                className="h-[36px] gap-[8px] px-[10px] text-[14px] text-muted-foreground hover:text-foreground"
+                className="h-[36px] w-[36px] text-muted-foreground hover:text-foreground"
                 tooltip="Compose"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
               >
-                <InboxIcon type="Edit" size={20} />
-                <span className="font-medium">Compose</span>
+                <InboxIcon type="Edit" size={24} weight={200} />
               </Button>
               <Button
                 variant="ghost"
@@ -139,7 +139,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip="Accounts"
                 onClick={() => openDialog('preference', { defaultPage: 'integration' })}
               >
-                <InboxIcon type="UserIcon" size={20} />
+                <InboxIcon type="UserIcon" size={24} weight={200} />
               </Button>
               <Button
                 variant="ghost"
@@ -153,7 +153,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
                 onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
               >
-                <InboxIcon type="Calendar" size={20} />
+                <InboxIcon symbol="calendar_today" size={24} weight={200} />
               </Button>
             </div>
           </div>

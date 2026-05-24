@@ -1,6 +1,5 @@
 import CommandPalette from '@/renderer/app/containers/command/CommandPalette';
 import AttachmentPreviewDialog from '@/renderer/app/containers/dialog/AttachmentPreviewDialog';
-import DeleteMemberDialog from '@/renderer/app/containers/dialog/DeleteMemberDialog';
 import DraftDiscardDialog from '@/renderer/app/containers/dialog/DraftDiscardDialog';
 import DraftSaveDialog from '@/renderer/app/containers/dialog/DraftSaveDialog';
 import PreferanceDialog from '@/renderer/app/containers/dialog/PreferanceDialog';
@@ -55,10 +54,6 @@ const DialogManager = () => {
         open={dialogState.preference.open}
         defaultPage={dialogState.preference.defaultPage} // Pass additional prop
         onOpenChange={() => closeDialog('preference')}
-      />
-      <DeleteMemberDialog
-        open={dialogState.deleteAccount.open}
-        onOpenChange={() => closeDialog('deleteAccount')}
       />
       <AttachmentPreviewDialog
         accountId={dialogState.attachmentPreview.accountId}

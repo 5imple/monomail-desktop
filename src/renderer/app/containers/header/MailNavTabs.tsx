@@ -101,7 +101,7 @@ const MailNavTabs = React.memo(() => {
                 : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
             )}
           >
-            <InboxIcon symbol={item.icon} size={20} />
+            <InboxIcon symbol={item.icon} size={24} weight={200} />
             <span>{item.label}</span>
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span

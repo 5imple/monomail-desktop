@@ -13,6 +13,7 @@ import {
   DBGetAllThreadsMultiUser,
   DBGetThread,
   DBGetThreadsByLabelMultiUser,
+  DBPurgeStubThreads,
   isPrimaryThread,
   ValidLabel,
   validLabels
@@ -105,7 +106,15 @@ const useThreadFetchHandler = () => {
   // Helper function to get limited account UIDs based on user plan and account status
   const getLimitedAccountUids = useCallback(() => {
     const currentActiveSpace = activeSpaceRef.current;
-    if (!currentActiveSpace?.activeAccountUids?.length) return [];
+    const allAccountUids = accounts.map((acc) => acc.uid);
+
+    // A space cached under a previous account identity (e.g. a leftover backend
+    // `mock-account-*` id from a mode switch) can leave activeAccountUids empty
+    // or pointing at accounts that no longer exist. When that happens Gmail sync
+    // would either not run or run under a uid that has no Google token, freezing
+    // the inbox on stale cache. Recover by syncing all signed-in accounts so
+    // sync always runs under the real (Google) account identity.
+    if (!currentActiveSpace?.activeAccountUids?.length) return allAccountUids;
 
     // Payment-free build — every active account is allowed; no 2-account
     // free-plan cap to enforce.
@@ -113,6 +122,7 @@ const useThreadFetchHandler = () => {
       accounts.some((acc) => acc.uid === uid)
     );
 
+    if (validAccounts.length === 0) return allAccountUids;
     return validAccounts;
   }, [activeSpaceRef, accounts]);
 
@@ -350,16 +360,31 @@ const useThreadFetchHandler = () => {
 
                   // Handle thread visibility based on query type
                   if (isValidQuery) {
+                    const upperLabel = label.toUpperCase();
+                    // Gmail represents trash/spam by ADDING the TRASH/SPAM label
+                    // while keeping INBOX and the category labels, so a trashed
+                    // thread still satisfies includes('INBOX') / isPrimaryThread().
+                    // Mirror the DB fetch helpers (DBGetThreadsByLabelMultiUser,
+                    // DBGetAllThreadsMultiUser) and hide trashed/spam threads from
+                    // every other view — otherwise a just-trashed thread is
+                    // re-added here, undoing the optimistic removal.
+                    const hiddenByTrash =
+                      thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
+                    const hiddenBySpam =
+                      thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
+
                     let shouldShow = false;
                     if (label.toLowerCase() === 'all') {
                       // For "in:all", show everything except trash threads
                       shouldShow = !thread.labelIds.includes('TRASH');
+                    } else if (hiddenByTrash || hiddenBySpam) {
+                      shouldShow = false;
                     } else if (field === 'category') {
                       // Handle category queries
                       shouldShow = threadMatchesCategory(thread, label, preference);
                     } else {
                       // Handle regular label queries
-                      shouldShow = thread.labelIds.includes(label.toUpperCase());
+                      shouldShow = thread.labelIds.includes(upperLabel);
                     }
                     const isCurrentlyShown = threadIdsRef.current.includes(threadId);
 
@@ -385,7 +410,17 @@ const useThreadFetchHandler = () => {
                   // Check if thread matches current filter
                   let shouldShow = false;
 
-                  if (field === 'category') {
+                  const upperLabel = label.toUpperCase();
+                  // See the 'updated' case: trashed/spam threads keep INBOX and the
+                  // category labels, so exclude them from every non-trash/spam view.
+                  const hiddenByTrash =
+                    thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
+                  const hiddenBySpam =
+                    thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
+
+                  if (hiddenByTrash || hiddenBySpam) {
+                    shouldShow = false;
+                  } else if (field === 'category') {
                     // Handle category queries
                     shouldShow = threadMatchesCategory(thread, label, preference);
                   } else if (isValidQuery) {
@@ -394,7 +429,7 @@ const useThreadFetchHandler = () => {
                       // For "in:all", show everything except trash threads
                       shouldShow = !thread.labelIds.includes('TRASH');
                     } else {
-                      shouldShow = thread.labelIds.includes(label.toUpperCase());
+                      shouldShow = thread.labelIds.includes(upperLabel);
                     }
                   }
 
@@ -1454,6 +1489,38 @@ const useThreadFetchHandler = () => {
       historyUnsubscribe();
     };
   }, [activeSpace, updateFromMessageSubscribe]);
+
+  // One-time-per-account cleanup: drop stale `mock-*` stub threads left in the
+  // cache by an earlier backend/mock build so they stop shadowing real Gmail
+  // (and stop reappearing after a delete). If anything was removed, reload the
+  // list so the inbox reflects the cleaned cache immediately.
+  const purgedStubUidsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const toPurge = accounts
+      .map((acc) => acc.uid)
+      .filter((uid) => uid && !purgedStubUidsRef.current.has(uid));
+    if (toPurge.length === 0) return;
+    toPurge.forEach((uid) => purgedStubUidsRef.current.add(uid));
+
+    enqueueOperation(
+      async () => {
+        let removed = 0;
+        for (const uid of toPurge) {
+          try {
+            removed += await DBPurgeStubThreads(uid);
+          } catch (e) {
+            console.warn('[cache] stub purge failed for', uid, e);
+          }
+        }
+        if (removed > 0) {
+          console.log(`[cache] purged ${removed} stale stub thread(s)`);
+          resetThreadsArray();
+          await fetchThreadsHandler(false);
+        }
+      },
+      { priority: OperationPriority.HIGH, type: 'purge-stub-threads', batch: false }
+    );
+  }, [accounts, enqueueOperation, resetThreadsArray, fetchThreadsHandler]);
 
   // Check sync metadata when component mounts or active space changes
   useEffect(() => {

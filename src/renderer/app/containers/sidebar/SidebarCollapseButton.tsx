@@ -1,4 +1,4 @@
-import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
+import MonoIcon from '@/renderer/app/components/icons/SidebarIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { cn } from '@/renderer/app/lib/utils';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';

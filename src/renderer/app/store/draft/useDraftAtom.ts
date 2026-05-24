@@ -5,6 +5,7 @@ import mailApi from '@/main/api/mail/mailApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
+import { buildRawMessage } from '@/renderer/app/lib/mime/buildRawMessage';
 import { DBGetDraftById, DBRemoveDraft, DBSaveDraft } from '@/renderer/app/lib/db/draft';
 import { DBGetThread, DBSaveThread } from '@/renderer/app/lib/db/thread';
 import {
@@ -316,21 +317,48 @@ export function useDraftAtom() {
 
   // New function to actually send the draft immediately
   const sendDraftImmediately = useCallback(
-    async (uid: string, draftId: string, withTracking: boolean = false): Promise<void> => {
+    async (
+      uid: string,
+      draftId: string,
+      withTracking: boolean = false,
+      draft?: MonoDraft
+    ): Promise<void> => {
       // Show promise toast for send operation
       toast.promise(
         async () => {
-          // Call API to send the draft
-          const response = await draftApi.sendDraft(uid, draftId, withTracking);
+          const fullDraft = draft ?? (await DBGetDraftById(uid, draftId));
+          const hasAttachments =
+            !!fullDraft && Object.keys(fullDraft.attachments ?? {}).length > 0;
+          // Plain, untracked messages send straight through Gmail (works with no
+          // backend). Attachments and read-receipt tracking are backend features,
+          // so those keep the backend send path.
+          const canSendDirect = !!fullDraft && !hasAttachments && !withTracking;
+
+          let messageId: string | undefined;
+          if (canSendDirect) {
+            const resolvedDraft = fullDraft as MonoDraft;
+            const raw = buildRawMessage(resolvedDraft);
+            // Only thread when threadId is a real Gmail id (< 20 chars, per the
+            // repo convention); a new-compose placeholder id would 400.
+            const gmailThreadId =
+              resolvedDraft.threadId && resolvedDraft.threadId.length < 20
+                ? resolvedDraft.threadId
+                : undefined;
+            const sent = await mailApi.sendMessage(uid, raw, gmailThreadId);
+            messageId = sent?.id;
+          } else {
+            const response = await draftApi.sendDraft(uid, draftId, withTracking);
+            messageId = response?.messageId;
+          }
 
           // Handle the completion of sending
           await handleSendCompleted(uid, draftId);
 
-          // Fetch and save the sent message using the messageId from response
-          if (response?.messageId) {
-            await fetchAndSaveSentMessage(uid, response.messageId);
+          // Fetch and save the sent message using the messageId
+          if (messageId) {
+            await fetchAndSaveSentMessage(uid, messageId);
           } else {
-            console.warn('No messageId returned from sendDraft API');
+            console.warn('No messageId returned from send');
           }
         },
         {
@@ -451,7 +479,7 @@ export function useDraftAtom() {
           clearInterval(intervalId);
           toast.dismiss(toastId);
 
-          await sendDraftImmediately(uid, draft.id, withTracking);
+          await sendDraftImmediately(uid, draft.id, withTracking, draft);
           delete pendingSendsRef.current[draft.id];
         }
       }, 1000);

@@ -216,6 +216,37 @@ export async function DBRemoveThread(uid: string, threadId: string) {
   await tx.done;
 }
 
+/**
+ * Remove stale stub threads (ids prefixed `mock-`) left in the cache by an
+ * earlier backend-backed build / mock backend. The inbox renders from this
+ * cache, so these stubs keep showing — and reappear after a delete — even
+ * though the app now reads mail directly from Gmail. Safe to call repeatedly;
+ * returns the number of threads removed.
+ */
+export async function DBPurgeStubThreads(uid: string): Promise<number> {
+  const db = await initDB(uid);
+  const tx = db.transaction(['threads', 'messages', 'drafts'], 'readwrite');
+  const threadsStore = tx.objectStore('threads');
+  const messagesStore = tx.objectStore('messages');
+  const draftsStore = tx.objectStore('drafts');
+
+  const all = await threadsStore.getAll();
+  let removed = 0;
+  for (const threadData of all) {
+    if (typeof threadData?.id === 'string' && threadData.id.startsWith('mock-')) {
+      for (const itemId of threadData.items ?? []) {
+        await messagesStore.delete(itemId);
+        await draftsStore.delete(itemId);
+      }
+      await threadsStore.delete(threadData.id);
+      removed++;
+    }
+  }
+
+  await tx.done;
+  return removed;
+}
+
 export async function DBGetThreadsByLabel(
   uid: string,
   label: ValidLabel | string,

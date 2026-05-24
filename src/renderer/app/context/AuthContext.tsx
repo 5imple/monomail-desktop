@@ -4,8 +4,6 @@ import {
   MonoAccount,
   MonoMember,
   GetMonoAccountResponse,
-  SupportedLanguage,
-  supportedLanguages,
   UserPreference
 } from '@/main/api/auth/types';
 import draftApi from '@/main/api/draft/draftApi';
@@ -70,17 +68,7 @@ interface AuthContextType {
   updatePreference: (newPreference: Partial<UserPreference>) => Promise<void>;
 }
 
-const isSupportedLanguage = (lang: string): lang is SupportedLanguage => {
-  return supportedLanguages.has(lang as SupportedLanguage);
-};
-
-const getClientLanguage = (): string => {
-  const language = navigator.language || (navigator as any).userLanguage;
-  return language.split('-')[0];
-};
-
 export const defaultPreference: UserPreference = {
-  language: 'en',
   appearance: {
     theme: 'system',
     density: 'compact'
@@ -181,12 +169,6 @@ const mergeWithDefaultPreference = (
   }, {});
 
   const mergedPreference: UserPreference = {
-    language: isSupportedLanguage(userPreference.language)
-      ? userPreference.language
-      : isSupportedLanguage(getClientLanguage())
-        ? (getClientLanguage() as SupportedLanguage)
-        : defaultPreference.language,
-
     appearance: {
       theme: userPreference.appearance?.theme || defaultPreference.appearance.theme,
       density: userPreference.appearance?.density || defaultPreference.appearance.density
@@ -283,7 +265,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     relatedMembers
   } = authState;
 
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
 
   const { fetchAndSetBookmarks } = useBookmarkAtom();
   const { initializeContacts } = useContactAtom();
@@ -531,9 +513,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             needSelectAccount,
             relatedMembers: cachedData.relatedMembers || []
           }));
-          if (cachedData.preference) {
-            i18n.changeLanguage(cachedData.preference.language);
-          }
         }
 
         // Get the current token from main memory/safeStorage. Tokens are never
@@ -731,8 +710,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ...prev,
           preference
         }));
-
-        i18n.changeLanguage(preference.language);
 
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         try {

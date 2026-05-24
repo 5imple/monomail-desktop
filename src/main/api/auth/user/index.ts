@@ -51,16 +51,6 @@ const updateUserPreference = (preference: Partial<UserPreference>, signal?: Abor
 };
 
 /**
- * delete user
- *
- * @param {AbortSignal} [signal] - The abort signal to cancel the request.
- * @returns {Promise<void>} The response from the API.
- */
-const deleteUser = (signal?: AbortSignal) => {
-  return apiClient.delete(`/mono/user/delete`, { signal });
-};
-
-/**
  * unlink account from user
  *
  * @param {string} accountUid - The accountUid to unlink from user.
@@ -97,7 +87,6 @@ const updatePrimaryAccount = (to: string, signal?: AbortSignal) => {
  */
 const updateUserProfile = (
   preference: {
-    language: UserPreference['language'];
     displayName: MonoMember['displayName'];
   },
   signal?: AbortSignal
@@ -168,7 +157,6 @@ export default {
   getMonoAccount,
   getUserPreference,
   updateUserPreference,
-  deleteUser,
   unlinkAccountFromUser,
   updatePrimaryAccount,
   updateUserProfile,

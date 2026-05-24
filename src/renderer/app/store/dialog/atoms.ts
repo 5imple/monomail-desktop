@@ -40,9 +40,6 @@ export interface DialogState {
     open: boolean;
     defaultPage: string;
   };
-  deleteAccount: {
-    open: boolean;
-  };
   accountSelect: {
     open: boolean;
   };
@@ -93,9 +90,6 @@ export const dialogStateAtom = atom<DialogState>({
   preference: {
     open: false,
     defaultPage: 'general'
-  },
-  deleteAccount: {
-    open: false
   },
   accountSelect: {
     open: false

@@ -1,10 +1,5 @@
 import { AudioType } from '@/renderer/app/lib/soundManager';
 
-// Supported languages type and definition
-export type SupportedLanguage = 'en' | 'ko' | 'ja' | 'zh' | 'es' | 'fr' | 'de';
-
-export const supportedLanguages: Set<SupportedLanguage> = new Set(['en', 'ko', 'ja', 'es']);
-
 export type NotificationType = 'PRIMARY' | 'INBOX' | 'OFF';
 
 export type SplitCategoryPreferences = {
@@ -22,7 +17,6 @@ export type ThreadListDisplayPreferences = {
 };
 // User preference interface
 export interface UserPreference {
-  language: SupportedLanguage;
   appearance: {
     theme: 'light' | 'dark' | 'black' | 'pure-light' | 'system';
     density: 'compact' | 'cozy'; // 1: compact, 2: cozy

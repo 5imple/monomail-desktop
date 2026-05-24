@@ -499,6 +499,13 @@ export const createThreadCommands = (
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
+        // Only auto-open the next thread when acting from the reader (a single
+        // active thread, no explicit target/selection) or when explicitly asked.
+        // Otherwise a list-context Done would open a thread and the reader would
+        // go fullscreen, hiding the whole inbox.
+        const shouldAdvanceAfterDone =
+          args?.advanceAfterAction === true ||
+          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId);
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
@@ -518,7 +525,7 @@ export const createThreadCommands = (
               true,
               isInInboxView,
               false,
-              selectNextThread
+              shouldAdvanceAfterDone ? selectNextThread : undefined
             )
           );
 

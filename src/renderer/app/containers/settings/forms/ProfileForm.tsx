@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import authApi from '@/main/api/auth/authApi';
-import { SupportedLanguage } from '@/main/api/auth/types';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Avatar, AvatarFallback, AvatarImage } from '@/renderer/app/components/ui/avatar';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -26,17 +25,9 @@ import { Input } from '@/renderer/app/components/ui/input';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-
-const languages = [
-  { label: 'English', value: 'en' },
-  { label: 'Español', value: 'es' },
-  { label: '日本語', value: 'ja' },
-  { label: '한국어', value: 'ko' }
-] as const;
 
 const profileFormSchema = z.object({
   displayName: z
@@ -47,9 +38,6 @@ const profileFormSchema = z.object({
     .max(30, {
       message: 'Username must not be longer than 30 characters.'
     }),
-  language: z.string({
-    required_error: 'Please select a language.'
-  }),
   primary_email: z
     .string({
       required_error: 'Please select an email to display.'
@@ -60,17 +48,15 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export function ProfileForm() {
-  const { member, accounts, preference, signIn, updatePreference, signOut } = useAuth();
-  const { openDialog, closeDialog } = useDialogs();
+  const { member, accounts, signIn } = useAuth();
 
   const [appVersion, setAppVersion] = useState(import.meta.env.MONO_ENV_APP_VERSION);
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       displayName: member?.displayName ?? undefined,
-      primary_email: member?.email,
-      language: preference.language
+      primary_email: member?.email
     },
     mode: 'onChange'
   });
@@ -79,13 +65,8 @@ export function ProfileForm() {
     if (!member) return;
     try {
       await authApi.updateUserProfile({
-        language: data.language as SupportedLanguage,
         displayName: data.displayName
       });
-      await updatePreference({
-        language: data.language as SupportedLanguage
-      });
-      await i18n.changeLanguage(data.language);
       if (data.primary_email != member.email) {
         const account = accounts.find((account) => account.email === data.primary_email);
         if (account) {
@@ -188,57 +169,7 @@ export function ProfileForm() {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="language"
-          render={({ field }) => (
-            <FormItem className="flex flex-col">
-              <FormLabel>{t('settings.profile.language')}</FormLabel>
-              <FormControl>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="secondary" className="w-[200px] justify-between">
-                      {field.value
-                        ? languages.find((language) => language.value === field.value)?.label
-                        : 'Select language'}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="min-w-[200px]">
-                    <DropdownMenuGroup>
-                      {languages.map((language) => (
-                        <DropdownMenuCheckboxItem
-                          key={language.value}
-                          checked={field.value === language.value}
-                          onClick={() => form.setValue('language', language.value)}
-                        >
-                          {language.label}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         <Button type="submit">{t('settings.buttons.save_changes')}</Button>
-        <Separator />
-        <div className="">
-          <div className="text-sm text-muted-foreground">
-            {t('settings.profile.delete_account.description')}
-          </div>
-          <Button
-            type={'button'}
-            variant={'secondary'}
-            onClick={() => openDialog('deleteAccount')}
-            className="mt-3 text-destructive hover:text-destructive"
-          >
-            {t('settings.profile.delete_account.button')}
-          </Button>
-        </div>
-
         <Separator />
         <div className="flex justify-end gap-3 text-end">
           <a

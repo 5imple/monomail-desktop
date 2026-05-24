@@ -12,7 +12,6 @@ import '@/renderer/global.css';
 if (import.meta.env.DEV) {
   import('@/renderer/utils/reactScan');
 }
-import i18next from 'i18next';
 import mixpanel from 'mixpanel-browser';
 import ReactDOM from 'react-dom/client';
 import { HotkeysProvider } from 'react-hotkeys-hook';
@@ -56,9 +55,6 @@ if (!isDevelopment()) {
   });
   initializeAmplitude();
 }
-i18next.init({
-  lng: 'en'
-});
 
 // Initialize Service Worker for Network First caching strategy
 initializeServiceWorker();

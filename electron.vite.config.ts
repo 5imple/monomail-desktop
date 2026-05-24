@@ -181,9 +181,8 @@ export default defineConfig({
             // Virtualization and performance
             virtualization: ['react-window', 'react-virtualized-auto-sizer'],
 
-            // Internationalization - Split into smaller chunks
-            'i18n-core': ['i18next', 'react-i18next'],
-            'i18n-utils': ['i18next-browser-languagedetector', 'i18next-http-backend']
+            // Internationalization
+            'i18n-core': ['i18next', 'react-i18next']
           }
         }
       }
