@@ -47,7 +47,12 @@
       "Bash(chown -R simple:staff .)",
       "Bash(git rev-list *)",
       "Bash(grep -nE \"bg-|background|gradient|#[0-9a-fA-F]{3,6}|stone|gray|white|className=\" src/renderer/app/containers/layout/SignInLayout.tsx)",
-      "Bash(xargs grep -niE \"background|bg-|#[0-9a-f]{3,6}|style=\")"
+      "Bash(xargs grep -niE \"background|bg-|#[0-9a-f]{3,6}|style=\")",
+      "Bash(grep -cE '\\\\b__TRACKED_VAR__\\\\b' src/renderer/app/components/mail/thread/ThreadListCozyItem.tsx)",
+      "Bash(sed -n '484,500p' src/renderer/app/containers/panel/DisplayPanel.tsx)",
+      "Bash(sed -n '1,60p' src/renderer/app/components/ui/scroll-area.tsx)",
+      "Bash(grep -E \"\\\\.tsx$\")",
+      "Bash(grep -r \"useAuth\" /Users/simple/Desktop/Projects/monomail-desktop/src/renderer/app/containers -name \"*.tsx\" -l)"
     ]
   }
 }

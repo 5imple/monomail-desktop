@@ -131,13 +131,13 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 
   return (
     <div className={cn('no-drag', className)}>
-      <CardFooter className="flex items-center border-t border-border/40 px-5 py-3">
+      <CardFooter className="mx-9 flex h-[61px] items-center border-t border-border/50 px-0 py-0">
         {/* Left: primary text actions */}
         <div className="flex items-center gap-5">
           <Button
             variant="text"
             className={cn(
-              'font-semibold text-foreground hover:text-foreground/80',
+              'px-0 text-[13px] font-semibold text-foreground hover:text-foreground/80',
               (sendDisabled || isSending || isCurrentAccountExpired) && 'text-muted-foreground'
             )}
             disabled={sendDisabled || isSending || isCurrentAccountExpired}
@@ -153,6 +153,22 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
             draft={draft}
             disabled={sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0}
           />
+          <Button
+            variant="text"
+            sizeVariant="sm"
+            disabled
+            className="px-0 text-[13px] font-semibold text-muted-foreground/70 disabled:opacity-100"
+          >
+            Remind me
+          </Button>
+          <Button
+            variant="text"
+            sizeVariant="sm"
+            disabled
+            className="px-0 text-[13px] font-semibold text-muted-foreground/70 disabled:opacity-100"
+          >
+            Share draft
+          </Button>
         </div>
 
         {/* Right: icon actions + from-selector */}
@@ -217,11 +233,9 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
                 sizeVariant="sm"
                 typeVariant="icon"
                 className={cn(
-                  trackingEnabled
-                    ? 'text-accent'
-                    : isCurrentAccountExpired
-                      ? 'text-muted-foreground/50'
-                      : 'text-muted-foreground'
+                  'text-muted-foreground hover:text-foreground',
+                  trackingEnabled && 'text-foreground',
+                  isCurrentAccountExpired && 'text-muted-foreground/50'
                 )}
                 onClick={() => handleTrackingToggle(!trackingEnabled)}
                 disabled={isCurrentAccountExpired}
@@ -231,6 +245,15 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
             </TooltipTrigger>
             <TooltipContent>{t('compose_card.footer.use_tracker')}</TooltipContent>
           </Tooltip>
+          <Button
+            variant="ghost"
+            sizeVariant="sm"
+            typeVariant="icon"
+            className="text-muted-foreground hover:text-foreground"
+            disabled
+          >
+            <MonoIcon type="CodeBracket" className="h-4 w-4" />
+          </Button>
 
           {/* Attachment */}
           <Tooltip>

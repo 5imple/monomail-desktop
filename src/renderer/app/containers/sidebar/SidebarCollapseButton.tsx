@@ -9,6 +9,8 @@ interface SidebarCollapseButtonProps {
   className?: string;
 }
 
+const COLLAPSE_ICON_SIZE = 15;
+
 const SidebarCollapseButton: FC<SidebarCollapseButtonProps> = ({ className }) => {
   const { t } = useTranslation();
   const {
@@ -58,7 +60,7 @@ const SidebarCollapseButton: FC<SidebarCollapseButtonProps> = ({ className }) =>
       shortcut="MOD+\"
       sizeVariant="sm"
     >
-      <MonoIcon type={iconType} size={22} className="text-muted-foreground" />
+      <MonoIcon type={iconType} size={COLLAPSE_ICON_SIZE} className="text-muted-foreground" />
     </Button>
   );
 };

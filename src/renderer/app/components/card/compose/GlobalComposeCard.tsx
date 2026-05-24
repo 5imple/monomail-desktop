@@ -686,12 +686,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           </span>
         );
       case 'SAVED':
-        return (
-          <span className={baseClass}>
-            <MonoIcon type={'CheckCircle'} className="h-3 w-3" />
-            Saved
-          </span>
-        );
+        return null;
       case 'ERROR':
         return (
           <span className={cn(baseClass, 'text-destructive')}>
@@ -910,7 +905,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       <Suspense fallback={<EditorLoadingFallback />}>
         <TextEditor
           ref={editorRef}
-          className="pt-0"
+          className="min-h-[210px] px-9 py-4 text-[14px]"
           value={composeDraft.body}
           onChange={handleInputChange.bind(null, 'body')}
           onUploadInlineImage={handleUploadInlineImage}
@@ -998,124 +993,162 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     <div
       tabIndex={-1}
       className={cn(
-        'pointer-events-none absolute inset-0 z-10 flex origin-bottom items-end transition-all duration-300',
-        !isMaximized || isMinimized ? 'justify-center px-6 pb-6' : ''
+        'pointer-events-none absolute inset-0 z-10 origin-bottom transition-all duration-300',
+        isMinimized
+          ? 'flex items-end justify-center px-6 pb-6'
+          : 'flex flex-col bg-white dark:bg-background'
       )}
     >
-      <Card
+      {!isMinimized && (
+        <div className="grid h-[72px] shrink-0 grid-cols-[1fr_minmax(0,768px)_1fr] items-center px-8">
+          <div className="flex justify-start">
+            <Button
+              variant="ghost"
+              sizeVariant="sm"
+              typeVariant="icon"
+              className="pointer-events-auto h-9 w-9 text-muted-foreground hover:text-foreground"
+              onClick={() => void handleCloseButton()}
+              tooltip={t('tooltip.close')}
+            >
+              <MonoIcon type="ChevronLeft" className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex min-w-0 items-center">
+            <h1 className="truncate text-[24px] font-medium tracking-normal text-foreground">
+              New Message
+            </h1>
+          </div>
+          <div />
+        </div>
+      )}
+      <div
         className={cn(
-          'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/60 bg-card dark:bg-background',
-          'h-[57vh] max-h-[570px] min-h-[500px] w-full min-w-[540px] max-w-[600px] transition-all duration-300',
-          isMaximized && 'h-full min-h-full min-w-full max-w-full',
-          // Newton elevation: still clearly floating but less chunky than
-          // the prior 30% black drop. Refined edge keeps the popout
-          // distinct from the document behind it without screaming.
-          isMinimized ? 'shadow-md' : 'shadow-xl shadow-black/10 dark:shadow-black/40',
-          !isMaximized || isMinimized ? 'rounded-xl' : 'rounded-none border-0 shadow-none',
-
-          // isClosing ? 'duration-0' : 'duration-400',
-          isMinimized ? 'max-h-12 min-h-12 min-w-80 max-w-80' : '',
-          // isVisible && !isClosing ? '' : 'h-0 max-h-0 min-h-0',
-          isVisible && !isClosing ? '' : 'translate-y-4 opacity-0',
-          className
+          'pointer-events-none flex min-h-0 flex-1 justify-center px-8',
+          isMinimized ? 'contents' : isMaximized ? 'items-stretch pb-8' : 'items-start pb-8'
         )}
-        style={{
-          willChange: 'width, height, max-height, max-width'
-        }}
       >
-        <CardHeader className={cn('justify-center space-y-0 p-0')}>
-          <ComposeCardHeader
-            composeDraft={composeDraft}
-            handleInputChange={handleInputChange}
-            onKeyDown={(event) => {
-              if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
-                event.preventDefault();
-                toggleMinimize();
-              }
-            }}
-            onClose={handleCloseButton}
-            onMinimize={toggleMinimize}
-            onMaximize={toggleMaximize}
-            isMinimized={isMinimized}
-            isMaximized={isMaximized}
-            hasElectronPadding={!!(isElectron && isMaximized && sidebarCollapsed)}
-            draftStatus={renderDraftStatus}
-          />
-        </CardHeader>
-        {!isMinimized && (
-          <>
-            <CardContent className="no-drag flex-1 overflow-y-scroll p-0">
-              <div className="flex h-full flex-col">
-                <div className="px-5 pb-1 pt-3">
-                  <Input
-                    ref={subjectRef}
-                    variant="transparent"
-                    placeholder={t('text_editor.placeholder.subject')}
-                    className="h-auto border-none px-0 py-0 text-[18px] font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60"
-                    value={composeDraft.subject}
-                    onChange={(e) => handleInputChange('subject', e.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        editorRef.current?.focus();
-                      }
-                      if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
-                        event.preventDefault();
-                        toggleMinimize();
-                      }
-                      if (event.metaKey && event.code === 'Enter') {
-                        event.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                  />
-                </div>
-                <div className="relative flex-1 pb-4">
-                  {renderEditor}
-                  <div className="px-4 text-sm">
-                    <SignatureSwitcher draft={composeDraft} onSignatureChange={onSignatureChange} />
-                  </div>
+        <Card
+          className={cn(
+            'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/60 bg-card dark:bg-background',
+            'w-full min-w-0 transition-all duration-300',
+            isMaximized ? 'h-full min-h-0 max-w-[960px]' : 'h-[405px] min-h-[405px] max-w-[768px]',
+            isMinimized
+              ? 'max-h-12 min-h-12 min-w-80 max-w-80 rounded-xl shadow-md'
+              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.06),0_14px_28px_-18px_rgb(15_23_42_/_0.35),0_30px_60px_-36px_rgb(15_23_42_/_0.42)] ring-1 ring-slate-950/[0.06] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.04),0_16px_32px_-20px_rgb(0_0_0_/_0.62),0_34px_68px_-38px_rgb(0_0_0_/_0.7)] dark:ring-white/[0.08]',
 
-                  {historyMessage && (
-                    <div className="mt-4 px-3 text-sm">
-                      <ReferenceCard
-                        accountId={getUidFromEmail(composeDraft.from) as string}
-                        type={'forward'}
-                        item={historyMessage}
+            // isClosing ? 'duration-0' : 'duration-400',
+            // isVisible && !isClosing ? '' : 'h-0 max-h-0 min-h-0',
+            isVisible && !isClosing ? '' : 'translate-y-4 opacity-0',
+            className
+          )}
+          style={{
+            willChange: 'width, height, max-height, max-width'
+          }}
+        >
+          <CardHeader className={cn('justify-center space-y-0 p-0')}>
+            <ComposeCardHeader
+              composeDraft={composeDraft}
+              handleInputChange={handleInputChange}
+              onKeyDown={(event) => {
+                if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
+                  event.preventDefault();
+                  toggleMinimize();
+                }
+              }}
+              onClose={handleCloseButton}
+              onMinimize={toggleMinimize}
+              onMaximize={toggleMaximize}
+              isMinimized={isMinimized}
+              isMaximized={isMaximized}
+              hasElectronPadding={!!(isElectron && isMaximized && sidebarCollapsed)}
+              draftStatus={renderDraftStatus}
+            />
+          </CardHeader>
+          {!isMinimized && (
+            <>
+              <CardContent className="no-drag flex-1 overflow-hidden p-0">
+                <div className="flex h-full flex-col">
+                  <div className="px-9 pb-1 pt-3">
+                    <Input
+                      ref={subjectRef}
+                      variant="transparent"
+                      placeholder={t('text_editor.placeholder.subject')}
+                      className="h-auto border-none px-0 py-0 text-[14px] font-semibold tracking-normal text-foreground placeholder:text-muted-foreground/80"
+                      value={composeDraft.subject}
+                      onChange={(e) => handleInputChange('subject', e.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          editorRef.current?.focus();
+                        }
+                        if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
+                          event.preventDefault();
+                          toggleMinimize();
+                        }
+                        if (event.metaKey && event.code === 'Enter') {
+                          event.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="relative flex-1 pb-4">
+                    {!composeDraft.body.replace(/<[^>]*>/g, '').trim() && (
+                      <div className="pointer-events-none absolute left-9 top-4 z-10 text-[14px] font-medium text-muted-foreground/75">
+                        Tip: Hit ⌘J for AI
+                      </div>
+                    )}
+                    {renderEditor}
+                    <div className="px-4 text-sm">
+                      <SignatureSwitcher
+                        draft={composeDraft}
+                        onSignatureChange={onSignatureChange}
                       />
                     </div>
-                  )}
-                  {replyMessage && (
-                    <div className="mt-4 px-3 text-sm">
-                      <ReferenceCard
-                        accountId={getUidFromEmail(composeDraft.from) as string}
-                        type={'reply'}
-                        item={replyMessage}
-                      />
+
+                    {historyMessage && (
+                      <div className="mt-4 px-3 text-sm">
+                        <ReferenceCard
+                          accountId={getUidFromEmail(composeDraft.from) as string}
+                          type={'forward'}
+                          item={historyMessage}
+                        />
+                      </div>
+                    )}
+                    {replyMessage && (
+                      <div className="mt-4 px-3 text-sm">
+                        <ReferenceCard
+                          accountId={getUidFromEmail(composeDraft.from) as string}
+                          type={'reply'}
+                          item={replyMessage}
+                        />
+                      </div>
+                    )}
+                    <div className="mt-4 grid auto-cols-max grid-flow-row gap-3 px-4 text-center">
+                      {memoizedAttachments}
                     </div>
-                  )}
-                  <div className="mt-4 grid auto-cols-max grid-flow-row gap-3 px-4 text-center">
-                    {memoizedAttachments}
                   </div>
                 </div>
-              </div>
-            </CardContent>
-            <ComposeCardFooter
-              draft={composeDraft}
-              draftSaveStatus={draftSaveStatus}
-              handleSendMessage={handleSendMessage}
-              handleFileChange={handleFileChange}
-              trackingEnabled={trackingEnabled}
-              onTrackingChange={handleTrackingChange}
-              sendDisabled={
-                composeDraft.to.length === 0 || !composeDraft.from || draftSaveStatus === 'LOADING'
-              }
-              onFromChange={onFromChange}
-              onDiscard={handleDiscard}
-            />
-          </>
-        )}
-      </Card>
+              </CardContent>
+              <ComposeCardFooter
+                draft={composeDraft}
+                draftSaveStatus={draftSaveStatus}
+                handleSendMessage={handleSendMessage}
+                handleFileChange={handleFileChange}
+                trackingEnabled={trackingEnabled}
+                onTrackingChange={handleTrackingChange}
+                sendDisabled={
+                  composeDraft.to.length === 0 ||
+                  !composeDraft.from ||
+                  draftSaveStatus === 'LOADING'
+                }
+                onFromChange={onFromChange}
+                onDiscard={handleDiscard}
+              />
+            </>
+          )}
+        </Card>
+      </div>
     </div>
   );
 };

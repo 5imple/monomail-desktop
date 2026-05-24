@@ -24,6 +24,8 @@ import { useSearchParams } from 'react-router-dom';
 
 interface AppLayoutProps {}
 
+const TITLEBAR_ACTION_ICON_SIZE = 17;
+
 const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
@@ -104,11 +106,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
 
   return (
     <>
-      <div
-        className={cn(
-          'no-drag h-screen bg-white dark:bg-background'
-        )}
-      >
+      <div className={cn('no-drag h-screen bg-white dark:bg-background')}>
         <div className="flex h-full flex-col overflow-hidden">
           {/* Unified titlebar — spans the full window width. `drag` allows
               window dragging across the whole strip; each nav button carries
@@ -129,7 +127,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip="Compose"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
               >
-                <InboxIcon type="Edit" size={24} weight={200} />
+                <InboxIcon type="Edit" size={TITLEBAR_ACTION_ICON_SIZE} weight={200} />
               </Button>
               <Button
                 variant="ghost"
@@ -139,7 +137,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip="Accounts"
                 onClick={() => openDialog('preference', { defaultPage: 'integration' })}
               >
-                <InboxIcon type="UserIcon" size={24} weight={200} />
+                <InboxIcon type="UserIcon" size={TITLEBAR_ACTION_ICON_SIZE} weight={200} />
               </Button>
               <Button
                 variant="ghost"
@@ -153,7 +151,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
                 onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
               >
-                <InboxIcon symbol="calendar_today" size={24} weight={200} />
+                <InboxIcon symbol="calendar_today" size={TITLEBAR_ACTION_ICON_SIZE} weight={200} />
               </Button>
             </div>
           </div>

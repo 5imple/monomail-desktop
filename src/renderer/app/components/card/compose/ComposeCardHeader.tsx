@@ -95,11 +95,13 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
       {/* To row */}
       <div
         className={cn(
-          'no-drag flex items-start px-5 pt-4',
+          'no-drag flex items-start px-9 pt-3',
           hasElectronPadding && 'pl-28'
         )}
       >
-        <span className="mr-3 mt-[9px] shrink-0 text-sm font-semibold text-foreground">To</span>
+        <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
+          To
+        </span>
         <div className="min-w-0 flex-1">
           <ContactSuggestionInput
             contacts={contactArray}
@@ -205,8 +207,10 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
 
       {/* Cc row */}
       {(composeDraft.cc.length > 0 || showCc) ? (
-        <div className="no-drag flex items-start px-5 pt-1">
-          <span className="mr-3 mt-[9px] shrink-0 text-sm font-semibold text-foreground">Cc</span>
+        <div className="no-drag flex items-start px-9 pt-1">
+          <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
+            Cc
+          </span>
           <ContactSuggestionInput
             contacts={contactArray}
             className="min-h-0 flex-1 items-start border-none px-0 py-0.5"
@@ -245,8 +249,8 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
 
       {/* Bcc row */}
       {(composeDraft.bcc.length > 0 || showBcc) ? (
-        <div className="no-drag flex items-start px-5 pt-1">
-          <span className="mr-3 mt-[9px] shrink-0 text-sm font-semibold text-foreground">
+        <div className="no-drag flex items-start px-9 pt-1">
+          <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
             Bcc
           </span>
           <ContactSuggestionInput
