@@ -184,9 +184,7 @@ class AppWindow extends BrowserWindow {
         sandbox: false,
         nodeIntegration: false
       },
-      // backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackgroundColor : lightBackgroundColor,
-      vibrancy: 'fullscreen-ui',
-      visualEffectState: 'followWindow',
+      backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackgroundColor : lightBackgroundColor,
       ...options
     };
 

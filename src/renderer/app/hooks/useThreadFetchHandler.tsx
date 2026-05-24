@@ -629,12 +629,6 @@ const useThreadFetchHandler = () => {
                 );
               }
 
-              log.info(
-                `[INBOX-DIAG] displaying ${threads.length} for "${currentQuery}": ${threads
-                  .map((t) => `${t.id}:${(t.subject || '').slice(0, 28)}:[${t.labelIds.join('|')}]`)
-                  .join(' || ')}`
-              );
-
               if (!abortController.signal.aborted) {
                 const isLimited = checkThreadAge(threads);
                 if (threads.length > 0) {

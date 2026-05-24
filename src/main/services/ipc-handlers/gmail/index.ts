@@ -138,11 +138,6 @@ export function registerGmailHandlers() {
         } satisfies GmailRequestResult;
       }
 
-      if (typeof args?.path === 'string' && args.path.startsWith('/threads?')) {
-        const listed = (data as { threads?: Array<{ id?: string }> })?.threads;
-        const ids = Array.isArray(listed) ? listed.map((t) => t?.id).filter(Boolean) : [];
-        log.info(`[GMAIL-DIAG] inbox query -> ${ids.length} ids: ${ids.join(',')}`);
-      }
       return { ok: true, status: response.status, data } satisfies GmailRequestResult;
     } catch (error) {
       log.error(

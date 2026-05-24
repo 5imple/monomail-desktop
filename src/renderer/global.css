@@ -281,8 +281,19 @@
       sans-serif;
   }
 
+  html,
+  body,
+  #root {
+    background-color: #fff;
+  }
+
+  .dark body,
+  .dark #root {
+    background-color: hsl(var(--background));
+  }
+
   body {
-    @apply bg-transparent text-foreground;
+    @apply text-foreground;
     font-family:
       Inter,
       -apple-system,
