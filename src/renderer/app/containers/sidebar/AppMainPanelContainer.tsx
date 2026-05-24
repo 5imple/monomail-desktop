@@ -15,11 +15,7 @@ const AppMainPanelContainer: FC<{ className?: string }> = ({ className }) => {
   // Memoize draft windows rendering
   const memoizedDrafts = useMemo(() => {
     return globalDraftWindows.map((draft) => (
-      <GlobalComposeCard
-        className="absolute bottom-0 rounded-b-none border-b-0"
-        key={draft.id}
-        draft={draft}
-      />
+      <GlobalComposeCard key={draft.id} draft={draft} />
     ));
   }, [globalDraftWindows]);
 

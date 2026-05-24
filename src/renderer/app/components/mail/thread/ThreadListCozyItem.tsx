@@ -5,22 +5,18 @@ import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
+import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
-import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
-import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { formatListDate } from '@/renderer/app/lib/formatDate';
 import { highlightThreadText } from '@/renderer/app/lib/highlightThreadText';
 import { cn } from '@/renderer/app/lib/utils';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraggable } from '@dnd-kit/core';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 interface DraggableSenderProps {
   sender: string;
@@ -57,85 +53,7 @@ const DraggableSender = React.memo<DraggableSenderProps>(({ sender, threadId, in
 
 DraggableSender.displayName = 'DraggableSender';
 
-interface SnoozeButtonProps {
-  thread: MonoThread;
-  buttonClassName?: string;
-}
-
-const SnoozeButton = React.memo<SnoozeButtonProps>(({ thread, buttonClassName }) => {
-  const [open, setOpen] = useState(false);
-  const { snoozeThread } = useQueueAtom();
-  const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
-
-  const handlePickPreset = useCallback(
-    async (preset: { id: string; scheduledFor: string | null }) => {
-      if (!preset.scheduledFor) return;
-      const sender = thread.from?.[0];
-      const res = await snoozeThread({
-        threadId: thread.id,
-        accountId: thread.accountId,
-        snoozeUntil: preset.scheduledFor,
-        threadSnapshot: {
-          subject: thread.subject || '(No subject)',
-          snippet: thread.snippet || '',
-          from: {
-            id: sender?.email || thread.id,
-            name: sender?.name || sender?.email || 'Unknown',
-            email: sender?.email || ''
-          },
-          isStarred: thread.labelIds?.includes('STARRED') ?? false
-        }
-      });
-      setOpen(false);
-      if (!res.ok) {
-        toast.error(`Couldn't snooze: ${res.error}`);
-        return;
-      }
-      toast.success(`Snoozed until ${new Date(preset.scheduledFor).toLocaleString()}`);
-    },
-    [thread, snoozeThread]
-  );
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="text"
-          typeVariant="inline"
-          sizeVariant="xs"
-          tabIndex={-1}
-          className={
-            buttonClassName ??
-            'shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100'
-          }
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          tooltip="Snooze"
-          aria-label="Snooze"
-        >
-          <MonoIcon type="Clock" size={18} weight={300} grade={0} />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="bottom"
-        sideOffset={6}
-        className="w-auto border-none bg-transparent p-0 shadow-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <ReschedulePopover
-          presets={presets}
-          heading="Snooze until"
-          onPickPreset={handlePickPreset}
-          onPickCustom={() => setOpen(false)}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-});
-SnoozeButton.displayName = 'SnoozeButton';
+// SnoozeButton / LabelButton live in ./ThreadRowActions (shared with the dense row).
 
 interface ThreadListCozyItemProps {
   threadId: string;
@@ -570,6 +488,10 @@ export const ThreadListCozyItem = React.memo(
                       >
                         <MonoIcon type="Check" size={18} weight={300} grade={0} />
                       </button>
+                      <LabelButton
+                        thread={currentThread}
+                        buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
+                      />
                       <SnoozeButton
                         thread={currentThread}
                         buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"

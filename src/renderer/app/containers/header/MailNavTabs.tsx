@@ -27,6 +27,8 @@ const NAV_ITEMS: MailNavItem[] = [
   { id: 'sent', label: 'Sent', icon: 'send', query: 'in:sent', shortcut: 'G E' }
 ];
 
+const TITLEBAR_NAV_ICON_SIZE = 17;
+
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
 
 const queryHasToken = (normalizedQuery: string, token: string) =>
@@ -101,7 +103,7 @@ const MailNavTabs = React.memo(() => {
                 : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
             )}
           >
-            <InboxIcon symbol={item.icon} size={24} weight={200} />
+            <InboxIcon symbol={item.icon} size={TITLEBAR_NAV_ICON_SIZE} weight={200} />
             <span>{item.label}</span>
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span

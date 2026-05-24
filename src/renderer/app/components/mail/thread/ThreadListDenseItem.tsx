@@ -3,6 +3,7 @@ import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
+import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
@@ -498,6 +499,14 @@ export const ThreadListDenseItem = React.memo(
                         >
                           <MonoIcon type="Check" size={18} weight={300} grade={0} />
                         </button>
+                        <LabelButton
+                          thread={currentThread}
+                          buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
+                        />
+                        <SnoozeButton
+                          thread={currentThread}
+                          buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
+                        />
                         <button
                           type="button"
                           tabIndex={-1}

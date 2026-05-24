@@ -32,7 +32,7 @@ const navItemVariants = cva(
         // Card lift + 2px lime left tab — Newton "active" signal via
         // `--chart-1`, mirroring the DraftCard red-stripe convention.
         className:
-          'border bg-card text-foreground shadow-sm hover:bg-card before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-r before:bg-chart-1 before:content-[""]'
+          'border border-border/70 bg-card text-foreground shadow-[0_1px_1.5px_rgba(0,0,0,0.05)] hover:bg-card dark:shadow-[0_1px_1.5px_rgba(0,0,0,0.22)] before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-r before:bg-chart-1 before:content-[""]'
       },
       {
         variant: 'default',

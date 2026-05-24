@@ -263,9 +263,11 @@
   }
 
   *:focus {
-    outline-width: 0px;
-    outline-offset: -1px;
-    outline-color: hsl(var(--ring));
+    /* Chrome/Electron's default focus-visible ring uses outline-style: auto,
+       which ignores outline-width — so width:0 alone let a blue ring leak
+       through on focusable panels. Setting the style none fully suppresses it.
+       (Intentional focus indicators in this app use ring/box-shadow, not outline.) */
+    outline: none;
   }
 
   html {
