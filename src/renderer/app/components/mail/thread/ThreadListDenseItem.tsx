@@ -323,54 +323,67 @@ export const ThreadListDenseItem = React.memo(
                   <div
                     className={cn('flex items-center gap-3 border-b border-border/40 px-3 py-1.5')}
                   >
-                    {/* Hover checkbox */}
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      aria-label={isChecked ? 'Deselect email' : 'Select email'}
-                      aria-pressed={isChecked}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        if (e.shiftKey) {
-                          onClick(e, threadId);
-                          return;
-                        }
-                        setSelectedThreads((prev) =>
-                          prev.includes(threadId)
-                            ? prev.filter((id) => id !== threadId)
-                            : [...prev, threadId]
-                        );
-                      }}
-                      className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity duration-150',
-                        isChecked
-                          ? 'opacity-100'
-                          : 'opacity-20 hover:!opacity-100 focus-visible:!opacity-100 group-hover:!opacity-100'
+                    {/* Unread dot + hover checkbox share the same slot: an unread
+                        row shows the blue dot here at rest; on hover the checkbox
+                        takes over (hover behavior unchanged). */}
+                    <div className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+                      {isUnread && !isChecked && (
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 transition-opacity duration-150 group-hover:opacity-0"
+                        />
                       )}
-                    >
-                      <div
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        aria-label={isChecked ? 'Deselect email' : 'Select email'}
+                        aria-pressed={isChecked}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          if (e.shiftKey) {
+                            onClick(e, threadId);
+                            return;
+                          }
+                          setSelectedThreads((prev) =>
+                            prev.includes(threadId)
+                              ? prev.filter((id) => id !== threadId)
+                              : [...prev, threadId]
+                          );
+                        }}
                         className={cn(
-                          'flex h-5 w-5 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,transform] duration-150',
+                          'flex h-7 w-7 items-center justify-center rounded-full transition-opacity duration-150',
                           isChecked
-                            ? 'border-muted-foreground bg-muted-foreground text-background shadow-none'
-                            : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground group-hover:scale-105 group-hover:border-muted-foreground/70 group-hover:bg-muted/70 group-hover:text-foreground'
+                            ? 'opacity-100'
+                            : cn(
+                                'hover:!opacity-100 focus-visible:!opacity-100 group-hover:!opacity-100',
+                                isUnread ? 'opacity-0' : 'opacity-20'
+                              )
                         )}
                       >
-                        <MonoIcon
-                          type="Check"
+                        <div
                           className={cn(
-                            'stroke-[1.5]',
-                            isChecked ? 'h-3.5 w-3.5' : 'h-3 w-3',
-                            isChecked ? 'opacity-100' : 'opacity-80 group-hover:text-foreground'
+                            'flex h-5 w-5 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,transform] duration-150',
+                            isChecked
+                              ? 'border-muted-foreground bg-muted-foreground text-background shadow-none'
+                              : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground group-hover:scale-105 group-hover:border-muted-foreground/70 group-hover:bg-muted/70 group-hover:text-foreground'
                           )}
-                        />
-                      </div>
-                    </button>
+                        >
+                          <MonoIcon
+                            type="Check"
+                            className={cn(
+                              'stroke-[1.5]',
+                              isChecked ? 'h-3.5 w-3.5' : 'h-3 w-3',
+                              isChecked ? 'opacity-100' : 'opacity-80 group-hover:text-foreground'
+                            )}
+                          />
+                        </div>
+                      </button>
+                    </div>
 
                     {/* Avatar */}
                     <RecipientAvatar
@@ -382,12 +395,6 @@ export const ThreadListDenseItem = React.memo(
 
                     {/* Sender column */}
                     <div className="flex w-32 shrink-0 items-center gap-2 overflow-hidden">
-                      {isUnread && (
-                        <span
-                          aria-hidden
-                          className="h-2 w-2 shrink-0 rounded-full bg-blue-500"
-                        />
-                      )}
                       <div className="min-w-0 flex-1 overflow-hidden">
                         <span
                           className={cn(
