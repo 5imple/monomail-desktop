@@ -25,6 +25,8 @@ import { useSearchParams } from 'react-router-dom';
 interface AppLayoutProps {}
 
 const TITLEBAR_ACTION_ICON_SIZE = 17;
+const TITLEBAR_ACTION_ICON_WEIGHT = 300;
+const TITLEBAR_ACTION_ICON_GRADE = 0;
 
 const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { t } = useTranslation();
@@ -127,7 +129,12 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip="Compose"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
               >
-                <InboxIcon type="Edit" size={TITLEBAR_ACTION_ICON_SIZE} weight={200} />
+                <InboxIcon
+                  type="Edit"
+                  size={TITLEBAR_ACTION_ICON_SIZE}
+                  weight={TITLEBAR_ACTION_ICON_WEIGHT}
+                  grade={TITLEBAR_ACTION_ICON_GRADE}
+                />
               </Button>
               <Button
                 variant="ghost"
@@ -137,7 +144,12 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip="Accounts"
                 onClick={() => openDialog('preference', { defaultPage: 'integration' })}
               >
-                <InboxIcon type="UserIcon" size={TITLEBAR_ACTION_ICON_SIZE} weight={200} />
+                <InboxIcon
+                  type="UserIcon"
+                  size={TITLEBAR_ACTION_ICON_SIZE}
+                  weight={TITLEBAR_ACTION_ICON_WEIGHT}
+                  grade={TITLEBAR_ACTION_ICON_GRADE}
+                />
               </Button>
               <Button
                 variant="ghost"
@@ -151,7 +163,12 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
                 onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
               >
-                <InboxIcon symbol="calendar_today" size={TITLEBAR_ACTION_ICON_SIZE} weight={200} />
+                <InboxIcon
+                  symbol="calendar_today"
+                  size={TITLEBAR_ACTION_ICON_SIZE}
+                  weight={TITLEBAR_ACTION_ICON_WEIGHT}
+                  grade={TITLEBAR_ACTION_ICON_GRADE}
+                />
               </Button>
             </div>
           </div>

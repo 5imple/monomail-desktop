@@ -1034,7 +1034,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
             isMaximized ? 'h-full min-h-0 max-w-[960px]' : 'h-[405px] min-h-[405px] max-w-[768px]',
             isMinimized
               ? 'max-h-12 min-h-12 min-w-80 max-w-80 rounded-xl shadow-md'
-              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.06),0_14px_28px_-18px_rgb(15_23_42_/_0.35),0_30px_60px_-36px_rgb(15_23_42_/_0.42)] ring-1 ring-slate-950/[0.06] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.04),0_16px_32px_-20px_rgb(0_0_0_/_0.62),0_34px_68px_-38px_rgb(0_0_0_/_0.7)] dark:ring-white/[0.08]',
+              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.04),0_10px_24px_-20px_rgb(15_23_42_/_0.28),-12px_14px_30px_-28px_rgb(15_23_42_/_0.18),12px_14px_30px_-28px_rgb(15_23_42_/_0.18)] ring-1 ring-slate-950/[0.055] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.035),0_12px_26px_-20px_rgb(0_0_0_/_0.42),-12px_14px_30px_-28px_rgb(0_0_0_/_0.34),12px_14px_30px_-28px_rgb(0_0_0_/_0.34)] dark:ring-white/[0.08]',
 
             // isClosing ? 'duration-0' : 'duration-400',
             // isVisible && !isClosing ? '' : 'h-0 max-h-0 min-h-0',

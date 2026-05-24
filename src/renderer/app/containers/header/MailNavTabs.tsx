@@ -28,6 +28,8 @@ const NAV_ITEMS: MailNavItem[] = [
 ];
 
 const TITLEBAR_NAV_ICON_SIZE = 17;
+const TITLEBAR_NAV_ICON_WEIGHT = 300;
+const TITLEBAR_NAV_ICON_GRADE = 0;
 
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -103,7 +105,12 @@ const MailNavTabs = React.memo(() => {
                 : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
             )}
           >
-            <InboxIcon symbol={item.icon} size={TITLEBAR_NAV_ICON_SIZE} weight={200} />
+            <InboxIcon
+              symbol={item.icon}
+              size={TITLEBAR_NAV_ICON_SIZE}
+              weight={TITLEBAR_NAV_ICON_WEIGHT}
+              grade={TITLEBAR_NAV_ICON_GRADE}
+            />
             <span>{item.label}</span>
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span
