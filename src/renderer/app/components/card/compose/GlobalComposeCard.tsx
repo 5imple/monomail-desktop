@@ -65,7 +65,7 @@ interface MonoAttachmentWithStatus extends MonoAttachment {
 }
 
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
-  const { preference, getUidFromEmail, accounts, getAccountByUid } = useAuth();
+  const { preference, getUidFromEmail, accounts } = useAuth();
   const { templates } = useTemplateAtom();
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
@@ -82,7 +82,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [isClosing, setIsClosing] = useState(false);
   const { trackEvent } = useUserTrackingData();
   const [isSending, setIsSending] = useState(false);
-  const [trackingEnabled, setTrackingEnabled] = useState(true);
+  const trackingEnabled = true;
 
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
@@ -214,10 +214,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       setGlobalDraftWindows((prev) => prev.filter((win) => win.id !== draft?.id));
     }, 400);
   }, [draft, isMaximized]);
-
-  const handleTrackingChange = useCallback((enabled: boolean) => {
-    setTrackingEnabled(enabled);
-  }, []);
 
   useEffect(() => {
     setIsVisible(true); // Trigger grow animation
@@ -521,45 +517,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       }
     },
     [composeDraft, draft, handleClose, openDialog, updateMessage]
-  );
-
-  const onFromChange = useCallback(
-    async (email: string, uid: string) => {
-      const currentFromEmail = composeDraft.from;
-      const currentUid = currentFromEmail ? getUidFromEmail(currentFromEmail) : null;
-
-      if (currentUid && currentUid !== uid && composeDraft.id) {
-        try {
-          await removeDraft(currentUid, composeDraft.id, false);
-
-          setComposeDraft((prevDraft) => {
-            const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
-            updatedDraft.update({
-              from: email
-            });
-
-            apiClient.setApiActiveUid(uid);
-            updateMessage(updatedDraft);
-
-            return updatedDraft;
-          });
-        } catch (error) {
-          console.error('Error handling draft transfer between accounts:', error);
-          toast.error(t('toast.error.transfer_draft'));
-        }
-      } else {
-        setComposeDraft((prevDraft) => {
-          const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
-          updatedDraft.update({ from: email });
-
-          apiClient.setApiActiveUid(uid);
-          updateMessage(updatedDraft);
-
-          return updatedDraft;
-        });
-      }
-    },
-    [composeDraft.from, composeDraft.id, getUidFromEmail, removeDraft, t, updateMessage]
   );
 
   const onSignatureChange = useCallback(
@@ -1029,12 +986,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       >
         <Card
           className={cn(
-            'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/60 bg-card dark:bg-background',
+            'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/35 bg-card dark:bg-background',
             'w-full min-w-0 transition-all duration-300',
             isMaximized ? 'h-full min-h-0 max-w-[960px]' : 'h-[405px] min-h-[405px] max-w-[768px]',
             isMinimized
               ? 'max-h-12 min-h-12 min-w-80 max-w-80 rounded-xl shadow-md'
-              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.04),0_10px_24px_-20px_rgb(15_23_42_/_0.28),-12px_14px_30px_-28px_rgb(15_23_42_/_0.18),12px_14px_30px_-28px_rgb(15_23_42_/_0.18)] ring-1 ring-slate-950/[0.055] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.035),0_12px_26px_-20px_rgb(0_0_0_/_0.42),-12px_14px_30px_-28px_rgb(0_0_0_/_0.34),12px_14px_30px_-28px_rgb(0_0_0_/_0.34)] dark:ring-white/[0.08]',
+              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.04),0_10px_24px_-20px_rgb(15_23_42_/_0.28),-12px_14px_30px_-28px_rgb(15_23_42_/_0.18),12px_14px_30px_-28px_rgb(15_23_42_/_0.18)] ring-1 ring-slate-950/[0.035] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.035),0_12px_26px_-20px_rgb(0_0_0_/_0.42),-12px_14px_30px_-28px_rgb(0_0_0_/_0.34),12px_14px_30px_-28px_rgb(0_0_0_/_0.34)] dark:ring-white/[0.055]',
 
             // isClosing ? 'duration-0' : 'duration-400',
             // isVisible && !isClosing ? '' : 'h-0 max-h-0 min-h-0',
@@ -1135,14 +1092,11 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                 draftSaveStatus={draftSaveStatus}
                 handleSendMessage={handleSendMessage}
                 handleFileChange={handleFileChange}
-                trackingEnabled={trackingEnabled}
-                onTrackingChange={handleTrackingChange}
                 sendDisabled={
                   composeDraft.to.length === 0 ||
                   !composeDraft.from ||
                   draftSaveStatus === 'LOADING'
                 }
-                onFromChange={onFromChange}
                 onDiscard={handleDiscard}
               />
             </>

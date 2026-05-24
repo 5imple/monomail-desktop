@@ -27,7 +27,7 @@ const NAV_ITEMS: MailNavItem[] = [
   { id: 'sent', label: 'Sent', icon: 'send', query: 'in:sent', shortcut: 'G E' }
 ];
 
-const TITLEBAR_NAV_ICON_SIZE = 17;
+const TITLEBAR_NAV_ICON_SIZE = 15;
 const TITLEBAR_NAV_ICON_WEIGHT = 300;
 const TITLEBAR_NAV_ICON_GRADE = 0;
 
@@ -88,7 +88,7 @@ const MailNavTabs = React.memo(() => {
   );
 
   return (
-    <div className="flex items-center gap-[6px]">
+    <div className="flex items-center gap-[5px]">
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeId;
         const isLoading = item.id === loadingTabId && !isActive;
@@ -99,7 +99,7 @@ const MailNavTabs = React.memo(() => {
             title={`${item.label} (${item.shortcut})`}
             onClick={() => handleTabClick(item)}
             className={cn(
-              'no-drag relative flex h-[32px] min-w-[96px] items-center justify-center gap-[7px] rounded-lg px-[10px] text-[14px] transition-colors',
+              'no-drag relative flex h-[29px] min-w-[86px] items-center justify-center gap-[6px] rounded-[7px] px-[9px] text-[13px] transition-colors',
               isActive
                 ? 'bg-foreground/[0.10] font-normal text-foreground'
                 : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
@@ -115,7 +115,7 @@ const MailNavTabs = React.memo(() => {
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span
                 className={cn(
-                  'min-w-[1ch] text-[13px] tabular-nums',
+                  'min-w-[1ch] text-[12px] tabular-nums',
                   isActive ? 'text-foreground' : 'text-muted-foreground'
                 )}
               >
@@ -123,7 +123,7 @@ const MailNavTabs = React.memo(() => {
               </span>
             )}
             {isLoading && (
-              <span className="absolute bottom-0.5 left-3 right-3 h-[2px] animate-pulse rounded-full bg-accent" />
+              <span className="absolute bottom-0.5 left-[11px] right-[11px] h-[2px] animate-pulse rounded-full bg-accent" />
             )}
           </button>
         );
