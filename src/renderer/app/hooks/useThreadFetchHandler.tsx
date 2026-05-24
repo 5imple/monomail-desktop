@@ -13,6 +13,7 @@ import {
   DBGetAllThreadsMultiUser,
   DBGetThread,
   DBGetThreadsByLabelMultiUser,
+  DBPurgeStubThreads,
   isPrimaryThread,
   ValidLabel,
   validLabels
@@ -105,7 +106,15 @@ const useThreadFetchHandler = () => {
   // Helper function to get limited account UIDs based on user plan and account status
   const getLimitedAccountUids = useCallback(() => {
     const currentActiveSpace = activeSpaceRef.current;
-    if (!currentActiveSpace?.activeAccountUids?.length) return [];
+    const allAccountUids = accounts.map((acc) => acc.uid);
+
+    // A space cached under a previous account identity (e.g. a leftover backend
+    // `mock-account-*` id from a mode switch) can leave activeAccountUids empty
+    // or pointing at accounts that no longer exist. When that happens Gmail sync
+    // would either not run or run under a uid that has no Google token, freezing
+    // the inbox on stale cache. Recover by syncing all signed-in accounts so
+    // sync always runs under the real (Google) account identity.
+    if (!currentActiveSpace?.activeAccountUids?.length) return allAccountUids;
 
     // Payment-free build — every active account is allowed; no 2-account
     // free-plan cap to enforce.
@@ -113,6 +122,7 @@ const useThreadFetchHandler = () => {
       accounts.some((acc) => acc.uid === uid)
     );
 
+    if (validAccounts.length === 0) return allAccountUids;
     return validAccounts;
   }, [activeSpaceRef, accounts]);
 
@@ -1479,6 +1489,38 @@ const useThreadFetchHandler = () => {
       historyUnsubscribe();
     };
   }, [activeSpace, updateFromMessageSubscribe]);
+
+  // One-time-per-account cleanup: drop stale `mock-*` stub threads left in the
+  // cache by an earlier backend/mock build so they stop shadowing real Gmail
+  // (and stop reappearing after a delete). If anything was removed, reload the
+  // list so the inbox reflects the cleaned cache immediately.
+  const purgedStubUidsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const toPurge = accounts
+      .map((acc) => acc.uid)
+      .filter((uid) => uid && !purgedStubUidsRef.current.has(uid));
+    if (toPurge.length === 0) return;
+    toPurge.forEach((uid) => purgedStubUidsRef.current.add(uid));
+
+    enqueueOperation(
+      async () => {
+        let removed = 0;
+        for (const uid of toPurge) {
+          try {
+            removed += await DBPurgeStubThreads(uid);
+          } catch (e) {
+            console.warn('[cache] stub purge failed for', uid, e);
+          }
+        }
+        if (removed > 0) {
+          console.log(`[cache] purged ${removed} stale stub thread(s)`);
+          resetThreadsArray();
+          await fetchThreadsHandler(false);
+        }
+      },
+      { priority: OperationPriority.HIGH, type: 'purge-stub-threads', batch: false }
+    );
+  }, [accounts, enqueueOperation, resetThreadsArray, fetchThreadsHandler]);
 
   // Check sync metadata when component mounts or active space changes
   useEffect(() => {

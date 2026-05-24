@@ -317,6 +317,11 @@ async function syncThreadsWithPagination(
       idToken
     );
 
+    // DIAGNOSTIC: confirm the full sync is actually pulling real Gmail threads.
+    console.log(
+      `[threadSync] uid=${uid} q="${q}" fetched=${threadResponse?.threads?.length ?? 0} hasMore=${!!threadResponse?.nextPageToken}`
+    );
+
     // If request is aborted during this process, do not proceed
     // Before returning, save the current state to pausedSyncs if this was a pause operation
     const pausedSync = pausedSyncs.get(requestId);

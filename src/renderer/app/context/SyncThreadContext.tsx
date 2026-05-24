@@ -177,6 +177,22 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
       };
     }
 
+    // DIAGNOSTIC: surface whether the thread worker's Gmail calls actually
+    // succeed (and the exact uid/status/error when they don't).
+    if (!(result as { ok?: boolean })?.ok) {
+      console.warn(
+        '[gmail-bridge] FAIL',
+        args?.method,
+        args?.path,
+        'uid=',
+        args?.uid,
+        'status=',
+        (result as { status?: number })?.status,
+        'err=',
+        (result as { error?: string })?.error
+      );
+    }
+
     workerRef.current?.postMessage({
       type: 'MAIL_API_RESPONSE',
       payload: { requestId, result }

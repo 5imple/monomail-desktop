@@ -87,7 +87,6 @@ const updatePrimaryAccount = (to: string, signal?: AbortSignal) => {
  */
 const updateUserProfile = (
   preference: {
-    language: UserPreference['language'];
     displayName: MonoMember['displayName'];
   },
   signal?: AbortSignal

@@ -9,32 +9,14 @@ import { FC, useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import MonoIcon from '@/renderer/app/components/icons/icons';
-import { supportedLanguages, SupportedLanguage } from '@/main/api/auth/types';
-
-// Language display configuration - memoized outside component
-const languageOptions = [
-  { key: 'en' as SupportedLanguage, label: 'English', nativeLabel: 'English' },
-  { key: 'es' as SupportedLanguage, label: 'Spanish', nativeLabel: 'Español' },
-  { key: 'fr' as SupportedLanguage, label: 'French', nativeLabel: 'Français' },
-  { key: 'de' as SupportedLanguage, label: 'German', nativeLabel: 'Deutsch' },
-  { key: 'it' as SupportedLanguage, label: 'Italian', nativeLabel: 'Italiano' },
-  { key: 'pt' as SupportedLanguage, label: 'Portuguese', nativeLabel: 'Português' },
-  { key: 'ru' as SupportedLanguage, label: 'Russian', nativeLabel: 'Русский' },
-  { key: 'ja' as SupportedLanguage, label: 'Japanese', nativeLabel: '日本語' },
-  { key: 'ko' as SupportedLanguage, label: 'Korean', nativeLabel: '한국어' },
-  { key: 'zh' as SupportedLanguage, label: 'Chinese', nativeLabel: '中文' }
-].filter((lang) => supportedLanguages.has(lang.key));
 
 const OnBoardingAppearance: FC<{
   activeTheme: 'light' | 'dark';
   onContinue: () => void;
   onThemeChange?: (theme: 'light' | 'dark') => void;
 }> = ({ activeTheme, onContinue, onThemeChange }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { currentTheme, setTheme } = useTheme();
-  const [activeLanguage, setActiveLanguage] = useState<SupportedLanguage>(
-    i18n.language as SupportedLanguage
-  );
   const { updatePreference, preference } = useAuth();
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -51,11 +33,11 @@ const OnBoardingAppearance: FC<{
       lightDescription: t('onboarding.appearance.theme_selection.light.description'),
       darkDescription: t('onboarding.appearance.theme_selection.dark.description')
     }),
-    [t, activeLanguage]
+    [t]
   );
 
   // Optimized animations with reduced complexity
-  const leftTrail = useTrail(4, {
+  const leftTrail = useTrail(3, {
     from: { opacity: 0, transform: 'translateY(40px)' },
     to: { opacity: 1, transform: 'translateY(0px)' },
     config: { tension: 200, friction: 20 },
@@ -102,39 +84,17 @@ const OnBoardingAppearance: FC<{
     [isTransitioning, onThemeChange]
   );
 
-  // Optimize language change with useCallback
-  const handleChangeLanguage = useCallback(
-    (newLanguage: SupportedLanguage) => {
-      setActiveLanguage(newLanguage);
-      i18n.changeLanguage(newLanguage);
-      updatePreference({
-        ...preference,
-        language: newLanguage
-      });
-    },
-    [i18n, preference, updatePreference]
-  );
-
   // Optimize continue handler
   const handleContinue = useCallback(() => {
     updatePreference({
       appearance: {
         ...preference.appearance,
         theme: currentTheme
-      },
-      language: activeLanguage
+      }
     });
     setTheme(activeTheme);
     onContinue();
-  }, [
-    updatePreference,
-    preference,
-    currentTheme,
-    activeLanguage,
-    setTheme,
-    activeTheme,
-    onContinue
-  ]);
+  }, [updatePreference, preference, currentTheme, setTheme, activeTheme, onContinue]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -180,49 +140,6 @@ const OnBoardingAppearance: FC<{
               }
 
               if (index === 2) {
-                return (
-                  <animated.div key="language-selection" className="mt-8" style={style}>
-                    <div className="space-y-1">
-                      {languageOptions.map((languageOption) => {
-                        const isSelected = activeLanguage === languageOption.key;
-
-                        return (
-                          <div
-                            key={languageOption.key}
-                            className="cursor-pointer"
-                            onClick={() => handleChangeLanguage(languageOption.key)}
-                          >
-                            <div className={cn('py-2 transition-all duration-200')}>
-                              <div className="flex items-center justify-between">
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-medium text-foreground">
-                                    {languageOption.nativeLabel}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {languageOption.label}
-                                  </span>
-                                </div>
-
-                                <div
-                                  className={cn(
-                                    'shrink-0 opacity-0 transition-opacity duration-200',
-                                    isSelected && 'opacity-100'
-                                  )}
-                                >
-                                  <div className="flex h-4 w-4 items-center justify-center rounded-full bg-primary">
-                                    <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </animated.div>
-                );
-              }
-              if (index === 3) {
                 return (
                   <animated.div key="continue-button" style={style} className="mt-12">
                     <animated.div style={continueButtonSpring}>

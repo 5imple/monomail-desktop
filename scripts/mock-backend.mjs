@@ -164,7 +164,6 @@ const STUB_THREADS_BY_ID = new Map(STUB_THREADS.map((t) => [t.id, t]));
 const STUB_MESSAGES_BY_ID = new Map(STUB_THREADS.flatMap((t) => t.items.map((m) => [m.id, m])));
 
 const STUB_PREFERENCE = {
-  language: 'en',
   appearance: { theme: 'system', density: 'cozy' },
   compose: { cancelWindow: 5, fullscreen: false },
   account: { accentColor: {} },
