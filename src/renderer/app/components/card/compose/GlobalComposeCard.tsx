@@ -29,7 +29,6 @@ import {
   DBSaveAttachmentBlob
 } from '@/renderer/app/lib/db/draftAttachment';
 import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
-import { isElectron } from '@/renderer/app/lib/electronApi';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
@@ -38,7 +37,6 @@ import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
-import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import juice from 'juice';
 import { debounce } from 'lodash';
 import React, {
@@ -78,7 +76,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { openDialog } = useDialogs();
   const { updateDraft, sendDraft, removeDraft } = useDraftAtom();
   const { setGlobalDraftWindows } = useComposeWindowAtom();
-  const { sidebarCollapsed } = useSidebarAtom();
   const { activateScope, deactivateScope } = useHotkeyScope();
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -1032,7 +1029,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               onMaximize={toggleMaximize}
               isMinimized={isMinimized}
               isMaximized={isMaximized}
-              hasElectronPadding={!!(isElectron && isMaximized && sidebarCollapsed)}
               draftStatus={renderDraftStatus}
             />
           </CardHeader>
