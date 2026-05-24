@@ -24,6 +24,10 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
+import {
+  DBDeleteAttachmentBlob,
+  DBSaveAttachmentBlob
+} from '@/renderer/app/lib/db/draftAttachment';
 import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
@@ -581,7 +585,16 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       try {
         const uid = getUidFromEmail(composeDraft.from);
         if (uid) {
-          await draftApi.uploadAttachment(uid, attachmentId, composeDraft.id, file);
+          // Standalone: hold the bytes locally; buildRawMessage encodes them at send.
+          await DBSaveAttachmentBlob(uid, {
+            attachmentId,
+            draftId: composeDraft.id,
+            fileName: file.name,
+            mimeType: file.type,
+            size: file.size,
+            inline: false,
+            blob: file
+          });
 
           const updatedAttachments = {
             ...composeDraft.attachments,
@@ -614,6 +627,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
 
   const onAttachmentDelete = useCallback(
     (attachmentId: string) => {
+      const uid = getUidFromEmail(composeDraft.from);
+      if (uid) void DBDeleteAttachmentBlob(uid, attachmentId);
       setComposeDraft((prevDraft) => {
         const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
         const updatedAttachments = { ...updatedDraft.attachments };
@@ -623,7 +638,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         return updatedDraft;
       });
     },
-    [updateMessage]
+    [updateMessage, getUidFromEmail, composeDraft.from]
   );
 
   const renderDraftStatus = useMemo(() => {
@@ -986,12 +1001,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       >
         <Card
           className={cn(
-            'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/35 bg-card dark:bg-background',
+            'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/25 bg-card dark:bg-background',
             'w-full min-w-0 transition-all duration-300',
             isMaximized ? 'h-full min-h-0 max-w-[960px]' : 'h-[405px] min-h-[405px] max-w-[768px]',
             isMinimized
               ? 'max-h-12 min-h-12 min-w-80 max-w-80 rounded-xl shadow-md'
-              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.04),0_10px_24px_-20px_rgb(15_23_42_/_0.28),-12px_14px_30px_-28px_rgb(15_23_42_/_0.18),12px_14px_30px_-28px_rgb(15_23_42_/_0.18)] ring-1 ring-slate-950/[0.035] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.035),0_12px_26px_-20px_rgb(0_0_0_/_0.42),-12px_14px_30px_-28px_rgb(0_0_0_/_0.34),12px_14px_30px_-28px_rgb(0_0_0_/_0.34)] dark:ring-white/[0.055]',
+              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.035),0_10px_24px_-22px_rgb(15_23_42_/_0.22),-8px_10px_22px_-18px_rgb(15_23_42_/_0.12),8px_10px_22px_-18px_rgb(15_23_42_/_0.12)] ring-1 ring-slate-950/[0.025] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.03),0_12px_26px_-22px_rgb(0_0_0_/_0.36),-8px_10px_22px_-18px_rgb(0_0_0_/_0.26),8px_10px_22px_-18px_rgb(0_0_0_/_0.26)] dark:ring-white/[0.04]',
 
             // isClosing ? 'duration-0' : 'duration-400',
             // isVisible && !isClosing ? '' : 'h-0 max-h-0 min-h-0',
