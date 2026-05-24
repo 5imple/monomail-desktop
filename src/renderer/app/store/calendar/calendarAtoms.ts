@@ -384,6 +384,20 @@ export function convertFromGoogleEvent(
     return null;
   };
 
+  const getTimestampValue = (timestamp: unknown, fallback: number): number => {
+    if (typeof timestamp === 'string') {
+      const parsed = Date.parse(timestamp);
+      return Number.isNaN(parsed) ? fallback : parsed;
+    }
+
+    if (timestamp && typeof timestamp === 'object') {
+      const value = (timestamp as { value?: unknown }).value;
+      if (typeof value === 'number') return value;
+    }
+
+    return fallback;
+  };
+
   const convertedEvent = {
     id: googleEvent.id,
     accountUid, // Ensure accountUid is always set
@@ -415,8 +429,8 @@ export function convertFromGoogleEvent(
     htmlLink: googleEvent.htmlLink,
     status: (googleEvent.status as 'confirmed' | 'tentative' | 'cancelled') || 'confirmed',
     sequence: googleEvent.sequence || 0,
-    created: new Date(googleEvent.created?.value || Date.now()),
-    updated: new Date(googleEvent.updated?.value || Date.now()),
+    created: new Date(getTimestampValue(googleEvent.created, Date.now())),
+    updated: new Date(getTimestampValue(googleEvent.updated, Date.now())),
     conferenceData: googleEvent.conferenceData
       ? {
           conferenceId: googleEvent.conferenceData.conferenceId || '',

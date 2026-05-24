@@ -17,6 +17,7 @@ type GmailRequestResult =
 
 const GMAIL_BASE_URL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const PEOPLE_BASE_URL = 'https://people.googleapis.com/v1';
+const CALENDAR_BASE_URL = 'https://www.googleapis.com/calendar/v3';
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']);
 const FORWARDED_HEADERS = new Set(['accept', 'content-type']);
 
@@ -32,6 +33,13 @@ function buildPeopleUrl(path: unknown): string | null {
   if (!path.startsWith('/') || path.startsWith('//')) return null;
   if (/[\r\n]/.test(path)) return null;
   return `${PEOPLE_BASE_URL}${path}`;
+}
+
+function buildCalendarUrl(path: unknown): string | null {
+  if (typeof path !== 'string') return null;
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
+  if (/[\r\n]/.test(path)) return null;
+  return `${CALENDAR_BASE_URL}${path}`;
 }
 
 function sanitizeMethod(method: unknown): string | null {
@@ -176,6 +184,59 @@ export function registerGmailHandlers() {
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'People request failed'
+      } satisfies GmailRequestResult;
+    }
+  });
+
+  ipcMain.handle('main:calendar:request', async (_event, args?: GmailRequestArgs) => {
+    try {
+      const url = buildCalendarUrl(args?.path);
+      if (!url)
+        return { ok: false, error: 'Invalid Calendar request path' } satisfies GmailRequestResult;
+
+      const method = sanitizeMethod(args?.method);
+      if (!method) {
+        return { ok: false, error: 'Invalid Calendar request method' } satisfies GmailRequestResult;
+      }
+
+      const uid = typeof args?.uid === 'string' && args.uid.trim() ? args.uid.trim() : null;
+      if (!uid) {
+        return {
+          ok: false,
+          error: 'Calendar account uid is required'
+        } satisfies GmailRequestResult;
+      }
+
+      const { accessToken } = await tokenManager.getGoogleAccountAccessToken(uid);
+      const headers = {
+        Accept: 'application/json',
+        ...sanitizeHeaders(args?.headers),
+        Authorization: `Bearer ${accessToken}`
+      };
+
+      const response = await net.fetch(url, {
+        method,
+        headers,
+        body: typeof args?.body === 'string' ? args.body : undefined
+      });
+
+      const data = await readResponseBody(response, args?.responseType ?? 'json');
+      if (!response.ok) {
+        log.warn(`[calendar:ipc] request failed: ${method} ${response.status}`);
+        return {
+          ok: false,
+          status: response.status,
+          data,
+          error: getErrorMessage(response.status, data, 'Calendar')
+        } satisfies GmailRequestResult;
+      }
+
+      return { ok: true, status: response.status, data } satisfies GmailRequestResult;
+    } catch (error) {
+      log.error('[calendar:ipc] request failed:', error instanceof Error ? error.message : error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Calendar request failed'
       } satisfies GmailRequestResult;
     }
   });

@@ -208,6 +208,9 @@ export const createThreadCommands = (
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
+        const shouldAdvanceAfterTrash =
+          args?.advanceAfterAction === true ||
+          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId);
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
@@ -229,7 +232,7 @@ export const createThreadCommands = (
               true,
               !isInTrashView,
               false,
-              selectNextThread
+              shouldAdvanceAfterTrash ? selectNextThread : undefined
             )
           );
 

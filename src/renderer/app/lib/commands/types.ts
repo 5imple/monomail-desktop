@@ -17,6 +17,7 @@ export type CommandScope =
 // Simple thread command args
 export interface ThreadCommandArgs {
   threadIds?: string[];
+  advanceAfterAction?: boolean;
 }
 
 export interface MessageCommandArgs {

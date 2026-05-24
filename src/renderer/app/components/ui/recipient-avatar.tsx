@@ -3,7 +3,6 @@ import { MonoRecipient } from '@/main/models/types';
 import { Avatar, AvatarImage } from '@/renderer/app/components/ui/avatar';
 import { DBGetContactByEmail } from '@/renderer/app/lib/db/contact';
 import electronApi from '@/renderer/app/lib/electronApi';
-import { getFaviconFromEmail } from '@/renderer/app/lib/faviconUtils';
 import { cn } from '@/renderer/app/lib/utils';
 import { FC, useEffect, useState, useRef } from 'react';
 
@@ -171,7 +170,26 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
         return;
       }
 
-      // 1. Prefer the signed-in Gmail account photo when this sender is one of the user's accounts.
+      // 1. The sender's actual Google/Gmail avatar via the People API.
+      if (accountId) {
+        const photoUrl = await fetchPeoplePhotoUrl(normalizedRecipientEmail, accountId);
+        if (!cancelled && photoUrl) {
+          try {
+            const img = await loadImg(photoUrl);
+            imageCache.set(cacheKey, img);
+            if (!cancelled) {
+              setImageSrc(img.src);
+              setImageLoaded(true);
+            }
+            return;
+          } catch {
+            // People photo didn't load — keep resolving other sources.
+          }
+        }
+      }
+
+      // 2. The signed-in account photo — covers the user's own sends, where the
+      //    People API won't return a result for the user themselves.
       if (preferredImageSrc) {
         try {
           const img = await loadImg(preferredImageSrc);
@@ -182,11 +200,11 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
           }
           return;
         } catch {
-          // Stored account image didn't load — keep resolving other sources.
+          // Account image didn't load — keep resolving other sources.
         }
       }
 
-      // 2. Try a locally stored Google contact photo.
+      // 3. A locally stored Google contact photo.
       if (accountId) {
         const storedPhotoUrl = await fetchStoredContactPhotoUrl(
           normalizedRecipientEmail,
@@ -196,8 +214,10 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
           try {
             const img = await loadImg(storedPhotoUrl);
             imageCache.set(cacheKey, img);
-            setImageSrc(img.src);
-            setImageLoaded(true);
+            if (!cancelled) {
+              setImageSrc(img.src);
+              setImageLoaded(true);
+            }
             return;
           } catch {
             // Stored photo URL didn't load — keep resolving other sources.
@@ -205,36 +225,9 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
         }
       }
 
-      // 3. Try Google People API photos.
-      if (accountId) {
-        const photoUrl = await fetchPeoplePhotoUrl(normalizedRecipientEmail, accountId);
-        if (!cancelled && photoUrl) {
-          try {
-            const img = await loadImg(photoUrl);
-            imageCache.set(cacheKey, img);
-            setImageSrc(img.src);
-            setImageLoaded(true);
-            return;
-          } catch {
-            // Photo URL didn't load — fall through to favicon.
-          }
-        }
-      }
-
-      if (cancelled) return;
-
-      // 4. Fall back to company logo / favicon.
-      const faviconUrl = getFaviconFromEmail(normalizedRecipientEmail);
-      try {
-        const img = await loadImg(faviconUrl);
-        if (!cancelled) {
-          imageCache.set(cacheKey, img);
-          setImageSrc(img.src);
-          setImageLoaded(true);
-        }
-      } catch {
-        // No image — show initials
-      }
+      // No Google/contact photo for this sender — show clean initials, like
+      // Gmail. We intentionally do NOT fall back to a domain favicon/logo:
+      // those looked poor (tiny scaled favicons) and aren't the sender's avatar.
     };
 
     resolve();

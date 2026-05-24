@@ -24,6 +24,7 @@ type PeopleBridgeRequest = {
   headers?: Record<string, string>;
   responseType?: 'json' | 'blob' | 'text';
 };
+type CalendarBridgeRequest = GmailBridgeRequest;
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import {
   INativeNotificationOptions,
@@ -136,6 +137,7 @@ interface IpcRenderer {
   ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
   gmailRequest: <T = any>(args: GmailBridgeRequest) => Promise<GmailBridgeResult<T>>;
   peopleRequest: <T = any>(args: PeopleBridgeRequest) => Promise<GmailBridgeResult<T>>;
+  calendarRequest: <T = any>(args: CalendarBridgeRequest) => Promise<GmailBridgeResult<T>>;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;
@@ -473,6 +475,12 @@ const electronApi: IpcRenderer = {
   peopleRequest: async (args) => {
     if (isElectron) {
       return window.electronBridge.peopleRequest(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  calendarRequest: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.calendarRequest(args);
     }
     return { ok: false, error: 'Not in Electron' };
   },

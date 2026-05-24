@@ -56,7 +56,8 @@ const MIN_REFRESH_INTERVAL_MS = 5_000;
 const DIRECT_GOOGLE_SCOPES = [
   'https://mail.google.com',
   'https://www.googleapis.com/auth/gmail.modify',
-  'https://www.googleapis.com/auth/contacts.readonly'
+  'https://www.googleapis.com/auth/contacts.readonly',
+  'https://www.googleapis.com/auth/calendar.events'
 ];
 
 /**

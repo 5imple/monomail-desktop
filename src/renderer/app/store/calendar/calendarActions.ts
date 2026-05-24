@@ -244,6 +244,7 @@ export const applyDraftAtom = atom(
         endTime: mergedEvent.allDay
           ? (parseEventDate(mergedEvent.end.date) || new Date()).getTime()
           : (parseEventDate(mergedEvent.end.dateTime) || new Date()).getTime(),
+        allDay: mergedEvent.allDay,
         // Only include timeZone for timed events
         ...(mergedEvent.allDay ? {} : { timeZone: mergedEvent.timezone }),
         attendees: filteredAttendees.map((a) => a.email),
@@ -388,6 +389,7 @@ export const createEventAtom = atom(
         endTime: tempEvent.allDay
           ? (parseEventDate(tempEvent.end.date) || new Date()).getTime()
           : (parseEventDate(tempEvent.end.dateTime) || new Date()).getTime(),
+        allDay: tempEvent.allDay,
         // Always provide timeZone - use event timezone or default to system timezone
         timeZone: tempEvent.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         attendees: filteredAttendees.map((a) => a.email),

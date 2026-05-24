@@ -18,7 +18,7 @@ export interface GoogleCalendarEventsResponse {
 export interface GoogleCalendarEvent {
   attendees: Attendee[];
   conferenceData: ConferenceData;
-  created: Timestamp;
+  created: Timestamp | string;
   creator: Creator;
   end: DateTimeInfo;
   etag: string;
@@ -38,7 +38,7 @@ export interface GoogleCalendarEvent {
   summary: string;
   location?: string;
   description?: string;
-  updated: Timestamp;
+  updated: Timestamp | string;
 }
 
 interface Attendee {
@@ -82,11 +82,14 @@ interface Creator {
 
 interface DateTimeInfo {
   dateTime: string | null;
-  date?: {
-    value: number;
-    dateOnly: boolean;
-    timeZoneShift: number;
-  } | null;
+  date?:
+    | string
+    | {
+        value: number;
+        dateOnly: boolean;
+        timeZoneShift: number;
+      }
+    | null;
   timeZone: string | null;
 }
 
@@ -106,6 +109,7 @@ export interface CalendarRsvpRequest {
   eventId: string;
   responseStatus: 'accepted' | 'declined' | 'tentative';
   sendNotifications: boolean;
+  uid?: string;
 }
 
 /**
@@ -146,6 +150,7 @@ export interface CreateCalendarEventRequest {
   startTime: number; // epoch milliseconds
   endTime: number; // epoch milliseconds
   timeZone: string;
+  allDay?: boolean;
   attendees?: string[]; // list of attendee email addresses
   enableReminders?: boolean;
   reminderMinutes?: number[];
@@ -166,6 +171,7 @@ export interface UpdateCalendarEventRequest {
   startTime?: number; // epoch milliseconds
   endTime?: number; // epoch milliseconds
   timeZone?: string;
+  allDay?: boolean;
   attendees?: string[];
   enableReminders?: boolean;
   reminderMinutes?: number[];
