@@ -29,9 +29,8 @@ const PreferanceDialog: FC<PreferanceDialogProps> = ({
         <DialogOverlay className="dark" />
         <DialogTitle hidden />
         <DialogContent
-          closeButton={false}
           aria-description=""
-          className="gap-0 overflow-hidden p-0 dark:border sm:max-w-[1080px]"
+          className="gap-0 overflow-hidden p-0 dark:border sm:max-w-[1080px] [&>button.absolute]:z-10"
         >
           <SettingsLayout defaultPage={defaultPage} />
         </DialogContent>

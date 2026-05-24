@@ -10,7 +10,6 @@ export function registerIpcHandlers() {
   registerAuthHandlers();
   registerGmailHandlers();
   registerQueueHandlers();
-  registerGmailHandlers();
   // FCM IPC handlers retired in Phase B — push lives on a backend
   // WebSocket now (see services/push/WebSocketPushClient.ts).
 }

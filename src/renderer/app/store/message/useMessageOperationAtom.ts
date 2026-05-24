@@ -31,7 +31,7 @@ export function useMessageOperationAtom() {
           console.warn(`Message with ID ${messageId} not found in DB, fetching from API.`);
 
           const fetchedMessage = await mailApi.getMessage(uid, messageId);
-          if (!fetchedMessage) {
+          if (!fetchedMessage?.payload) {
             console.error(`Message with ID ${messageId} could not be fetched.`);
             return;
           }

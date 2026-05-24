@@ -40,7 +40,9 @@ export const getFaviconFromEmail = (email: string): string => {
     const faviconUrl = `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/api/favicon?email=${email}`;
     return faviconUrl;
   } else {
-    const faviconUrl = `https://logo.clearbit.com/${extractDomainFromEmail(email)}`;
+    // Clearbit's free logo API was sunset, so logo.clearbit.com no longer resolves.
+    // Google's favicon service resolves in both dev and prod with no backend.
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${extractDomainFromEmail(email)}&sz=128`;
     return faviconUrl;
   }
 };

@@ -54,8 +54,10 @@ export const parseGmailThread = (accountId: string, thread: GmailThreadGetRespon
     {} as Record<string, MonoAttachment>
   );
 
-  // Parse messages into MonoMessage
-  const parsedMessages = thread.messages.map((message) => MonoMessage.fromGmailMessage(message));
+  // Parse messages into MonoMessage (skip any without a payload — fromGmailMessage requires it)
+  const parsedMessages = thread.messages
+    .filter((message) => message?.payload)
+    .map((message) => MonoMessage.fromGmailMessage(message));
 
   return new MonoThread({
     accountId: accountId,

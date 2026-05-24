@@ -68,6 +68,15 @@
   /* color: hsl(var(--foreground)); */
 }
 
+.email-document {
+  color-scheme: light;
+}
+
+.email-document img {
+  max-width: 100%;
+  height: auto;
+}
+
 @property --wipe-position {
   syntax: '<percentage>';
   inherits: false;

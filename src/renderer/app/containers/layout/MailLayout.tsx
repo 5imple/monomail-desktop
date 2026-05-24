@@ -94,6 +94,11 @@ const DragOverlayContent = React.memo(
 DragOverlayContent.displayName = 'DragOverlayContent';
 
 interface MailLayoutProps {}
+
+type ReaderPanelPhase = 'closed' | 'opening' | 'open' | 'closing';
+
+const READER_PANEL_TRANSITION_MS = 280;
+
 export function MailLayout({}: MailLayoutProps) {
   const { notificationAlert, setNotificationAlert } = useThreadListAtom();
   const { pinEmailInSpace } = useSpacePinAtom();
@@ -152,6 +157,10 @@ export function MailLayout({}: MailLayoutProps) {
   const threadListRef = useRef<any>(null);
   const [isDraggingHandle, setIsDraggingHandle] = useState(false); // State to track handle dragging
   const [isGroupedPanelExpanded, setIsGroupedPanelExpanded] = useState(false);
+  const [readerPanelPhase, setReaderPanelPhase] = useState<ReaderPanelPhase>(
+    activeThreadId ? 'open' : 'closed'
+  );
+  const readerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getLastSavedPanelSize = () => {
     const savedSize = localStorage.getItem(PANEL_SIZE_STORAGE_KEY);
@@ -171,13 +180,47 @@ export function MailLayout({}: MailLayoutProps) {
   };
 
   useEffect(() => {
+    if (readerCloseTimerRef.current) {
+      clearTimeout(readerCloseTimerRef.current);
+      readerCloseTimerRef.current = null;
+    }
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let animationFrameId: number | null = null;
+
     if (activeThreadId) {
       togglePanels(true);
       setFullscreenDisplayPanel(true);
+      if (prefersReducedMotion) {
+        setReaderPanelPhase('open');
+      } else {
+        setReaderPanelPhase('opening');
+        animationFrameId = window.requestAnimationFrame(() => {
+          setReaderPanelPhase('open');
+        });
+      }
     } else {
-      togglePanels(false);
-      setFullscreenDisplayPanel(false);
+      const finishClosing = () => {
+        togglePanels(false);
+        setFullscreenDisplayPanel(false);
+        setReaderPanelPhase('closed');
+      };
+
+      if (readerPanelPhase === 'closed' || prefersReducedMotion) {
+        finishClosing();
+      } else {
+        setReaderPanelPhase('closing');
+        readerCloseTimerRef.current = setTimeout(finishClosing, READER_PANEL_TRANSITION_MS);
+      }
     }
+
+    return () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [activeThreadId]);
 
   const { draftsMapByAccount, setDraftsByThread } = useDraftAtom();
@@ -248,6 +291,11 @@ export function MailLayout({}: MailLayoutProps) {
     setupNotification();
   }, [preference.notification.watchNotification]);
 
+  const isReaderMounted = readerPanelPhase !== 'closed';
+  const isReaderFullscreen = Boolean(activeThreadId) || fullscreenDisplayPanel;
+  const isReaderSettledOpen = readerPanelPhase === 'open';
+  const isResizeHandleEnabled = isGroupedPanelExpanded && !isReaderFullscreen;
+
   return (
     <>
       <DndContext
@@ -273,7 +321,7 @@ export function MailLayout({}: MailLayoutProps) {
             order={1}
             defaultSize={100}
             style={
-              fullscreenDisplayPanel
+              isReaderFullscreen
                 ? {
                     flexBasis: '0%',
                     flexGrow: 0,
@@ -288,9 +336,15 @@ export function MailLayout({}: MailLayoutProps) {
           </ResizablePanel>
 
           {/* Grouped Panels Handle */}
-          {isGroupedPanelExpanded && !fullscreenDisplayPanel && (
-            <ResizableHandle onDragging={(dragging) => setIsDraggingHandle(dragging)} />
-          )}
+          <ResizableHandle
+            disabled={!isResizeHandleEnabled}
+            tabIndex={isResizeHandleEnabled ? 0 : -1}
+            aria-hidden={!isResizeHandleEnabled}
+            onDragging={(dragging) => setIsDraggingHandle(dragging)}
+            className={cn(
+              !isResizeHandleEnabled && 'w-0 bg-transparent after:w-0 after:content-none'
+            )}
+          />
 
           {/* DISPLAY PANEL */}
           <ResizablePanel
@@ -303,8 +357,8 @@ export function MailLayout({}: MailLayoutProps) {
             minSize={20}
             // When fullscreenDisplayPanel is true, make the display panel take up 100% width.
             style={{
-              willChange: 'flex-grow, flex-basis, opacity',
-              ...(fullscreenDisplayPanel
+              willChange: 'flex-grow, flex-basis, opacity, transform',
+              ...(isReaderFullscreen
                 ? {
                     flexBasis: '100%',
                     flexGrow: 1,
@@ -317,14 +371,18 @@ export function MailLayout({}: MailLayoutProps) {
               if (size !== 0) localStorage.setItem(PANEL_SIZE_STORAGE_KEY, size.toString());
             }}
             className={cn(
-              'flex transition-opacity',
+              'flex transform-gpu transition-[opacity,transform]',
               // 'transition-all ease-in-out will-change-auto'
-              fullscreenDisplayPanel ? 'flex-grow basis-[100%]' : '',
+              isReaderFullscreen ? 'flex-grow basis-[100%]' : '',
               // isDraggingHandle ? 'duration-0' : 'duration-300',
-              isGroupedPanelExpanded ? 'opacity-100' : 'opacity-0'
+              isDraggingHandle ? 'duration-0' : 'duration-300 ease-bouncy-in-out',
+              isGroupedPanelExpanded || isReaderMounted ? 'opacity-100' : 'opacity-0',
+              isReaderMounted && !isReaderSettledOpen
+                ? 'translate-x-5 scale-[0.995]'
+                : 'translate-x-0 scale-100'
             )}
           >
-            <DisplayPanel className="flex-1 overflow-hidden" />
+            <DisplayPanel className="flex-1 overflow-hidden" readerPhase={readerPanelPhase} />
             {/* <ContactsExtensionInline className="border-l w-[320px]" /> */}
           </ResizablePanel>
         </ResizablePanelGroup>

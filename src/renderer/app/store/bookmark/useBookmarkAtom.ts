@@ -14,10 +14,14 @@ export function useBookmarkAtom() {
    * @param {AbortSignal} [signal] - Optional abort signal to cancel the request.
    */
   const fetchAndSetBookmarks = async (signal?: AbortSignal) => {
-    const response = await bookmarkApi.fetchBookmarks(signal);
-    if (response) {
-      const bookmarkResponse = response as SearchBookmarkResponse;
-      setSearchBookmark(bookmarkResponse.bookmarks);
+    try {
+      const response = await bookmarkApi.fetchBookmarks(signal);
+      if (response) {
+        const bookmarkResponse = response as SearchBookmarkResponse;
+        setSearchBookmark(bookmarkResponse.bookmarks);
+      }
+    } catch (error) {
+      console.error('Failed to fetch bookmarks:', error);
     }
   };
 

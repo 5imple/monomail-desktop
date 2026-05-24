@@ -65,6 +65,7 @@ const mirror: AuthMirror = { accessToken: null, expiresAt: 0, member: null };
 const authStateListeners = new Set<Listener>();
 const idTokenListeners = new Set<Listener>();
 let hydrated = false;
+let hydratePromise: Promise<void> | null = null;
 
 function buildUser(): MonoUser | null {
   // The access token alone is enough to bootstrap — `fetchData` in
@@ -106,19 +107,25 @@ function notify(listeners: Set<Listener>): void {
 
 async function hydrate(): Promise<void> {
   if (hydrated) return;
-  hydrated = true;
-  try {
-    const state = await electronApi.getAuthState();
-    if (state) {
-      mirror.accessToken = state.accessToken;
-      mirror.expiresAt = state.expiresAt;
-      mirror.member = state.member ?? null;
+  if (hydratePromise) return hydratePromise;
+
+  hydratePromise = (async () => {
+    try {
+      const state = await electronApi.getAuthState();
+      if (state) {
+        mirror.accessToken = state.accessToken;
+        mirror.expiresAt = state.expiresAt;
+        mirror.member = state.member ?? null;
+      }
+    } catch (e) {
+      console.error('[monoAuth] initial hydration failed:', e);
+    } finally {
+      hydrated = true;
+      hydratePromise = null;
     }
-  } catch (e) {
-    console.error('[monoAuth] initial hydration failed:', e);
-  }
-  notify(authStateListeners);
-  notify(idTokenListeners);
+  })();
+
+  return hydratePromise;
 }
 
 // Wire up IPC event listeners once.

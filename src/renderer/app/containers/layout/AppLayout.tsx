@@ -113,46 +113,47 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
           {/* Unified titlebar — spans the full window width. `drag` allows
               window dragging across the whole strip; each nav button carries
               `no-drag` so clicks still fire. Traffic lights sit at x=12,y=16
-              so we reserve pl-20 on the left to avoid overlapping them. */}
-          <div className="drag relative z-50 flex h-11 w-full shrink-0 items-center bg-background pl-20 pr-4">
+              so we reserve an explicit left gutter to avoid rem-scale drift. */}
+          <div className="drag relative z-50 flex h-[52px] w-full shrink-0 items-center bg-background pl-[92px] pr-[16px]">
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="pointer-events-auto">
                 <MailNavTabs />
               </div>
             </div>
-            <div className="no-drag absolute right-4 flex items-center gap-1">
+            <div className="no-drag absolute right-[16px] flex items-center gap-[6px]">
               <Button
                 variant="ghost"
                 sizeVariant="sm"
-                className="h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+                className="h-[36px] gap-[8px] px-[10px] text-[14px] text-muted-foreground hover:text-foreground"
                 tooltip="Compose"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
               >
-                <InboxIcon type="Edit" size={18} />
-                <span className="text-xs font-medium">Compose</span>
+                <InboxIcon type="Edit" size={20} />
+                <span className="font-medium">Compose</span>
               </Button>
               <Button
                 variant="ghost"
                 typeVariant="icon"
                 sizeVariant="sm"
-                className="text-muted-foreground hover:text-foreground"
+                className="h-[36px] w-[36px] text-muted-foreground hover:text-foreground"
                 tooltip="Accounts"
                 onClick={() => openDialog('preference', { defaultPage: 'integration' })}
               >
-                <InboxIcon type="UserIcon" size={18} />
+                <InboxIcon type="UserIcon" size={20} />
               </Button>
               <Button
                 variant="ghost"
                 typeVariant="icon"
                 sizeVariant="sm"
                 className={cn(
+                  'h-[36px] w-[36px]',
                   'hover:text-foreground',
                   calendarDisplayPanel ? 'text-foreground' : 'text-muted-foreground'
                 )}
                 tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
                 onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
               >
-                <InboxIcon type="Calendar" size={18} fill={calendarDisplayPanel} />
+                <InboxIcon type="Calendar" size={20} />
               </Button>
             </div>
           </div>
@@ -244,7 +245,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
         <SidebarCollapseButton
           className={cn(
             'no-drag fixed top-[8px] z-50',
-            sidebarCollapsed ? 'left-20' : 'left-[178px]',
+            sidebarCollapsed ? 'left-[92px]' : 'left-[178px]',
             isElectron ?? 'hidden'
             // Remove opacity transition - inherits from parent
           )}

@@ -456,7 +456,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
             if (!message) {
               const messageResponse = await mailApi.getMessage(uid, composeDraft.messageId);
 
-              if (messageResponse) {
+              if (messageResponse?.payload) {
                 message = MonoMessage.fromGmailMessage(messageResponse);
                 // Save to DB for future use
                 await DBSaveMessage(uid, message);

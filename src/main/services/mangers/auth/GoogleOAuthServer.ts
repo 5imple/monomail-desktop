@@ -11,7 +11,8 @@ const GMAIL_SCOPES = [
   'email',
   'profile',
   'https://www.googleapis.com/auth/gmail.modify',
-  'https://www.googleapis.com/auth/contacts.readonly'
+  'https://www.googleapis.com/auth/contacts.readonly',
+  'https://www.googleapis.com/auth/calendar.events'
 ].join(' ');
 const FLOW_TIMEOUT_MS = 5 * 60_000;
 

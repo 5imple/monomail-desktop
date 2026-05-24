@@ -2,7 +2,7 @@ import { LRUCache } from 'lru-cache';
 import { MonoRecipient } from '@/main/models/types';
 import { Avatar, AvatarImage } from '@/renderer/app/components/ui/avatar';
 import { DBGetContactByEmail } from '@/renderer/app/lib/db/contact';
-import { getFaviconFromEmail } from '@/renderer/app/lib/faviconUtils';
+import electronApi from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { FC, useEffect, useState, useRef } from 'react';
 
@@ -22,6 +22,11 @@ const photoUrlCache = new LRUCache<string, string | false>({
 // Cache loaded <img> elements for the final resolved URL
 const imageCache = new LRUCache<string, HTMLImageElement>({
   max: 200,
+  ttl: 60 * 60 * 1000
+});
+
+const failedImageUrlCache = new LRUCache<string, true>({
+  max: 500,
   ttl: 60 * 60 * 1000
 });
 
@@ -58,27 +63,23 @@ async function fetchPeoplePhotoUrl(email: string, accountId: string): Promise<st
   if (photoUrlCache.has(cacheKey)) return photoUrlCache.get(cacheKey) || null;
 
   try {
-    const bridge = (window as any).electronBridge;
-    if (!bridge?.getGoogleAccountToken) return null;
-
-    const tokenResult = await bridge.getGoogleAccountToken(accountId);
-    if (!tokenResult?.ok) return null;
-
     const encodedEmail = encodeURIComponent(email);
-    const urls = [
-      `https://people.googleapis.com/v1/people:searchContacts?query=${encodedEmail}&readMask=photos,emailAddresses&pageSize=1&sources=READ_SOURCE_TYPE_CONTACT&sources=READ_SOURCE_TYPE_DOMAIN_CONTACT`,
-      `https://people.googleapis.com/v1/otherContacts:search?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1`,
-      `https://people.googleapis.com/v1/people:searchDirectoryPeople?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1&sources=DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE`
+    const paths = [
+      `/people:searchContacts?query=${encodedEmail}&readMask=photos,emailAddresses&pageSize=1&sources=READ_SOURCE_TYPE_CONTACT&sources=READ_SOURCE_TYPE_DOMAIN_CONTACT`,
+      `/otherContacts:search?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1`,
+      `/people:searchDirectoryPeople?query=${encodedEmail}&readMask=photos,emailAddresses,names&pageSize=1&sources=DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE`
     ];
 
-    for (const url of urls) {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${tokenResult.accessToken}`, Accept: 'application/json' }
+    for (const path of paths) {
+      const result = await electronApi.peopleRequest<any>({
+        uid: accountId,
+        path,
+        headers: { Accept: 'application/json' }
       });
 
-      if (!res.ok) continue;
+      if (!result.ok) continue;
 
-      const data = await res.json();
+      const data = result.data;
       const people = [
         ...(data.results?.map((result: any) => result.person).filter(Boolean) ?? []),
         ...(data.people ?? []),
@@ -107,10 +108,17 @@ async function fetchPeoplePhotoUrl(email: string, accountId: string): Promise<st
 }
 
 function loadImg(src: string): Promise<HTMLImageElement> {
+  if (failedImageUrlCache.has(src)) {
+    return Promise.reject(new Error('Image URL recently failed to load'));
+  }
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => {
+      failedImageUrlCache.set(src, true);
+      reject(new Error('Image failed to load'));
+    };
     img.src = src;
   });
 }
@@ -162,7 +170,26 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
         return;
       }
 
-      // 1. Prefer the signed-in Gmail account photo when this sender is one of the user's accounts.
+      // 1. The sender's actual Google/Gmail avatar via the People API.
+      if (accountId) {
+        const photoUrl = await fetchPeoplePhotoUrl(normalizedRecipientEmail, accountId);
+        if (!cancelled && photoUrl) {
+          try {
+            const img = await loadImg(photoUrl);
+            imageCache.set(cacheKey, img);
+            if (!cancelled) {
+              setImageSrc(img.src);
+              setImageLoaded(true);
+            }
+            return;
+          } catch {
+            // People photo didn't load — keep resolving other sources.
+          }
+        }
+      }
+
+      // 2. The signed-in account photo — covers the user's own sends, where the
+      //    People API won't return a result for the user themselves.
       if (preferredImageSrc) {
         try {
           const img = await loadImg(preferredImageSrc);
@@ -173,11 +200,11 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
           }
           return;
         } catch {
-          // Stored account image didn't load — keep resolving other sources.
+          // Account image didn't load — keep resolving other sources.
         }
       }
 
-      // 2. Try a locally stored Google contact photo.
+      // 3. A locally stored Google contact photo.
       if (accountId) {
         const storedPhotoUrl = await fetchStoredContactPhotoUrl(
           normalizedRecipientEmail,
@@ -187,8 +214,10 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
           try {
             const img = await loadImg(storedPhotoUrl);
             imageCache.set(cacheKey, img);
-            setImageSrc(img.src);
-            setImageLoaded(true);
+            if (!cancelled) {
+              setImageSrc(img.src);
+              setImageLoaded(true);
+            }
             return;
           } catch {
             // Stored photo URL didn't load — keep resolving other sources.
@@ -196,36 +225,9 @@ const RecipientAvatar: FC<RecipientAvatarProps> = ({
         }
       }
 
-      // 3. Try Google People API photos.
-      if (accountId) {
-        const photoUrl = await fetchPeoplePhotoUrl(normalizedRecipientEmail, accountId);
-        if (!cancelled && photoUrl) {
-          try {
-            const img = await loadImg(photoUrl);
-            imageCache.set(cacheKey, img);
-            setImageSrc(img.src);
-            setImageLoaded(true);
-            return;
-          } catch {
-            // Photo URL didn't load — fall through to favicon.
-          }
-        }
-      }
-
-      if (cancelled) return;
-
-      // 4. Fall back to company logo / favicon.
-      const faviconUrl = getFaviconFromEmail(normalizedRecipientEmail);
-      try {
-        const img = await loadImg(faviconUrl);
-        if (!cancelled) {
-          imageCache.set(cacheKey, img);
-          setImageSrc(img.src);
-          setImageLoaded(true);
-        }
-      } catch {
-        // No image — show initials
-      }
+      // No Google/contact photo for this sender — show clean initials, like
+      // Gmail. We intentionally do NOT fall back to a domain favicon/logo:
+      // those looked poor (tiny scaled favicons) and aren't the sender's avatar.
     };
 
     resolve();

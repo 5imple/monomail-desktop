@@ -208,6 +208,9 @@ export const createThreadCommands = (
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
+        const shouldAdvanceAfterTrash =
+          args?.advanceAfterAction === true ||
+          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId);
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
@@ -218,17 +221,20 @@ export const createThreadCommands = (
 
         // Define the promise that will handle the trash operation
         const trashPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) => {
+          // Execute for each account's threads.
+          // The map arrow must return the promise (no curly-brace body) — otherwise
+          // Promise.all resolves on [undefined, …] before the Gmail call finishes,
+          // so failures never surface to the toast.
+          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
             markThreadAsTrash(
               accountId,
               accountThreadIds,
               true,
               !isInTrashView,
               false,
-              selectNextThread
-            );
-          });
+              shouldAdvanceAfterTrash ? selectNextThread : undefined
+            )
+          );
 
           await Promise.all(promises);
 

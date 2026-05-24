@@ -7,13 +7,24 @@ import {
   DBSaveThread,
   DBSaveThreads
 } from '@/renderer/app/lib/db/thread';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
-import { activeThreadIdAtom, threadsMapAtom } from './atoms';
+import {
+  activeThreadIdAtom,
+  filteredThreadIdsAtom,
+  threadIdsAtom,
+  threadsMapAtom
+} from './atoms';
 
 export function useThreadOperationAtom() {
   const [threadsMap, setThreadsMap] = useAtom(threadsMapAtom);
   const [activeThreadId, setActiveThreadId] = useAtom(activeThreadIdAtom);
+  // useSetAtom — setters only, WITHOUT subscribing to the value. Subscribing here
+  // (via useAtom) made every consumer of this hook — AuthContext, the fetch
+  // handler, command hooks — re-render on every threadIds/filteredThreadIds
+  // change, which storms during load and stalls it.
+  const setThreadIds = useSetAtom(threadIdsAtom);
+  const setFilteredThreadIds = useSetAtom(filteredThreadIdsAtom);
 
   const setThreads = useCallback(
     async (
@@ -397,8 +408,37 @@ export function useThreadOperationAtom() {
 
         return updatedMap;
       });
+
+      // Keep the rendered id lists consistent with threadsMap. The map update
+      // above (shouldRemoveThreads) deletes the thread object, but the id stays
+      // in threadIds/filteredThreadIds — a "dangling id" that points at a missing
+      // map entry. The thread rows then have to defensively render null, and any
+      // unguarded consumer of that id throws mid-render and unmounts the whole
+      // list. Prune the ids here so map and lists never drift. On restore (undo)
+      // add them back so the thread reappears in the list, not just the map.
+      if (threadIds.length > 0 && (shouldRemoveThreads || shouldRestoreThreads)) {
+        const targetIds = new Set(threadIds);
+        if (shouldRemoveThreads) {
+          const prune = (prev: string[]) => prev.filter((id) => !targetIds.has(id));
+          setThreadIds(prune);
+          setFilteredThreadIds(prune);
+        } else {
+          // restore: append any missing ids; the list re-sorts by timestamp once
+          // the map entry is present.
+          const merge = (prev: string[]) => {
+            const present = new Set(prev);
+            const next = [...prev];
+            threadIds.forEach((id) => {
+              if (!present.has(id)) next.push(id);
+            });
+            return next;
+          };
+          setThreadIds(merge);
+          setFilteredThreadIds(merge);
+        }
+      }
     },
-    [threadsMap, setThreadsMap]
+    [threadsMap, setThreadsMap, setThreadIds, setFilteredThreadIds]
   );
 
   const sortThreadsByDate = (threads: Record<string, MonoThread>) => {

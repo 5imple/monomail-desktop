@@ -6,7 +6,6 @@ import { cn } from '@/renderer/app/lib/utils';
 import { parseICS, ICalendarEvent } from '@/renderer/app/lib/icsParser';
 import { toast } from 'sonner';
 import mailApi from '@/main/api/mail/mailApi';
-import { apiClient } from '@/main/api/apiClient';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { MonoAttachment } from '@/main/models/types';
 import calendarApi from '@/main/api/calendar/calendarApi'; // Import the new calendar API
@@ -255,14 +254,13 @@ export const CalendarEventCard: React.FC<CalendarEventProps> = ({
             ? 'declined'
             : 'tentative';
 
-      // Set the active account before making the API call
-      apiClient.setApiActiveUid(accountId);
       // Call the API to update the RSVP status
       await calendarApi.sendEventRsvp({
         calendarId: 'primary', // Assuming primary calendar
         eventId: event.uid.split('@')[0],
         responseStatus,
-        sendNotifications: false
+        sendNotifications: false,
+        uid: accountId
       });
 
       // Show success toast

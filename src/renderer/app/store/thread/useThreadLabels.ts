@@ -7,6 +7,32 @@ import { useAtom } from 'jotai';
 import { useCallback } from 'react';
 import { threadsMapAtom } from './atoms';
 
+async function applyThreadLabelsToGmail(
+  uid: string,
+  threadIds: string[],
+  addLabels: string[],
+  removeLabels: string[]
+) {
+  const shouldTrash = addLabels.includes('TRASH');
+  const shouldUntrash = !shouldTrash && removeLabels.includes('TRASH');
+  const remainingAddLabels = addLabels.filter((label) => label !== 'TRASH');
+  const remainingRemoveLabels = removeLabels.filter((label) => label !== 'TRASH');
+
+  if (shouldTrash) {
+    await Promise.all(threadIds.map((threadId) => mailApi.trashThread(uid, threadId)));
+  } else if (shouldUntrash) {
+    await Promise.all(threadIds.map((threadId) => mailApi.untrashThread(uid, threadId)));
+  }
+
+  if (remainingAddLabels.length === 0 && remainingRemoveLabels.length === 0) return;
+
+  if (threadIds.length > 1) {
+    await mailApi.batchModifyThreads(uid, threadIds, remainingAddLabels, remainingRemoveLabels);
+  } else if (threadIds.length === 1) {
+    await mailApi.modifyThread(uid, threadIds[0], remainingAddLabels, remainingRemoveLabels);
+  }
+}
+
 export interface IPerformThreadsAction {
   uid: string;
   threadIds: string[];
@@ -69,13 +95,7 @@ export function useThreadLabelAtom() {
         }
 
         try {
-          if (threadIds.length > 1) {
-            // Use batchModifyThreads for multiple threads
-            await mailApi.batchModifyThreads(uid, threadIds, addLabels, removeLabels);
-          } else if (threadIds.length === 1) {
-            // Use modifyThread for a single thread
-            await mailApi.modifyThread(uid, threadIds[0], addLabels, removeLabels);
-          }
+          await applyThreadLabelsToGmail(uid, threadIds, addLabels, removeLabels);
 
           if (addLabels.includes('UNREAD')) {
             electronApi.incrementBadge(threadIds.length);

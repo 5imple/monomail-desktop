@@ -33,6 +33,32 @@ OfflineContext.displayName = 'OfflineContext';
 
 const OFFLINE_QUEUE_KEY = 'offline_actions_queue';
 
+async function applyThreadLabelsToGmail(
+  uid: string,
+  threadIds: string[],
+  addLabels: string[],
+  removeLabels: string[]
+) {
+  const shouldTrash = addLabels.includes('TRASH');
+  const shouldUntrash = !shouldTrash && removeLabels.includes('TRASH');
+  const remainingAddLabels = addLabels.filter((label) => label !== 'TRASH');
+  const remainingRemoveLabels = removeLabels.filter((label) => label !== 'TRASH');
+
+  if (shouldTrash) {
+    await Promise.all(threadIds.map((threadId) => mailApi.trashThread(uid, threadId)));
+  } else if (shouldUntrash) {
+    await Promise.all(threadIds.map((threadId) => mailApi.untrashThread(uid, threadId)));
+  }
+
+  if (remainingAddLabels.length === 0 && remainingRemoveLabels.length === 0) return;
+
+  if (threadIds.length > 1) {
+    await mailApi.batchModifyThreads(uid, threadIds, remainingAddLabels, remainingRemoveLabels);
+  } else if (threadIds.length === 1) {
+    await mailApi.modifyThread(uid, threadIds[0], remainingAddLabels, remainingRemoveLabels);
+  }
+}
+
 export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -100,11 +126,7 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (action.type === 'THREAD_LABEL_ACTION') {
           const { uid, threadIds, addLabels = [], removeLabels = [] } = action.data;
 
-          if (threadIds.length > 1) {
-            await mailApi.batchModifyThreads(uid, threadIds, addLabels, removeLabels);
-          } else if (threadIds.length === 1) {
-            await mailApi.modifyThread(uid, threadIds[0], addLabels, removeLabels);
-          }
+          await applyThreadLabelsToGmail(uid, threadIds, addLabels, removeLabels);
 
           // Update badge counts
           if (addLabels.includes('UNREAD')) {

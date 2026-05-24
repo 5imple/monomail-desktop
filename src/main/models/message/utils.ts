@@ -1,7 +1,6 @@
 import { GmailMessage, GmailMessagePayload } from '@/main/api/gmail/types';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoAttachment } from '@/main/models/types';
-import Color from 'color';
 import DOMPurify from 'dompurify';
 
 export function parseGmailMessage(message: GmailMessage): MonoMessage {
@@ -37,22 +36,19 @@ export function parsePayloadPart(message: MonoMessage) {
 
   function parsePayload(part: GmailMessagePayload) {
     if (part.mimeType === 'text/plain' && part.body.data) {
-      const decodedData = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-      plainTextBody += textDecoder.decode(
-        new Uint8Array([...decodedData].map((char) => char.charCodeAt(0)))
-      );
+      plainTextBody += decodePayloadData(part.body.data, textDecoder);
     } else if (part.mimeType === 'text/html' && part.body.data) {
-      const decodedData = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-      const decodedHtml = textDecoder.decode(
-        new Uint8Array([...decodedData].map((char) => char.charCodeAt(0)))
-      );
+      const decodedHtml = decodePayloadData(part.body.data, textDecoder);
 
       const parser = new DOMParser();
       const doc = parser.parseFromString(decodedHtml, 'text/html');
 
       // Process style elements
-      doc.querySelectorAll('style').forEach((style) => {
+      const scopedStyleBlocks = Array.from(doc.querySelectorAll('style')).map((style) => {
         style.textContent = wrapCssRules(style.textContent || '', '.mono-content-reset');
+        const scopedStyle = serializeScopedStyle(style.textContent || '');
+        style.remove();
+        return scopedStyle;
       });
 
       // Remove specific styles and set anchor attributes
@@ -73,15 +69,13 @@ export function parsePayloadPart(message: MonoMessage) {
 
       // Handle inline images with cid
       processInlineImages(doc, message.id, message.inlineImages);
+      prepareEmailImages(cleanBody);
 
       // Wrap the cleaned HTML in a container with a unique class
       if (cleanBody.innerHTML.length > 0) {
         htmlBody += `
         <div class="mono-content">
-          ${DOMPurify.sanitize(cleanBody.innerHTML, {
-            ADD_ATTR: ['target', 'data-open-modal', 'bgColor', 'color', 'borderColor', 'align'],
-            ADD_TAGS: ['div']
-          })}
+          ${scopedStyleBlocks.join('')}${sanitizeEmailHtml(cleanBody.innerHTML)}
         </div>`;
       }
     }
@@ -103,6 +97,56 @@ export function parsePayloadPart(message: MonoMessage) {
     trackingImagesRemoved,
     trackingDomains: [...new Set(trackingDomains)] // Remove duplicates
   };
+}
+
+function decodePayloadData(data: string, textDecoder: TextDecoder): string {
+  const normalized = data.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+  const decodedData = atob(padded);
+
+  return textDecoder.decode(new Uint8Array([...decodedData].map((char) => char.charCodeAt(0))));
+}
+
+function sanitizeEmailHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ADD_TAGS: ['center', 'div', 'font', 'style'],
+    ADD_ATTR: [
+      'align',
+      'alt',
+      'background',
+      'bgcolor',
+      'bgColor',
+      'border',
+      'bordercolor',
+      'borderColor',
+      'cellpadding',
+      'cellspacing',
+      'class',
+      'color',
+      'data-attachment-id',
+      'data-content-id',
+      'data-open-modal',
+      'decoding',
+      'height',
+      'href',
+      'loading',
+      'referrerpolicy',
+      'role',
+      'src',
+      'style',
+      'target',
+      'title',
+      'valign',
+      'width'
+    ],
+    FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus'],
+    FORBID_TAGS: ['base', 'embed', 'iframe', 'meta', 'object', 'script']
+  });
+}
+
+function serializeScopedStyle(cssText: string): string {
+  const safeCssText = cssText.replace(/<\/style/gi, '<\\/style');
+  return `<style>${safeCssText}</style>`;
 }
 
 function escapeHtml(value: string): string {
@@ -353,29 +397,65 @@ function extractAndRemoveEmailHistory(body: HTMLElement): {
   return { cleanBody: body, history };
 }
 
-async function processInlineImages(
+function normalizeContentId(value?: string | null): string {
+  if (!value) return '';
+
+  let normalized = value.trim().replace(/^cid:/i, '').replace(/^<|>$/g, '');
+  try {
+    normalized = decodeURIComponent(normalized);
+  } catch {
+    // Keep the sender-provided value when it is not valid URI encoding.
+  }
+
+  return normalized.trim().replace(/^<|>$/g, '');
+}
+
+function getInlineAttachment(
+  inlineImages: Record<string, MonoAttachment>,
+  contentId: string
+): MonoAttachment | undefined {
+  const normalizedContentId = normalizeContentId(contentId);
+  if (!normalizedContentId) return undefined;
+
+  return (
+    inlineImages[normalizedContentId] ??
+    Object.entries(inlineImages).find(
+      ([key]) => normalizeContentId(key) === normalizedContentId
+    )?.[1]
+  );
+}
+
+function prepareEmailImages(root: HTMLElement) {
+  root.querySelectorAll('img').forEach((img) => {
+    img.setAttribute('loading', 'lazy');
+    img.setAttribute('decoding', 'async');
+    img.setAttribute('referrerpolicy', 'no-referrer');
+    img.style.maxWidth = '100%';
+    if (!img.getAttribute('alt')) img.setAttribute('alt', '');
+  });
+}
+
+function processInlineImages(
   doc: Document,
   messageId: string,
   inlineImages: Record<string, MonoAttachment>
 ) {
   const imgElements = doc.querySelectorAll('img');
-  Array.from(imgElements).map((img) => {
-    const cidMatch = img.getAttribute('src')?.match(/cid:(.+)/);
-    if (cidMatch) {
-      const cid = cidMatch[1];
+  Array.from(imgElements).forEach((img) => {
+    const src = img.getAttribute('src');
+    if (!src || !/^cid:/i.test(src)) return;
 
-      const attachment = inlineImages[cid];
+    const cid = normalizeContentId(src);
+    const attachment = getInlineAttachment(inlineImages, cid);
 
-      if (attachment) {
-        try {
-          img.setAttribute('data-content-id', cid);
-          img.setAttribute('data-attachment-id', attachment.attachmentId);
-          img.setAttribute('src', '');
-        } catch (error) {
-          console.error(`Error fetching attachment for cid: ${cid}`, error);
-          // Optionally, handle the error (e.g., show a placeholder image or remove the element)
-          img.remove();
-        }
+    if (attachment) {
+      try {
+        img.setAttribute('data-content-id', cid);
+        img.setAttribute('data-attachment-id', attachment.attachmentId);
+        img.setAttribute('src', '');
+      } catch (error) {
+        console.error(`Error fetching attachment for cid: ${cid} in message ${messageId}`, error);
+        img.remove();
       }
     }
   });

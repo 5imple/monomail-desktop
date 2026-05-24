@@ -151,6 +151,10 @@ class ApiClient {
     return this.baseURL.startsWith('https://gmail.googleapis.com/');
   }
 
+  private isCalendarApiClient() {
+    return this.baseURL.startsWith('https://www.googleapis.com/calendar/v3');
+  }
+
   private shouldProxyGmailRequest() {
     return this.isGmailApiClient() && (isWebWorker || isElectron);
   }
@@ -299,7 +303,7 @@ class ApiClient {
       accountUid &&
       isBrowser &&
       isElectron &&
-      this.baseURL.startsWith('https://gmail.googleapis.com/')
+      this.isGmailApiClient()
     ) {
       try {
         const tokenResult = await (window as any).electronBridge?.getGoogleAccountToken(accountUid);
@@ -370,22 +374,50 @@ class ApiClient {
 
     // Create a promise for the request with retries
     const makeRequest = async (attempt: number = 0): Promise<T> => {
-      // In Electron renderer, route Gmail requests through the main process
-      // via IPC so net.fetch is used instead of browser fetch (which is
-      // blocked by CORS because gmail.googleapis.com doesn't allow
-      // localhost origins in preflight responses).
-      if (isBrowser && isElectron && this.baseURL.startsWith('https://gmail.googleapis.com/')) {
+      if (isBrowser && isElectron && this.isCalendarApiClient()) {
+        if (!accountUid) return Promise.reject(new Error('Calendar account uid is required'));
+
         const bodyStr =
           config.body instanceof FormData
             ? undefined
             : typeof config.body === 'string'
               ? config.body
               : undefined;
+        const ipcRequest = (window as any).electronBridge?.calendarRequest({
+          method,
+          path: url,
+          uid: accountUid,
+          headers: this.toPlainHeaders(config.headers),
+          body: bodyStr,
+          responseType
+        }) as Promise<GmailBridgeResult<T>> | undefined;
+        if (!ipcRequest) return Promise.reject(new Error('Calendar IPC bridge not available'));
+        const ipcResult = await this.withAbort(ipcRequest, config.signal);
+        if (!ipcResult.ok) return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
+        return ipcResult.data as T;
+      }
+
+      // In Electron renderer, route Gmail requests through the main process
+      // via IPC so net.fetch is used instead of browser fetch (which is
+      // blocked by CORS because gmail.googleapis.com doesn't allow
+      // localhost origins in preflight responses).
+      if (isBrowser && isElectron && this.isGmailApiClient()) {
+        const bodyStr =
+          config.body instanceof FormData
+            ? undefined
+            : typeof config.body === 'string'
+              ? config.body
+              : undefined;
+        // Forward config.headers so Content-Type reaches the IPC handler.
+        // Without it, POST/PUT/PATCH bodies arrive at Gmail with no MIME type
+        // and the server silently ignores the JSON payload (200 OK, no-op),
+        // which made e.g. thread.modify (trash/done) appear to succeed in the
+        // UI but actually never apply — the row reappeared on refresh.
         const ipcResult = await (window as any).electronBridge?.gmailRequest({
           method,
           path: url,
           uid: accountUid ?? undefined,
-          headers: {},
+          headers: this.toPlainHeaders(config.headers),
           body: bodyStr,
           responseType
         });
@@ -562,6 +594,11 @@ export const apiClient = ApiClient.getInstance(getApiUrl());
 // The access token is injected via setApiClientIdToken() in AuthContext
 // whenever the token refreshes.
 export const gmailApiClient = new ApiClient('https://gmail.googleapis.com/gmail/v1/users/me');
+
+// Separate client for direct Google Calendar API calls. Calendar access also
+// goes through the main-process IPC bridge so OAuth tokens stay out of browser
+// fetch and renderer CORS rules.
+export const calendarApiClient = new ApiClient('https://www.googleapis.com/calendar/v3');
 
 /**
  * Set the Mono API token.

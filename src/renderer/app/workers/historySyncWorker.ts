@@ -52,6 +52,16 @@ interface SyncError {
 // Track active sync operations
 const activeSyncs = new Map<string, AbortController>();
 
+function getErrorStatus(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null;
+
+  const status = (error as { status?: unknown }).status;
+  if (typeof status === 'number') return status;
+
+  const dataStatus = (error as { data?: { status?: unknown } }).data?.status;
+  return typeof dataStatus === 'number' ? dataStatus : null;
+}
+
 // Listen for messages from main thread
 self.addEventListener('message', async (event) => {
   const { type, payload } = event.data;
@@ -440,7 +450,7 @@ async function processHistoryItems(uid: string, history: GmailHistory[]): Promis
         async (p, added) => {
           try {
             const messageResponse = await mailApi.getMessage(uid, added.id);
-            if (messageResponse) {
+            if (messageResponse?.payload) {
               const message = MonoMessage.fromGmailMessage(messageResponse);
 
               if (!message.labelIds.includes('DRAFT')) {
@@ -455,7 +465,9 @@ async function processHistoryItems(uid: string, history: GmailHistory[]): Promis
               }
             }
           } catch (error) {
-            console.error('Error processing added message:', error);
+            if (getErrorStatus(error) !== 404) {
+              console.error('Error processing added message:', error);
+            }
           }
 
           return await p;
@@ -503,7 +515,7 @@ async function processHistoryItems(uid: string, history: GmailHistory[]): Promis
             } else {
               // If the message doesn't exist, try to fetch it
               const fetchedMessage = await mailApi.getMessage(uid, messageId);
-              if (fetchedMessage) {
+              if (fetchedMessage?.payload) {
                 const newMessage = MonoMessage.fromGmailMessage(fetchedMessage);
                 await DBSaveMessage(uid, newMessage);
                 return {
@@ -538,7 +550,7 @@ async function processHistoryItems(uid: string, history: GmailHistory[]): Promis
             } else {
               // If the message doesn't exist, try to fetch it
               const fetchedMessage = await mailApi.getMessage(uid, messageId);
-              if (fetchedMessage) {
+              if (fetchedMessage?.payload) {
                 const newMessage = MonoMessage.fromGmailMessage(fetchedMessage);
                 await DBSaveMessage(uid, newMessage);
                 return {
@@ -578,7 +590,7 @@ async function processOutlookHistoryItems(uid: string, history: GmailHistory[]):
         async (p, added) => {
           try {
             const messageResponse = await mailApi.getMessage(uid, added.id);
-            if (messageResponse) {
+            if (messageResponse?.payload) {
               const message = MonoMessage.fromGmailMessage(messageResponse);
 
               if (!message.labelIds.includes('DRAFT')) {
@@ -637,7 +649,7 @@ async function processOutlookHistoryItems(uid: string, history: GmailHistory[]):
               } as UpdateType;
             } else {
               const fetchedMessage = await mailApi.getMessage(uid, messageId);
-              if (fetchedMessage) {
+              if (fetchedMessage?.payload) {
                 const newMessage = MonoMessage.fromGmailMessage(fetchedMessage);
                 // Use upsert for Outlook
                 await DBUpsertMessage(uid, newMessage);
@@ -668,7 +680,7 @@ async function processOutlookHistoryItems(uid: string, history: GmailHistory[]):
               } as UpdateType;
             } else {
               const fetchedMessage = await mailApi.getMessage(uid, messageId);
-              if (fetchedMessage) {
+              if (fetchedMessage?.payload) {
                 const newMessage = MonoMessage.fromGmailMessage(fetchedMessage);
                 // Use upsert for Outlook
                 await DBUpsertMessage(uid, newMessage);
