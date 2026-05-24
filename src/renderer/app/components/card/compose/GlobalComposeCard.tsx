@@ -1,6 +1,5 @@
 // Updated GlobalComposeCard.tsx
 import { apiClient } from '@/main/api/apiClient';
-import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { IMonoTemplate } from '@/main/api/template/types';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
@@ -239,30 +238,27 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     [debouncedUpdateDraft]
   );
 
-  const handleUploadInlineImage = useCallback(
-    async (file: File, uuid: string, draftId: string) => {
-      const uid = getUidFromEmail(composeDraft.from);
-      if (uid) apiClient.setApiActiveUid(uid);
-      else throw new Error('No active account');
-
-      if (draftSaveStatus === 'INITIALIZED') {
-        if (!composeDraft.from) {
-          toast.error(t('toast.error.no_email_to_save'));
-          throw new Error('No from email to save the draft.');
-        }
-
-        try {
-          await updateDraft(uid, composeDraft, true, true);
-        } catch (error) {
-          handleDraftSaveError(error);
-          throw new Error('Error saving draft.');
+  const handleUploadInlineImage = useCallback(async (file: File, uuid: string) => {
+    // Standalone: embed inline images as data URIs in the body. buildRawMessage
+    // converts them to proper cid: parts at send time (Gmail strips data URIs).
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    return {
+      inlineImage: {
+        [uuid]: {
+          attachmentId: uuid,
+          fileName: file.name,
+          mimeType: file.type,
+          size: file.size,
+          url
         }
       }
-
-      return draftApi.uploadInlineImage(uid, file, uuid, draftId);
-    },
-    [composeDraft, draftSaveStatus, getUidFromEmail, handleDraftSaveError, t, updateDraft]
-  );
+    };
+  }, []);
   // Create a loading component for the editor
   const EditorLoadingFallback = () => (
     <div className="h-32 animate-pulse rounded">

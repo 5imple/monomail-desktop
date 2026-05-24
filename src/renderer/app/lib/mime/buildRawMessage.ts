@@ -71,21 +71,54 @@ const htmlEntity = (html: string): MimeEntity => ({
   body: wrapBase64(utf8ToBase64(html))
 });
 
-const attachmentEntity = (record: DraftAttachmentRecord, base64: string): MimeEntity => {
-  const name = isNonAscii(record.fileName)
-    ? encodeHeaderWord(record.fileName)
-    : record.fileName.replace(/"/g, '');
+// A single media part (attachment or inline image) from already-base64 content.
+const mediaPart = (opts: {
+  mimeType: string;
+  fileName: string;
+  base64: string;
+  inline: boolean;
+  contentId?: string;
+}): MimeEntity => {
+  const name = isNonAscii(opts.fileName)
+    ? encodeHeaderWord(opts.fileName)
+    : opts.fileName.replace(/"/g, '');
   const headers = [
-    `Content-Type: ${record.mimeType || 'application/octet-stream'}; name="${name}"`,
+    `Content-Type: ${opts.mimeType || 'application/octet-stream'}; name="${name}"`,
     'Content-Transfer-Encoding: base64'
   ];
-  if (record.inline && record.contentId) {
-    headers.push(`Content-ID: <${record.contentId}>`);
-    headers.push(`Content-Disposition: inline; ${dispositionFilename(record.fileName)}`);
+  if (opts.inline && opts.contentId) {
+    headers.push(`Content-ID: <${opts.contentId}>`);
+    headers.push(`Content-Disposition: inline; ${dispositionFilename(opts.fileName)}`);
   } else {
-    headers.push(`Content-Disposition: attachment; ${dispositionFilename(record.fileName)}`);
+    headers.push(`Content-Disposition: attachment; ${dispositionFilename(opts.fileName)}`);
   }
-  return { headers, body: wrapBase64(base64) };
+  return { headers, body: wrapBase64(opts.base64) };
+};
+
+// Pull <img src="data:...;base64,..."> images out of the body into cid: inline
+// parts, rewriting each src to `cid:<id>`. Gmail (and most clients) strip data:
+// URIs from received mail, so inline images must travel as multipart/related.
+const extractInlineDataImages = (html: string): { html: string; parts: MimeEntity[] } => {
+  if (typeof DOMParser === 'undefined' || !html.includes('data:image/')) {
+    return { html, parts: [] };
+  }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const parts: MimeEntity[] = [];
+  let index = 0;
+  doc.querySelectorAll('img[src^="data:"]').forEach((img) => {
+    const match = /^data:([^;,]+);base64,([\s\S]*)$/.exec(img.getAttribute('src') || '');
+    if (!match) return;
+    const mimeType = match[1] || 'image/png';
+    const base64 = match[2] || '';
+    index += 1;
+    const ext = (mimeType.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'png';
+    const contentId = `inline-${index}-${Math.random().toString(36).slice(2)}@monomail`;
+    parts.push(
+      mediaPart({ mimeType, fileName: `image-${index}.${ext}`, base64, inline: true, contentId })
+    );
+    img.setAttribute('src', `cid:${contentId}`);
+  });
+  return { html: doc.body.innerHTML, parts };
 };
 
 /**
@@ -109,22 +142,36 @@ export async function buildRawMessage(
   if (bcc) addressHeaders.push(`Bcc: ${bcc}`);
   addressHeaders.push(`Subject: ${encodeHeaderWord(draft.subject || '')}`);
 
-  // Encode attachment bytes to base64 up front (async blob reads).
+  // Encode locally-held attachment bytes to base64 up front (async blob reads).
   const encoded = await Promise.all(
     attachments.map(async (record) => ({
       record,
       base64: bytesToBase64(new Uint8Array(await record.blob.arrayBuffer()))
     }))
   );
-  const inlineParts = encoded
+  const storeInlineParts = encoded
     .filter(({ record }) => record.inline && record.contentId)
-    .map(({ record, base64 }) => attachmentEntity(record, base64));
+    .map(({ record, base64 }) =>
+      mediaPart({
+        mimeType: record.mimeType,
+        fileName: record.fileName,
+        base64,
+        inline: true,
+        contentId: record.contentId
+      })
+    );
   const fileParts = encoded
     .filter(({ record }) => !(record.inline && record.contentId))
-    .map(({ record, base64 }) => attachmentEntity(record, base64));
+    .map(({ record, base64 }) =>
+      mediaPart({ mimeType: record.mimeType, fileName: record.fileName, base64, inline: false })
+    );
+
+  // Inline images embedded in the body as data: URIs become cid: parts.
+  const { html: bodyHtml, parts: dataInlineParts } = extractInlineDataImages(draft.body || '');
+  const inlineParts = [...dataInlineParts, ...storeInlineParts];
 
   // Body, wrapped with inline images as multipart/related when present.
-  const html = htmlEntity(draft.body || '');
+  const html = htmlEntity(bodyHtml);
   const related =
     inlineParts.length > 0 ? multipartEntity('related', [html, ...inlineParts]) : html;
 
