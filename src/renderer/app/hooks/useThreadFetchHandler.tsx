@@ -350,16 +350,31 @@ const useThreadFetchHandler = () => {
 
                   // Handle thread visibility based on query type
                   if (isValidQuery) {
+                    const upperLabel = label.toUpperCase();
+                    // Gmail represents trash/spam by ADDING the TRASH/SPAM label
+                    // while keeping INBOX and the category labels, so a trashed
+                    // thread still satisfies includes('INBOX') / isPrimaryThread().
+                    // Mirror the DB fetch helpers (DBGetThreadsByLabelMultiUser,
+                    // DBGetAllThreadsMultiUser) and hide trashed/spam threads from
+                    // every other view — otherwise a just-trashed thread is
+                    // re-added here, undoing the optimistic removal.
+                    const hiddenByTrash =
+                      thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
+                    const hiddenBySpam =
+                      thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
+
                     let shouldShow = false;
                     if (label.toLowerCase() === 'all') {
                       // For "in:all", show everything except trash threads
                       shouldShow = !thread.labelIds.includes('TRASH');
+                    } else if (hiddenByTrash || hiddenBySpam) {
+                      shouldShow = false;
                     } else if (field === 'category') {
                       // Handle category queries
                       shouldShow = threadMatchesCategory(thread, label, preference);
                     } else {
                       // Handle regular label queries
-                      shouldShow = thread.labelIds.includes(label.toUpperCase());
+                      shouldShow = thread.labelIds.includes(upperLabel);
                     }
                     const isCurrentlyShown = threadIdsRef.current.includes(threadId);
 
@@ -385,7 +400,17 @@ const useThreadFetchHandler = () => {
                   // Check if thread matches current filter
                   let shouldShow = false;
 
-                  if (field === 'category') {
+                  const upperLabel = label.toUpperCase();
+                  // See the 'updated' case: trashed/spam threads keep INBOX and the
+                  // category labels, so exclude them from every non-trash/spam view.
+                  const hiddenByTrash =
+                    thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
+                  const hiddenBySpam =
+                    thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
+
+                  if (hiddenByTrash || hiddenBySpam) {
+                    shouldShow = false;
+                  } else if (field === 'category') {
                     // Handle category queries
                     shouldShow = threadMatchesCategory(thread, label, preference);
                   } else if (isValidQuery) {
@@ -394,7 +419,7 @@ const useThreadFetchHandler = () => {
                       // For "in:all", show everything except trash threads
                       shouldShow = !thread.labelIds.includes('TRASH');
                     } else {
-                      shouldShow = thread.labelIds.includes(label.toUpperCase());
+                      shouldShow = thread.labelIds.includes(upperLabel);
                     }
                   }
 
