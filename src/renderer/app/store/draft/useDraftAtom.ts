@@ -1,6 +1,5 @@
 // src/store/draft/useDraftAtom.ts
 
-import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
@@ -105,12 +104,7 @@ export function useDraftAtom() {
         }
       }
 
-      // Update the draft via API
-      if (api) {
-        await draftApi.updateDraft(uid, draft.id, draft.toPlainObject());
-      }
-
-      // Save to local DB
+      // Persist locally only (standalone: no backend draft store).
       if (saveLocal) {
         await DBSaveDraft(uid, draft);
       }
@@ -177,20 +171,9 @@ export function useDraftAtom() {
         if (draftData) {
           const thread = await DBGetThread(uid, draftData.threadId);
 
-          if (callApi) {
-            try {
-              await draftApi.deleteDraft(uid, draftId);
-            } catch (error: any) {
-              if (error.status === 404) {
-                console.warn(`Draft ${draftId} not found on server. Removing from cache.`);
-              } else {
-                console.error('Error deleting draft from API:', error);
-                return;
-              }
-            }
-          }
-
           await DBRemoveDraft(uid, draftId);
+          // Discard any locally-held attachment bytes for this draft.
+          await DBDeleteAttachmentsForDraft(uid, draftId);
 
           if (thread) {
             // Remove the draft from the thread
