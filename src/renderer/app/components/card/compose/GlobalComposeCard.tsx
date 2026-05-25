@@ -72,6 +72,22 @@ const formatAttachmentSize = (size: number) => {
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 };
 
+const filesToFileList = (files: File[]): FileList => {
+  const fileList = {
+    length: files.length,
+    item: (index: number) => files[index] ?? null,
+    [Symbol.iterator]: function* () {
+      yield* files;
+    }
+  } as unknown as FileList;
+
+  files.forEach((file, index) => {
+    (fileList as unknown as Record<number, File>)[index] = file;
+  });
+
+  return fileList;
+};
+
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
   const { preference, getUidFromEmail, accounts } = useAuth();
   const { templates } = useTemplateAtom();
@@ -89,6 +105,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [isClosing, setIsClosing] = useState(false);
   const { trackEvent } = useUserTrackingData();
   const [isSending, setIsSending] = useState(false);
+  const [isAttachmentDropActive, setIsAttachmentDropActive] = useState(false);
   const trackingEnabled = true;
 
   const [showCc, setShowCc] = useState(false);
@@ -786,18 +803,74 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const handleAttachmentUpload = useCallback(
     async (file: File) => {
       // Create a FileList-like object with a single file
-      const fileList = {
-        length: 1,
-        item: (index: number) => (index === 0 ? file : null),
-        [0]: file,
-        [Symbol.iterator]: function* () {
-          yield file;
-        }
-      } as FileList;
-
-      await handleFileChange(fileList);
+      await handleFileChange(filesToFileList([file]));
     },
     [handleFileChange]
+  );
+
+  const isEditorDropEvent = useCallback((event: React.DragEvent<HTMLElement>) => {
+    return event.target instanceof Element && !!event.target.closest('.ProseMirror');
+  }, []);
+
+  const hasDraggedFiles = useCallback((event: React.DragEvent<HTMLElement>) => {
+    return Array.from(event.dataTransfer.types).includes('Files');
+  }, []);
+
+  const handleAttachmentDragEnter = useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event) || isEditorDropEvent(event)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setIsAttachmentDropActive(true);
+    },
+    [hasDraggedFiles, isEditorDropEvent]
+  );
+
+  const handleAttachmentDragOver = useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event)) return;
+
+      if (isEditorDropEvent(event)) {
+        setIsAttachmentDropActive(false);
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'copy';
+      setIsAttachmentDropActive(true);
+    },
+    [hasDraggedFiles, isEditorDropEvent]
+  );
+
+  const handleAttachmentDragLeave = useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event) || isEditorDropEvent(event)) return;
+
+      const currentTarget = event.currentTarget;
+      const relatedTarget = event.relatedTarget;
+      if (relatedTarget instanceof Node && currentTarget.contains(relatedTarget)) return;
+
+      setIsAttachmentDropActive(false);
+    },
+    [hasDraggedFiles, isEditorDropEvent]
+  );
+
+  const handleAttachmentDrop = useCallback(
+    async (event: React.DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event) || isEditorDropEvent(event)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setIsAttachmentDropActive(false);
+
+      const droppedFiles = Array.from(event.dataTransfer.files);
+      if (droppedFiles.length === 0) return;
+
+      await handleFileChange(filesToFileList(droppedFiles));
+    },
+    [handleFileChange, hasDraggedFiles, isEditorDropEvent]
   );
 
   // Handle file delete
@@ -823,103 +896,122 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const memoizedAttachments = useMemo(() => {
     const uid = getUidFromEmail(composeDraft.from);
     const attachmentEntries = Object.entries(attachments);
-    if (!uid || attachmentEntries.length === 0) return null;
+    if (!uid || (attachmentEntries.length === 0 && !isAttachmentDropActive)) return null;
 
     return (
-      <div className="shrink-0 border-t border-border/25 px-9 py-2.5">
+      <div
+        className={cn(
+          'shrink-0 border-t border-border/25 px-9 py-2.5 transition-colors',
+          isAttachmentDropActive && 'border-chart-1/40 bg-chart-1/5'
+        )}
+      >
         <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
-          <MonoIcon type="Paperclip" className="h-3.5 w-3.5" />
-          <span>
-            {attachmentEntries.length} attachment{attachmentEntries.length === 1 ? '' : 's'}
-          </span>
+          <MonoIcon
+            type="Paperclip"
+            className={cn('h-3.5 w-3.5', isAttachmentDropActive && 'text-chart-1')}
+          />
+          <span>{isAttachmentDropActive ? 'Drop to attach' : 'Attachments'}</span>
+          {attachmentEntries.length > 0 && (
+            <span className="font-mono text-[10px] uppercase tracking-[0.08em]">
+              {attachmentEntries.length} file{attachmentEntries.length === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
-        <div className="max-h-[112px] overflow-y-auto pr-1">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2">
-            {attachmentEntries.map(([id, attachment]) => {
-              const isReady = attachment.status === 'success';
-              const isInvalid = attachment.status === 'invalid';
-
-              return (
-                <div
-                  key={attachment.attachmentId}
-                  className={cn(
-                    'group flex min-w-0 items-center gap-2 rounded-md border border-border/60 bg-muted/25 px-2.5 py-2 transition-colors',
-                    isReady && 'hover:border-border hover:bg-muted/40',
-                    isInvalid && 'border-destructive/40 bg-destructive/5'
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-100"
-                    disabled={!isReady}
-                    aria-label={`Preview ${attachment.fileName}`}
-                    onClick={() => {
-                      openDialog('attachmentPreview', {
-                        accountId: uid,
-                        source: 'draft',
-                        itemId: composeDraft.id,
-                        attachment
-                      });
-                    }}
-                  >
-                    <span
-                      className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground',
-                        isInvalid && 'text-destructive'
-                      )}
-                      aria-hidden
-                    >
-                      {attachment.status === 'loading' ? (
-                        <Loader className="h-3.5 w-3.5" />
-                      ) : (
-                        getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium tracking-tight text-foreground">
-                        {attachment.fileName}
-                      </span>
-                      <span className="mt-0.5 block truncate font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
-                        {attachment.status === 'loading'
-                          ? 'Uploading'
-                          : isInvalid
-                            ? attachment.errorMessage || 'Upload failed'
-                            : formatAttachmentSize(attachment.size)}
-                      </span>
-                    </span>
-                  </button>
-
-                  {isInvalid && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center text-destructive">
-                          <MonoIcon type="AlertCircle" className="h-4 w-4" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>{attachment.errorMessage || 'Upload failed'}</TooltipContent>
-                    </Tooltip>
-                  )}
-
-                  <Button
-                    className="-mr-1 h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                    type="button"
-                    variant={'ghost'}
-                    sizeVariant={'xs'}
-                    typeVariant={'icon'}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleFileDelete(id);
-                    }}
-                    tooltip="Remove attachment"
-                  >
-                    <MonoIcon type={'X'} className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              );
-            })}
+        {attachmentEntries.length === 0 ? (
+          <div className="rounded-md border border-dashed border-chart-1/50 bg-background/70 px-3 py-2 text-[13px] text-muted-foreground">
+            Attach files to this email
           </div>
-        </div>
+        ) : (
+          <div className="max-h-[112px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2">
+              {attachmentEntries.map(([id, attachment]) => {
+                const isReady = attachment.status === 'success';
+                const isInvalid = attachment.status === 'invalid';
+
+                return (
+                  <div
+                    key={attachment.attachmentId}
+                    className={cn(
+                      'group flex min-w-0 items-center gap-2 rounded-md border border-border/60 bg-muted/25 px-2.5 py-2 transition-colors',
+                      isReady && 'hover:border-border hover:bg-muted/40',
+                      isInvalid && 'border-destructive/40 bg-destructive/5'
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-100"
+                      disabled={!isReady}
+                      aria-label={`Preview ${attachment.fileName}`}
+                      onClick={() => {
+                        openDialog('attachmentPreview', {
+                          accountId: uid,
+                          source: 'draft',
+                          itemId: composeDraft.id,
+                          attachment
+                        });
+                      }}
+                    >
+                      <span
+                        className={cn(
+                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground',
+                          isInvalid && 'text-destructive'
+                        )}
+                        aria-hidden
+                      >
+                        {attachment.status === 'loading' ? (
+                          <Loader className="h-3.5 w-3.5" />
+                        ) : (
+                          getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium tracking-tight text-foreground">
+                          {attachment.fileName}
+                        </span>
+                        <span className="mt-0.5 block truncate font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
+                          {attachment.status === 'loading'
+                            ? 'Uploading'
+                            : isInvalid
+                              ? attachment.errorMessage || 'Upload failed'
+                              : formatAttachmentSize(attachment.size)}
+                        </span>
+                      </span>
+                    </button>
+
+                    {isInvalid && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center text-destructive">
+                            <MonoIcon type="AlertCircle" className="h-4 w-4" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {attachment.errorMessage || 'Upload failed'}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+
+                    <Button
+                      className="-mr-1 h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                      type="button"
+                      variant={'ghost'}
+                      sizeVariant={'xs'}
+                      typeVariant={'icon'}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleFileDelete(id);
+                      }}
+                      tooltip="Remove attachment"
+                    >
+                      <MonoIcon type={'X'} className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   }, [
@@ -928,6 +1020,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     composeDraft.id,
     getUidFromEmail,
     handleFileDelete,
+    isAttachmentDropActive,
     openDialog
   ]);
 
@@ -1101,7 +1194,13 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           </CardHeader>
           {!isMinimized && (
             <>
-              <CardContent className="no-drag min-h-0 flex-1 overflow-hidden p-0">
+              <CardContent
+                className="no-drag min-h-0 flex-1 overflow-hidden p-0"
+                onDragEnter={handleAttachmentDragEnter}
+                onDragOver={handleAttachmentDragOver}
+                onDragLeave={handleAttachmentDragLeave}
+                onDrop={handleAttachmentDrop}
+              >
                 <div className="flex h-full min-h-0 flex-col">
                   <div className="px-9 pb-1 pt-3">
                     <Input
@@ -1163,18 +1262,26 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                   {memoizedAttachments}
                 </div>
               </CardContent>
-              <ComposeCardFooter
-                draft={composeDraft}
-                draftSaveStatus={draftSaveStatus}
-                handleSendMessage={handleSendMessage}
-                handleFileChange={handleFileChange}
-                sendDisabled={
-                  composeDraft.to.length === 0 ||
-                  !composeDraft.from ||
-                  draftSaveStatus === 'LOADING'
-                }
-                onDiscard={handleDiscard}
-              />
+              <div
+                className={cn('transition-colors', isAttachmentDropActive && 'bg-chart-1/5')}
+                onDragEnter={handleAttachmentDragEnter}
+                onDragOver={handleAttachmentDragOver}
+                onDragLeave={handleAttachmentDragLeave}
+                onDrop={handleAttachmentDrop}
+              >
+                <ComposeCardFooter
+                  draft={composeDraft}
+                  draftSaveStatus={draftSaveStatus}
+                  handleSendMessage={handleSendMessage}
+                  handleFileChange={handleFileChange}
+                  sendDisabled={
+                    composeDraft.to.length === 0 ||
+                    !composeDraft.from ||
+                    draftSaveStatus === 'LOADING'
+                  }
+                  onDiscard={handleDiscard}
+                />
+              </div>
             </>
           )}
         </Card>
