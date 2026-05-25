@@ -35,7 +35,7 @@ import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useExtensionAtom } from '@/renderer/app/store/extension/useExtensionAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
-import { useSpring, useTransition } from '@react-spring/web';
+import { useTransition } from '@react-spring/web';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Forward, Reply, ReplyAll } from 'lucide-react';
@@ -476,7 +476,14 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           contentHeight = contentHeight - heightDifference;
         }
 
-        containerRef.current.style.height = isCollapsed ? '0px' : `${contentHeight}px`;
+        // Never force an expanded message to 0px. If the content hasn't been
+        // measured yet (scrollHeight 0), fall back to natural height so the body
+        // can't end up rendered-but-invisible.
+        containerRef.current.style.height = isCollapsed
+          ? '0px'
+          : contentHeight > 0
+            ? `${contentHeight}px`
+            : 'auto';
       }
     };
 
@@ -670,12 +677,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       enter: { opacity: 1, transform: 'translateY(0px)' },
       leave: { opacity: 0, transform: 'translateY(-20px)' },
       config: { tension: 200, friction: 20 }
-    });
-
-    const springStyle = useSpring({
-      height: isCollapsed ? 0 : 'auto',
-      opacity: isCollapsed ? 0 : 1,
-      config: { tension: 220, friction: 20 }
     });
 
     /**

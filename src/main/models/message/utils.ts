@@ -387,12 +387,24 @@ function extractAndRemoveEmailHistory(body: HTMLElement): {
   // Start traversing the body
   body.childNodes.forEach(traverseNode);
 
-  if (currentHistory.trim()) {
-    history.push(currentHistory.trim());
-  }
+  // Snapshot before removal so we can bail out if extraction would empty the body.
+  const bodyHtmlBeforeRemoval = body.innerHTML;
 
   // Remove nodes that are part of the history
   nodesToRemove.forEach((node) => node.parentNode?.removeChild(node));
+
+  // Guard: never let history-extraction swallow the entire visible body. If the
+  // whole message tripped a "From:/On … wrote:" pattern and removal left nothing
+  // visible, restore the full body and skip extraction — showing the email with
+  // quoted text inline beats rendering a blank message.
+  if (!(body.textContent || '').trim()) {
+    body.innerHTML = bodyHtmlBeforeRemoval;
+    return { cleanBody: body, history: [] };
+  }
+
+  if (currentHistory.trim()) {
+    history.push(currentHistory.trim());
+  }
 
   return { cleanBody: body, history };
 }
