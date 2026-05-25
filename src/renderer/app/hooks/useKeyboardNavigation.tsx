@@ -159,7 +159,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
   const areaRefs = useRef<Partial<AreaRefsMap>>({});
 
   // Get filteredThreadIds from the context
-  const { filteredThreadIds } = useThreadAtom();
+  const { filteredThreadIds, setSelectedThreads } = useThreadAtom();
 
   // Define area configurations with orientation and navigation relationships
   const areaConfigs: Record<FocusableArea, AreaConfig> = {
@@ -1137,12 +1137,35 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     }
   }, [focusPosition, getItemList, isFocusable, isAreaDisabled]);
 
-  // Additional hotkey to activate the focused element
-  useHotkeys(
-    ['space', 'enter'],
-    (e) => {
-      // e.preventDefault();
+  // Toggle selection (checkbox) of the focused thread, Gmail-style. Outside
+  // the thread list, fall back to activating the focused item.
+  const toggleSelectFocusedThread = useCallback(() => {
+    if (focusPosition.area !== 'thread-list') {
       activateFocusedItem();
+      return;
+    }
+    const threadId = filteredThreadIds[focusPosition.index];
+    if (!threadId) return;
+    setSelectedThreads((prev) =>
+      prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
+    );
+  }, [focusPosition, filteredThreadIds, setSelectedThreads, activateFocusedItem]);
+
+  // Enter opens the focused item.
+  useHotkeys(
+    'enter',
+    () => {
+      activateFocusedItem();
+    },
+    { scopes: ['GLOBAL'] }
+  );
+
+  // Space selects/deselects the focused thread.
+  useHotkeys(
+    'space',
+    (e) => {
+      e.preventDefault();
+      toggleSelectFocusedThread();
     },
     { scopes: ['GLOBAL'] }
   );
