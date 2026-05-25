@@ -132,6 +132,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
         </div>
         <div className="ml-1 flex shrink-0 items-center gap-0.5 pt-1">
           <Button
+            tabIndex={-1}
             onClick={() => setShowCc(!showCc)}
             className={cn(
               'font-sans text-[13px] font-medium tracking-normal transition-colors',
@@ -143,6 +144,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             Cc
           </Button>
           <Button
+            tabIndex={-1}
             onClick={() => setShowBcc(!showBcc)}
             className={cn(
               'font-sans text-[13px] font-medium tracking-normal transition-colors',
@@ -157,6 +159,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           {draftStatus && <div className="px-1">{draftStatus}</div>}
 
           <Button
+            tabIndex={-1}
             onClick={onMinimize}
             tooltip={t('tooltip.minimize')}
             shortcut="MOD+SHIFT+M"
@@ -168,6 +171,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             <MonoIcon type="ChevronDown" className="h-3.5 w-3.5" />
           </Button>
           <Button
+            tabIndex={-1}
             onClick={onMaximize}
             tooltip={isMaximized ? 'Restore' : 'Expand'}
             variant="ghost"
@@ -180,6 +184,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
+                tabIndex={-1}
                 variant="ghost"
                 sizeVariant="sm"
                 typeVariant="icon"
