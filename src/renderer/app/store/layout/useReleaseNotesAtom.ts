@@ -39,8 +39,12 @@ export function useReleaseNotesAtom() {
   // Fetch the latest release notes from the API
   const fetchReleaseNotes = async () => {
     try {
+      const homepageDomain = import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN?.replace(/\/$/, '');
+      const appVersion = import.meta.env.MONO_ENV_APP_VERSION || '1.0.0-dev';
+      if (!homepageDomain) return;
+
       const response = await fetch(
-        `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/api/release-note?version=${import.meta.env.MONO_ENV_APP_VERSION.split('-')[0]}`
+        `${homepageDomain}/api/release-note?version=${appVersion.split('-')[0]}`
       );
       if (!response.ok) throw new Error('Failed to fetch release notes');
       const data: ReleaseNote[] = await response.json();

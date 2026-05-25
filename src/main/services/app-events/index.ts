@@ -6,7 +6,7 @@ import { authManager } from '@/main/services/mangers/auth/AuthManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
-import { protocols } from '@/main/utils/contants';
+import { appProtocol, protocols } from '@/main/utils/contants';
 import {
   app,
   BrowserWindow,
@@ -400,7 +400,7 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
 
     // mono-desktop:// deep links — used by the browser-side auth flow to
     // hand a token back to the desktop app.
-    if (url.startsWith(`${import.meta.env.MONO_ENV_PROTOCOL}://`)) {
+    if (url.startsWith(`${appProtocol}://`)) {
       const urlObj = new URL(url);
       const queryParams = new URLSearchParams(urlObj.search);
       const paramsObject: Record<string, string> = {};

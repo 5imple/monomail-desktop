@@ -10,8 +10,9 @@ import {
   ScrollAreaViewport,
   ScrollBar
 } from '@/renderer/app/components/ui/scroll-area';
+import { formatMessageDate, getForwardedMessageBody } from '@/renderer/app/lib/formatBody';
 import { cn } from '@/renderer/app/lib/utils';
-import { FC, useEffect, useRef, useState } from 'react';
+import { FC, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface ReferenceCardProps {
@@ -25,6 +26,10 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const referenceBody = useMemo(() => {
+    return type === 'forward' ? getForwardedMessageBody(item) : item.getParsedBody();
+  }, [item, type]);
+  const formattedDate = useMemo(() => formatMessageDate(item), [item]);
 
   const toggleExpand = () => {
     setIsExpanded((prev) => !prev);
@@ -115,7 +120,9 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
             <div className="line-clamp-1 text-[13px] font-medium tracking-tight text-foreground">
               {summary}
             </div>
-            <div className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">{subject}</div>
+            <div className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">
+              {subject} · {formattedDate}
+            </div>
           </div>
           <Button
             onClick={toggleExpand}
@@ -139,7 +146,7 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
               <ScrollAreaViewport>
                 <div
                   className="select-text"
-                  dangerouslySetInnerHTML={{ __html: item.getParsedBody() }}
+                  dangerouslySetInnerHTML={{ __html: referenceBody }}
                 ></div>
                 <ScrollBar orientation={'horizontal'} />
               </ScrollAreaViewport>

@@ -63,12 +63,13 @@ initializeServiceWorker();
 initializeNetworkMonitoring();
 
 const careers = import.meta.env.MONO_ENV_CAREERS_URL?.trim();
+const appVersion = import.meta.env.MONO_ENV_APP_VERSION || '1.0.0-dev';
 const logo = `
   __  __                     __  __       _ _ 
  |  \\/  | ___  _ __   ___   |  \\/  | __ _(_) |
  | |\\/| |/ _ \\| '_ \\ / _ \\  | |\\/| |/ _\` | | |
  | |  | | (_) | | | | (_) | | |  | | (_| | | |
- |_|  |_|\\___/|_| |_|\\___/  |_|  |_|\\__,_|_|_| v${import.meta.env.MONO_ENV_APP_VERSION}
+ |_|  |_|\\___/|_| |_|\\___/  |_|  |_|\\__,_|_|_| v${appVersion}
 ${careers ? `\n  ${careers}` : ''}
 `;
 

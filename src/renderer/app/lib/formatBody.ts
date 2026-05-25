@@ -1,32 +1,100 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoRecipient } from '@/main/models/types';
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
+}
+
+export function formatRecipient(recipient: MonoRecipient) {
+  const name = escapeHtml(recipient.name || recipient.email);
+  const email = escapeHtml(recipient.email);
+  return recipient.name === recipient.email || !recipient.name
+    ? `&lt;${email}&gt;`
+    : `${name} &lt;${email}&gt;`;
+}
+
+function parseTimezoneOffset(timezone: string): number | null {
+  const match = timezone.match(/^([+-])(\d{2})(\d{2})$/);
+  if (!match) return null;
+
+  const sign = match[1] === '-' ? -1 : 1;
+  return sign * (Number(match[2]) * 60 + Number(match[3]));
+}
+
+export function formatMessageDate(emailData: MonoMessage): string {
+  const timezone = emailData.timezone || '';
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC'
+  });
+
+  const offsetMinutes = parseTimezoneOffset(timezone);
+  if (offsetMinutes !== null) {
+    return `${formatter.format(new Date(emailData.timestamp + offsetMinutes * 60_000))} ${timezone}`;
+  }
+
+  if (timezone === 'UTC' || timezone === 'GMT') {
+    return `${formatter.format(new Date(emailData.timestamp))} ${timezone}`;
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(new Date(emailData.timestamp));
+}
+
+export function getForwardedMessageBody(emailData: MonoMessage): string {
+  const body = emailData.getParsedBody();
+  const history = emailData.getParsedHistory().join('');
+
+  return history ? `${body}${history}` : body;
+}
+
 export function formatForwardedMessage(emailData: MonoMessage) {
   // Destructure the email data
-  const { from, timestamp, subject, to } = emailData;
-  const body = emailData.getParsedBody();
-
-  // Helper function to format recipient
-  const formatRecipient = (recipient: MonoRecipient) => {
-    const email = recipient.email.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return recipient.name === recipient.email
-      ? `&lt;${email}&gt;`
-      : `${recipient.name} &lt;${email}&gt;`;
-  };
+  const { from, subject, to } = emailData;
+  const body = getForwardedMessageBody(emailData);
 
   // Format from and to fields
   const formattedFrom = formatRecipient(from);
   const formattedTo = to.map(formatRecipient).join(', ');
 
   // Format timestamp to a readable date
-  const formattedDate = new Date(timestamp).toLocaleString('en-US', { timeZone: 'UTC' });
+  const formattedDate = escapeHtml(formatMessageDate(emailData));
+  const formattedSubject = escapeHtml(subject);
 
   // Define the forward header content dynamically
   const forwardHeader = `
   <div>---------- Forwarded message ---------</div>
   <div><strong>From:</strong> ${formattedFrom}</div>
   <div><strong>Date:</strong> ${formattedDate}</div>
-  <div><strong>Subject:</strong> ${subject}</div>
+  <div><strong>Subject:</strong> ${formattedSubject}</div>
   <div><strong>To:</strong> ${formattedTo}</div>
   `;
   // Combine the forward header and the original body
@@ -46,20 +114,12 @@ export function formatForwardedMessage(emailData: MonoMessage) {
 
 export function formatReplyMessage(emailData: MonoMessage) {
   // Destructure the email data
-  const { from, timestamp } = emailData;
+  const { from } = emailData;
   const body = emailData.getParsedBody();
-
-  // Helper function to format the "from" field
-  const formatRecipient = (recipient: MonoRecipient) => {
-    const email = recipient.email.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return recipient.name === recipient.email
-      ? `&lt;${email}&gt;`
-      : `${recipient.name} &lt;${email}&gt;`;
-  };
 
   // Format the sender and timestamp
   const formattedFrom = formatRecipient(from);
-  const formattedDate = new Date(timestamp).toLocaleString('en-US', { timeZone: 'UTC' });
+  const formattedDate = formatMessageDate(emailData);
 
   // Add the reply prefix line
   const replyHeader = `On ${formattedDate}, ${formattedFrom} wrote:\n`;

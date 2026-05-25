@@ -393,7 +393,8 @@ class ApiClient {
         }) as Promise<GmailBridgeResult<T>> | undefined;
         if (!ipcRequest) return Promise.reject(new Error('Calendar IPC bridge not available'));
         const ipcResult = await this.withAbort(ipcRequest, config.signal);
-        if (!ipcResult.ok) return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
+        if (!ipcResult.ok)
+          return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
         return ipcResult.data as T;
       }
 
@@ -422,7 +423,8 @@ class ApiClient {
           responseType
         });
         if (!ipcResult) return Promise.reject(new Error('Gmail IPC bridge not available'));
-        if (!ipcResult.ok) return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
+        if (!ipcResult.ok)
+          return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
         return ipcResult.data as T;
       }
 
@@ -571,7 +573,9 @@ class ApiClient {
 const getApiUrl = () => {
   const fromVite =
     typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MONO_ENV_API_URL;
-  const base = (fromVite || process.env.MONO_ENV_API_URL || '').trim().replace(/\/$/, '');
+  const fromProcess =
+    typeof process !== 'undefined' && process.env ? process.env.MONO_ENV_API_URL : '';
+  const base = (fromVite || fromProcess || '').trim().replace(/\/$/, '');
   if (!base) {
     // Do NOT throw here — throwing at module scope crashes the renderer before
     // React mounts, producing a blank frosted-glass window with no error shown.
