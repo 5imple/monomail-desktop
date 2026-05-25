@@ -1,4 +1,5 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
+import GlobalComposeCard from '@/renderer/app/components/card/compose/GlobalComposeCard';
 import InboxIcon from '@/renderer/app/components/icons/InboxIcon';
 import StatusIndicator from '@/renderer/app/components/StatusIndicator';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -13,6 +14,7 @@ import { useRegisterHotkeys } from '@/renderer/app/hooks/useRegisterHotkeys';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
+import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -34,6 +36,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const threadIdParam = searchParams.get('tid');
   const { gmailStatusInvalid, calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
+  const { globalDraftWindows } = useComposeWindowAtom();
   const { setActiveThreadId } = useThreadAtom();
   const [isLoaded, setIsLoaded] = useState(false);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
@@ -214,6 +217,9 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 />
               </div>
             </div>
+            {globalDraftWindows.map((draft) => (
+              <GlobalComposeCard key={draft.id} draft={draft} />
+            ))}
             {!isLoaded && startupTimedOut && (
               <div className="absolute inset-0 z-50 flex items-center justify-center p-6">
                 <div className="w-full max-w-md rounded-md border bg-card/95 p-5 shadow-sm">
@@ -261,6 +267,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
           className={cn(
             'no-drag fixed top-[8px] z-50',
             sidebarCollapsed ? 'left-[92px]' : 'left-[178px]',
+            globalDraftWindows.length > 0 && 'hidden',
             isElectron ?? 'hidden'
             // Remove opacity transition - inherits from parent
           )}

@@ -2,10 +2,7 @@ import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
-import { MonoRecipient } from '@/main/models/types';
 import mailApi from '@/main/api/mail/mailApi';
-import { ContactCard } from '@/renderer/app/components/card/ContactCard';
-import { AttachmentCard } from '@/renderer/app/components/card/AttachmentCard';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
 import MessageCard from '@/renderer/app/components/card/MessageCard';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
@@ -42,7 +39,6 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
   const { activeThreadId, threadsMap } = useThreadAtom();
   const { unmarkThreadsAsUnread, addLabelToThread } = useThreadLabelAtom();
   const { updateThread, updateThreadState } = useThreadOperationAtom();
-  const { contactDisplayPanel, setContactDisplayPanel } = useGlobalAtom();
   const { t } = useTranslation();
 
   const [thread, setThread] = useState<MonoThread | null>(null);
@@ -451,15 +447,6 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     if (scrollAreaRef.current) scrollAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
   }, [activeThreadId]);
 
-  const [selectedRecipient, setSelectedRecipient] = useState<MonoRecipient | null>(null);
-
-  // Auto-select first recipient from thread (same logic as ContactCard)
-
-  const handleContactOpen = (recipient: MonoRecipient) => {
-    setContactDisplayPanel(true);
-    setSelectedRecipient(recipient);
-  };
-
   return (
     <div
       className={cn(
@@ -526,13 +513,11 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
                     accountId={thread?.accountId}
                     collapsed={!isLastMessage}
                     draft={relatedDraft}
-                    contactToggle={contactDisplayPanel}
                     className={cn('transition-all duration-300 ease-bouncy-in-out')}
                     style={{
                       zIndex: `${orderedItems.messages.length - index}`
                     }}
                     cardClassName={cn('transition-all h-fit')}
-                    handleContactOpen={handleContactOpen}
                     isFocused={focusedMessageId === message.id}
                     onFocusRequest={() => setFocusedMessageId(message.id)}
                   />
@@ -550,25 +535,6 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
             </div>
           </div>
         </ScrollArea>
-        <div
-          className={cn(
-            'transition-all duration-300 ease-bouncy-in-out',
-            'h-fit',
-            contactDisplayPanel ? 'opacity-100' : 'opacity-0',
-            contactDisplayPanel
-              ? 'mr-5 mt-2 max-w-[320px] translate-x-0'
-              : 'mr-0 max-w-0 translate-x-full'
-          )}
-        >
-          <div className="flex flex-col gap-3">
-            <ContactCard
-              thread={stableThread}
-              recipient={selectedRecipient}
-              onRecipientChange={setSelectedRecipient}
-            />
-            <AttachmentCard selectedRecipient={selectedRecipient} thread={stableThread} />
-          </div>
-        </div>
       </div>
     </div>
   );

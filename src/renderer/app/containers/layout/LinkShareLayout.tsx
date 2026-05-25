@@ -10,9 +10,9 @@ import BaseHeader from '@/renderer/app/containers/header/BaseHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
-import { FC, useCallback, useEffect, useState } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getShareCookieDomain, getUtmSource } from '@/renderer/app/lib/runtimeBranding';
 
@@ -21,38 +21,11 @@ interface LinkShareLayoutProps {}
 const LinkShareLayout: FC<LinkShareLayoutProps> = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { member, isLoading: authLoading, signIn, isLoggedIn } = useAuth();
+  const { member, isLoading: authLoading, isLoggedIn } = useAuth();
   const { id } = useParams();
   const [messages, setMessages] = useState<MonoMessage[]>([]);
   const [subject, setSubject] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
-  const [searchParams] = useSearchParams();
-  const tokenParam = searchParams.get('token');
-
-  useEffect(() => {
-    // Check for token in URL params (coming back from sign-in)
-    if (tokenParam) {
-      handleSignInWithToken(tokenParam);
-    }
-  }, [tokenParam]);
-
-  const handleSignInWithToken = useCallback(
-    async (token: string) => {
-      try {
-        if (!token) throw new Error('Invalid token received.');
-        await signIn(token);
-        toast.success(t('toast.link_share.sign_in_success'));
-
-        // Check if we need to refresh data after sign-in
-        if (id) {
-          fetchData(id);
-        }
-      } catch (error: any) {
-        toast.error(error.message || 'An error occurred during sign-in.');
-      }
-    },
-    [signIn, id, t]
-  );
 
   const fetchData = async (shareId: string) => {
     try {

@@ -18,6 +18,7 @@ import { getDiscordInviteUrl, getSocialXUrl } from '@/renderer/app/lib/runtimeBr
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
+import { useOwnAvatarUrl } from '@/renderer/app/hooks/useOwnAvatarUrl';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/renderer/app/components/ui/skeleton';
@@ -43,6 +44,7 @@ const UserAvatar: FC<UserAvatarProps> = ({ user, className }) => {
   const { t } = useTranslation();
 
   const { openDialog } = useDialogs();
+  const avatarUrl = useOwnAvatarUrl(user?.primaryUid ?? user?.uid, user?.profileImageUrl || undefined);
   return user ? (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -51,7 +53,7 @@ const UserAvatar: FC<UserAvatarProps> = ({ user, className }) => {
             <AvatarImage
               className="select-none bg-gradient-to-t from-muted-low to-secondary object-contain transition-opacity duration-300 dark:from-background dark:to-secondary"
               alt={`@${user.displayName}`}
-              src={user.profileImageUrl}
+              src={avatarUrl}
             />
             <AvatarFallback className="select-none bg-gradient-to-t from-muted-low to-secondary object-contain text-sm transition-opacity duration-300 dark:from-background dark:to-secondary">
               {user?.displayName![0].toUpperCase() ?? 'E'}

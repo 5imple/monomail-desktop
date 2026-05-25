@@ -802,7 +802,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   </div>
                   {currentMessage.timestamp && (
                     <div className="ml-auto flex items-center gap-2 text-muted-foreground">
-                      <span className="shrink-0 whitespace-nowrap font-mono text-[11px] tabular-nums">
+                      <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums">
                         {formatDate(currentMessage.timestamp)}
                       </span>
                     </div>
