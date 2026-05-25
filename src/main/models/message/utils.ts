@@ -403,7 +403,7 @@ function extractAndRemoveEmailHistory(body: HTMLElement): {
   }
 
   if (currentHistory.trim()) {
-    history.push(currentHistory.trim());
+    history.push(sanitizeEmailHtml(currentHistory.trim()));
   }
 
   return { cleanBody: body, history };

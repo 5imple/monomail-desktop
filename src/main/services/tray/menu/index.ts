@@ -1,11 +1,21 @@
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 
 import { app, shell } from 'electron';
+
+const appVersion = String(import.meta.env.MONO_ENV_APP_VERSION || app.getVersion());
+const openAppLabel = appVersion.includes('dev') ? 'Open Mono Mail (Dev)' : 'Open Mono Mail';
+const homepageDomain = String(
+  import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN || import.meta.env.MONO_ENV_PUBLIC_DOMAIN || ''
+).replace(/\/$/, '');
+
+function openCommunity() {
+  if (!homepageDomain) return;
+  shell.openExternal(`${homepageDomain}/community`);
+}
+
 export const trayAppMenu = [
   {
-    label: import.meta.env.MONO_ENV_APP_VERSION.includes('dev')
-      ? 'Open Mono Mail (Dev)'
-      : 'Open Mono Mail',
+    label: openAppLabel,
     click: () => {
       const mainWindow = windowManager.getMainAppWindow();
       if (!mainWindow) {
@@ -48,7 +58,7 @@ export const trayAppMenu = [
   {
     label: 'Join our Community',
     click: () => {
-      shell.openExternal(import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN + '/community');
+      openCommunity();
       // ipcRenderer.invoke('main:native:open-community-window');
     }
   },
@@ -74,9 +84,7 @@ export const trayAppMenu = [
 ];
 export const trayDefaultMenu = [
   {
-    label: import.meta.env.MONO_ENV_APP_VERSION.includes('dev')
-      ? 'Open Mono Mail (Dev)'
-      : 'Open Mono Mail',
+    label: openAppLabel,
     click: () => {
       const mainWindow = windowManager.getMainAppWindow();
       if (!mainWindow) {
@@ -90,7 +98,7 @@ export const trayDefaultMenu = [
   {
     label: 'Join our Community',
     click: () => {
-      shell.openExternal(import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN + '/community');
+      openCommunity();
     }
   },
   { type: 'separator' as const }, // Explicitly type 'separator'

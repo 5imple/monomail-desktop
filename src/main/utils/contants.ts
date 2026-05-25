@@ -4,7 +4,8 @@ import { nativeImage } from 'electron';
 
 export const darkBackgroundColor = '#1f1f1f';
 export const lightBackgroundColor = '#ffffff';
-export const protocols = [import.meta.env.MONO_ENV_PROTOCOL, 'mailto'];
+export const appProtocol = import.meta.env.MONO_ENV_PROTOCOL || 'mono-desktop';
+export const protocols = [appProtocol, 'mailto'];
 
 export const onlineTrayIcon = nativeImage.createFromPath(icon).resize({ width: 16, height: 16 });
 export const offlineTrayIcon = nativeImage
