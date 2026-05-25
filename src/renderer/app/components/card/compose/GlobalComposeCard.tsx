@@ -1213,12 +1213,9 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               composeDraft={composeDraft}
               handleInputChange={handleInputChange}
               onKeyDown={(event) => {
-                // Tab out of the To field → Subject (Shift+Tab keeps default).
-                if (event.key === 'Tab' && !event.shiftKey) {
-                  event.preventDefault();
-                  subjectRef.current?.focus();
-                  return;
-                }
+                // Tab order follows the visible fields via natural DOM order
+                // (To → Cc/Bcc when shown → Subject); the Cc/Bcc toggles and
+                // window buttons are tabIndex={-1} so Tab skips them.
                 if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
                   event.preventDefault();
                   toggleMinimize();
