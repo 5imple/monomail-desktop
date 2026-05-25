@@ -6,6 +6,8 @@ import log from 'electron-log';
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
+const GOOGLE_PEOPLE_ME_PHOTOS_URL =
+  'https://people.googleapis.com/v1/people/me?personFields=photos';
 const GMAIL_SCOPES = [
   'openid',
   'email',
@@ -40,6 +42,24 @@ async function fetchUserInfo(
   });
   if (!res.ok) throw new Error(`userinfo fetch failed: ${res.status}`);
   return res.json() as Promise<{ sub: string; email: string; name?: string; picture?: string }>;
+}
+
+// The OIDC `picture` claim is frequently absent for Google Workspace accounts.
+// Fall back to the People API so the user's own avatar still resolves. Returns
+// only a real (non-default) photo; if the account has no photo (Google serves an
+// auto-generated monogram flagged `default`), this yields undefined so the UI
+// shows its initials fallback instead of Google's generic glyph.
+async function fetchOwnPhotoUrl(accessToken: string): Promise<string | undefined> {
+  try {
+    const res = await net.fetch(GOOGLE_PEOPLE_ME_PHOTOS_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as { photos?: { url?: string; default?: boolean }[] };
+    return data.photos?.find((photo) => photo?.url && !photo.default)?.url;
+  } catch {
+    return undefined;
+  }
 }
 
 class GoogleOAuthServer {
@@ -163,6 +183,8 @@ class GoogleOAuthServer {
           }
 
           const userInfo = await fetchUserInfo(body.access_token);
+          // Workspace accounts often omit the OIDC `picture`; fall back to People API.
+          const picture = userInfo.picture || (await fetchOwnPhotoUrl(body.access_token));
 
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(
@@ -178,7 +200,7 @@ class GoogleOAuthServer {
             sub: userInfo.sub,
             email: userInfo.email,
             name: userInfo.name,
-            picture: userInfo.picture
+            picture
           });
         } catch (e) {
           res.writeHead(200, { 'Content-Type': 'text/html' });
