@@ -76,6 +76,12 @@ class SchedulerService {
    *  anything that came due while the app was closed. */
   start(): void {
     if (this.sweepTimer) return;
+    log.info(
+      '[scheduler] started — sweeping every %ds (%d snooze, %d reminder pending)',
+      SWEEP_INTERVAL_MS / 1000,
+      Object.keys(this.getSnoozes()).length,
+      Object.keys(this.getReminders()).length
+    );
     this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
     void this.sweep();
   }
@@ -86,6 +92,7 @@ class SchedulerService {
     const labelId = await this.getSnoozeLabelId(req.accountId);
     // Move the thread out of the inbox and tag it as snoozed.
     await modifyThread(req.accountId, req.threadId, [labelId], ['INBOX']);
+    log.info('[scheduler] snoozed thread %s until %s', req.threadId, req.snoozeUntil);
 
     const task: SnoozeTask = {
       snoozeId: generateUUID(),
@@ -143,6 +150,7 @@ class SchedulerService {
       createdAt: new Date().toISOString()
     };
     this.setReminders({ ...this.getReminders(), [task.reminderId]: task });
+    log.info('[scheduler] reminder set for thread %s at %s', task.threadId, task.reminderAt);
     return { id: task.reminderId };
   }
 
@@ -164,6 +172,7 @@ class SchedulerService {
     for (const task of Object.values(this.getSnoozes())) {
       if (new Date(task.snoozeUntil).getTime() > now) continue;
       try {
+        log.info('[scheduler] un-snoozing thread %s (due)', task.threadId);
         await this.restoreToInbox(task);
         this.removeSnooze(task.snoozeId);
         this.emit({ type: 'THREAD_UNSNOOZED', snoozeId: task.snoozeId });
@@ -176,6 +185,7 @@ class SchedulerService {
     for (const reminder of Object.values(this.getReminders())) {
       if (new Date(reminder.reminderAt).getTime() > now) continue;
       try {
+        log.info('[scheduler] firing reminder %s (thread %s)', reminder.reminderId, reminder.threadId);
         notificationManager.createNativeNotification({
           id: `reminder-${reminder.reminderId}`,
           title: 'Reminder',
