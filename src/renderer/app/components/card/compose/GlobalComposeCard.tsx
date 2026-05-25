@@ -935,7 +935,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     return (
       <div
         className={cn(
-          'shrink-0 border-t border-border/25 px-9 py-2.5 transition-colors',
+          'shrink-0 border-t border-border/60 px-9 py-2.5 transition-colors',
           isAttachmentDropActive && 'border-chart-1/40 bg-chart-1/5'
         )}
       >
