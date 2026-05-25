@@ -3,14 +3,14 @@ import mailApi from '@/main/api/mail/mailApi';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 
 import MonoIcon from '@/renderer/app/components/icons/icons';
-import ContactProfileDropdown from '@/renderer/app/components/mail/ContactProfileDropdown';
 import { Button } from '@/renderer/app/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader } from '@/renderer/app/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/renderer/app/components/ui/card';
 import {
   ScrollArea,
   ScrollAreaViewport,
   ScrollBar
 } from '@/renderer/app/components/ui/scroll-area';
+import { cn } from '@/renderer/app/lib/utils';
 import { FC, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -46,17 +46,9 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
     }
   };
 
-  const getReferenceTitle = () => {
-    switch (type) {
-      case 'forward':
-        return 'Forwarded message';
-      case 'reply':
-        return 'Reply message';
-
-      default:
-        return 'Reference message';
-    }
-  };
+  const subject = item.subject.length > 0 ? item.subject : '(No subject)';
+  const sender = item.from?.name?.trim() || item.from?.email || 'Original message';
+  const summary = type === 'reply' ? `Replying to ${sender}` : `Forwarding ${sender}`;
 
   useEffect(() => {
     if (!contentRef.current) return;
@@ -117,40 +109,32 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
 
   return (
     <Card className="border-border/60 shadow-sm transition-all duration-400 ease-bouncy-in-out">
-      <CardHeader className="border-b border-border/40 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              Quoted · {type === 'reply' ? 'Reply' : 'Forward'}
-            </p>
-            <div className="text-[14px] font-medium tracking-tight text-foreground">
-              {getReferenceTitle()}
+      <CardHeader className={cn('px-4 py-3', isExpanded && 'border-b border-border/40')}>
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="line-clamp-1 text-[13px] font-medium tracking-tight text-foreground">
+              {summary}
             </div>
+            <div className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">{subject}</div>
           </div>
-          <div>
-            <Button
-              onClick={toggleExpand}
-              tooltip={isExpanded ? t('tooltip.minimize') : t('tooltip.maximize')}
-              variant={'ghost'}
-              sizeVariant={'sm'}
-              typeVariant={'icon'}
-            >
-              {isExpanded ? <MonoIcon type={'Minimize'} /> : <MonoIcon type={'Maximize'} />}
-            </Button>
-          </div>
+          <Button
+            onClick={toggleExpand}
+            tooltip={isExpanded ? t('tooltip.minimize') : t('tooltip.maximize')}
+            variant="ghost"
+            sizeVariant="sm"
+            typeVariant="icon"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
+            {isExpanded ? <MonoIcon type="Minimize" /> : <MonoIcon type="Maximize" />}
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="border-b border-border/40">
-        {/* Always visible subject */}
-        <div className="text-[14px] font-medium tracking-tight">
-          {item.subject.length > 0 ? item.subject : '(No subject)'}
-        </div>
-        {/* Collapsible content */}
+      <CardContent className="p-0">
         <div
           className="overflow-hidden transition-all duration-300"
           style={{ height: `${contentHeight}px` }}
         >
-          <div ref={contentRef}>
+          <div ref={contentRef} className="px-4 py-3">
             <ScrollArea>
               <ScrollAreaViewport>
                 <div
@@ -163,36 +147,6 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
           </div>
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col items-start justify-center">
-        <div className="grid gap-1">
-          <div className="line-clamp-1 text-xs">
-            <span className="font-medium text-muted-foreground">To:</span>{' '}
-            {item.to.length === 0 ? (
-              <span>(No recipient)</span>
-            ) : (
-              item.to.map((recipient, index) => {
-                return (
-                  <span key={recipient.email} className="mr-1">
-                    <ContactProfileDropdown value={recipient.email}>
-                      <Button className="text-xs" variant="link" typeVariant={'inline'}>
-                        {`${recipient.name} (${recipient.email})`}
-                      </Button>
-                    </ContactProfileDropdown>
-                  </span>
-                );
-              })
-            )}
-          </div>
-          <div className="line-clamp-1 text-xs">
-            <span className="font-medium text-muted-foreground">Reply-To:</span>{' '}
-            <ContactProfileDropdown value={item.from.email}>
-              <Button className="text-xs" variant="link" typeVariant={'inline'}>
-                {item.from && `${item.from.name} (${item.from.email})`}
-              </Button>
-            </ContactProfileDropdown>
-          </div>
-        </div>
-      </CardFooter>
     </Card>
   );
 };
