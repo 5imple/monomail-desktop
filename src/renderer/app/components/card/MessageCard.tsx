@@ -28,10 +28,11 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useExtensionAtom } from '@/renderer/app/store/extension/useExtensionAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useSpring, useTransition } from '@react-spring/web';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Forward, Reply } from 'lucide-react';
+import { CornerUpLeft, CornerUpRight, ReplyAll } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Collapsible } from '@radix-ui/react-collapsible';
@@ -125,9 +126,9 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const { currentTheme } = useTheme(); // Get dark mode state from theme store
     const { openContactsPanel } = useExtensionAtom();
     const { globalSearchQuery } = useGlobalAtom();
+    const { setGlobalDraftWindows } = useComposeWindowAtom();
     const { accounts } = useAuth();
 
-    const [replyActive, setReplyActive] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(collapsed);
     const [showQuotedContent, setShowQuotedContent] = useState(false);
     const [showCcDropdown, setShowCcDropdown] = useState(false);
@@ -194,6 +195,73 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       const userEmail = accounts.length > 0 ? accounts[0].email : '';
       executeCommand('COMPOSE_NEW_MESSAGE', {
         draft: new MonoDraft({ from: userEmail, to: [recipient.email] })
+      });
+    };
+
+    const showHeaderMessageActions = !isCollapsed && !preview && !item.labelIds.includes('DRAFT') && !draft;
+
+    const handleReplyMessage = (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      setIsCollapsed(false);
+      onFocusRequest?.();
+      executeCommand('COMPOSE_REPLY_MESSAGE', {
+        message: item,
+        accountId: accountId
+      });
+    };
+
+    const handleReplyAllMessage = (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+
+      const accountEmail =
+        (accountId ? accounts.find((account) => account.uid === accountId)?.email : undefined) ??
+        accounts[0]?.email;
+
+      if (!accountEmail) return;
+
+      const ownEmails = new Set(accounts.map((account) => account.email.toLowerCase()));
+      ownEmails.add(accountEmail.toLowerCase());
+
+      const addUniqueRecipient = (target: string[], email?: string) => {
+        const normalizedEmail = email?.trim().toLowerCase();
+        if (!normalizedEmail || ownEmails.has(normalizedEmail)) return;
+        if (target.some((existingEmail) => existingEmail.toLowerCase() === normalizedEmail)) return;
+        target.push(email!.trim());
+      };
+
+      const to: string[] = [];
+      addUniqueRecipient(to, item.from.email);
+      item.to.forEach((recipient) => addUniqueRecipient(to, recipient.email));
+
+      const cc: string[] = [];
+      item.cc.forEach((recipient) => {
+        if (to.some((email) => email.toLowerCase() === recipient.email.toLowerCase())) return;
+        addUniqueRecipient(cc, recipient.email);
+      });
+
+      setIsCollapsed(false);
+      onFocusRequest?.();
+      setGlobalDraftWindows([
+        new MonoDraft({
+          from: accountEmail,
+          messageId: item.id,
+          threadId: item.threadId,
+          to,
+          cc,
+          subject: item.subject.toLowerCase().startsWith('re: ')
+            ? item.subject
+            : `Re: ${item.subject}`
+        })
+      ]);
+    };
+
+    const handleForwardMessage = (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      setIsCollapsed(false);
+      onFocusRequest?.();
+      executeCommand('COMPOSE_FORWARD_MESSAGE', {
+        message: item,
+        accountId: accountId
       });
     };
 
@@ -808,6 +876,48 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                       </span>
                     </div>
                   )}
+                  {showHeaderMessageActions && (
+                    <div
+                      className="ml-1 flex shrink-0 items-center gap-0.5 text-muted-foreground"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Button
+                        typeVariant="icon"
+                        sizeVariant="xs"
+                        variant="ghost"
+                        className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                        tooltipSide="bottom"
+                        tooltip={t('message_card.reply')}
+                        shortcut={isLastCard ? 'R' : undefined}
+                        onClick={handleReplyMessage}
+                      >
+                        <CornerUpLeft className="h-4 w-4" strokeWidth={1.8} />
+                      </Button>
+                      <Button
+                        typeVariant="icon"
+                        sizeVariant="xs"
+                        variant="ghost"
+                        className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                        tooltipSide="bottom"
+                        tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
+                        onClick={handleReplyAllMessage}
+                      >
+                        <ReplyAll className="h-4 w-4" strokeWidth={1.8} />
+                      </Button>
+                      <Button
+                        typeVariant="icon"
+                        sizeVariant="xs"
+                        variant="ghost"
+                        className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                        tooltipSide="bottom"
+                        tooltip={t('message_card.forward')}
+                        shortcut={isLastCard ? 'F' : undefined}
+                        onClick={handleForwardMessage}
+                      >
+                        <CornerUpRight className="h-4 w-4" strokeWidth={1.8} />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1343,59 +1453,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             // />
           )}
         </Card>
-        <div className="absolute -bottom-5 left-0 right-0 z-10 flex flex-col gap-2">
-          {!replyActive && !preview && !item.labelIds.includes('DRAFT') && !draft && (
-            <div
-              className={cn(
-                '-bottom-4 mx-auto flex justify-center opacity-0 duration-200',
-                isLastCard ? 'opacity-100' : 'group-hover:opacity-100',
-
-                isFocused && 'shadow-md'
-              )}
-            >
-              <div className="flex gap-1.5 rounded-full border border-border/70 bg-white/95 p-1 shadow-[0_10px_28px_-20px_rgb(15_23_42_/_0.6),0_1px_2px_rgb(15_23_42_/_0.08)] dark:bg-background/95">
-                <Button
-                  onClick={() => {
-                    setIsCollapsed(false);
-                    onFocusRequest?.();
-                    executeCommand('COMPOSE_REPLY_MESSAGE', {
-                      message: item,
-                      accountId: accountId
-                    });
-                  }}
-                  variant={'ghost'}
-                  sizeVariant={'sm'}
-                  className="h-8 rounded-full px-3.5 text-[13px] font-medium text-foreground hover:bg-muted-low"
-                  tooltipSide="bottom"
-                  tooltip={t('message_card.reply')}
-                  shortcut={isLastCard ? 'R' : undefined}
-                >
-                  <Reply className="mr-2 h-4 w-4 shrink-0" strokeWidth={1.9} />
-                  {t('message_card.reply')}
-                </Button>
-                <Button
-                  onClick={() => {
-                    setIsCollapsed(false);
-                    onFocusRequest?.();
-                    executeCommand('COMPOSE_FORWARD_MESSAGE', {
-                      message: item,
-                      accountId: accountId
-                    });
-                  }}
-                  variant={'ghost'}
-                  sizeVariant={'sm'}
-                  className="h-8 rounded-full px-3.5 text-[13px] font-medium text-foreground hover:bg-muted-low"
-                  tooltipSide="bottom"
-                  tooltip={t('message_card.forward')}
-                  shortcut={isLastCard ? 'F' : undefined}
-                >
-                  <Forward className="mr-2 h-4 w-4 shrink-0" strokeWidth={1.9} />
-                  {t('message_card.forward')}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     );
   }
