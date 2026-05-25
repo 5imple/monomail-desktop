@@ -1,6 +1,7 @@
 import type { CreateSnoozeRequest, SnoozeRecord, ThreadSnapshot } from '@/main/api/queue/types';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
+import { notificationManager } from '@/main/services/notification/NotificationManager';
 import { findOrCreateLabel, modifyThread } from '@/main/services/scheduler/gmailMain';
 import { generateUUID } from '@/main/utils';
 import log from 'electron-log';
@@ -27,8 +28,18 @@ interface SnoozeTask {
   snoozedLabelId?: string; // the label applied, to remove on un-snooze
 }
 
+interface ReminderTask {
+  reminderId: string;
+  accountId: string;
+  threadId: string;
+  subject: string;
+  reminderAt: string; // ISO 8601
+  createdAt: string; // ISO 8601
+}
+
 interface SchedulerStoreSchema {
   snoozes?: Record<string, SnoozeTask>;
+  reminders?: Record<string, ReminderTask>;
 }
 
 const EMPTY_THREAD_SNAPSHOT: ThreadSnapshot = {
@@ -49,6 +60,7 @@ class SchedulerService {
     // Drop all queued items on sign-out — they belong to the signed-out user.
     tokenManager.on('signed-out', () => {
       this.store.set('snoozes', {});
+      this.store.set('reminders', {});
       this.labelIdByAccount.clear();
     });
   }
@@ -114,6 +126,37 @@ class SchedulerService {
     return { items };
   }
 
+  // ── reminders ─────────────────────────────────────────────────────────────
+
+  createReminder(req: {
+    uid: string;
+    threadId: string;
+    subject?: string;
+    reminderAt: string;
+  }): { id: string } {
+    const task: ReminderTask = {
+      reminderId: generateUUID(),
+      accountId: req.uid,
+      threadId: req.threadId,
+      subject: req.subject ?? '',
+      reminderAt: req.reminderAt,
+      createdAt: new Date().toISOString()
+    };
+    this.setReminders({ ...this.getReminders(), [task.reminderId]: task });
+    return { id: task.reminderId };
+  }
+
+  listReminders(): { items: ReminderTask[] } {
+    return { items: Object.values(this.getReminders()) };
+  }
+
+  deleteReminder(reminderId: string): { ok: boolean } {
+    const reminders = this.getReminders();
+    delete reminders[reminderId];
+    this.setReminders(reminders);
+    return { ok: true };
+  }
+
   // ── sweep ───────────────────────────────────────────────────────────────
 
   private async sweep(): Promise<void> {
@@ -127,6 +170,21 @@ class SchedulerService {
       } catch (e) {
         // Leave the task in place; the next sweep retries.
         log.warn('[scheduler] un-snooze sweep failed for %s:', task.snoozeId, (e as Error).message);
+      }
+    }
+
+    for (const reminder of Object.values(this.getReminders())) {
+      if (new Date(reminder.reminderAt).getTime() > now) continue;
+      try {
+        notificationManager.createNativeNotification({
+          id: `reminder-${reminder.reminderId}`,
+          title: 'Reminder',
+          body: reminder.subject || 'You have a reminder',
+          metadata: { threadId: reminder.threadId, accountId: reminder.accountId }
+        });
+        this.removeReminder(reminder.reminderId);
+      } catch (e) {
+        log.warn('[scheduler] reminder sweep failed for %s:', reminder.reminderId, (e as Error).message);
       }
     }
   }
@@ -162,6 +220,20 @@ class SchedulerService {
     const snoozes = this.getSnoozes();
     delete snoozes[snoozeId];
     this.setSnoozes(snoozes);
+  }
+
+  private getReminders(): Record<string, ReminderTask> {
+    return this.store.get('reminders', {});
+  }
+
+  private setReminders(reminders: Record<string, ReminderTask>): void {
+    this.store.set('reminders', reminders);
+  }
+
+  private removeReminder(reminderId: string): void {
+    const reminders = this.getReminders();
+    delete reminders[reminderId];
+    this.setReminders(reminders);
   }
 
   private toSnoozeRecord(task: SnoozeTask): SnoozeRecord {

@@ -68,4 +68,15 @@ export function registerQueueHandlers() {
   ipcMain.handle('main:queue:send-now', (_, scheduleId: string) =>
     wrap(() => queueApi.sendScheduledNow(scheduleId))
   );
+
+  // ── reminders (local scheduler) ──
+  ipcMain.handle(
+    'main:reminder:create',
+    (_, req: { uid: string; threadId: string; subject?: string; reminderAt: string }) =>
+      wrap(async () => schedulerService.createReminder(req))
+  );
+  ipcMain.handle('main:reminder:list', () => wrap(async () => schedulerService.listReminders()));
+  ipcMain.handle('main:reminder:delete', (_, reminderId: string) =>
+    wrap(async () => schedulerService.deleteReminder(reminderId))
+  );
 }

@@ -81,6 +81,10 @@ const api = {
   queueRescheduleSend: (args: { scheduleId: string; sendAt: string }) =>
     ipcRenderer.invoke('main:queue:reschedule-send', args),
   queueSendNow: (scheduleId: string) => ipcRenderer.invoke('main:queue:send-now', scheduleId),
+  reminderCreate: (req: { uid: string; threadId: string; subject?: string; reminderAt: string }) =>
+    ipcRenderer.invoke('main:reminder:create', req),
+  reminderList: () => ipcRenderer.invoke('main:reminder:list'),
+  reminderDelete: (reminderId: string) => ipcRenderer.invoke('main:reminder:delete', reminderId),
   setAlertSound: (audio: AudioType) => ipcRenderer.invoke('main:system:set-alert-sound', audio),
   setIsFullSizeWindowOnCreation: (value: boolean) =>
     ipcRenderer.invoke('main:system:set-window-fullsize-on-creation', value),
