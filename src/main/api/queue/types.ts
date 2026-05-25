@@ -46,6 +46,14 @@ export interface CreateScheduleRequest {
   accountId: string;
   sendAt: string;
   draftSnapshot?: DraftSnapshot;
+  /**
+   * base64url RFC822 message to send at `sendAt`. Required in standalone mode:
+   * the main process has no access to local drafts, so the renderer builds the
+   * raw message (same path as immediate send) and hands it over at schedule time.
+   */
+  raw?: string;
+  /** Gmail threadId to thread the sent message into, when this is a reply. */
+  threadId?: string;
 }
 
 export interface ScheduleRecord {
