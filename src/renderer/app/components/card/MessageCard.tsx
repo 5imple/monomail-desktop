@@ -880,10 +880,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                     <div className="ml-auto flex items-center gap-1.5 text-muted-foreground">
                       {showHeaderMessageActions && (
                         <div
-                          className={cn(
-                            'flex max-w-0 shrink-0 items-center gap-0.5 overflow-hidden opacity-0 transition-all duration-150 group-hover:max-w-[88px] group-hover:opacity-100',
-                            isFocused && 'max-w-[88px] opacity-100'
-                          )}
+                          className="flex max-w-0 shrink-0 items-center gap-0.5 overflow-hidden opacity-0 transition-all duration-150 group-hover:max-w-[88px] group-hover:opacity-100"
                           onClick={(event) => event.stopPropagation()}
                         >
                           <Button
