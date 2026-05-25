@@ -21,10 +21,16 @@ const INBOX_CATEGORY_QUERIES = new Set([
 ]);
 
 const NAV_ITEMS: MailNavItem[] = [
-  { id: 'inbox', label: 'Inbox', icon: 'inbox', query: 'category:primary', shortcut: 'G I' },
-  { id: 'snooze', label: 'Later', icon: 'schedule', layout: 'LATER' as const, shortcut: 'G S' },
-  { id: 'starred', label: 'Starred', icon: 'star', query: 'is:starred', shortcut: 'G T' },
-  { id: 'sent', label: 'Sent', icon: 'send', query: 'in:sent', shortcut: 'G E' }
+  {
+    id: 'inbox',
+    label: 'Inbox',
+    icon: 'mark_email_unread',
+    query: 'category:primary',
+    shortcut: 'G I'
+  },
+  { id: 'snooze', label: 'Later', icon: 'snooze', layout: 'LATER' as const, shortcut: 'G S' },
+  { id: 'starred', label: 'Starred', icon: 'bookmark_star', query: 'is:starred', shortcut: 'G T' },
+  { id: 'sent', label: 'Sent', icon: 'outgoing_mail', query: 'in:sent', shortcut: 'G E' }
 ];
 
 const TITLEBAR_NAV_ICON_SIZE = 15;
