@@ -38,7 +38,7 @@ import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWin
 import { useSpring, useTransition } from '@react-spring/web';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CornerUpLeft, CornerUpRight, ReplyAll } from 'lucide-react';
+import { Forward, Reply, ReplyAll } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Collapsible } from '@radix-ui/react-collapsible';
@@ -877,7 +877,52 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                     <span className="whitespace-nowrap">{currentMessage.snippet}</span>
                   </div>
                   {currentMessage.timestamp && (
-                    <div className="ml-auto flex items-center gap-2 text-muted-foreground">
+                    <div className="ml-auto flex items-center gap-1.5 text-muted-foreground">
+                      {showHeaderMessageActions && (
+                        <div
+                          className={cn(
+                            'flex max-w-0 shrink-0 items-center gap-0.5 overflow-hidden opacity-0 transition-all duration-150 group-hover:max-w-[88px] group-hover:opacity-100',
+                            isFocused && 'max-w-[88px] opacity-100'
+                          )}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Button
+                            typeVariant="icon"
+                            sizeVariant="xs"
+                            variant="ghost"
+                            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                            tooltipSide="bottom"
+                            tooltip={t('message_card.reply')}
+                            shortcut={isLastCard ? 'R' : undefined}
+                            onClick={handleReplyMessage}
+                          >
+                            <Reply className="h-4 w-4" strokeWidth={1.8} />
+                          </Button>
+                          <Button
+                            typeVariant="icon"
+                            sizeVariant="xs"
+                            variant="ghost"
+                            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                            tooltipSide="bottom"
+                            tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
+                            onClick={handleReplyAllMessage}
+                          >
+                            <ReplyAll className="h-4 w-4" strokeWidth={1.8} />
+                          </Button>
+                          <Button
+                            typeVariant="icon"
+                            sizeVariant="xs"
+                            variant="ghost"
+                            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                            tooltipSide="bottom"
+                            tooltip={t('message_card.forward')}
+                            shortcut={isLastCard ? 'F' : undefined}
+                            onClick={handleForwardMessage}
+                          >
+                            <Forward className="h-4 w-4" strokeWidth={1.8} />
+                          </Button>
+                        </div>
+                      )}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <time
@@ -893,48 +938,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                           </TooltipContent>
                         </TooltipPortal>
                       </Tooltip>
-                    </div>
-                  )}
-                  {showHeaderMessageActions && (
-                    <div
-                      className="ml-1 flex shrink-0 items-center gap-0.5 text-muted-foreground"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Button
-                        typeVariant="icon"
-                        sizeVariant="xs"
-                        variant="ghost"
-                        className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
-                        tooltipSide="bottom"
-                        tooltip={t('message_card.reply')}
-                        shortcut={isLastCard ? 'R' : undefined}
-                        onClick={handleReplyMessage}
-                      >
-                        <CornerUpLeft className="h-4 w-4" strokeWidth={1.8} />
-                      </Button>
-                      <Button
-                        typeVariant="icon"
-                        sizeVariant="xs"
-                        variant="ghost"
-                        className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
-                        tooltipSide="bottom"
-                        tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
-                        onClick={handleReplyAllMessage}
-                      >
-                        <ReplyAll className="h-4 w-4" strokeWidth={1.8} />
-                      </Button>
-                      <Button
-                        typeVariant="icon"
-                        sizeVariant="xs"
-                        variant="ghost"
-                        className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
-                        tooltipSide="bottom"
-                        tooltip={t('message_card.forward')}
-                        shortcut={isLastCard ? 'F' : undefined}
-                        onClick={handleForwardMessage}
-                      >
-                        <CornerUpRight className="h-4 w-4" strokeWidth={1.8} />
-                      </Button>
                     </div>
                   )}
                 </div>
