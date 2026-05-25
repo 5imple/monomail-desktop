@@ -31,6 +31,7 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpring, useTransition } from '@react-spring/web';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Forward, Reply } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Collapsible } from '@radix-ui/react-collapsible';
@@ -1352,7 +1353,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                 isFocused && 'shadow-md'
               )}
             >
-              <div className="flex gap-2">
+              <div className="flex gap-1.5 rounded-full border border-border/70 bg-white/95 p-1 shadow-[0_10px_28px_-20px_rgb(15_23_42_/_0.6),0_1px_2px_rgb(15_23_42_/_0.08)] dark:bg-background/95">
                 <Button
                   onClick={() => {
                     setIsCollapsed(false);
@@ -1364,19 +1365,12 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   }}
                   variant={'ghost'}
                   sizeVariant={'sm'}
-                  className="rounded-full"
-                  style={{
-                    height: '34px',
-                    padding: '0 14px',
-                    backgroundColor: 'rgba(255,255,255,0.035)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    color: '#aaa7a0'
-                  }}
+                  className="h-8 rounded-full px-3.5 text-[13px] font-medium text-foreground hover:bg-muted-low"
                   tooltipSide="bottom"
                   tooltip={t('message_card.reply')}
                   shortcut={isLastCard ? 'R' : undefined}
                 >
-                  <MonoIcon className="mr-2 shrink-0" type={'Reply'} />
+                  <Reply className="mr-2 h-4 w-4 shrink-0" strokeWidth={1.9} />
                   {t('message_card.reply')}
                 </Button>
                 <Button
@@ -1390,19 +1384,12 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   }}
                   variant={'ghost'}
                   sizeVariant={'sm'}
-                  className="rounded-full"
-                  style={{
-                    height: '34px',
-                    padding: '0 14px',
-                    backgroundColor: 'rgba(255,255,255,0.035)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    color: '#aaa7a0'
-                  }}
+                  className="h-8 rounded-full px-3.5 text-[13px] font-medium text-foreground hover:bg-muted-low"
                   tooltipSide="bottom"
                   tooltip={t('message_card.forward')}
                   shortcut={isLastCard ? 'F' : undefined}
                 >
-                  <MonoIcon className="mr-2 shrink-0" type={'Forward'} />
+                  <Forward className="mr-2 h-4 w-4 shrink-0" strokeWidth={1.9} />
                   {t('message_card.forward')}
                 </Button>
               </div>
