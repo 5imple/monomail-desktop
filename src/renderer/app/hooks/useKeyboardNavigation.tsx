@@ -367,6 +367,10 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       // Use preferred index if provided, otherwise use pivot index
       const targetIndex = preferredIndex !== undefined ? preferredIndex : pivotIndexMap[area];
 
+      if (area === 'thread-list' && preferredIndex !== undefined && targetIndex < 0) {
+        return -1;
+      }
+
       // Clamp to valid bounds for all areas
       if (targetIndex > maxIndex) {
         return area === 'message-list' ? maxIndex : 0; // For message-list, go to last; others go to first
@@ -912,6 +916,10 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
 
     // Skip if area is disabled
     if (isAreaDisabled(area)) {
+      return;
+    }
+
+    if (!isKeyboardMode || index < 0) {
       return;
     }
 
