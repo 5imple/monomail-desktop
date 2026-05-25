@@ -164,8 +164,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
   // Refs to main container elements for scrolling and focus visualization
   const areaRefs = useRef<Partial<AreaRefsMap>>({});
 
-  // Get filteredThreadIds from the context
-  const { filteredThreadIds, setSelectedThreads } = useThreadAtom();
+  const { setSelectedThreads } = useThreadAtom();
 
   // Define area configurations with orientation and navigation relationships
   const areaConfigs: Record<FocusableArea, AreaConfig> = {
@@ -281,10 +280,13 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
         case 'pin-header':
           return navigationState.pinHeaderItems;
         case 'thread-list': {
-          // For thread-list, use filteredThreadIds to create navigation items
-          return filteredThreadIds.map((id) => ({
-            id,
-            ref: document.querySelector(`[data-thread="${id}"]`) as HTMLElement
+          // Build items straight from the rendered rows so the nav always
+          // matches what's on screen. The list renders from the context's
+          // threadIds, which can diverge from the filteredThreadIds atom — when
+          // it did, the nav had zero items and arrow keys did nothing.
+          return Array.from(document.querySelectorAll<HTMLElement>('[data-thread]')).map((el) => ({
+            id: el.getAttribute('data-thread') ?? '',
+            ref: el
           }));
         }
         case 'display-header':
@@ -297,7 +299,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
           return [];
       }
     },
-    [navigationState, filteredThreadIds]
+    [navigationState]
   );
 
   /**
@@ -684,7 +686,9 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       // (instead of jumping from a stale position).
       let current = focusPosition;
       if (enteringKeyboardMode && hoveredThreadIdRef.current) {
-        const hoveredIndex = filteredThreadIds.indexOf(hoveredThreadIdRef.current);
+        const hoveredIndex = getItemList('thread-list').findIndex(
+          (item) => item.id === hoveredThreadIdRef.current
+        );
         if (hoveredIndex >= 0) {
           current = { area: 'thread-list', index: hoveredIndex };
         }
@@ -840,8 +844,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       getSafeIndex,
       updatePivotIndex,
       findNextEnabledArea,
-      isKeyboardMode,
-      filteredThreadIds
+      isKeyboardMode
     ]
   );
 
@@ -1188,12 +1191,12 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       activateFocusedItem();
       return;
     }
-    const threadId = filteredThreadIds[focusPosition.index];
+    const threadId = getItemList('thread-list')[focusPosition.index]?.id;
     if (!threadId) return;
     setSelectedThreads((prev) =>
       prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
     );
-  }, [focusPosition, filteredThreadIds, setSelectedThreads, activateFocusedItem]);
+  }, [focusPosition, getItemList, setSelectedThreads, activateFocusedItem]);
 
   // Enter opens the focused item.
   useHotkeys(
