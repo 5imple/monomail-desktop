@@ -32,17 +32,17 @@ module.exports = {
           'BlinkMacSystemFont',
           'sans-serif'
         ],
-        // IBM Plex Mono for tracked uppercase labels (FROM/TO/SUBJECT,
-        // date dividers, kbd badges, file sizes, version info, timestamps).
-        // Components opt in via the `font-mono` utility.
+        // The `font-mono` utility now renders the primary sans typeface
+        // (Inter). The IBM Plex Mono label "signature" (FROM/TO/SUBJECT, date
+        // dividers, file counts/sizes, timestamps) was dropped app-wide. Real
+        // monospace (code/pre/kbd) keeps Plex Mono via element selectors.
         mono: [
-          'IBM Plex Mono',
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'Consolas',
-          'Liberation Mono',
-          'monospace'
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif'
         ]
       },
       transitionTimingFunction: {

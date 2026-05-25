@@ -308,13 +308,12 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* IBM Plex Mono is Newton's signature for gutter labels (FROM, TO,
-     SUBJECT, TODAY, IN 30 MIN), kbd badges, timestamps, and file sizes.
-     Components opt in via Tailwind's `font-mono` utility. */
+  /* Real monospace stays only for code/pre/kbd. The `font-mono` utility no
+     longer maps to IBM Plex Mono (see tailwind.config.js) — the tracked
+     uppercase label "signature" now uses the primary sans typeface. */
   code,
   pre,
-  kbd,
-  .font-mono {
+  kbd {
     font-family:
       'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   }
