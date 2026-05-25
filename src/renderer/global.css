@@ -284,6 +284,13 @@
       sans-serif;
   }
 
+  /* Email reading body: match Gmail's default (~13px "Normal") so unstyled
+     messages don't render oversized. Emails that set their own font-size are
+     unaffected. */
+  .email-document {
+    font-size: 13px;
+  }
+
   html,
   body,
   #root {
