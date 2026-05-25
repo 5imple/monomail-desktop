@@ -37,7 +37,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { gmailStatusInvalid, calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
   const { globalDraftWindows } = useComposeWindowAtom();
-  const { setActiveThreadId } = useThreadAtom();
+  const { activeThreadId, setActiveThreadId } = useThreadAtom();
   const [isLoaded, setIsLoaded] = useState(false);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
   const { accounts } = useAuth();
@@ -50,6 +50,44 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
       setActiveThreadId(threadIdParam);
     }
   }, [setActiveThreadId, threadIdParam]);
+
+  // Escape returns to the previous view: close the open email (back to the
+  // list). Dialogs/menus handle their own Escape (Radix), and we don't hijack
+  // it while the user is typing in a field. Capture phase so we can read the
+  // still-open dialog state before Radix dismisses it.
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+
+      const el = document.activeElement as HTMLElement | null;
+      if (
+        el &&
+        (el.tagName === 'INPUT' ||
+          el.tagName === 'TEXTAREA' ||
+          el.tagName === 'SELECT' ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+
+      // An open dialog/menu owns Escape — let it close instead of navigating.
+      if (
+        document.querySelector(
+          '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"]'
+        )
+      ) {
+        return;
+      }
+
+      if (activeThreadId) {
+        e.preventDefault();
+        setActiveThreadId(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape, true);
+    return () => document.removeEventListener('keydown', handleEscape, true);
+  }, [activeThreadId, setActiveThreadId]);
 
   useEffect(() => {
     const handleCommandTrigger = (commandId: CommandType) => {
