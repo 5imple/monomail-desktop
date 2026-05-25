@@ -205,7 +205,8 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       });
     };
 
-    const showHeaderMessageActions = !isCollapsed && !preview && !item.labelIds.includes('DRAFT') && !draft;
+    const showHeaderMessageActions =
+      !isCollapsed && !preview && !item.labelIds.includes('DRAFT') && !draft;
 
     const handleReplyMessage = (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -1390,13 +1391,28 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   <>
                     <div className="p-4 pt-0">
                       <Button
-                        className="px-2"
-                        variant="secondary"
-                        tooltip={t('tooltip.show_quoted')}
+                        aria-expanded={showQuotedContent}
+                        className="h-7 gap-1.5 rounded px-2 text-xs text-muted-foreground hover:text-foreground"
+                        variant="ghost"
+                        tooltip={t(
+                          showQuotedContent
+                            ? 'message_card.hide_quoted'
+                            : 'message_card.show_quoted'
+                        )}
                         typeVariant={'inline'}
                         onClick={() => setShowQuotedContent(!showQuotedContent)}
                       >
-                        <MonoIcon type={'MoreHorizontal'} className="h-4 w-4" />
+                        <MonoIcon
+                          type={showQuotedContent ? 'ChevronUp' : 'ChevronDown'}
+                          className="h-3.5 w-3.5"
+                        />
+                        <span>
+                          {t(
+                            showQuotedContent
+                              ? 'message_card.hide_quoted'
+                              : 'message_card.show_quoted'
+                          )}
+                        </span>
                       </Button>
                     </div>
 

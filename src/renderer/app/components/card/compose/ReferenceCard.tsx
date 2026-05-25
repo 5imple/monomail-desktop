@@ -54,6 +54,9 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
   const subject = item.subject.length > 0 ? item.subject : '(No subject)';
   const sender = item.from?.name?.trim() || item.from?.email || 'Original message';
   const summary = type === 'reply' ? `Replying to ${sender}` : `Forwarding ${sender}`;
+  const expandedLabel = isExpanded
+    ? t('message_card.hide_original')
+    : t('message_card.show_original');
 
   useEffect(() => {
     if (!contentRef.current) return;
@@ -125,14 +128,16 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
             </div>
           </div>
           <Button
+            aria-expanded={isExpanded}
             onClick={toggleExpand}
-            tooltip={isExpanded ? t('tooltip.minimize') : t('tooltip.maximize')}
+            tooltip={expandedLabel}
             variant="ghost"
             sizeVariant="sm"
-            typeVariant="icon"
-            className="shrink-0 text-muted-foreground hover:text-foreground"
+            typeVariant="inline"
+            className="h-7 shrink-0 gap-1.5 rounded px-2 text-xs text-muted-foreground hover:text-foreground"
           >
-            {isExpanded ? <MonoIcon type="Minimize" /> : <MonoIcon type="Maximize" />}
+            <MonoIcon type={isExpanded ? 'ChevronUp' : 'ChevronDown'} className="h-3.5 w-3.5" />
+            <span>{expandedLabel}</span>
           </Button>
         </div>
       </CardHeader>
