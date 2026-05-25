@@ -6,6 +6,7 @@ import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadI
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
 import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
+import { useThreadReadMotion } from '@/renderer/app/components/mail/thread/useThreadReadMotion';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
@@ -74,9 +75,12 @@ export const ThreadListCozyItem = React.memo(
       const [opacity, setOpacity] = useState(0);
       const containerRef = useRef<HTMLDivElement | null>(null);
       const hasBeenVisibleRef = useRef(false);
+      const lastThreadRef = useRef<MonoThread | null>(null);
 
       // No memo on currentThread to ensure it always has the latest data
-      const currentThread = threadsMap[threadId];
+      const liveThread = threadsMap[threadId] ?? null;
+      if (liveThread) lastThreadRef.current = liveThread;
+      const currentThread = liveThread ?? lastThreadRef.current;
 
       const senderAvatarRecipient = useMemo(() => {
         if (!currentThread) return { email: '', name: '' };
@@ -211,9 +215,10 @@ export const ThreadListCozyItem = React.memo(
 
       // Debugging removed to clean up console
 
-      const isUnread = currentThread?.labelIds.includes('UNREAD');
+      const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
       const isChecked = selectedThreads.includes(threadId);
       const isActive = activeThreadId === threadId;
+      const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null);
 
       // Newton senders renderer (inlined — identical to ThreadListItem's
       // version). DraggableSender handles dnd-kit drag handles for "Me"
@@ -278,6 +283,7 @@ export const ThreadListCozyItem = React.memo(
           aria-pressed={isChecked}
           data-thread={threadId}
           data-thread-focused={isActive}
+          data-read-motion={readMotion ?? undefined}
           data-thread-selected={isChecked}
           tabIndex={0}
           role="button"
@@ -287,7 +293,7 @@ export const ThreadListCozyItem = React.memo(
           }}
           className={cn(
             // `group` enables hover-revealed children (e.g. SnoozeButton).
-            'group relative mx-[10%] rounded-md transition-colors transition-opacity duration-150 duration-200 ease-out',
+            'group relative mx-[10%] overflow-hidden rounded-md transition-colors transition-opacity duration-150 duration-200 ease-out',
             isChecked
               ? '!bg-foreground/[0.07] ring-1 ring-inset ring-foreground/10 hover:!bg-foreground/[0.07] dark:!bg-foreground/[0.12] dark:ring-foreground/15 dark:hover:!bg-foreground/[0.12]'
               : isActive
@@ -324,6 +330,7 @@ export const ThreadListCozyItem = React.memo(
                     {isUnread && !isChecked && (
                       <span
                         aria-hidden
+                        data-unread-dot
                         className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 transition-opacity duration-150 group-hover:opacity-0"
                       />
                     )}

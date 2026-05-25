@@ -12,6 +12,7 @@ import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
 import { useSyncThread } from '@/renderer/app/context/SyncThreadContext';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { AnimatePresence, motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 
 interface ThreadListProps {
@@ -196,16 +197,32 @@ function ThreadList({ onScroll }: ThreadListProps) {
                 </span>
                 {groupIndex === 0 && <FilterOptionDropdownMenu showLabel />}
               </div>
-              {group.ids.map((threadId) => (
-                <MemoizedThreadItem
-                  key={threadId}
-                  threadId={threadId}
-                  onClick={handleItemClick}
-                  ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
-                  density={preference.appearance.density}
-                  index={threadIndexMap.get(threadId) ?? 0}
-                />
-              ))}
+              <AnimatePresence initial={false} mode="popLayout">
+                {group.ids.map((threadId) => (
+                  <motion.div
+                    key={threadId}
+                    ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
+                    layout
+                    initial={false}
+                    animate={{ opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' }}
+                    exit={{
+                      opacity: 0,
+                      x: 56,
+                      scale: 0.985,
+                      filter: 'blur(2px)',
+                      transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] }
+                    }}
+                    transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
+                  >
+                    <MemoizedThreadItem
+                      threadId={threadId}
+                      onClick={handleItemClick}
+                      density={preference.appearance.density}
+                      index={threadIndexMap.get(threadId) ?? 0}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           ))}
           {groupedThreads.length === 0 &&
