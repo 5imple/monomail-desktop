@@ -1,7 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import InboxIcon from '@/renderer/app/components/icons/InboxIcon';
-import type { MaterialSymbol } from 'material-symbols';
-import { Send, Star, type LucideIcon } from 'lucide-react';
+import { Clock3, Inbox, Send, Star, type LucideIcon } from 'lucide-react';
 import { cn } from '@/renderer/app/lib/utils';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
@@ -9,8 +7,9 @@ import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 type MailNavItemBase = {
   id: 'inbox' | 'snooze' | 'starred' | 'sent';
   label: string;
+  Icon: LucideIcon;
   shortcut: string;
-} & ({ icon: MaterialSymbol; LucideIcon?: never } | { icon?: never; LucideIcon: LucideIcon });
+};
 
 type MailNavItem = MailNavItemBase &
   ({ query: string; layout?: never } | { query?: never; layout: 'LATER' });
@@ -27,18 +26,14 @@ const NAV_ITEMS: MailNavItem[] = [
   {
     id: 'inbox',
     label: 'Inbox',
-    icon: 'mark_email_unread',
+    Icon: Inbox,
     query: 'category:primary',
     shortcut: 'G I'
   },
-  { id: 'snooze', label: 'Later', icon: 'snooze', layout: 'LATER' as const, shortcut: 'G S' },
-  { id: 'starred', label: 'Starred', LucideIcon: Star, query: 'is:starred', shortcut: 'G T' },
-  { id: 'sent', label: 'Sent', LucideIcon: Send, query: 'in:sent', shortcut: 'G E' }
+  { id: 'snooze', label: 'Later', Icon: Clock3, layout: 'LATER' as const, shortcut: 'G S' },
+  { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G T' },
+  { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G E' }
 ];
-
-const TITLEBAR_NAV_ICON_SIZE = 15;
-const TITLEBAR_NAV_ICON_WEIGHT = 300;
-const TITLEBAR_NAV_ICON_GRADE = 0;
 
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -114,20 +109,11 @@ const MailNavTabs = React.memo(() => {
                 : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
             )}
           >
-            {item.LucideIcon ? (
-              <item.LucideIcon
-                className="h-[15px] w-[15px] shrink-0"
-                strokeWidth={1.8}
-                aria-hidden="true"
-              />
-            ) : (
-              <InboxIcon
-                symbol={item.icon}
-                size={TITLEBAR_NAV_ICON_SIZE}
-                weight={TITLEBAR_NAV_ICON_WEIGHT}
-                grade={TITLEBAR_NAV_ICON_GRADE}
-              />
-            )}
+            <item.Icon
+              className="h-[15px] w-[15px] shrink-0"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
             <span>{item.label}</span>
             {item.id === 'inbox' && inboxUnreadCount > 0 && (
               <span
