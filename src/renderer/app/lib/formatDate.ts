@@ -17,6 +17,24 @@ export const formatDate = (
   return formattedDate;
 };
 
+export const formatMessageHeaderDate = (
+  timestamp: number,
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone
+): string => {
+  const date = toZonedTime(new Date(timestamp), timeZone);
+
+  return formatInTimeZone(date, timeZone, 'eee, MMM d');
+};
+
+export const formatFullDateTime = (
+  timestamp: number,
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone
+): string => {
+  const date = toZonedTime(new Date(timestamp), timeZone);
+
+  return formatInTimeZone(date, timeZone, "eee, MMM d, yyyy 'at' h:mm a");
+};
+
 export const formatListDate = (
   timestamp: number,
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone

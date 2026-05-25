@@ -22,7 +22,12 @@ import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
-import { formatDate, formatListDate, formatRelativeTime } from '@/renderer/app/lib/formatDate';
+import {
+  formatFullDateTime,
+  formatListDate,
+  formatMessageHeaderDate,
+  formatRelativeTime
+} from '@/renderer/app/lib/formatDate';
 import { isCalendarAttachment } from '@/renderer/app/lib/icsParser';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
@@ -871,9 +876,13 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   </div>
                   {currentMessage.timestamp && (
                     <div className="ml-auto flex items-center gap-2 text-muted-foreground">
-                      <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums">
-                        {formatDate(currentMessage.timestamp)}
-                      </span>
+                      <time
+                        className="shrink-0 whitespace-nowrap text-[11px] tabular-nums"
+                        dateTime={new Date(currentMessage.timestamp).toISOString()}
+                        title={formatFullDateTime(currentMessage.timestamp)}
+                      >
+                        {formatMessageHeaderDate(currentMessage.timestamp)}
+                      </time>
                     </div>
                   )}
                   {showHeaderMessageActions && (
