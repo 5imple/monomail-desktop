@@ -1156,10 +1156,10 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     <div
       tabIndex={-1}
       className={cn(
-        'pointer-events-none absolute inset-0 z-10 origin-bottom transition-all duration-300',
+        'absolute inset-0 z-40 origin-bottom transition-all duration-300',
         isMinimized
-          ? 'flex items-end justify-center px-6 pb-6'
-          : 'flex flex-col bg-white dark:bg-background'
+          ? 'pointer-events-none flex items-end justify-center px-6 pb-6'
+          : 'pointer-events-auto flex flex-col bg-white dark:bg-background'
       )}
     >
       {!isMinimized && (
