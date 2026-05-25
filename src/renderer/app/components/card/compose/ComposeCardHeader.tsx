@@ -1,12 +1,6 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
 import { Option } from '@/renderer/app/components/ui/multi-selector';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import ContactSuggestionInput from '@/renderer/app/containers/input/ContactSuggestionInput';
@@ -65,25 +59,18 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
         >
           <MonoIcon type="ChevronUp" className="h-3.5 w-3.5" />
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              sizeVariant="sm"
-              typeVariant="icon"
-              className="text-muted-foreground"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MonoIcon type="X" className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onClose()}>
-              <MonoIcon type="X" className="mr-2 h-4 w-4" />
-              <span>{t('tooltip.close')}</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          variant="ghost"
+          sizeVariant="sm"
+          typeVariant="icon"
+          className="text-muted-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+        >
+          <MonoIcon type="X" className="h-3.5 w-3.5" />
+        </Button>
       </div>
     );
   }
@@ -181,25 +168,17 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           >
             <MonoIcon type={isMaximized ? 'Minimize' : 'Maximize'} className="h-3.5 w-3.5" />
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                tabIndex={-1}
-                variant="ghost"
-                sizeVariant="sm"
-                typeVariant="icon"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <MonoIcon type="X" className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onClose()}>
-                <MonoIcon type="X" className="mr-2 h-4 w-4" />
-                <span>{t('tooltip.close')}</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            tabIndex={-1}
+            onClick={() => onClose()}
+            tooltip={t('tooltip.close')}
+            variant="ghost"
+            sizeVariant="sm"
+            typeVariant="icon"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <MonoIcon type="X" className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
 
