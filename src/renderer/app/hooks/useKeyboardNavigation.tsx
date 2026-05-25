@@ -93,6 +93,12 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
 
   // Track if we're in keyboard navigation mode
   const [isKeyboardMode, setIsKeyboardMode] = useState(false);
+  const isKeyboardModeRef = useRef(false);
+  isKeyboardModeRef.current = isKeyboardMode;
+
+  // The thread row the mouse is over, so arrow nav can start from it when the
+  // user switches from mouse hover to the keyboard.
+  const hoveredThreadIdRef = useRef<string | null>(null);
 
   // Track if we're currently applying programmatic focus to prevent loops
   const isProgrammaticFocus = useRef(false);
@@ -668,11 +674,21 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
    */
   const handleArrowNavigation = useCallback(
     (key: string) => {
+      const enteringKeyboardMode = !isKeyboardMode;
       // Enter keyboard mode when arrow keys are used
       setIsKeyboardMode(true);
 
-      // Get current state directly instead of using setState callback
-      const current = focusPosition;
+      // Get current state directly instead of using setState callback. When the
+      // user switches from mouse hover to the keyboard, start from the row the
+      // mouse is over so the highlight continues from where they're looking
+      // (instead of jumping from a stale position).
+      let current = focusPosition;
+      if (enteringKeyboardMode && hoveredThreadIdRef.current) {
+        const hoveredIndex = filteredThreadIds.indexOf(hoveredThreadIdRef.current);
+        if (hoveredIndex >= 0) {
+          current = { area: 'thread-list', index: hoveredIndex };
+        }
+      }
       const { area, index } = current;
       const config = areaConfigs[area];
       const currentItemList = getItemList(area);
@@ -818,7 +834,15 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
         }
       }
     },
-    [focusPosition, getItemList, getSafeIndex, updatePivotIndex, findNextEnabledArea]
+    [
+      focusPosition,
+      getItemList,
+      getSafeIndex,
+      updatePivotIndex,
+      findNextEnabledArea,
+      isKeyboardMode,
+      filteredThreadIds
+    ]
   );
 
   const resetMessageListToLast = useCallback(() => {
@@ -941,9 +965,11 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     applyRealFocus();
   }, [focusPosition]);
 
-  // Handle mouse interactions - exit keyboard mode
+  // Exit keyboard mode on real mouse interaction, and track the hovered thread
+  // row so arrow nav can resume from where the mouse is.
   useEffect(() => {
-    const handleMouseInteraction = () => {
+    const exitKeyboardMode = () => {
+      if (!isKeyboardModeRef.current) return;
       setIsKeyboardMode(false);
       // Remove all keyboard focus indicators
       document.querySelectorAll('.keyboard-focused').forEach((el) => {
@@ -955,8 +981,26 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       });
     };
 
-    document.addEventListener('mousedown', handleMouseInteraction);
-    return () => document.removeEventListener('mousedown', handleMouseInteraction);
+    let lastX = -1;
+    let lastY = -1;
+    const handleMouseMove = (e: MouseEvent) => {
+      // Smooth-scroll under a stationary cursor fires mousemove with unchanged
+      // coordinates — ignore those so arrow-nav scrolling doesn't drop us out
+      // of keyboard mode (which would flicker the highlight off).
+      if (e.clientX === lastX && e.clientY === lastY) return;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      const row = (e.target as HTMLElement | null)?.closest?.('[data-thread]') ?? null;
+      hoveredThreadIdRef.current = row ? row.getAttribute('data-thread') : null;
+      exitKeyboardMode();
+    };
+
+    document.addEventListener('mousedown', exitKeyboardMode);
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      document.removeEventListener('mousedown', exitKeyboardMode);
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
   }, []);
 
   // Set up global hotkeys for arrow navigation with key repeat support
