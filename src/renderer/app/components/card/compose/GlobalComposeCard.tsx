@@ -88,6 +88,25 @@ const filesToFileList = (files: File[]): FileList => {
   return fileList;
 };
 
+const getDraggedFiles = (dataTransfer: DataTransfer): File[] => {
+  const fileMap = new Map<string, File>();
+
+  Array.from(dataTransfer.files).forEach((file) => {
+    fileMap.set(`${file.name}-${file.size}-${file.lastModified}-${file.type}`, file);
+  });
+
+  Array.from(dataTransfer.items).forEach((item) => {
+    if (item.kind !== 'file') return;
+
+    const file = item.getAsFile();
+    if (file) {
+      fileMap.set(`${file.name}-${file.size}-${file.lastModified}-${file.type}`, file);
+    }
+  });
+
+  return Array.from(fileMap.values());
+};
+
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
   const { preference, getUidFromEmail, accounts } = useAuth();
   const { templates } = useTemplateAtom();
@@ -808,30 +827,45 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     [handleFileChange]
   );
 
-  const isEditorDropEvent = useCallback((event: React.DragEvent<HTMLElement>) => {
-    return event.target instanceof Element && !!event.target.closest('.ProseMirror');
+  const isInlineEditorDropEvent = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (!(event.target instanceof Element)) return false;
+
+    const editorElement = event.target.closest('.ProseMirror') as HTMLElement | null;
+    if (!editorElement) return false;
+
+    if (event.target !== editorElement) return true;
+
+    const contentBottom = Array.from(editorElement.children).reduce((bottom, child) => {
+      return Math.max(bottom, child.getBoundingClientRect().bottom);
+    }, editorElement.getBoundingClientRect().top);
+
+    return event.clientY <= contentBottom + 12;
   }, []);
 
   const hasDraggedFiles = useCallback((event: React.DragEvent<HTMLElement>) => {
-    return Array.from(event.dataTransfer.types).includes('Files');
+    return (
+      event.dataTransfer.files.length > 0 ||
+      Array.from(event.dataTransfer.items).some((item) => item.kind === 'file') ||
+      Array.from(event.dataTransfer.types).includes('Files')
+    );
   }, []);
 
   const handleAttachmentDragEnter = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!hasDraggedFiles(event) || isEditorDropEvent(event)) return;
+      if (!hasDraggedFiles(event) || isInlineEditorDropEvent(event)) return;
 
       event.preventDefault();
       event.stopPropagation();
       setIsAttachmentDropActive(true);
     },
-    [hasDraggedFiles, isEditorDropEvent]
+    [hasDraggedFiles, isInlineEditorDropEvent]
   );
 
   const handleAttachmentDragOver = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
       if (!hasDraggedFiles(event)) return;
 
-      if (isEditorDropEvent(event)) {
+      if (isInlineEditorDropEvent(event)) {
         setIsAttachmentDropActive(false);
         return;
       }
@@ -841,12 +875,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       event.dataTransfer.dropEffect = 'copy';
       setIsAttachmentDropActive(true);
     },
-    [hasDraggedFiles, isEditorDropEvent]
+    [hasDraggedFiles, isInlineEditorDropEvent]
   );
 
   const handleAttachmentDragLeave = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!hasDraggedFiles(event) || isEditorDropEvent(event)) return;
+      if (!hasDraggedFiles(event) || isInlineEditorDropEvent(event)) return;
 
       const currentTarget = event.currentTarget;
       const relatedTarget = event.relatedTarget;
@@ -854,23 +888,23 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
 
       setIsAttachmentDropActive(false);
     },
-    [hasDraggedFiles, isEditorDropEvent]
+    [hasDraggedFiles, isInlineEditorDropEvent]
   );
 
   const handleAttachmentDrop = useCallback(
     async (event: React.DragEvent<HTMLElement>) => {
-      if (!hasDraggedFiles(event) || isEditorDropEvent(event)) return;
+      if (!hasDraggedFiles(event) || isInlineEditorDropEvent(event)) return;
 
       event.preventDefault();
       event.stopPropagation();
       setIsAttachmentDropActive(false);
 
-      const droppedFiles = Array.from(event.dataTransfer.files);
+      const droppedFiles = getDraggedFiles(event.dataTransfer);
       if (droppedFiles.length === 0) return;
 
       await handleFileChange(filesToFileList(droppedFiles));
     },
-    [handleFileChange, hasDraggedFiles, isEditorDropEvent]
+    [handleFileChange, hasDraggedFiles, isInlineEditorDropEvent]
   );
 
   // Handle file delete
@@ -1201,12 +1235,20 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           {!isMinimized && (
             <>
               <CardContent
-                className="no-drag min-h-0 flex-1 overflow-hidden p-0"
-                onDragEnter={handleAttachmentDragEnter}
-                onDragOver={handleAttachmentDragOver}
-                onDragLeave={handleAttachmentDragLeave}
-                onDrop={handleAttachmentDrop}
+                className="no-drag relative min-h-0 flex-1 overflow-hidden p-0"
+                onDragEnterCapture={handleAttachmentDragEnter}
+                onDragOverCapture={handleAttachmentDragOver}
+                onDragLeaveCapture={handleAttachmentDragLeave}
+                onDropCapture={handleAttachmentDrop}
               >
+                {isAttachmentDropActive && (
+                  <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-background/70 backdrop-blur-[1px]">
+                    <div className="flex items-center gap-2 rounded-md border border-chart-1/40 bg-card px-3 py-2 text-[13px] font-medium text-foreground shadow-sm">
+                      <MonoIcon type="Paperclip" className="h-4 w-4 text-chart-1" />
+                      <span>Drop file here</span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex h-full min-h-0 flex-col">
                   <div className="px-9 pb-1 pt-3">
                     <Input
@@ -1270,10 +1312,10 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               </CardContent>
               <div
                 className={cn('transition-colors', isAttachmentDropActive && 'bg-chart-1/5')}
-                onDragEnter={handleAttachmentDragEnter}
-                onDragOver={handleAttachmentDragOver}
-                onDragLeave={handleAttachmentDragLeave}
-                onDrop={handleAttachmentDrop}
+                onDragEnterCapture={handleAttachmentDragEnter}
+                onDragOverCapture={handleAttachmentDragOver}
+                onDragLeaveCapture={handleAttachmentDragLeave}
+                onDropCapture={handleAttachmentDrop}
               >
                 <ComposeCardFooter
                   draft={composeDraft}
