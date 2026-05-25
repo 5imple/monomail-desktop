@@ -1,9 +1,11 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
+import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
+import { useThreadReadMotion } from '@/renderer/app/components/mail/thread/useThreadReadMotion';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
@@ -75,10 +77,13 @@ export const ThreadListDenseItem = React.memo(
       const containerRef = useRef<HTMLDivElement | null>(null);
       const itemRef = useRef<HTMLDivElement | null>(null);
       const hasBeenVisibleRef = useRef(false);
+      const lastThreadRef = useRef<MonoThread | null>(null);
       const executeCommand = useExecuteCommand();
 
       // Use direct access to thread instead of memoizing to ensure we always have latest data
-      const currentThread = threadsMap[threadId];
+      const liveThread = threadsMap[threadId] ?? null;
+      if (liveThread) lastThreadRef.current = liveThread;
+      const currentThread = liveThread ?? lastThreadRef.current;
 
       const senderAvatarRecipient = useMemo(() => {
         if (!currentThread) return { email: '', name: '' };
@@ -220,9 +225,10 @@ export const ThreadListDenseItem = React.memo(
         ];
       }, [currentThread?.labelIds]); // Specific dependency on labelIds for reactivity
 
-      const isUnread = currentThread?.labelIds.includes('UNREAD');
+      const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
       const isChecked = selectedThreads.includes(threadId);
       const isActive = activeThreadId === threadId;
+      const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null);
 
       // Same sender renderer used by the other two row variants.
       const renderSenderNames = () => {
@@ -285,6 +291,7 @@ export const ThreadListDenseItem = React.memo(
           aria-pressed={isChecked}
           data-thread={threadId}
           data-thread-focused={isActive}
+          data-read-motion={readMotion ?? undefined}
           style={{
             transitionDelay:
               opacity === 0 && !hasBeenVisibleRef.current ? `${Math.min(index, 12) * 20}ms` : '0ms'
@@ -293,7 +300,7 @@ export const ThreadListDenseItem = React.memo(
           tabIndex={0}
           role="button"
           className={cn(
-            'group relative mx-[10%] rounded-md transition-colors transition-opacity duration-150 duration-200 ease-out',
+            'group relative mx-[10%] overflow-hidden rounded-md transition-colors transition-opacity duration-150 duration-200 ease-out',
             isChecked
               ? '!bg-foreground/[0.07] ring-1 ring-inset ring-foreground/10 hover:!bg-foreground/[0.07] dark:!bg-foreground/[0.12] dark:ring-foreground/15 dark:hover:!bg-foreground/[0.12]'
               : isActive
@@ -331,6 +338,7 @@ export const ThreadListDenseItem = React.memo(
                       {isUnread && !isChecked && (
                         <span
                           aria-hidden
+                          data-unread-dot
                           className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 transition-opacity duration-150 group-hover:opacity-0"
                         />
                       )}

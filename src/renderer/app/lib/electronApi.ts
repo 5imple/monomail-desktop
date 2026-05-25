@@ -163,6 +163,15 @@ interface IpcRenderer {
     sendAt: string;
   }) => Promise<QueueResult<QueueScheduleRecord>>;
   queueSendNow: (scheduleId: string) => Promise<QueueResult<{ ok: boolean; messageId: string }>>;
+  reminderCreate: (req: {
+    uid: string;
+    threadId: string;
+    messageId?: string;
+    subject?: string;
+    reminderAt: string;
+  }) => Promise<QueueResult<{ id: string }>>;
+  reminderList: () => Promise<QueueResult<{ items: unknown[] }>>;
+  reminderDelete: (reminderId: string) => Promise<QueueResult<{ ok: boolean }>>;
   /**
    * Set the app offline
    * @param {boolean} status - Offline status
@@ -526,6 +535,18 @@ const electronApi: IpcRenderer = {
   },
   queueSendNow: async (scheduleId) => {
     if (isElectron) return window.electronBridge.queueSendNow(scheduleId);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  reminderCreate: async (req) => {
+    if (isElectron) return window.electronBridge.reminderCreate(req);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  reminderList: async () => {
+    if (isElectron) return window.electronBridge.reminderList();
+    return { ok: false, error: 'Not in Electron' };
+  },
+  reminderDelete: async (reminderId) => {
+    if (isElectron) return window.electronBridge.reminderDelete(reminderId);
     return { ok: false, error: 'Not in Electron' };
   },
   setActiveUid: async (uid) => {

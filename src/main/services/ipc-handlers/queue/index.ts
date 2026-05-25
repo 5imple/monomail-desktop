@@ -1,4 +1,5 @@
 import { queueApi } from '@/main/api/queue/queueApi';
+import { schedulerService } from '@/main/services/scheduler/SchedulerService';
 import type {
   CreateScheduleRequest,
   CreateSnoozeRequest
@@ -29,21 +30,21 @@ function wrap<T>(fn: () => Promise<T>): Promise<Result<T>> {
 
 export function registerQueueHandlers() {
   ipcMain.handle('main:queue:snooze', (_, req: CreateSnoozeRequest) =>
-    wrap(() => queueApi.createSnooze(req))
+    wrap(() => schedulerService.createSnooze(req))
   );
 
   ipcMain.handle('main:queue:list-snoozed', (_, accountId: string) =>
-    wrap(() => queueApi.listSnoozes(accountId))
+    wrap(async () => schedulerService.listSnoozes(accountId))
   );
 
   ipcMain.handle('main:queue:unsnooze', (_, snoozeId: string) =>
-    wrap(() => queueApi.unsnooze(snoozeId))
+    wrap(() => schedulerService.unsnooze(snoozeId))
   );
 
   ipcMain.handle(
     'main:queue:reschedule-snooze',
     (_, args: { snoozeId: string; snoozeUntil: string }) =>
-      wrap(() => queueApi.rescheduleSnooze(args.snoozeId, args.snoozeUntil))
+      wrap(() => schedulerService.rescheduleSnooze(args.snoozeId, args.snoozeUntil))
   );
 
   ipcMain.handle('main:queue:schedule', (_, req: CreateScheduleRequest) =>
@@ -66,5 +67,16 @@ export function registerQueueHandlers() {
 
   ipcMain.handle('main:queue:send-now', (_, scheduleId: string) =>
     wrap(() => queueApi.sendScheduledNow(scheduleId))
+  );
+
+  // ── reminders (local scheduler) ──
+  ipcMain.handle(
+    'main:reminder:create',
+    (_, req: { uid: string; threadId: string; subject?: string; reminderAt: string }) =>
+      wrap(async () => schedulerService.createReminder(req))
+  );
+  ipcMain.handle('main:reminder:list', () => wrap(async () => schedulerService.listReminders()));
+  ipcMain.handle('main:reminder:delete', (_, reminderId: string) =>
+    wrap(async () => schedulerService.deleteReminder(reminderId))
   );
 }

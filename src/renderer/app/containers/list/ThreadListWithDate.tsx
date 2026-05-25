@@ -15,6 +15,7 @@ import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useTranslation } from 'react-i18next';
 import DateSeparator from '@/renderer/app/components/mail/thread/DateSeparator';
 import { ScrollAreaScrollbar } from '@radix-ui/react-scroll-area';
+import { AnimatePresence, motion } from 'motion/react';
 
 // Define types for thread processing
 interface ThreadWithTimestamp {
@@ -355,28 +356,42 @@ function ThreadListWithDate({ isScrolled, setKeyPressed, onScroll }: ThreadListW
                   waterfall instead of a flash of unstyled list. New rows
                   appearing later via pagination also animate, which makes
                   paginated loads feel intentional. */}
-              {group.threads.map((threadId, index) => {
-                const isLastThreadInList =
-                  index === group.threads.length - 1 && groupIndex === processedThreads.length - 1;
+              <AnimatePresence initial={false} mode="popLayout">
+                {group.threads.map((threadId, index) => {
+                  const isLastThreadInList =
+                    index === group.threads.length - 1 &&
+                    groupIndex === processedThreads.length - 1;
 
-                return (
-                  <div
-                    key={threadId}
-                    ref={isLastThreadInList ? lastThreadElementRef : null}
-                    className="duration-300 animate-in fade-in-0"
-                    style={{
-                      animationDelay: `${Math.min(index * 40, 400)}ms`,
-                      animationFillMode: 'both'
-                    }}
-                  >
-                    <MemoizedThreadItem
-                      threadId={threadId}
-                      onClick={handleItemClick}
-                      density={preference.appearance.density}
-                    />
-                  </div>
-                );
-              })}
+                  return (
+                    <motion.div
+                      key={threadId}
+                      ref={isLastThreadInList ? lastThreadElementRef : null}
+                      layout
+                      initial={false}
+                      animate={{ opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' }}
+                      exit={{
+                        opacity: 0,
+                        x: 56,
+                        scale: 0.985,
+                        filter: 'blur(2px)',
+                        transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] }
+                      }}
+                      transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
+                      className="duration-300 animate-in fade-in-0"
+                      style={{
+                        animationDelay: `${Math.min(index * 40, 400)}ms`,
+                        animationFillMode: 'both'
+                      }}
+                    >
+                      <MemoizedThreadItem
+                        threadId={threadId}
+                        onClick={handleItemClick}
+                        density={preference.appearance.density}
+                      />
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </React.Fragment>
           ))}
 
