@@ -86,13 +86,25 @@ export const useRegisterHotkeys = (options = {}) => {
       check: (thread) => thread.labelIds.includes('INBOX'),
       trueCommand: 'THREAD_DONE',
       falseCommand: 'THREAD_UNDONE'
+    },
+    'MOD+Backspace': {
+      // Trash/untrash hotkey
+      check: (thread) => thread.labelIds.includes('TRASH'),
+      trueCommand: 'THREAD_UNTRASH',
+      falseCommand: 'THREAD_TRASH'
+    },
+    Backspace: {
+      // Trash/untrash hotkey
+      check: (thread) => thread.labelIds.includes('TRASH'),
+      trueCommand: 'THREAD_UNTRASH',
+      falseCommand: 'THREAD_TRASH'
+    },
+    Delete: {
+      // Trash/untrash hotkey
+      check: (thread) => thread.labelIds.includes('TRASH'),
+      trueCommand: 'THREAD_UNTRASH',
+      falseCommand: 'THREAD_TRASH'
     }
-    // Backspace: {
-    //   // Trash/untrash hotkey
-    //   check: (thread) => thread.labelIds.includes('TRASH'),
-    //   trueCommand: 'THREAD_UNTRASH',
-    //   falseCommand: 'THREAD_TRASH'
-    // }
   };
 
   const getThreadHotkeyTarget = useCallback((): ThreadHotkeyTarget => {
@@ -151,7 +163,9 @@ export const useRegisterHotkeys = (options = {}) => {
       'THREAD_STAR',
       'THREAD_UNSTAR',
       'THREAD_DONE',
-      'THREAD_UNDONE'
+      'THREAD_UNDONE',
+      'THREAD_TRASH',
+      'THREAD_UNTRASH'
     ]);
 
     return allCommands.filter((cmd) => !pairedCommandsSet.has(cmd));
