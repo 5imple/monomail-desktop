@@ -20,15 +20,15 @@ import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAt
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { CommandType } from '@/renderer/app/types';
+import { CalendarDays, CircleUserRound, SquarePen } from 'lucide-react';
 import { FC, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
 interface AppLayoutProps {}
 
-const TITLEBAR_ACTION_ICON_SIZE = 17;
-const TITLEBAR_ACTION_ICON_WEIGHT = 300;
-const TITLEBAR_ACTION_ICON_GRADE = 0;
+const TITLEBAR_ACTION_ICON_CLASS = 'h-[17px] w-[17px]';
+const TITLEBAR_ACTION_ICON_STROKE_WIDTH = 1.8;
 
 const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { t } = useTranslation();
@@ -132,11 +132,10 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip="Compose"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
               >
-                <InboxIcon
-                  type="Edit"
-                  size={TITLEBAR_ACTION_ICON_SIZE}
-                  weight={TITLEBAR_ACTION_ICON_WEIGHT}
-                  grade={TITLEBAR_ACTION_ICON_GRADE}
+                <SquarePen
+                  className={TITLEBAR_ACTION_ICON_CLASS}
+                  strokeWidth={TITLEBAR_ACTION_ICON_STROKE_WIDTH}
+                  aria-hidden="true"
                 />
               </Button>
               <Button
@@ -147,11 +146,10 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip="Accounts"
                 onClick={() => openDialog('preference', { defaultPage: 'integration' })}
               >
-                <InboxIcon
-                  type="UserIcon"
-                  size={TITLEBAR_ACTION_ICON_SIZE}
-                  weight={TITLEBAR_ACTION_ICON_WEIGHT}
-                  grade={TITLEBAR_ACTION_ICON_GRADE}
+                <CircleUserRound
+                  className={TITLEBAR_ACTION_ICON_CLASS}
+                  strokeWidth={TITLEBAR_ACTION_ICON_STROKE_WIDTH}
+                  aria-hidden="true"
                 />
               </Button>
               <Button
@@ -166,11 +164,10 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
                 onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
               >
-                <InboxIcon
-                  symbol="calendar_today"
-                  size={TITLEBAR_ACTION_ICON_SIZE}
-                  weight={TITLEBAR_ACTION_ICON_WEIGHT}
-                  grade={TITLEBAR_ACTION_ICON_GRADE}
+                <CalendarDays
+                  className={TITLEBAR_ACTION_ICON_CLASS}
+                  strokeWidth={TITLEBAR_ACTION_ICON_STROKE_WIDTH}
+                  aria-hidden="true"
                 />
               </Button>
             </div>
