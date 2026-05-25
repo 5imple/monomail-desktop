@@ -16,6 +16,7 @@ import FilterOption from './FilterOption';
 import { Button } from '@/renderer/app/components/ui/button';
 import { useThreadFilter } from '@/renderer/app/store/thread/useThreadFilter';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
+import { ListFilter } from 'lucide-react';
 
 interface FilterOptionConfig {
   type: string;
@@ -158,7 +159,11 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
               className
             )}
           >
-            <MonoIcon type="Filter" size={showLabel ? 15 : undefined} />
+            <ListFilter
+              className={cn('shrink-0', showLabel ? 'h-[15px] w-[15px]' : 'h-4 w-4')}
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
             {activeFilters.length > 0 && (
               <Badge className="ml-1 h-4 bg-accent px-1 text-xs text-accent-foreground hover:bg-accent">
                 {activeFilters.length}
