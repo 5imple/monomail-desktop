@@ -1,7 +1,6 @@
 import { Navigate, RouteObject } from 'react-router-dom';
 
 import AppLayout from '@/renderer/app/containers/layout/AppLayout';
-import LinkShareLayout from '@/renderer/app/containers/layout/LinkShareLayout';
 import SignInLayout from '@/renderer/app/containers/layout/SignInLayout';
 import AuthGuard from '@/renderer/app/middlewares/AuthGuard';
 import OnBoardingLayout from '@/renderer/app/containers/layout/OnBoardingLayout';
@@ -45,11 +44,6 @@ const baseRoutes: RouteObject[] = [
   {
     path: '/onboarding',
     element: applyGuards(<OnBoardingLayout />, false)
-  },
-  {
-    path: '/share/:id',
-    // LinkShareLayout doesn't need ElectronGuard by default
-    element: <LinkShareLayout />
   },
   {
     path: '/migration',
