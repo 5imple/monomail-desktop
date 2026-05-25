@@ -1217,33 +1217,6 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     { scopes: ['GLOBAL'] }
   );
 
-  /**
-   * Effect to handle initial activation of the first thread when thread list loads
-   */
-  useEffect(() => {
-    const { area, index } = focusPosition;
-
-    // Only auto-activate on initial load for thread-list
-    if (area === 'thread-list' && index === 0) {
-      const threadItems = getItemList('thread-list');
-
-      // Check if we just got the first thread items and should auto-activate
-      if (threadItems.length > 0 && threadItems[0]?.ref) {
-        const isFirstLoad = lastPivotUpdate.current['thread-list'] === -1;
-
-        if (isFirstLoad) {
-          // Mark that we've handled the first load
-          lastPivotUpdate.current['thread-list'] = 0;
-
-          // Auto-activate the first thread
-          setTimeout(() => {
-            setShouldAutoActivate({ area: 'thread-list', index: 0 });
-          });
-        }
-      }
-    }
-  }, [navigationState.threadListItems, focusPosition, getItemList]);
-
   // Alternative approach: Add an initialization method to the hook's return object
   // const initializeWithFirstThread = useCallback(() => {
   //   const threadItems = getItemList('thread-list');
