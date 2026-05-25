@@ -1,60 +1,57 @@
-import { apiClient } from '@/main/api/apiClient';
+import { localDataStore } from '@/renderer/app/lib/localDataStore';
 import { SearchBookmark, SearchBookmarkResponse } from '@/main/api/bookmark/types';
 
+// Standalone: saved-search bookmarks live in local storage, keyed by account uid.
+const LS_KEY = 'bookmarks';
+
+const readAll = (): Record<string, SearchBookmark[]> =>
+  localDataStore.get<Record<string, SearchBookmark[]>>(LS_KEY) ?? {};
+
 /**
- * Fetch bookmarks for a specific account.
- * @param {AbortSignal} [signal] - The abort signal to cancel the request.
- * @returns {Promise<SearchBookmarkResponse>>} - The list of bookmarks.
+ * Fetch all bookmarks grouped by account uid.
  */
-const fetchBookmarks = (signal?: AbortSignal) => {
-  return apiClient.get<SearchBookmarkResponse>(`/mono/bookmarks`, {
-    signal
-  });
+const fetchBookmarks = async (_signal?: AbortSignal): Promise<SearchBookmarkResponse> => {
+  return { bookmarks: readAll() };
 };
 
 /**
- * Add a new bookmark for a specific account.
- * @param {SearchBookmark} bookmark - The bookmark data.
- * @param {AbortSignal} [signal] - The abort signal to cancel the request.
- * @returns {Promise<void>} - Resolves when the bookmark is successfully added.
+ * Add (or replace, de-duped by query) a bookmark for an account.
  */
-const addBookmark = (uid: string, bookmark: SearchBookmark, signal?: AbortSignal) => {
-  return apiClient.post<void>(`/mono/bookmark`, bookmark, {
-    uid,
-    signal
-  });
+const addBookmark = async (
+  uid: string,
+  bookmark: SearchBookmark,
+  _signal?: AbortSignal
+): Promise<void> => {
+  const all = readAll();
+  const list = all[uid] ?? [];
+  const next = [...list.filter((b) => b.query !== bookmark.query), bookmark];
+  localDataStore.set(LS_KEY, { ...all, [uid]: next });
 };
 
 /**
- * Update an existing bookmark.
- * @param {string} query - The query of the bookmark to update.
- * @param {Partial<SearchBookmark>} updatedData - The updated bookmark data.
- * @param {AbortSignal} [signal] - The abort signal to cancel the request.
- * @returns {Promise<void>} - Resolves when the bookmark is successfully updated.
+ * Update an existing bookmark (matched by query) for an account.
  */
-const updateBookmark = (
+const updateBookmark = async (
   uid: string,
   query: string,
   updatedData: Partial<SearchBookmark>,
-  signal?: AbortSignal
-) => {
-  return apiClient.patch<void>(`/mono/bookmark?query=${query}`, updatedData, {
-    uid,
-    signal
+  _signal?: AbortSignal
+): Promise<void> => {
+  const all = readAll();
+  const list = all[uid] ?? [];
+  localDataStore.set(LS_KEY, {
+    ...all,
+    [uid]: list.map((b) => (b.query === query ? { ...b, ...updatedData } : b))
   });
 };
 
 /**
- * Delete an existing bookmark.
- * @param {string} query - The query of the bookmark to delete.
- * @param {AbortSignal} [signal] - The abort signal to cancel the request.
- * @returns {Promise<void>} - Resolves when the bookmark is successfully deleted.
+ * Delete a bookmark (matched by query) for an account.
  */
-const deleteBookmark = (uid: string, query: string, signal?: AbortSignal) => {
-  return apiClient.delete<void>(`/mono/bookmark?query=${query}`, {
-    uid,
-    signal
-  });
+const deleteBookmark = async (uid: string, query: string, _signal?: AbortSignal): Promise<void> => {
+  const all = readAll();
+  const list = all[uid] ?? [];
+  localDataStore.set(LS_KEY, { ...all, [uid]: list.filter((b) => b.query !== query) });
 };
 
 export default {
