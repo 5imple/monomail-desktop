@@ -152,10 +152,10 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
             variant="ghost"
             sizeVariant="sm"
             className={cn(
-              'flex items-center text-muted-foreground',
+              'flex h-7 items-center bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground',
               showLabel &&
-                'h-7 gap-1.5 rounded-md border border-border/60 bg-background/70 px-2 text-[11px] font-medium uppercase tracking-[0.12em] shadow-sm hover:bg-muted hover:text-foreground',
-              activeFilters.length > 0 && 'border-accent/50 text-accent hover:text-accent',
+                'gap-1.5 rounded-md text-[11px] font-medium uppercase tracking-[0.12em]',
+              activeFilters.length > 0 && 'text-accent hover:text-accent',
               className
             )}
           >
