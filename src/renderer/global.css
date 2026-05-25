@@ -14,13 +14,14 @@
  *   - Rose (`--destructive`) for destructive actions, distinct from accent
  *   - Stone-500 for focus rings (neutral, editorial feel)
  *
- * Neutrals are warm stone (24–60°) to match Newton's calm editorial tone.
+ * App canvases use pure white in light mode; secondary surfaces keep a
+ * restrained neutral tint for affordance and separation.
  * Inter + IBM Plex Mono are loaded so kbd badges, mono labels, and
  * timestamps render in Newton's tracked-uppercase style.
  */
 
 :root {
-  --background: 60 9% 98%; /* stone-50 — warm canvas */
+  --background: 0 0% 100%; /* snow-white app canvas */
   --foreground: 24 10% 10%; /* stone-900 */
 
   --card: 0 0% 100%;
@@ -38,7 +39,7 @@
   --secondary-gradient: linear-gradient(var(--gray10), #fafafa);
 
   --muted: 20 6% 96%;
-  --muted-high: 60 9% 98%;
+  --muted-high: 0 0% 100%;
   --muted-low: 20 6% 90%;
   --muted-foreground: 25 6% 45%; /* stone-500 */
 
@@ -68,7 +69,7 @@
   --chart-5: 43 96% 56%; /* amber-400 */
 
   /* Sidebar tokens (source baseline; consumed by nav in P3 sidebar restyle) */
-  --sidebar: 60 9% 98%; /* stone-50 */
+  --sidebar: 0 0% 100%;
   --sidebar-foreground: 24 10% 10%;
   --sidebar-primary: 24 10% 10%;
   --sidebar-primary-foreground: 60 9% 98%;
@@ -97,7 +98,7 @@
   --secondary-gradient: linear-gradient(var(--gray10), #fafafa);
 
   --muted: 20 6% 98%;
-  --muted-high: 60 9% 99%;
+  --muted-high: 0 0% 100%;
   --muted-low: 20 6% 93%;
   --muted-foreground: 25 6% 45%;
 
