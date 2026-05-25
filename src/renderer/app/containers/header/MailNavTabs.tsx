@@ -30,7 +30,7 @@ const NAV_ITEMS: MailNavItem[] = [
   },
   { id: 'snooze', label: 'Later', icon: 'snooze', layout: 'LATER' as const, shortcut: 'G S' },
   { id: 'starred', label: 'Starred', icon: 'star_shine', query: 'is:starred', shortcut: 'G T' },
-  { id: 'sent', label: 'Sent', icon: 'send', query: 'in:sent', shortcut: 'G E' }
+  { id: 'sent', label: 'Sent', icon: 'near_me', query: 'in:sent', shortcut: 'G E' }
 ];
 
 const TITLEBAR_NAV_ICON_SIZE = 15;
