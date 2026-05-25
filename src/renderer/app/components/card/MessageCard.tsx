@@ -19,6 +19,7 @@ import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { CopyButton } from '@/renderer/app/components/ui/copy-button';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
@@ -42,6 +43,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Collapsible } from '@radix-ui/react-collapsible';
 import { CollapsibleContent, CollapsibleTrigger } from '@/renderer/app/components/ui/collapsible';
+import { TooltipPortal } from '@radix-ui/react-tooltip';
 
 interface MessageCardProps {
   className?: string;
@@ -876,13 +878,21 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   </div>
                   {currentMessage.timestamp && (
                     <div className="ml-auto flex items-center gap-2 text-muted-foreground">
-                      <time
-                        className="shrink-0 whitespace-nowrap text-[11px] tabular-nums"
-                        dateTime={new Date(currentMessage.timestamp).toISOString()}
-                        title={formatFullDateTime(currentMessage.timestamp)}
-                      >
-                        {formatMessageHeaderDate(currentMessage.timestamp)}
-                      </time>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <time
+                            className="shrink-0 cursor-default whitespace-nowrap text-[11px] tabular-nums"
+                            dateTime={new Date(currentMessage.timestamp).toISOString()}
+                          >
+                            {formatMessageHeaderDate(currentMessage.timestamp)}
+                          </time>
+                        </TooltipTrigger>
+                        <TooltipPortal>
+                          <TooltipContent side="bottom">
+                            {formatFullDateTime(currentMessage.timestamp)}
+                          </TooltipContent>
+                        </TooltipPortal>
+                      </Tooltip>
                     </div>
                   )}
                   {showHeaderMessageActions && (
