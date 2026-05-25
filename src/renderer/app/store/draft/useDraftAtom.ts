@@ -1,12 +1,15 @@
 // src/store/draft/useDraftAtom.ts
 
-import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
 import { buildRawMessage } from '@/renderer/app/lib/mime/buildRawMessage';
 import { DBGetDraftById, DBRemoveDraft, DBSaveDraft } from '@/renderer/app/lib/db/draft';
+import {
+  DBDeleteAttachmentsForDraft,
+  DBGetAttachmentsForDraft
+} from '@/renderer/app/lib/db/draftAttachment';
 import { DBGetThread, DBSaveThread } from '@/renderer/app/lib/db/thread';
 import {
   calculateAttachments,
@@ -101,12 +104,7 @@ export function useDraftAtom() {
         }
       }
 
-      // Update the draft via API
-      if (api) {
-        await draftApi.updateDraft(uid, draft.id, draft.toPlainObject());
-      }
-
-      // Save to local DB
+      // Persist locally only (standalone: no backend draft store).
       if (saveLocal) {
         await DBSaveDraft(uid, draft);
       }
@@ -173,20 +171,9 @@ export function useDraftAtom() {
         if (draftData) {
           const thread = await DBGetThread(uid, draftData.threadId);
 
-          if (callApi) {
-            try {
-              await draftApi.deleteDraft(uid, draftId);
-            } catch (error: any) {
-              if (error.status === 404) {
-                console.warn(`Draft ${draftId} not found on server. Removing from cache.`);
-              } else {
-                console.error('Error deleting draft from API:', error);
-                return;
-              }
-            }
-          }
-
           await DBRemoveDraft(uid, draftId);
+          // Discard any locally-held attachment bytes for this draft.
+          await DBDeleteAttachmentsForDraft(uid, draftId);
 
           if (thread) {
             // Remove the draft from the thread
@@ -327,32 +314,23 @@ export function useDraftAtom() {
       toast.promise(
         async () => {
           const fullDraft = draft ?? (await DBGetDraftById(uid, draftId));
-          const hasAttachments =
-            !!fullDraft && Object.keys(fullDraft.attachments ?? {}).length > 0;
-          // Plain, untracked messages send straight through Gmail (works with no
-          // backend). Attachments and read-receipt tracking are backend features,
-          // so those keep the backend send path.
-          const canSendDirect = !!fullDraft && !hasAttachments && !withTracking;
+          if (!fullDraft) throw new Error('Draft not found');
 
-          let messageId: string | undefined;
-          if (canSendDirect) {
-            const resolvedDraft = fullDraft as MonoDraft;
-            const raw = buildRawMessage(resolvedDraft);
-            // Only thread when threadId is a real Gmail id (< 20 chars, per the
-            // repo convention); a new-compose placeholder id would 400.
-            const gmailThreadId =
-              resolvedDraft.threadId && resolvedDraft.threadId.length < 20
-                ? resolvedDraft.threadId
-                : undefined;
-            const sent = await mailApi.sendMessage(uid, raw, gmailThreadId);
-            messageId = sent?.id;
-          } else {
-            const response = await draftApi.sendDraft(uid, draftId, withTracking);
-            messageId = response?.messageId;
-          }
+          // Standalone: every message sends straight through Gmail. Build the
+          // full MIME (incl. attachments + inline images) from locally-held
+          // bytes. Only thread when threadId is a real Gmail id (< 20 chars,
+          // per the repo convention); a new-compose placeholder id would 400.
+          const attachmentRecords = await DBGetAttachmentsForDraft(uid, draftId);
+          const raw = await buildRawMessage(fullDraft, attachmentRecords);
+          const gmailThreadId =
+            fullDraft.threadId && fullDraft.threadId.length < 20 ? fullDraft.threadId : undefined;
+          const sent = await mailApi.sendMessage(uid, raw, gmailThreadId);
+          const messageId = sent?.id;
 
           // Handle the completion of sending
           await handleSendCompleted(uid, draftId);
+          // Drop the locally-held attachment bytes now the message is out.
+          await DBDeleteAttachmentsForDraft(uid, draftId);
 
           // Fetch and save the sent message using the messageId
           if (messageId) {

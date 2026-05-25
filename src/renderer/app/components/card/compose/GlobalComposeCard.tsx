@@ -1,6 +1,5 @@
 // Updated GlobalComposeCard.tsx
 import { apiClient } from '@/main/api/apiClient';
-import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { IMonoTemplate } from '@/main/api/template/types';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
@@ -24,8 +23,11 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
+import {
+  DBDeleteAttachmentBlob,
+  DBSaveAttachmentBlob
+} from '@/renderer/app/lib/db/draftAttachment';
 import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
-import { isElectron } from '@/renderer/app/lib/electronApi';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
@@ -34,7 +36,6 @@ import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
-import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import juice from 'juice';
 import { debounce } from 'lodash';
 import React, {
@@ -65,7 +66,7 @@ interface MonoAttachmentWithStatus extends MonoAttachment {
 }
 
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
-  const { preference, getUidFromEmail, accounts, getAccountByUid } = useAuth();
+  const { preference, getUidFromEmail, accounts } = useAuth();
   const { templates } = useTemplateAtom();
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
@@ -74,7 +75,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { openDialog } = useDialogs();
   const { updateDraft, sendDraft, removeDraft } = useDraftAtom();
   const { setGlobalDraftWindows } = useComposeWindowAtom();
-  const { sidebarCollapsed } = useSidebarAtom();
   const { activateScope, deactivateScope } = useHotkeyScope();
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -82,7 +82,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [isClosing, setIsClosing] = useState(false);
   const { trackEvent } = useUserTrackingData();
   const [isSending, setIsSending] = useState(false);
-  const [trackingEnabled, setTrackingEnabled] = useState(true);
+  const trackingEnabled = true;
 
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
@@ -215,10 +215,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     }, 400);
   }, [draft, isMaximized]);
 
-  const handleTrackingChange = useCallback((enabled: boolean) => {
-    setTrackingEnabled(enabled);
-  }, []);
-
   useEffect(() => {
     setIsVisible(true); // Trigger grow animation
     requestAnimationFrame(() => editorRef.current?.focus());
@@ -242,30 +238,27 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     [debouncedUpdateDraft]
   );
 
-  const handleUploadInlineImage = useCallback(
-    async (file: File, uuid: string, draftId: string) => {
-      const uid = getUidFromEmail(composeDraft.from);
-      if (uid) apiClient.setApiActiveUid(uid);
-      else throw new Error('No active account');
-
-      if (draftSaveStatus === 'INITIALIZED') {
-        if (!composeDraft.from) {
-          toast.error(t('toast.error.no_email_to_save'));
-          throw new Error('No from email to save the draft.');
-        }
-
-        try {
-          await updateDraft(uid, composeDraft, true, true);
-        } catch (error) {
-          handleDraftSaveError(error);
-          throw new Error('Error saving draft.');
+  const handleUploadInlineImage = useCallback(async (file: File, uuid: string) => {
+    // Standalone: embed inline images as data URIs in the body. buildRawMessage
+    // converts them to proper cid: parts at send time (Gmail strips data URIs).
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    return {
+      inlineImage: {
+        [uuid]: {
+          attachmentId: uuid,
+          fileName: file.name,
+          mimeType: file.type,
+          size: file.size,
+          url
         }
       }
-
-      return draftApi.uploadInlineImage(uid, file, uuid, draftId);
-    },
-    [composeDraft, draftSaveStatus, getUidFromEmail, handleDraftSaveError, t, updateDraft]
-  );
+    };
+  }, []);
   // Create a loading component for the editor
   const EditorLoadingFallback = () => (
     <div className="h-32 animate-pulse rounded">
@@ -523,45 +516,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     [composeDraft, draft, handleClose, openDialog, updateMessage]
   );
 
-  const onFromChange = useCallback(
-    async (email: string, uid: string) => {
-      const currentFromEmail = composeDraft.from;
-      const currentUid = currentFromEmail ? getUidFromEmail(currentFromEmail) : null;
-
-      if (currentUid && currentUid !== uid && composeDraft.id) {
-        try {
-          await removeDraft(currentUid, composeDraft.id, false);
-
-          setComposeDraft((prevDraft) => {
-            const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
-            updatedDraft.update({
-              from: email
-            });
-
-            apiClient.setApiActiveUid(uid);
-            updateMessage(updatedDraft);
-
-            return updatedDraft;
-          });
-        } catch (error) {
-          console.error('Error handling draft transfer between accounts:', error);
-          toast.error(t('toast.error.transfer_draft'));
-        }
-      } else {
-        setComposeDraft((prevDraft) => {
-          const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
-          updatedDraft.update({ from: email });
-
-          apiClient.setApiActiveUid(uid);
-          updateMessage(updatedDraft);
-
-          return updatedDraft;
-        });
-      }
-    },
-    [composeDraft.from, composeDraft.id, getUidFromEmail, removeDraft, t, updateMessage]
-  );
-
   const onSignatureChange = useCallback(
     (signatureId: string | null) => {
       setComposeDraft((prevDraft) => {
@@ -624,7 +578,16 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       try {
         const uid = getUidFromEmail(composeDraft.from);
         if (uid) {
-          await draftApi.uploadAttachment(uid, attachmentId, composeDraft.id, file);
+          // Standalone: hold the bytes locally; buildRawMessage encodes them at send.
+          await DBSaveAttachmentBlob(uid, {
+            attachmentId,
+            draftId: composeDraft.id,
+            fileName: file.name,
+            mimeType: file.type,
+            size: file.size,
+            inline: false,
+            blob: file
+          });
 
           const updatedAttachments = {
             ...composeDraft.attachments,
@@ -657,6 +620,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
 
   const onAttachmentDelete = useCallback(
     (attachmentId: string) => {
+      const uid = getUidFromEmail(composeDraft.from);
+      if (uid) void DBDeleteAttachmentBlob(uid, attachmentId);
       setComposeDraft((prevDraft) => {
         const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
         const updatedAttachments = { ...updatedDraft.attachments };
@@ -666,7 +631,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         return updatedDraft;
       });
     },
-    [updateMessage]
+    [updateMessage, getUidFromEmail, composeDraft.from]
   );
 
   const renderDraftStatus = useMemo(() => {
@@ -1029,12 +994,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       >
         <Card
           className={cn(
-            'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/60 bg-card dark:bg-background',
+            'ease-bounce-in-out pointer-events-auto flex flex-col border border-border/25 bg-card dark:bg-background',
             'w-full min-w-0 transition-all duration-300',
             isMaximized ? 'h-full min-h-0 max-w-[960px]' : 'h-[405px] min-h-[405px] max-w-[768px]',
             isMinimized
               ? 'max-h-12 min-h-12 min-w-80 max-w-80 rounded-xl shadow-md'
-              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.06),0_14px_28px_-18px_rgb(15_23_42_/_0.35),0_30px_60px_-36px_rgb(15_23_42_/_0.42)] ring-1 ring-slate-950/[0.06] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.04),0_16px_32px_-20px_rgb(0_0_0_/_0.62),0_34px_68px_-38px_rgb(0_0_0_/_0.7)] dark:ring-white/[0.08]',
+              : 'rounded-md shadow-[0_1px_2px_rgb(15_23_42_/_0.035),0_10px_24px_-22px_rgb(15_23_42_/_0.22),-8px_10px_22px_-18px_rgb(15_23_42_/_0.12),8px_10px_22px_-18px_rgb(15_23_42_/_0.12)] ring-1 ring-slate-950/[0.025] dark:shadow-[0_1px_2px_rgb(255_255_255_/_0.03),0_12px_26px_-22px_rgb(0_0_0_/_0.36),-8px_10px_22px_-18px_rgb(0_0_0_/_0.26),8px_10px_22px_-18px_rgb(0_0_0_/_0.26)] dark:ring-white/[0.04]',
 
             // isClosing ? 'duration-0' : 'duration-400',
             // isVisible && !isClosing ? '' : 'h-0 max-h-0 min-h-0',
@@ -1060,7 +1025,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               onMaximize={toggleMaximize}
               isMinimized={isMinimized}
               isMaximized={isMaximized}
-              hasElectronPadding={!!(isElectron && isMaximized && sidebarCollapsed)}
               draftStatus={renderDraftStatus}
             />
           </CardHeader>
@@ -1135,14 +1099,11 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                 draftSaveStatus={draftSaveStatus}
                 handleSendMessage={handleSendMessage}
                 handleFileChange={handleFileChange}
-                trackingEnabled={trackingEnabled}
-                onTrackingChange={handleTrackingChange}
                 sendDisabled={
                   composeDraft.to.length === 0 ||
                   !composeDraft.from ||
                   draftSaveStatus === 'LOADING'
                 }
-                onFromChange={onFromChange}
                 onDiscard={handleDiscard}
               />
             </>

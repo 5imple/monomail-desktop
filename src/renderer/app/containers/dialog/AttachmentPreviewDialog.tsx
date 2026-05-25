@@ -1,6 +1,6 @@
 import { apiClient } from '@/main/api/apiClient';
-import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
+import { DBGetAttachmentBlob } from '@/renderer/app/lib/db/draftAttachment';
 import { MonoAttachment } from '@/main/models/types';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -62,9 +62,11 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
     try {
       setIsLoaded(false);
 
-      let response: Blob;
+      let response: Blob | null = null;
       if (source === 'draft') {
-        response = await draftApi.getAttachmentDownload(accountId, attachment.attachmentId);
+        // Standalone: draft attachment bytes are held locally.
+        const record = await DBGetAttachmentBlob(accountId, attachment.attachmentId);
+        response = record?.blob ?? null;
       } else {
         response = await mailApi.getAttachmentDownload(
           accountId,
@@ -73,6 +75,8 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
           attachment.fileName
         );
       }
+
+      if (!response) return;
 
       setBlob(response);
       const url = URL.createObjectURL(response);

@@ -25,7 +25,6 @@ interface ComposeCardHeaderProps {
   onMaximize: () => void;
   isMinimized: boolean;
   isMaximized: boolean;
-  hasElectronPadding: boolean;
   draftStatus: React.ReactNode;
 }
 
@@ -38,7 +37,6 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   onMaximize,
   isMinimized,
   isMaximized,
-  hasElectronPadding,
   draftStatus
 }) => {
   const { t } = useTranslation();
@@ -93,12 +91,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   return (
     <>
       {/* To row */}
-      <div
-        className={cn(
-          'no-drag flex items-start px-9 pt-3',
-          hasElectronPadding && 'pl-28'
-        )}
-      >
+      <div className="no-drag flex items-start px-9 pt-3">
         <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
           To
         </span>

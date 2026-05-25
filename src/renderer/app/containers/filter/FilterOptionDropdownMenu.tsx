@@ -159,7 +159,6 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
             )}
           >
             <MonoIcon type="Filter" size={showLabel ? 15 : undefined} />
-            {showLabel && <span>Filter</span>}
             {activeFilters.length > 0 && (
               <Badge className="ml-1 h-4 bg-accent px-1 text-xs text-accent-foreground hover:bg-accent">
                 {activeFilters.length}
