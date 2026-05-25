@@ -43,7 +43,7 @@ export const HotkeyScopeProvider: React.FC<HotkeyScopeProviderProps> = ({ childr
         }
         return prev;
       });
-      if (!activeScopes.includes(scope)) {
+      if (activeScopes.includes(scope)) {
         disableScope(scope);
       }
     },
