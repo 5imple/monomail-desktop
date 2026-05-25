@@ -85,16 +85,16 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                 <SyncHistoryProvider>
                   <SyncThreadProvider>
                     <MessageProvider>
-                      <KeyboardNavigationProvider>
-                        <HotkeysProvider initiallyActiveScopes={['GLOBAL']}>
-                          <HotkeyScopeProvider>
+                      <HotkeysProvider initiallyActiveScopes={['GLOBAL']}>
+                        <HotkeyScopeProvider>
+                          <KeyboardNavigationProvider>
                             <Toaster />
                             <AppErrorBoundary>
                               <AppRouter />
                             </AppErrorBoundary>
-                          </HotkeyScopeProvider>
-                        </HotkeysProvider>
-                      </KeyboardNavigationProvider>
+                          </KeyboardNavigationProvider>
+                        </HotkeyScopeProvider>
+                      </HotkeysProvider>
                     </MessageProvider>
                   </SyncThreadProvider>
                 </SyncHistoryProvider>
