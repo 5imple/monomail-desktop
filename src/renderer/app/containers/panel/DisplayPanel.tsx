@@ -216,8 +216,10 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     if (!scrollAreaRef.current) return;
     displayMessages(stableThread);
 
-    let abortFullThreadFetch: (() => void) | undefined;
-
+    // Load full message bodies when the cached thread is metadata-only. We do
+    // NOT abort this on effect re-runs (readerPhase / threadsMap churn): an
+    // aborted fetch silently leaves the body empty, and the in-flight guard
+    // below already prevents duplicate fetches for the same thread.
     if (threadNeedsFullBody(stableThread) && stableThread.accountId) {
       const fetchKey = `${stableThread.accountId}:${stableThread.id}:${stableThread.historyId ?? ''}`;
       if (
@@ -225,22 +227,17 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
         !fullThreadFetchCompletedRef.current.has(fetchKey)
       ) {
         fullThreadFetchesRef.current.add(fetchKey);
-        const abortController = new AbortController();
         let completed = false;
-        abortFullThreadFetch = () => abortController.abort();
 
         mailApi
-          .getThread(stableThread.accountId, stableThread.id, abortController.signal)
+          .getThread(stableThread.accountId, stableThread.id)
           .then((response) => {
-            if (abortController.signal.aborted) return;
             const fullThread = MonoThread.fromPlainObject(response);
             completed = true;
             updateThread(stableThread.accountId, fullThread);
           })
           .catch((error) => {
-            if (!abortController.signal.aborted) {
-              console.error('Failed to fetch full thread body:', error);
-            }
+            console.error('Failed to fetch full thread body:', error);
           })
           .finally(() => {
             fullThreadFetchesRef.current.delete(fetchKey);
@@ -260,8 +257,6 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     if (isNewThread || isUnreadThread) {
       readMessages(stableThread);
     }
-
-    return abortFullThreadFetch;
   }, [stableThread, readerPhase]);
 
   useEffect(() => {
