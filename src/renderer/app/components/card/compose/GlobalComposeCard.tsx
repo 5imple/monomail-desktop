@@ -1179,6 +1179,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               composeDraft={composeDraft}
               handleInputChange={handleInputChange}
               onKeyDown={(event) => {
+                // Tab out of the To field → Subject (Shift+Tab keeps default).
+                if (event.key === 'Tab' && !event.shiftKey) {
+                  event.preventDefault();
+                  subjectRef.current?.focus();
+                  return;
+                }
                 if (event.metaKey && event.shiftKey && event.code === 'KeyM') {
                   event.preventDefault();
                   toggleMinimize();
@@ -1211,7 +1217,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                       value={composeDraft.subject}
                       onChange={(e) => handleInputChange('subject', e.target.value)}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
+                        if (event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) {
                           event.preventDefault();
                           editorRef.current?.focus();
                         }
