@@ -11,7 +11,6 @@ import ComposeCardFooter from '@/renderer/app/components/card/compose/ComposeCar
 import ComposeCardHeader from '@/renderer/app/components/card/compose/ComposeCardHeader';
 import ReferenceCard from '@/renderer/app/components/card/compose/ReferenceCard';
 import MonoIcon from '@/renderer/app/components/icons/icons';
-import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import SignatureSwitcher from '@/renderer/app/components/mail/SignatureSwitcher';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/renderer/app/components/ui/card';
@@ -29,6 +28,7 @@ import {
 } from '@/renderer/app/lib/db/draftAttachment';
 import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
 import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
+import { getAttachmentIcon } from '@/renderer/app/lib/getAttachmentIcon';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
@@ -64,6 +64,13 @@ interface MonoAttachmentWithStatus extends MonoAttachment {
   status: 'loading' | 'success' | 'invalid';
   errorMessage?: string;
 }
+
+const formatAttachmentSize = (size: number) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+};
 
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
   const { preference, getUidFromEmail, accounts } = useAuth();
@@ -815,50 +822,114 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
 
   const memoizedAttachments = useMemo(() => {
     const uid = getUidFromEmail(composeDraft.from);
-    if (!uid) return null;
+    const attachmentEntries = Object.entries(attachments);
+    if (!uid || attachmentEntries.length === 0) return null;
 
-    return Object.entries(attachments).map(([id, attachment]) => (
-      <div key={attachment.attachmentId} className="flex items-center gap-1">
-        <AttachmentItem
-          accountId={uid}
-          source={'draft'}
-          itemId={composeDraft.id}
-          preview
-          disabled={attachment.status !== 'success'}
-          attachment={attachment}
-        >
-          <div className="ml-auto flex items-center">
-            {attachment.status === 'loading' ? (
-              <Loader className="ml-2" />
-            ) : attachment.status === 'invalid' ? (
-              <Tooltip>
-                <TooltipTrigger>
-                  <MonoIcon type="AlertCircle" className="ml-2 h-4 w-4 text-destructive" />
-                </TooltipTrigger>
-                <TooltipContent>{attachment.errorMessage || 'Upload failed'}</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Button
-                className="-mr-2 ml-1"
-                type="button"
-                variant={'ghost'}
-                sizeVariant={'xs'}
-                typeVariant={'icon'}
-                disabled={attachment.status !== 'success'}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleFileDelete(id);
-                }}
-              >
-                <MonoIcon type={'X'} className="h-4 w-4" />
-              </Button>
-            )}
+    return (
+      <div className="shrink-0 border-t border-border/25 px-9 py-2.5">
+        <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+          <MonoIcon type="Paperclip" className="h-3.5 w-3.5" />
+          <span>
+            {attachmentEntries.length} attachment{attachmentEntries.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <div className="max-h-[112px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2">
+            {attachmentEntries.map(([id, attachment]) => {
+              const isReady = attachment.status === 'success';
+              const isInvalid = attachment.status === 'invalid';
+
+              return (
+                <div
+                  key={attachment.attachmentId}
+                  className={cn(
+                    'group flex min-w-0 items-center gap-2 rounded-md border border-border/60 bg-muted/25 px-2.5 py-2 transition-colors',
+                    isReady && 'hover:border-border hover:bg-muted/40',
+                    isInvalid && 'border-destructive/40 bg-destructive/5'
+                  )}
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-100"
+                    disabled={!isReady}
+                    aria-label={`Preview ${attachment.fileName}`}
+                    onClick={() => {
+                      openDialog('attachmentPreview', {
+                        accountId: uid,
+                        source: 'draft',
+                        itemId: composeDraft.id,
+                        attachment
+                      });
+                    }}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground',
+                        isInvalid && 'text-destructive'
+                      )}
+                      aria-hidden
+                    >
+                      {attachment.status === 'loading' ? (
+                        <Loader className="h-3.5 w-3.5" />
+                      ) : (
+                        getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium tracking-tight text-foreground">
+                        {attachment.fileName}
+                      </span>
+                      <span className="mt-0.5 block truncate font-mono text-[10px] uppercase tabular-nums tracking-[0.08em] text-muted-foreground">
+                        {attachment.status === 'loading'
+                          ? 'Uploading'
+                          : isInvalid
+                            ? attachment.errorMessage || 'Upload failed'
+                            : formatAttachmentSize(attachment.size)}
+                      </span>
+                    </span>
+                  </button>
+
+                  {isInvalid && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center text-destructive">
+                          <MonoIcon type="AlertCircle" className="h-4 w-4" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>{attachment.errorMessage || 'Upload failed'}</TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  <Button
+                    className="-mr-1 h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    type="button"
+                    variant={'ghost'}
+                    sizeVariant={'xs'}
+                    typeVariant={'icon'}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleFileDelete(id);
+                    }}
+                    tooltip="Remove attachment"
+                  >
+                    <MonoIcon type={'X'} className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
-        </AttachmentItem>
+        </div>
       </div>
-    ));
-  }, [attachments, composeDraft.from, composeDraft.id, handleFileDelete, getUidFromEmail]);
+    );
+  }, [
+    attachments,
+    composeDraft.from,
+    composeDraft.id,
+    getUidFromEmail,
+    handleFileDelete,
+    openDialog
+  ]);
 
   // Optimize render method for editor section
   const renderEditor = useMemo(() => {
@@ -1030,8 +1101,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           </CardHeader>
           {!isMinimized && (
             <>
-              <CardContent className="no-drag flex-1 overflow-hidden p-0">
-                <div className="flex h-full flex-col">
+              <CardContent className="no-drag min-h-0 flex-1 overflow-hidden p-0">
+                <div className="flex h-full min-h-0 flex-col">
                   <div className="px-9 pb-1 pt-3">
                     <Input
                       ref={subjectRef}
@@ -1056,7 +1127,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                       }}
                     />
                   </div>
-                  <div className="relative flex-1 pb-4">
+                  <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
                     {!composeDraft.body.replace(/<[^>]*>/g, '').trim() && (
                       <div className="pointer-events-none absolute left-9 top-4 z-10 text-[14px] font-medium text-muted-foreground/75">
                         Tip: Hit ⌘J for AI
@@ -1088,10 +1159,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                         />
                       </div>
                     )}
-                    <div className="mt-4 grid auto-cols-max grid-flow-row gap-3 px-4 text-center">
-                      {memoizedAttachments}
-                    </div>
                   </div>
+                  {memoizedAttachments}
                 </div>
               </CardContent>
               <ComposeCardFooter
