@@ -52,6 +52,7 @@ interface KeyboardNavigationContextType {
   isKeyboardMode: boolean;
   setPivotIndex: (area: FocusableArea, index: number) => void;
   findItemIndexById: (area: FocusableArea, itemId: string) => number;
+  getHighlightedItemId: (area: FocusableArea) => string | null;
   updatePivotByItemId: (area: FocusableArea, itemId: string) => void;
   // New disable functionality
   setAreaDisabled: (area: FocusableArea, disabled: boolean) => void;

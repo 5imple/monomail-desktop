@@ -1,5 +1,5 @@
 import { useHotkeys } from 'react-hotkeys-hook';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useCommands } from '@/renderer/app/lib/commands/useCommands';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { CommandType } from '@/renderer/app/types';
@@ -11,6 +11,12 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
+import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+
+type ThreadHotkeyTarget = {
+  source: 'selection' | 'highlight' | 'active' | 'none';
+  threadIds: string[];
+};
 
 export const useRegisterHotkeys = (options = {}) => {
   const executeCommand = useExecuteCommand();
@@ -21,6 +27,7 @@ export const useRegisterHotkeys = (options = {}) => {
   const { undoLastAction, hasUndoActions } = useUndoManager();
   const { t } = useTranslation();
   const { accounts } = useAuth();
+  const { getHighlightedItemId } = useKeyboardNavigationContext();
 
   useHotkeys(
     'MOD+Z',
@@ -75,7 +82,7 @@ export const useRegisterHotkeys = (options = {}) => {
       falseCommand: 'THREAD_STAR'
     },
     E: {
-      // Star/unstar hotkey
+      // Done/undone hotkey
       check: (thread) => thread.labelIds.includes('INBOX'),
       trueCommand: 'THREAD_DONE',
       falseCommand: 'THREAD_UNDONE'
@@ -88,14 +95,28 @@ export const useRegisterHotkeys = (options = {}) => {
     // }
   };
 
-  const targetThreadIds = useMemo(
-    () => (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : []),
-    [activeThreadId, selectedThreads]
-  );
+  const getThreadHotkeyTarget = useCallback((): ThreadHotkeyTarget => {
+    if (selectedThreads.length > 0) {
+      return { source: 'selection', threadIds: selectedThreads };
+    }
 
-  const firstTargetThread = useMemo(() => {
-    return targetThreadIds.length > 0 ? threadsMap[targetThreadIds[0]] : null;
-  }, [targetThreadIds, threadsMap]);
+    const highlightedThreadId = getHighlightedItemId('thread-list');
+    if (highlightedThreadId) {
+      return { source: 'highlight', threadIds: [highlightedThreadId] };
+    }
+
+    if (activeThreadId) {
+      return { source: 'active', threadIds: [activeThreadId] };
+    }
+
+    return { source: 'none', threadIds: [] };
+  }, [activeThreadId, getHighlightedItemId, selectedThreads]);
+
+  const getExplicitThreadArgs = useCallback((target: ThreadHotkeyTarget) => {
+    return target.source === 'selection' || target.source === 'highlight'
+      ? { threadIds: target.threadIds }
+      : undefined;
+  }, []);
 
   // Register paired command hotkeys
   Object.entries(pairedCommands).forEach(([hotkey, { check, trueCommand, falseCommand }]) => {
@@ -103,15 +124,18 @@ export const useRegisterHotkeys = (options = {}) => {
       hotkey,
       (e) => {
         e.preventDefault();
-        if (!firstTargetThread || targetThreadIds.length === 0) return;
+        const target = getThreadHotkeyTarget();
+        const firstTargetThread =
+          target.threadIds.length > 0 ? threadsMap[target.threadIds[0]] : null;
+        if (!firstTargetThread || target.threadIds.length === 0) return;
 
         // Determine which command to run based on the thread's current state
         const commandToRun = check(firstTargetThread) ? trueCommand : falseCommand;
         trackEvent('hotkey_command_executed', { command: commandToRun });
-        executeCommand(commandToRun as CommandType);
+        executeCommand(commandToRun as CommandType, getExplicitThreadArgs(target));
       },
       { preventDefault: true, ...options },
-      [firstTargetThread, targetThreadIds, executeCommand, trackEvent]
+      [executeCommand, getExplicitThreadArgs, getThreadHotkeyTarget, threadsMap, trackEvent]
     );
   });
 
@@ -143,6 +167,7 @@ export const useRegisterHotkeys = (options = {}) => {
             useHotkeys(
               hotkey,
               () => {
+                const targetThreadIds = getThreadHotkeyTarget().threadIds;
                 if (targetThreadIds.length > 0) {
                   const thread = threadsMap[targetThreadIds[0]];
                   if (thread) {
@@ -171,7 +196,7 @@ export const useRegisterHotkeys = (options = {}) => {
                 }
               },
               { scopes: [command.scope], preventDefault: true, ...options },
-              [executeCommand, targetThreadIds, threadsMap, trackEvent, accounts]
+              [executeCommand, getThreadHotkeyTarget, threadsMap, trackEvent, accounts]
             );
             break;
 
@@ -179,6 +204,7 @@ export const useRegisterHotkeys = (options = {}) => {
             useHotkeys(
               hotkey,
               () => {
+                const targetThreadIds = getThreadHotkeyTarget().threadIds;
                 if (targetThreadIds.length > 0) {
                   const thread = threadsMap[targetThreadIds[0]];
                   if (thread) {
@@ -194,7 +220,7 @@ export const useRegisterHotkeys = (options = {}) => {
                 }
               },
               { scopes: [command.scope], preventDefault: true, ...options },
-              [executeCommand, targetThreadIds, threadsMap, trackEvent, accounts]
+              [executeCommand, getThreadHotkeyTarget, threadsMap, trackEvent, accounts]
             );
             break;
 
@@ -219,8 +245,13 @@ export const useRegisterHotkeys = (options = {}) => {
               hotkey,
               (e) => {
                 e.preventDefault();
+                const target = getThreadHotkeyTarget();
+                const args =
+                  command.scope === 'CONVERSATION_SELECTED'
+                    ? getExplicitThreadArgs(target)
+                    : undefined;
                 trackEvent('hotkey_command_executed', { command: commandId });
-                executeCommand(commandId);
+                executeCommand(commandId, args);
               },
               {
                 scopes: [command.scope],
@@ -228,7 +259,13 @@ export const useRegisterHotkeys = (options = {}) => {
                 useKey: hotkey === '!' || hotkey === '?',
                 ...options
               },
-              [executeCommand, trackEvent]
+              [
+                command.scope,
+                executeCommand,
+                getExplicitThreadArgs,
+                getThreadHotkeyTarget,
+                trackEvent
+              ]
             );
             break;
         }

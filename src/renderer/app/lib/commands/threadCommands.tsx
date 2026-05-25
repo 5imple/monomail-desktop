@@ -204,7 +204,7 @@ export const createThreadCommands = (
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_trash'),
       icon: 'Trash',
-      hotkeys: ['MOD+Backspace', 'Backspace'],
+      hotkeys: ['MOD+Backspace', 'Backspace', 'Delete'],
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;

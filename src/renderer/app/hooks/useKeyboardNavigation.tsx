@@ -334,6 +334,27 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     [getItemList]
   );
 
+  const getHighlightedItemId = useCallback(
+    (area: FocusableArea): string | null => {
+      if (isAreaDisabled(area)) return null;
+
+      const itemList = getItemList(area);
+
+      if (area === 'thread-list' && !isKeyboardModeRef.current && hoveredThreadIdRef.current) {
+        return itemList.some((item) => item.id === hoveredThreadIdRef.current)
+          ? hoveredThreadIdRef.current
+          : null;
+      }
+
+      if (!isKeyboardModeRef.current || focusPosition.area !== area || focusPosition.index < 0) {
+        return null;
+      }
+
+      return itemList[focusPosition.index]?.id ?? null;
+    },
+    [focusPosition, getItemList, isAreaDisabled]
+  );
+
   /**
    * Gets a safe index for an area, handling out-of-bounds scenarios and disabled areas
    */
@@ -1253,6 +1274,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     pivotIndexMap,
     setPivotIndex, // External API to set pivot points
     findItemIndexById, // Find index by item ID
+    getHighlightedItemId,
     updatePivotByItemId, // Update pivot using item ID
     setAreaDisabled,
     setAreasDisabled,
