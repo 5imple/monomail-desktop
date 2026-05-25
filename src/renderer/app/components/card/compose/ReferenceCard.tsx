@@ -11,7 +11,8 @@ import {
   ScrollAreaViewport,
   ScrollBar
 } from '@/renderer/app/components/ui/scroll-area';
-import { FC, useEffect, useRef, useState } from 'react';
+import { formatMessageDate, getForwardedMessageBody } from '@/renderer/app/lib/formatBody';
+import { FC, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface ReferenceCardProps {
@@ -25,6 +26,10 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const referenceBody = useMemo(() => {
+    return type === 'forward' ? getForwardedMessageBody(item) : item.getParsedBody();
+  }, [item, type]);
+  const formattedDate = useMemo(() => formatMessageDate(item), [item]);
 
   const toggleExpand = () => {
     setIsExpanded((prev) => !prev);
@@ -155,7 +160,7 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
               <ScrollAreaViewport>
                 <div
                   className="select-text"
-                  dangerouslySetInnerHTML={{ __html: item.getParsedBody() }}
+                  dangerouslySetInnerHTML={{ __html: referenceBody }}
                 ></div>
                 <ScrollBar orientation={'horizontal'} />
               </ScrollAreaViewport>
@@ -165,6 +170,17 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
       </CardContent>
       <CardFooter className="flex flex-col items-start justify-center">
         <div className="grid gap-1">
+          <div className="line-clamp-1 text-xs">
+            <span className="font-medium text-muted-foreground">From:</span>{' '}
+            <ContactProfileDropdown value={item.from.email}>
+              <Button className="text-xs" variant="link" typeVariant={'inline'}>
+                {item.from && `${item.from.name} (${item.from.email})`}
+              </Button>
+            </ContactProfileDropdown>
+          </div>
+          <div className="line-clamp-1 text-xs">
+            <span className="font-medium text-muted-foreground">Date:</span> {formattedDate}
+          </div>
           <div className="line-clamp-1 text-xs">
             <span className="font-medium text-muted-foreground">To:</span>{' '}
             {item.to.length === 0 ? (
@@ -182,14 +198,6 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
                 );
               })
             )}
-          </div>
-          <div className="line-clamp-1 text-xs">
-            <span className="font-medium text-muted-foreground">Reply-To:</span>{' '}
-            <ContactProfileDropdown value={item.from.email}>
-              <Button className="text-xs" variant="link" typeVariant={'inline'}>
-                {item.from && `${item.from.name} (${item.from.email})`}
-              </Button>
-            </ContactProfileDropdown>
           </div>
         </div>
       </CardFooter>

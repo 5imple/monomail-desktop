@@ -388,7 +388,7 @@ function extractAndRemoveEmailHistory(body: HTMLElement): {
   body.childNodes.forEach(traverseNode);
 
   if (currentHistory.trim()) {
-    history.push(currentHistory.trim());
+    history.push(sanitizeEmailHtml(currentHistory.trim()));
   }
 
   // Remove nodes that are part of the history

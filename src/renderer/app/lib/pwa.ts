@@ -16,7 +16,7 @@ export const initializeServiceWorker = () => {
   }
 
   // In development, service worker might not be available
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     // logPWA('info', 'Development mode - Service Worker disabled for now');
     // logPWA('info', 'Network First strategy will be active in production build');
     return () => Promise.resolve();
@@ -160,7 +160,7 @@ export const initializeNetworkMonitoring = () => {
 
 // Force refresh with bypass cache (for debugging)
 export const forceAppUpdate = async () => {
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     logPWA('info', 'Force updating app (bypass cache)...');
 
     // Clear all caches
