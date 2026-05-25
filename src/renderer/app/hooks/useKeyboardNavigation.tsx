@@ -189,7 +189,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       left: 'sidebar-nav',
       right: 'message-list',
       up: 'pin-header',
-      autoActivateOnMove: true // Auto-activate threads when navigating
+      autoActivateOnMove: false
     },
     'display-header': {
       orientation: 'horizontal',
