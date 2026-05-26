@@ -7,6 +7,7 @@ import type {
   ThreadSnapshot
 } from '@/main/api/queue/types';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
+import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { notificationManager } from '@/main/services/notification/NotificationManager';
 import { findOrCreateLabel, modifyThread, sendRawMessage } from '@/main/services/scheduler/gmailMain';
 import { generateUUID } from '@/main/utils';
@@ -286,8 +287,13 @@ class SchedulerService {
 
   private async sweep(): Promise<void> {
     const now = Date.now();
+    const connectedUids = new Set(tokenManager.getGoogleAccounts().map((a) => a.uid));
     for (const task of Object.values(this.getSnoozes())) {
       if (new Date(task.snoozeUntil).getTime() > now) continue;
+      // Skip silently when the account isn't connected (signed out): we can't reach
+      // Gmail to restore the thread, so wait for reconnect rather than retrying and
+      // warning every sweep. It un-snoozes once the account is back.
+      if (!connectedUids.has(task.accountId)) continue;
       try {
         log.info('[scheduler] un-snoozing thread %s (due)', task.threadId);
         await this.restoreToInbox(task);
@@ -439,10 +445,14 @@ class SchedulerService {
   }
 
   private emit(event: Record<string, unknown>): void {
-    // Broadcast to every window (not just the main one): a compose/popout window
-    // may be the only one open, and each renderer keeps its own queue cache.
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('renderer:queue:event', event);
+    // Send to a single window — the main one, or the first live window if main is
+    // closed. (Broadcasting to all windows caused duplicate toasts and races on the
+    // shared, IndexedDB-persisted queue cache.)
+    const target =
+      windowManager.getMainAppWindow() ??
+      BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+    if (target && !target.isDestroyed()) {
+      target.webContents.send('renderer:queue:event', event);
     }
   }
 }
