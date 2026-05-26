@@ -1,4 +1,3 @@
-import { queueApi } from '@/main/api/queue/queueApi';
 import { schedulerService } from '@/main/services/scheduler/SchedulerService';
 import type {
   CreateScheduleRequest,
@@ -48,25 +47,25 @@ export function registerQueueHandlers() {
   );
 
   ipcMain.handle('main:queue:schedule', (_, req: CreateScheduleRequest) =>
-    wrap(() => queueApi.createSchedule(req))
+    wrap(() => schedulerService.createSchedule(req))
   );
 
   ipcMain.handle('main:queue:list-scheduled', (_, accountId: string) =>
-    wrap(() => queueApi.listSchedules(accountId))
+    wrap(async () => schedulerService.listSchedules(accountId))
   );
 
   ipcMain.handle('main:queue:cancel-schedule', (_, scheduleId: string) =>
-    wrap(() => queueApi.cancelSchedule(scheduleId))
+    wrap(async () => schedulerService.cancelSchedule(scheduleId))
   );
 
   ipcMain.handle(
     'main:queue:reschedule-send',
     (_, args: { scheduleId: string; sendAt: string }) =>
-      wrap(() => queueApi.rescheduleSend(args.scheduleId, args.sendAt))
+      wrap(() => schedulerService.rescheduleSend(args.scheduleId, args.sendAt))
   );
 
   ipcMain.handle('main:queue:send-now', (_, scheduleId: string) =>
-    wrap(() => queueApi.sendScheduledNow(scheduleId))
+    wrap(() => schedulerService.sendScheduledNow(scheduleId))
   );
 
   // ── reminders (local scheduler) ──

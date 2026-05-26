@@ -62,7 +62,6 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
             'shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100'
           }
           onClick={(e) => {
-            e.preventDefault();
             e.stopPropagation();
           }}
           tooltip="Snooze"
@@ -131,7 +130,6 @@ export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, button
             'shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100'
           }
           onClick={(e) => {
-            e.preventDefault();
             e.stopPropagation();
           }}
           tooltip="Label"

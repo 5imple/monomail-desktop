@@ -1,8 +1,15 @@
-import type { CreateSnoozeRequest, SnoozeRecord, ThreadSnapshot } from '@/main/api/queue/types';
+import type {
+  CreateScheduleRequest,
+  CreateSnoozeRequest,
+  DraftSnapshot,
+  ScheduleRecord,
+  SnoozeRecord,
+  ThreadSnapshot
+} from '@/main/api/queue/types';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { notificationManager } from '@/main/services/notification/NotificationManager';
-import { findOrCreateLabel, modifyThread } from '@/main/services/scheduler/gmailMain';
+import { findOrCreateLabel, modifyThread, sendRawMessage } from '@/main/services/scheduler/gmailMain';
 import { generateUUID } from '@/main/utils';
 import log from 'electron-log';
 import Store from 'electron-store';
@@ -17,6 +24,9 @@ import Store from 'electron-store';
 
 const SWEEP_INTERVAL_MS = 30_000;
 const SNOOZE_LABEL_NAME = 'Snoozed';
+// Cap retries so a permanently-failing scheduled send (e.g. revoked token)
+// stops re-attempting instead of sending on every sweep forever.
+const MAX_SEND_ATTEMPTS = 3;
 
 interface SnoozeTask {
   snoozeId: string;
@@ -37,9 +47,23 @@ interface ReminderTask {
   createdAt: string; // ISO 8601
 }
 
+interface ScheduleTask {
+  scheduleId: string;
+  accountId: string;
+  raw: string; // base64url RFC822, built by the renderer at schedule time
+  sendAt: string; // ISO 8601
+  draftId: string;
+  threadId?: string;
+  draftSnapshot: DraftSnapshot;
+  createdAt: string; // ISO 8601
+  status: 'pending' | 'sending' | 'failed';
+  attempts: number;
+}
+
 interface SchedulerStoreSchema {
   snoozes?: Record<string, SnoozeTask>;
   reminders?: Record<string, ReminderTask>;
+  schedules?: Record<string, ScheduleTask>;
 }
 
 const EMPTY_THREAD_SNAPSHOT: ThreadSnapshot = {
@@ -47,6 +71,14 @@ const EMPTY_THREAD_SNAPSHOT: ThreadSnapshot = {
   snippet: '',
   from: { id: '', name: '', email: '' },
   isStarred: false
+};
+
+const EMPTY_DRAFT_SNAPSHOT: DraftSnapshot = {
+  subject: '',
+  bodySnippet: '',
+  recipients: [],
+  attachmentCount: 0,
+  isReply: false
 };
 
 class SchedulerService {
@@ -61,6 +93,7 @@ class SchedulerService {
     tokenManager.on('signed-out', () => {
       this.store.set('snoozes', {});
       this.store.set('reminders', {});
+      this.store.set('schedules', {});
       this.labelIdByAccount.clear();
     });
   }
@@ -76,6 +109,13 @@ class SchedulerService {
    *  anything that came due while the app was closed. */
   start(): void {
     if (this.sweepTimer) return;
+    log.info(
+      '[scheduler] started — sweeping every %ds (%d snooze, %d reminder, %d scheduled-send pending)',
+      SWEEP_INTERVAL_MS / 1000,
+      Object.keys(this.getSnoozes()).length,
+      Object.keys(this.getReminders()).length,
+      Object.keys(this.getSchedules()).length
+    );
     this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
     void this.sweep();
   }
@@ -86,6 +126,7 @@ class SchedulerService {
     const labelId = await this.getSnoozeLabelId(req.accountId);
     // Move the thread out of the inbox and tag it as snoozed.
     await modifyThread(req.accountId, req.threadId, [labelId], ['INBOX']);
+    log.info('[scheduler] snoozed thread %s until %s', req.threadId, req.snoozeUntil);
 
     const task: SnoozeTask = {
       snoozeId: generateUUID(),
@@ -143,6 +184,7 @@ class SchedulerService {
       createdAt: new Date().toISOString()
     };
     this.setReminders({ ...this.getReminders(), [task.reminderId]: task });
+    log.info('[scheduler] reminder set for thread %s at %s', task.threadId, task.reminderAt);
     return { id: task.reminderId };
   }
 
@@ -157,6 +199,61 @@ class SchedulerService {
     return { ok: true };
   }
 
+  // ── scheduled send ────────────────────────────────────────────────────────
+
+  async createSchedule(req: CreateScheduleRequest): Promise<ScheduleRecord> {
+    if (!req.raw) {
+      throw new Error('createSchedule requires a built raw message (renderer must supply it)');
+    }
+    const task: ScheduleTask = {
+      scheduleId: generateUUID(),
+      accountId: req.accountId,
+      raw: req.raw,
+      sendAt: req.sendAt,
+      draftId: req.draftId,
+      threadId: req.threadId,
+      draftSnapshot: req.draftSnapshot ?? EMPTY_DRAFT_SNAPSHOT,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      attempts: 0
+    };
+    this.setSchedules({ ...this.getSchedules(), [task.scheduleId]: task });
+    log.info('[scheduler] scheduled send %s for %s', task.scheduleId, task.sendAt);
+    return this.toScheduleRecord(task);
+  }
+
+  listSchedules(accountId: string): { items: ScheduleRecord[] } {
+    const items = Object.values(this.getSchedules())
+      .filter((task) => task.accountId === accountId)
+      .map((task) => this.toScheduleRecord(task));
+    return { items };
+  }
+
+  cancelSchedule(scheduleId: string): { ok: boolean } {
+    this.removeSchedule(scheduleId);
+    log.info('[scheduler] cancelled scheduled send %s', scheduleId);
+    return { ok: true };
+  }
+
+  async rescheduleSend(scheduleId: string, sendAt: string): Promise<ScheduleRecord> {
+    const schedules = this.getSchedules();
+    const task = schedules[scheduleId];
+    if (!task) throw new Error('Schedule not found');
+    const updated: ScheduleTask = { ...task, sendAt, status: 'pending', attempts: 0 };
+    this.setSchedules({ ...schedules, [scheduleId]: updated });
+    return this.toScheduleRecord(updated);
+  }
+
+  async sendScheduledNow(scheduleId: string): Promise<{ ok: boolean; messageId: string }> {
+    const task = this.getSchedules()[scheduleId];
+    if (!task) throw new Error('Schedule not found');
+    const sent = await sendRawMessage(task.accountId, task.raw, task.threadId);
+    this.removeSchedule(scheduleId);
+    this.emit({ type: 'SCHEDULED_SENT', scheduleId, messageId: sent.id });
+    log.info('[scheduler] sent scheduled message %s now (gmail id %s)', scheduleId, sent.id);
+    return { ok: true, messageId: sent.id };
+  }
+
   // ── sweep ───────────────────────────────────────────────────────────────
 
   private async sweep(): Promise<void> {
@@ -164,6 +261,7 @@ class SchedulerService {
     for (const task of Object.values(this.getSnoozes())) {
       if (new Date(task.snoozeUntil).getTime() > now) continue;
       try {
+        log.info('[scheduler] un-snoozing thread %s (due)', task.threadId);
         await this.restoreToInbox(task);
         this.removeSnooze(task.snoozeId);
         this.emit({ type: 'THREAD_UNSNOOZED', snoozeId: task.snoozeId });
@@ -176,6 +274,7 @@ class SchedulerService {
     for (const reminder of Object.values(this.getReminders())) {
       if (new Date(reminder.reminderAt).getTime() > now) continue;
       try {
+        log.info('[scheduler] firing reminder %s (thread %s)', reminder.reminderId, reminder.threadId);
         notificationManager.createNativeNotification({
           id: `reminder-${reminder.reminderId}`,
           title: 'Reminder',
@@ -185,6 +284,44 @@ class SchedulerService {
         this.removeReminder(reminder.reminderId);
       } catch (e) {
         log.warn('[scheduler] reminder sweep failed for %s:', reminder.reminderId, (e as Error).message);
+      }
+    }
+
+    for (const task of Object.values(this.getSchedules())) {
+      if (task.status === 'sending' || task.status === 'failed') continue;
+      if (new Date(task.sendAt).getTime() > now) continue;
+      // Send-once guard: mark 'sending' and persist before the await so an
+      // overlapping sweep cannot dispatch the same message twice.
+      this.setSchedules({
+        ...this.getSchedules(),
+        [task.scheduleId]: { ...task, status: 'sending' }
+      });
+      try {
+        log.info('[scheduler] sending scheduled message %s (due)', task.scheduleId);
+        const sent = await sendRawMessage(task.accountId, task.raw, task.threadId);
+        this.removeSchedule(task.scheduleId);
+        this.emit({ type: 'SCHEDULED_SENT', scheduleId: task.scheduleId, messageId: sent.id });
+      } catch (e) {
+        const attempts = task.attempts + 1;
+        const status: ScheduleTask['status'] = attempts >= MAX_SEND_ATTEMPTS ? 'failed' : 'pending';
+        this.setSchedules({
+          ...this.getSchedules(),
+          [task.scheduleId]: { ...task, status, attempts }
+        });
+        log.warn(
+          '[scheduler] scheduled send %s failed (attempt %d/%d): %s',
+          task.scheduleId,
+          attempts,
+          MAX_SEND_ATTEMPTS,
+          (e as Error).message
+        );
+        if (status === 'failed') {
+          this.emit({
+            type: 'SCHEDULE_FAILED',
+            scheduleId: task.scheduleId,
+            error: (e as Error).message
+          });
+        }
       }
     }
   }
@@ -234,6 +371,31 @@ class SchedulerService {
     const reminders = this.getReminders();
     delete reminders[reminderId];
     this.setReminders(reminders);
+  }
+
+  private getSchedules(): Record<string, ScheduleTask> {
+    return this.store.get('schedules', {});
+  }
+
+  private setSchedules(schedules: Record<string, ScheduleTask>): void {
+    this.store.set('schedules', schedules);
+  }
+
+  private removeSchedule(scheduleId: string): void {
+    const schedules = this.getSchedules();
+    delete schedules[scheduleId];
+    this.setSchedules(schedules);
+  }
+
+  private toScheduleRecord(task: ScheduleTask): ScheduleRecord {
+    return {
+      scheduleId: task.scheduleId,
+      draftId: task.draftId,
+      accountId: task.accountId,
+      sendAt: task.sendAt,
+      createdAt: task.createdAt,
+      draftSnapshot: task.draftSnapshot
+    };
   }
 
   private toSnoozeRecord(task: SnoozeTask): SnoozeRecord {

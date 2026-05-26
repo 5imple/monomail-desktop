@@ -1,5 +1,8 @@
 import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
 import electronApi from '@/renderer/app/lib/electronApi';
+import { buildRawMessage } from '@/renderer/app/lib/mime/buildRawMessage';
+import { DBGetDraftById } from '@/renderer/app/lib/db/draft';
+import { DBGetAttachmentsForDraft } from '@/renderer/app/lib/db/draftAttachment';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import type {
   ScheduleRecord,
@@ -258,10 +261,22 @@ export function useQueueAtom() {
       sendAt: string;
       draftSnapshot?: DraftSnapshot;
     }) => {
-      const res = await electronApi.queueSchedule(req);
+      // Standalone: build the raw MIME now (same path as immediate send) so the
+      // main-process timer can send it at sendAt without backend/draft access.
+      const fullDraft = await DBGetDraftById(req.accountId, req.draftId);
+      if (!fullDraft) return { ok: false as const, error: 'Draft not found' };
+      const attachmentRecords = await DBGetAttachmentsForDraft(req.accountId, req.draftId);
+      const builtRaw = await buildRawMessage(fullDraft, attachmentRecords);
+      const threadId =
+        fullDraft.threadId && fullDraft.threadId.length < 20 ? fullDraft.threadId : undefined;
+
+      const res = await electronApi.queueSchedule({ ...req, raw: builtRaw, threadId });
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = scheduleRecordToItem(res.data);
-      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }; });
+      setState((prev2) => {
+        const prev = resolveQueueState(prev2);
+        return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } };
+      });
       return { ok: true as const, item };
     },
     [setState]
