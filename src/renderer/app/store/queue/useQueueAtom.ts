@@ -319,7 +319,9 @@ export function useQueueAtom() {
         const prev = resolveQueueState(prev2);
         return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } };
       });
-      return { ok: true as const, item };
+      // Return the uid the draft was actually resolved under so the caller cleans
+      // up the right local draft (matters when the fallback above kicked in).
+      return { ok: true as const, item, resolvedUid };
     },
     [setState, primaryAccountId]
   );

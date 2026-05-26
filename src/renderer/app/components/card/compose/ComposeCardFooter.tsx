@@ -240,7 +240,7 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
       // Standalone: the raw message is now captured in the scheduler, so remove
       // the local draft (DB + attachment bytes + thread) — otherwise it lingers
       // in Drafts and could be opened and sent again manually (double-send).
-      await removeDraft(accountId, draft.id, false);
+      await removeDraft(res.resolvedUid, draft.id, false);
       setActiveLayout('LATER');
       toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
     },
