@@ -52,8 +52,9 @@ const fetchSpace = (id: string, signal?: AbortSignal) => {
 const fetchDefaultSpace = (signal?: AbortSignal) => {
   if (!isBackendConfigured())
     return Promise.resolve<MonoSpaceResponse>({
-      id: '',
-      name: '',
+      // Stable non-empty id so callers that key/compare on it don't choke on '' .
+      id: 'local-default',
+      name: 'Default',
       color: '',
       icon: '',
       createdAt: '',
