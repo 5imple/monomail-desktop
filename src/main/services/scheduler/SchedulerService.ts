@@ -7,10 +7,10 @@ import type {
   ThreadSnapshot
 } from '@/main/api/queue/types';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
-import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { notificationManager } from '@/main/services/notification/NotificationManager';
 import { findOrCreateLabel, modifyThread, sendRawMessage } from '@/main/services/scheduler/gmailMain';
 import { generateUUID } from '@/main/utils';
+import { BrowserWindow } from 'electron';
 import log from 'electron-log';
 import Store from 'electron-store';
 
@@ -91,7 +91,10 @@ class SchedulerService {
     this.store = new Store<SchedulerStoreSchema>({ name: 'scheduler' });
     // Drop all queued items on sign-out — they belong to the signed-out user.
     tokenManager.on('signed-out', () => {
-      this.store.set('snoozes', {});
+      // Keep snoozes: a snoozed thread sits out of the inbox under a "Snoozed"
+      // label, so clearing the record would strand it (never restored). Leaving
+      // it lets the sweep restore it at snoozeUntil once the account reconnects.
+      // Reminders/schedules are forward actions that shouldn't fire post-sign-out.
       this.store.set('reminders', {});
       this.store.set('schedules', {});
       this.labelIdByAccount.clear();
@@ -116,8 +119,33 @@ class SchedulerService {
       Object.keys(this.getReminders()).length,
       Object.keys(this.getSchedules()).length
     );
+    this.recoverStuckSchedules();
     this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
     void this.sweep();
+  }
+
+  /** Crash recovery: a schedule left 'sending' means a prior run set the guard
+   *  but exited before the send resolved. We can't know whether it actually went
+   *  out, so we don't auto-resend (that would risk a duplicate) — we drop it and
+   *  notify the user to verify, rather than leave it stuck forever. */
+  private recoverStuckSchedules(): void {
+    for (const task of Object.values(this.getSchedules())) {
+      if (task.status !== 'sending') continue;
+      log.warn('[scheduler] schedule %s stuck "sending" after restart — dropping', task.scheduleId);
+      this.removeSchedule(task.scheduleId);
+      try {
+        notificationManager.createNativeNotification({
+          id: `schedule-stuck-${task.scheduleId}`,
+          title: 'Scheduled send may not have completed',
+          body:
+            task.draftSnapshot.subject ||
+            'A scheduled email was interrupted — please check your Sent folder.',
+          metadata: { scheduleId: task.scheduleId, accountId: task.accountId }
+        });
+      } catch {
+        /* notification is best-effort */
+      }
+    }
   }
 
   // ── snooze ──────────────────────────────────────────────────────────────
@@ -303,23 +331,24 @@ class SchedulerService {
         this.emit({ type: 'SCHEDULED_SENT', scheduleId: task.scheduleId, messageId: sent.id });
       } catch (e) {
         const attempts = task.attempts + 1;
-        const status: ScheduleTask['status'] = attempts >= MAX_SEND_ATTEMPTS ? 'failed' : 'pending';
-        this.setSchedules({
-          ...this.getSchedules(),
-          [task.scheduleId]: { ...task, status, attempts }
-        });
+        const message = (e as Error).message;
         log.warn(
           '[scheduler] scheduled send %s failed (attempt %d/%d): %s',
           task.scheduleId,
           attempts,
           MAX_SEND_ATTEMPTS,
-          (e as Error).message
+          message
         );
-        if (status === 'failed') {
-          this.emit({
-            type: 'SCHEDULE_FAILED',
-            scheduleId: task.scheduleId,
-            error: (e as Error).message
+        if (attempts >= MAX_SEND_ATTEMPTS) {
+          // Give up: remove it so it doesn't linger as a dead row that looks
+          // pending, and surface the failure so the user can resend.
+          this.removeSchedule(task.scheduleId);
+          this.emit({ type: 'SCHEDULE_FAILED', scheduleId: task.scheduleId, error: message });
+        } else {
+          // Retry on a later sweep — back to 'pending'.
+          this.setSchedules({
+            ...this.getSchedules(),
+            [task.scheduleId]: { ...task, status: 'pending', attempts }
           });
         }
       }
@@ -410,8 +439,11 @@ class SchedulerService {
   }
 
   private emit(event: Record<string, unknown>): void {
-    const mainWindow = windowManager.getMainAppWindow();
-    if (mainWindow) mainWindow.webContents.send('renderer:queue:event', event);
+    // Broadcast to every window (not just the main one): a compose/popout window
+    // may be the only one open, and each renderer keeps its own queue cache.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('renderer:queue:event', event);
+    }
   }
 }
 

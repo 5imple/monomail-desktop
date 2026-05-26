@@ -1,5 +1,6 @@
 import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
 import electronApi from '@/renderer/app/lib/electronApi';
+import { toast } from 'sonner';
 import { buildRawMessage } from '@/renderer/app/lib/mime/buildRawMessage';
 import { DBGetDraftById } from '@/renderer/app/lib/db/draft';
 import { DBGetAttachmentsForDraft } from '@/renderer/app/lib/db/draftAttachment';
@@ -106,6 +107,7 @@ interface QueueEvent {
   snoozeUntil?: string;
   sendAt?: string;
   messageId?: string;
+  error?: string;
 }
 
 function resolveQueueState(s: QueueState | Promise<QueueState>): QueueState {
@@ -134,6 +136,18 @@ function ensurePushSubscribed() {
         if (!data.scheduleId) return;
         const { [data.scheduleId]: _removed, ...rest } = prev.scheduled;
         store.set(queueAtom, { ...prev, scheduled: rest });
+        return;
+      }
+      case 'SCHEDULE_FAILED': {
+        if (!data.scheduleId) return;
+        const failedItem = prev.scheduled[data.scheduleId];
+        const { [data.scheduleId]: _failed, ...remaining } = prev.scheduled;
+        store.set(queueAtom, { ...prev, scheduled: remaining });
+        toast.error(
+          failedItem
+            ? `Scheduled send failed: "${failedItem.subject || '(no subject)'}"${data.error ? ` — ${data.error}` : ''}`
+            : `A scheduled send failed${data.error ? `: ${data.error}` : ''}`
+        );
         return;
       }
       case 'SNOOZE_RESCHEDULED': {
