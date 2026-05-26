@@ -1,4 +1,4 @@
-import { apiClient } from '@/main/api/apiClient';
+import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import {
   AddPinRequest,
   CreateSpaceRequest,
@@ -27,6 +27,8 @@ import {
  * @returns {Promise<MonoSpaceResponse[]>} - The list of spaces.
  */
 const fetchSpaces = (signal?: AbortSignal) => {
+  // Standalone: spaces are a backend-only feature (hidden in the standalone build).
+  if (!isBackendConfigured()) return Promise.resolve<MonoSpaceResponse[]>([]);
   return apiClient.get<MonoSpaceResponse[]>('/mono/spaces', { signal });
 };
 
@@ -48,6 +50,18 @@ const fetchSpace = (id: string, signal?: AbortSignal) => {
  * @returns {Promise<MonoSpaceResponse>} - The default space data.
  */
 const fetchDefaultSpace = (signal?: AbortSignal) => {
+  if (!isBackendConfigured())
+    return Promise.resolve<MonoSpaceResponse>({
+      id: '',
+      name: '',
+      color: '',
+      icon: '',
+      createdAt: '',
+      updatedAt: '',
+      pinnedEmails: [],
+      accountUids: [],
+      default: true
+    });
   return apiClient.get<MonoSpaceResponse>('/mono/spaces/default', {
     signal
   });
@@ -181,6 +195,15 @@ const fetchSpaceContacts = (id: string, signal?: AbortSignal) => {
  * @returns {Promise<CustomSidebarResponse>} - The custom sidebar configuration.
  */
 const fetchCustomSidebar = (spaceId: string, signal?: AbortSignal) => {
+  // Standalone: no server-side custom sidebar — return an empty config.
+  if (!isBackendConfigured())
+    return Promise.resolve<CustomSidebarResponse>({
+      id: '',
+      spaceId,
+      sidebarState: { items: {}, order: [] },
+      createdAt: '',
+      updatedAt: ''
+    });
   return apiClient.get<CustomSidebarResponse>(`/mono/sidebar/spaces/${spaceId}`, {
     signal
   });
