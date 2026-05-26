@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
-import { apiClient } from '@/main/api/apiClient';
+import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import {
   DraftAttachmentDownloadResponse,
   DraftUploadInlineImageResponse,
@@ -27,6 +27,8 @@ const getDraftById = (draftId: string, signal?: AbortSignal) => {
  * @returns {Promise<MonoDraftGetResponse>} The draft response.
  */
 const getDrafts = (signal?: AbortSignal) => {
+  // Standalone: drafts live locally in IndexedDB; there is no server draft store.
+  if (!isBackendConfigured()) return Promise.resolve<MonoDraftGetResponse>({ drafts: {} });
   return apiClient.get<MonoDraftGetResponse>(`/mail/drafts`, {
     signal
   });

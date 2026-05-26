@@ -591,7 +591,18 @@ const getApiUrl = () => {
   return `${base}/api/v1`;
 };
 
-export const apiClient = ApiClient.getInstance(getApiUrl());
+// Resolve once (so the not-configured warning logs at most once, not per call).
+const API_BASE_URL = getApiUrl();
+
+/**
+ * True when a backend base URL is configured. Secondary, backend-only features
+ * (tracking, share, spaces, server-side drafts, contacts, feedback) short-circuit
+ * to a local/no-op default when this is false, so the standalone build makes no
+ * backend calls and logs no "Backend not configured" errors.
+ */
+export const isBackendConfigured = (): boolean => Boolean(API_BASE_URL);
+
+export const apiClient = ApiClient.getInstance(API_BASE_URL);
 
 // Separate client for direct Gmail API calls. Base URL resolves to
 // https://gmail.googleapis.com/gmail/v1/users/me/<path>.
