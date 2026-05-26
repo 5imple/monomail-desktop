@@ -1,4 +1,4 @@
-import { apiClient } from '@/main/api/apiClient';
+import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import { GoogleContactResponse } from '@/main/api/contact/types';
 import { Contact } from '@/renderer/app/lib/db/contact';
 
@@ -10,6 +10,14 @@ interface ContactListResponse {
 }
 
 const getMonoContactList = (signal?: AbortSignal) => {
+  // Standalone: no backend contact store — return an empty page.
+  if (!isBackendConfigured())
+    return Promise.resolve<ContactListResponse>({
+      contacts: [],
+      currentPage: 0,
+      totalPages: 0,
+      totalElements: 0
+    });
   return apiClient.get<ContactListResponse>(`/mono/contact`, {
     signal
   });
@@ -36,6 +44,9 @@ interface PinnedEmailResponse {
 
 // Fetch Pinned Emails
 const getPinnedEmails = (signal?: AbortSignal) => {
+  // Standalone: no backend pin store.
+  if (!isBackendConfigured())
+    return Promise.resolve<PinnedEmailResponse>({ uid: '', pinnedEmails: [] });
   return apiClient.get<PinnedEmailResponse>(`/mono/pin`, {
     signal
   });

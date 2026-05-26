@@ -1,4 +1,4 @@
-import { apiClient } from '@/main/api/apiClient';
+import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import { GmailMessage, GmailThreadGetResponse } from '@/main/api/gmail/types';
 
 /**
@@ -84,6 +84,8 @@ const getLinkShare = async ({ dataId, signal }: { dataId: string; signal?: Abort
  * @returns {Promise<OwnerShareResponse[]>} The list of shared emails owned by the user.
  */
 const getOwnerShares = async ({ signal }: { signal?: AbortSignal } = {}) => {
+  // Standalone: public share links are a dropped backend-only feature.
+  if (!isBackendConfigured()) return [] as OwnerShareResponse[];
   return await apiClient.get<OwnerShareResponse[]>(`/mono/share/owner`, {
     signal
   });
@@ -95,6 +97,8 @@ const getOwnerShares = async ({ signal }: { signal?: AbortSignal } = {}) => {
  * @returns {Promise<MonoShareResponse>} Map of accountId to shared item arrays.
  */
 const getMonoShares = async ({ signal }: { signal?: AbortSignal } = {}) => {
+  // Standalone: public share links are a dropped backend-only feature.
+  if (!isBackendConfigured()) return {} as MonoShareResponse;
   return await apiClient.get<MonoShareResponse>(`/mono/share`, {
     signal
   });
