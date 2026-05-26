@@ -11,6 +11,7 @@ import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePop
 import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import React, { useCallback, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -203,6 +204,7 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
   const [open, setOpen] = useState(false);
   const { scheduleDraft, primaryAccountId } = useQueueAtom();
   const { setActiveLayout } = useGlobalAtom();
+  const { removeDraft } = useDraftAtom();
   const { getUidFromEmail } = useAuth();
   const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
 
@@ -235,10 +237,14 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         toast.error(`Couldn't schedule send: ${res.error}`);
         return;
       }
+      // Standalone: the raw message is now captured in the scheduler, so remove
+      // the local draft (DB + attachment bytes + thread) — otherwise it lingers
+      // in Drafts and could be opened and sent again manually (double-send).
+      await removeDraft(accountId, draft.id, false);
       setActiveLayout('LATER');
       toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
     },
-    [draft, scheduleDraft, setActiveLayout, getUidFromEmail, primaryAccountId]
+    [draft, scheduleDraft, setActiveLayout, getUidFromEmail, primaryAccountId, removeDraft]
   );
 
   return (
