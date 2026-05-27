@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/componen
 import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
+import { CustomDateTimePicker } from '@/renderer/app/containers/queue/CustomDateTimePicker';
 import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
 import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
@@ -194,6 +195,7 @@ export default ComposeCardFooter;
 
 function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: boolean }) {
   const [open, setOpen] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
   const { scheduleDraft, primaryAccountId } = useQueueAtom();
   const { setActiveLayout } = useGlobalAtom();
   const { removeDraft } = useDraftAtom();
@@ -240,7 +242,13 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setCustomMode(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="text"
@@ -258,12 +266,24 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         sideOffset={6}
         className="w-auto border-none bg-transparent p-0 shadow-none"
       >
-        <ReschedulePopover
-          presets={presets}
-          heading="Send Later"
-          onPickPreset={handlePickPreset}
-          onPickCustom={() => setOpen(false)}
-        />
+        {customMode ? (
+          <CustomDateTimePicker
+            heading="Send Later"
+            confirmLabel="Schedule"
+            onBack={() => setCustomMode(false)}
+            onConfirm={(iso) => {
+              setCustomMode(false);
+              handlePickPreset({ id: 'custom', label: 'Custom', scheduledFor: iso });
+            }}
+          />
+        ) : (
+          <ReschedulePopover
+            presets={presets}
+            heading="Send Later"
+            onPickPreset={handlePickPreset}
+            onPickCustom={() => setCustomMode(true)}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );

@@ -2,6 +2,7 @@ import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
+import { CustomDateTimePicker } from '@/renderer/app/containers/queue/CustomDateTimePicker';
 import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
 import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
@@ -17,6 +18,7 @@ interface ThreadActionButtonProps {
 
 export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, buttonClassName }) => {
   const [open, setOpen] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
   const { snoozeThread } = useQueueAtom();
   const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
 
@@ -50,7 +52,13 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setCustomMode(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="text"
@@ -77,12 +85,24 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
         className="w-auto border-none bg-transparent p-0 shadow-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <ReschedulePopover
-          presets={presets}
-          heading="Snooze until"
-          onPickPreset={handlePickPreset}
-          onPickCustom={() => setOpen(false)}
-        />
+        {customMode ? (
+          <CustomDateTimePicker
+            heading="Snooze until"
+            confirmLabel="Snooze"
+            onBack={() => setCustomMode(false)}
+            onConfirm={(iso) => {
+              setCustomMode(false);
+              handlePickPreset({ id: 'custom', scheduledFor: iso });
+            }}
+          />
+        ) : (
+          <ReschedulePopover
+            presets={presets}
+            heading="Snooze until"
+            onPickPreset={handlePickPreset}
+            onPickCustom={() => setCustomMode(true)}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );
