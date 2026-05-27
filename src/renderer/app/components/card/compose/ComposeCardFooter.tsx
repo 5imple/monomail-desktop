@@ -138,14 +138,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
           >
             Remind me
           </Button>
-          <Button
-            variant="text"
-            sizeVariant="sm"
-            disabled
-            className="px-0 text-[13px] font-semibold text-muted-foreground/70 disabled:opacity-100"
-          >
-            Share draft
-          </Button>
         </div>
 
         {/* Right: secondary icon actions */}
