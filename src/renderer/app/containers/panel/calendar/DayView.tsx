@@ -698,11 +698,13 @@ export const DayView: React.FC<DayViewProps> = ({
         })()}
 
         {/* Scrollable time slots section */}
-        {/* relative+flex-1 wrapper gives the ScrollArea a guaranteed definite
-            height (via absolute inset-0) so the time grid actually scrolls —
-            flex/percentage height alone was leaving it unbounded. */}
-        <div className="relative min-h-0 w-full flex-1">
-          <ScrollArea className="absolute inset-0" viewportId="calendar-day-viewport">
+        {/* Mirror the proven-scrolling ThreadList pattern: a bounded
+            `relative min-h-0 flex-1 overflow-hidden` wrapper + a ScrollArea with
+            `h-full`. (NOT `absolute inset-0` — Radix's ScrollArea root sets an
+            inline `position: relative` that overrides the Tailwind `absolute`
+            class, so absolute positioning silently does nothing.) */}
+        <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+          <ScrollArea className="h-full w-full" viewportId="calendar-day-viewport">
             <div className="relative">
             <div className="flex flex-col">
               {timeSlots.map(({ hour, minute, index }) => (
