@@ -698,7 +698,7 @@ export const DayView: React.FC<DayViewProps> = ({
         })()}
 
         {/* Scrollable time slots section */}
-        <ScrollArea className="w-full flex-1" viewportId="calendar-day-viewport">
+        <ScrollArea className="min-h-0 w-full flex-1" viewportId="calendar-day-viewport">
           <div className="relative">
             <div className="flex flex-col">
               {timeSlots.map(({ hour, minute, index }) => (
