@@ -32,6 +32,17 @@ interface DayViewProps extends CalendarViewProps {
   numDays?: number;
 }
 
+// Remembers the day grid's vertical scroll position per day-key for the session.
+// DayView is unmounted/remounted when the user toggles DAY <-> AGENDA, which
+// would otherwise reset scroll and re-snap to "now" — overwriting a manual
+// scroll. Persisting here lets us restore the user's position across remounts.
+const dayViewScrollByKey = new Map<string, number>();
+
+// Local (not UTC) day-key — the time grid and the current-time line position
+// everything in local time, so the key must be local to match.
+const dayScrollKey = (date: Date, numDays: number): string =>
+  `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${numDays}`;
+
 export const DayView: React.FC<DayViewProps> = ({
   date,
   numDays = 1,
@@ -168,27 +179,48 @@ export const DayView: React.FC<DayViewProps> = ({
     if (!events || events.length === 0) return;
   }, [selectedTimeZone, events.length, date]);
 
-  // Auto-scroll to the current hour when the day view first opens (or the
-  // selected date changes) — otherwise the grid sits at midnight and the user
-  // has to scroll to find "now". One-shot per (date, view) so a manual scroll
-  // is respected.
+  // Auto-scroll the day grid on open / date change. Behavior per day-key:
+  //  - if the user already has a remembered scroll position for this day
+  //    (incl. after a DAY<->AGENDA remount), restore it — never fight a manual
+  //    scroll;
+  //  - otherwise scroll to ~2h before "now" for today (so now sits in view with
+  //    context above) or 8am for other days.
+  // Positioning is LOCAL time, matching the grid layout and the red current-time
+  // line in shared.tsx (CurrentTimeLine), and "today" uses the same isSameDay
+  // check the day headers / current-time line use — so the scroll lands exactly
+  // where the red line is.
   const hasAutoScrolledRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    const key = `${date.toISOString().slice(0, 10)}-${numDays}`;
+    const key = dayScrollKey(date, numDays);
     if (hasAutoScrolledRef.current === key) return;
     const viewport = document.getElementById('calendar-day-viewport');
     if (!viewport) return;
-    const now = new Date();
-    const isToday =
-      date.getFullYear() === now.getFullYear() &&
-      date.getMonth() === now.getMonth() &&
-      date.getDate() === now.getDate();
-    // Today: ~2h before current hour so "now" sits in view with context above.
-    // Other days: 8am (typical work-day start) so the user lands somewhere useful.
-    const targetHour = isToday ? Math.max(0, now.getHours() - 2) : 8;
-    viewport.scrollTo({ top: targetHour * pixelsPerHour, behavior: 'auto' });
     hasAutoScrolledRef.current = key;
+
+    const remembered = dayViewScrollByKey.get(key);
+    if (remembered !== undefined) {
+      viewport.scrollTo({ top: remembered, behavior: 'auto' });
+      return;
+    }
+
+    const now = new Date();
+    const isToday = isSameDay(date, now);
+    const targetHour = isToday ? Math.max(0, now.getHours() - 2) : 8;
+    const top = targetHour * pixelsPerHour;
+    viewport.scrollTo({ top, behavior: 'auto' });
+    dayViewScrollByKey.set(key, top);
   }, [date, numDays, pixelsPerHour]);
+
+  // Persist the user's manual scroll position per day-key so it survives the
+  // DAY<->AGENDA remount (see dayViewScrollByKey above).
+  React.useEffect(() => {
+    const viewport = document.getElementById('calendar-day-viewport');
+    if (!viewport) return;
+    const key = dayScrollKey(date, numDays);
+    const onScroll = () => dayViewScrollByKey.set(key, viewport.scrollTop);
+    viewport.addEventListener('scroll', onScroll, { passive: true });
+    return () => viewport.removeEventListener('scroll', onScroll);
+  }, [date, numDays]);
 
   // Merge live drag delta/over to reflect real-time during drag
   const getEventWithDragLive = (event: CalendarEvent): CalendarEvent => {
