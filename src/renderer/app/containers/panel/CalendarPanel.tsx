@@ -226,6 +226,19 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     loadGoogleEvents
   ]);
 
+  // Defensive: when accounts first become available, trigger an initial fetch
+  // even if the dep-based effect above had a race where selectedAccountUids was
+  // briefly []. Fires once per session — no more manual refresh on first open.
+  const initialFetchedRef = useRef(false);
+  useEffect(() => {
+    if (initialFetchedRef.current) return;
+    if (accounts.length === 0) return;
+    initialFetchedRef.current = true;
+    const uids = accounts.map((a) => a.uid);
+    const monthsToFetch = getPreloadMonths(currentMonth);
+    uids.forEach((uid) => monthsToFetch.forEach((m) => fetchMonth(m, uid)));
+  }, [accounts.length, currentMonth, getPreloadMonths]);
+
   // ============================================================================
   // NAVIGATION
   // ============================================================================

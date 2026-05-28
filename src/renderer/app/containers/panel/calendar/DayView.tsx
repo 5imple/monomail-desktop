@@ -168,6 +168,28 @@ export const DayView: React.FC<DayViewProps> = ({
     if (!events || events.length === 0) return;
   }, [selectedTimeZone, events.length, date]);
 
+  // Auto-scroll to the current hour when the day view first opens (or the
+  // selected date changes) — otherwise the grid sits at midnight and the user
+  // has to scroll to find "now". One-shot per (date, view) so a manual scroll
+  // is respected.
+  const hasAutoScrolledRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const key = `${date.toISOString().slice(0, 10)}-${numDays}`;
+    if (hasAutoScrolledRef.current === key) return;
+    const viewport = document.getElementById('calendar-day-viewport');
+    if (!viewport) return;
+    const now = new Date();
+    const isToday =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+    // Today: ~2h before current hour so "now" sits in view with context above.
+    // Other days: 8am (typical work-day start) so the user lands somewhere useful.
+    const targetHour = isToday ? Math.max(0, now.getHours() - 2) : 8;
+    viewport.scrollTo({ top: targetHour * pixelsPerHour, behavior: 'auto' });
+    hasAutoScrolledRef.current = key;
+  }, [date, numDays, pixelsPerHour]);
+
   // Merge live drag delta/over to reflect real-time during drag
   const getEventWithDragLive = (event: CalendarEvent): CalendarEvent => {
     const base = event;
