@@ -167,8 +167,6 @@ export function registerAppEventHandlers() {
         apiOrigin || '',
         apiWs,
         publicDomain,
-        'https://*.amplitude.com',
-        'https://api.mixpanel.com',
         'https://*.paddle.com',
         'https://status.cloud.google.com',
         // Google OAuth + Gmail direct API (Phase 1+)
@@ -185,8 +183,8 @@ export function registerAppEventHandlers() {
 
       // In dev mode relax script-src so Vite HMR and inline React work.
       const scriptSrc = !app.isPackaged
-        ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amplitude.com"
-        : "script-src 'self' https://*.amplitude.com";
+        ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+        : "script-src 'self'";
 
       const csp = [
         "default-src 'self'",

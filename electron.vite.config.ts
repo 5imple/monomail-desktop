@@ -172,9 +172,6 @@ export default defineConfig({
             'utils-dom': ['dompurify', 'sanitize-html'],
             'utils-markdown': ['marked', 'remark-gfm', 'rehype-raw'],
 
-            // Analytics and tracking
-            analytics: ['@amplitude/analytics-browser', 'mixpanel-browser'],
-
             // PDF and document handling
             'document-handling': ['react-pdf', 'react-to-print'],
 

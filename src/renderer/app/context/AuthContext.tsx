@@ -27,8 +27,6 @@ import {
 } from '@/renderer/app/store/space/useSpaceAtom';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
-import * as amplitude from '@amplitude/analytics-browser';
-import mixpanel from 'mixpanel-browser';
 import React, {
   createContext,
   ReactNode,
@@ -517,43 +515,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           member: member ?? null,
           preference: null // Will be updated below
         });
-
-        if (member && !isDevelopment()) {
-          mixpanel.identify(member.uid);
-          mixpanel.people.set({
-            $user_id: member.uid,
-            $name: member.displayName,
-            $email: member.email,
-            $member_name: member.memberName,
-            $app_version: import.meta.env.MONO_ENV_APP_VERSION,
-            $connected_accounts: accounts.length,
-            $connected_emails: accounts.map((account) => account.email)
-          });
-
-          amplitude.setUserId(member.uid);
-          // Set user properties in Amplitude
-          const identifyObj = new amplitude.Identify();
-
-          identifyObj.set('name', member.displayName);
-          identifyObj.set('email', member.email);
-          identifyObj.set('member_name', member.memberName);
-          identifyObj.set('app_version', import.meta.env.MONO_ENV_APP_VERSION);
-          identifyObj.set('connected_accounts_count', accounts.length);
-          identifyObj.set(
-            'connected_emails',
-            accounts.map((account) => account.email)
-          );
-
-          // Send the identify call
-          amplitude.identify(identifyObj);
-
-          // Track login event in Amplitude
-          amplitude.track('login', {
-            user_id: member.uid,
-            app_version: import.meta.env.MONO_ENV_APP_VERSION,
-            connected_accounts: accounts.length
-          });
-        }
 
         let preference;
         try {

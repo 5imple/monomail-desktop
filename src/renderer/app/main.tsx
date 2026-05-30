@@ -12,7 +12,6 @@ import '@/renderer/global.css';
 if (import.meta.env.DEV) {
   import('@/renderer/utils/reactScan');
 }
-import mixpanel from 'mixpanel-browser';
 import ReactDOM from 'react-dom/client';
 import { HotkeysProvider } from 'react-hotkeys-hook';
 import { BrowserRouter, HashRouter } from 'react-router-dom';
@@ -36,25 +35,10 @@ import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './context/AuthContext';
 import './global.css';
 import RouteLogger from './middlewares/RouteLogger';
-import initializeAmplitude from '@/renderer/app/lib/amplitude';
 import { KeyboardNavigationProvider } from '@/renderer/app/context/KeyboardNavigationContext';
 import { SyncThreadProvider } from '@/renderer/app/context/SyncThreadContext';
 import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import { initializeServiceWorker, initializeNetworkMonitoring } from '@/renderer/app/lib/pwa';
-
-// Initialize Amplitude before rendering your app
-if (!isDevelopment()) {
-  mixpanel.init(import.meta.env.MONO_ENV_MIXPANEL_TOKEN, {
-    debug: isDevelopment(),
-    track_pageview: true,
-    persistence: 'localStorage',
-    // Honor Do-Not-Track. The previous `ignore_dnt: true` overrode the
-    // user's browser-level opt-out, which is hostile-by-default for a
-    // mail client.
-    ignore_dnt: false
-  });
-  initializeAmplitude();
-}
 
 // Initialize Service Worker for Network First caching strategy
 initializeServiceWorker();
