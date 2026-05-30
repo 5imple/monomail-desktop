@@ -105,7 +105,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 
   return (
     <div className={cn('no-drag', className)}>
-      <CardFooter className="mx-9 flex h-[61px] items-center border-t-[0.5px] border-border/35 px-0 py-0">
+      <CardFooter className="mx-9 flex h-[61px] items-center border-t border-foreground/15 px-0 py-0 dark:border-foreground/25">
         {/* Left: primary text actions */}
         <div className="flex items-center gap-5">
           <Button
@@ -136,14 +136,6 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
             className="px-0 text-[13px] font-semibold text-muted-foreground/70 disabled:opacity-100"
           >
             Remind me
-          </Button>
-          <Button
-            variant="text"
-            sizeVariant="sm"
-            disabled
-            className="px-0 text-[13px] font-semibold text-muted-foreground/70 disabled:opacity-100"
-          >
-            Share draft
           </Button>
         </div>
 
