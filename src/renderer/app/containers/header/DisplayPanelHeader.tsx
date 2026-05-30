@@ -2,7 +2,6 @@ import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
-import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
@@ -13,8 +12,7 @@ import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
-import { forwardRef, useCallback, useMemo, useRef, useEffect } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
+import { forwardRef, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 
@@ -31,7 +29,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     const { setActiveThreadId } = useThreadAtom();
     const { removeLabelFromThread } = useThreadLabelAtom();
     const { t } = useTranslation();
-    const { activateScope, deactivateScope, activeScopes } = useHotkeyScope();
     const { setFullscreenDisplayPanel, fullscreenDisplayPanel } = useGlobalAtom();
     const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
     const { openDialog } = useDialogs();
@@ -130,7 +127,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     const handleClosePanel = async () => {
       if (thread) {
         setActiveThreadId(null);
-        setFullscreenDisplayPanel(false);
         trackEvent('panel_closed', { thread_id: thread.id });
       }
     };
@@ -158,21 +154,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       // Create a Set of labelIds that start with 'Label_' to ensure uniqueness
       return [...new Set(thread.labelIds.filter((label) => label.includes('Label_')))];
     }, [thread]);
-
-    const isNavigationEnabled = useCallback(() => {
-      return (
-        !activeScopes.includes('DIALOG') &&
-        !activeScopes.includes('DROPDOWN_MENU') &&
-        !activeScopes.includes('GLOBAL_COMPOSE')
-      );
-    }, [activeScopes]);
-
-    useHotkeys(
-      'ESC',
-      handleClosePanel,
-      { preventDefault: true, enabled: isNavigationEnabled(), scopes: ['CONVERSATION_DISPLAY'] },
-      [handleClosePanel]
-    );
 
     return (
       <div className="drag relative">

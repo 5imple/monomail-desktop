@@ -61,7 +61,7 @@ export const LinkButtonExtension = Extension.create({
                             '&nbsp;'.repeat(match.length)
                           );
                           button.className =
-                            'link-button text-accent underline underline-offset-2 focus:outline-none focus-visible:ring-2 text-start';
+                            'link-button text-blue-600 underline underline-offset-2 focus:outline-none focus-visible:ring-2 text-start';
 
                           // Store position data and href as attributes
                           button.setAttribute('data-href', href);
@@ -97,7 +97,7 @@ export const LinkButtonExtension = Extension.create({
                           fallback.innerHTML = text.replace(/ +/g, (match) =>
                             '&nbsp;'.repeat(match.length)
                           );
-                          fallback.className = 'text-accent underline underline-offset-2';
+                          fallback.className = 'text-blue-600 underline underline-offset-2';
                           return fallback;
                         }
                       },
@@ -371,8 +371,14 @@ export const LinkButtonPopover: React.FC<LinkButtonPopoverProps> = ({ editor }) 
         position: relative;
         z-index: 1;
         cursor: pointer;
+        color: rgb(37 99 235);
+        text-decoration-line: underline;
+        text-underline-offset: 2px;
       }
       .ProseMirror a {
+        color: rgb(37 99 235);
+        text-decoration-line: underline;
+        text-underline-offset: 2px;
         cursor: text; /* Changed from pointer to text for better text edit experience */
         &:hover {
          background-color: revert;
