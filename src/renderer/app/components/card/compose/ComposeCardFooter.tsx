@@ -7,10 +7,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/componen
 import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
+import { CustomDateTimePicker } from '@/renderer/app/containers/queue/CustomDateTimePicker';
 import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
 import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import React, { useCallback, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -193,8 +195,10 @@ export default ComposeCardFooter;
 
 function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: boolean }) {
   const [open, setOpen] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
   const { scheduleDraft, primaryAccountId } = useQueueAtom();
   const { setActiveLayout } = useGlobalAtom();
+  const { removeDraft } = useDraftAtom();
   const { getUidFromEmail } = useAuth();
   const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
 
@@ -227,14 +231,24 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         toast.error(`Couldn't schedule send: ${res.error}`);
         return;
       }
+      // Standalone: the raw message is now captured in the scheduler, so remove
+      // the local draft (DB + attachment bytes + thread) — otherwise it lingers
+      // in Drafts and could be opened and sent again manually (double-send).
+      await removeDraft(res.resolvedUid, draft.id, false);
       setActiveLayout('LATER');
       toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
     },
-    [draft, scheduleDraft, setActiveLayout, getUidFromEmail, primaryAccountId]
+    [draft, scheduleDraft, setActiveLayout, getUidFromEmail, primaryAccountId, removeDraft]
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setCustomMode(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="text"
@@ -252,12 +266,24 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         sideOffset={6}
         className="w-auto border-none bg-transparent p-0 shadow-none"
       >
-        <ReschedulePopover
-          presets={presets}
-          heading="Send Later"
-          onPickPreset={handlePickPreset}
-          onPickCustom={() => setOpen(false)}
-        />
+        {customMode ? (
+          <CustomDateTimePicker
+            heading="Send Later"
+            confirmLabel="Schedule"
+            onBack={() => setCustomMode(false)}
+            onConfirm={(iso) => {
+              setCustomMode(false);
+              handlePickPreset({ id: 'custom', label: 'Custom', scheduledFor: iso });
+            }}
+          />
+        ) : (
+          <ReschedulePopover
+            presets={presets}
+            heading="Send Later"
+            onPickPreset={handlePickPreset}
+            onPickCustom={() => setCustomMode(true)}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );

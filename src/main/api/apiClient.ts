@@ -277,8 +277,12 @@ class ApiClient {
    */
   private async request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
     if (!this.baseURL) {
+      // Standalone build: secondary backend features are intentionally absent.
+      // Read paths short-circuit to local no-ops before reaching here, so only a
+      // backend-only mutation (e.g. create space) lands here — give a clear
+      // message instead of implying a misconfiguration the user must fix.
       return Promise.reject(
-        new Error('Backend not configured: set MONO_ENV_API_URL in .env and restart the app.')
+        new Error('This feature requires a backend and is unavailable in standalone mode.')
       );
     }
 

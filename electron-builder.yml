@@ -1,5 +1,10 @@
 appId: io.github.erickim20.monomail-desktop
 productName: Mail Desktop
+# Maximum compression for installers/dmg (smaller download; slower packaging).
+compression: maximum
+# Ship only the English Electron locale (.pak); prunes ~50 unused locale files.
+electronLanguages:
+  - en
 directories:
   buildResources: build
 files:
@@ -19,6 +24,13 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # Per-arch artifacts (separate arm64 + x64) instead of one universal fat
+  # binary — each download is roughly half the size of a universal build.
+  target:
+    - target: default
+      arch:
+        - arm64
+        - x64
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -38,12 +50,10 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
-# Universal mac builds (arm64+x64) need per-arch native modules. With
-# `npmRebuild: false`, electron-builder skipped @electron/rebuild — and
-# `postinstall` only rebuilds for the runner's current arch (arm64 since
-# macos-latest is Apple Silicon). x64 users got arm64 .node files and
-# crashed on launch. Re-enabling npmRebuild fixes this; electron-builder
-# rebuilds for both arches before merging into the universal binary.
+# Per-arch mac builds (separate arm64 + x64 artifacts). npmRebuild must stay
+# true so electron-builder rebuilds native modules for the arch being packaged;
+# otherwise an artifact could ship .node files for the wrong arch and crash on
+# launch (previously seen when universal merges skipped @electron/rebuild).
 npmRebuild: true
 # Auto-update feed. The runtime UpdateManager.configureUpdater() also
 # reads MONO_ENV_UPDATE_FEED_URL and calls setFeedURL with it, so the two

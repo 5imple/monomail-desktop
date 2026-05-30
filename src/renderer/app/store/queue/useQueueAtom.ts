@@ -1,5 +1,9 @@
 import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
 import electronApi from '@/renderer/app/lib/electronApi';
+import { toast } from 'sonner';
+import { buildRawMessage } from '@/renderer/app/lib/mime/buildRawMessage';
+import { DBGetDraftById } from '@/renderer/app/lib/db/draft';
+import { DBGetAttachmentsForDraft } from '@/renderer/app/lib/db/draftAttachment';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import type {
   ScheduleRecord,
@@ -12,14 +16,15 @@ import { getDefaultStore, useAtom } from 'jotai';
 import { useCallback, useEffect, useMemo } from 'react';
 
 /**
- * P8 Later Queue — IPC-backed (Phase B, pieces 1 + 4 wired together).
+ * Later Queue — backed by the local main-process scheduler (no server).
  *
- * The atom is now a local cache mirroring server state. Writes go
- * through main-process IPC (`electronApi.queue*`), which speaks HTTP
- * to `/api/v1/mail/{snooze,schedule}`. Push events fire from the server
- * to `renderer:queue:event` and update the cache. IndexedDB still
- * persists the cache so the queue renders instantly on app reopen,
- * with a server hydrate behind it.
+ * The atom is a local cache. Writes go through main-process IPC
+ * (`electronApi.queue*`) to `SchedulerService`, which persists snoozes /
+ * scheduled-sends in electron-store and fires them on a periodic sweep.
+ * The scheduler emits `renderer:queue:event` (THREAD_UNSNOOZED /
+ * SCHEDULED_SENT / *_RESCHEDULED) to keep this cache in sync. IndexedDB
+ * persists the cache so the queue renders instantly on reopen, with a
+ * scheduler hydrate behind it.
  */
 
 export interface SnoozedItem {
@@ -102,6 +107,7 @@ interface QueueEvent {
   snoozeUntil?: string;
   sendAt?: string;
   messageId?: string;
+  error?: string;
 }
 
 function resolveQueueState(s: QueueState | Promise<QueueState>): QueueState {
@@ -130,6 +136,18 @@ function ensurePushSubscribed() {
         if (!data.scheduleId) return;
         const { [data.scheduleId]: _removed, ...rest } = prev.scheduled;
         store.set(queueAtom, { ...prev, scheduled: rest });
+        return;
+      }
+      case 'SCHEDULE_FAILED': {
+        if (!data.scheduleId) return;
+        const failedItem = prev.scheduled[data.scheduleId];
+        const { [data.scheduleId]: _failed, ...remaining } = prev.scheduled;
+        store.set(queueAtom, { ...prev, scheduled: remaining });
+        toast.error(
+          failedItem
+            ? `Scheduled send failed: "${failedItem.subject || '(no subject)'}"${data.error ? ` — ${data.error}` : ''}`
+            : `A scheduled send failed${data.error ? `: ${data.error}` : ''}`
+        );
         return;
       }
       case 'SNOOZE_RESCHEDULED': {
@@ -175,36 +193,48 @@ export function useQueueAtom() {
     ensurePushSubscribed();
   }, []);
 
-  // Hydrate from server once we have an account.
+  // Hydrate from the local scheduler for ALL connected accounts (the engine
+  // stores per-account, so the Later view must query each — not just primary,
+  // otherwise secondary-account snoozes/scheduled-sends never appear).
+  const accountUidsKey = useMemo(
+    () => accounts.map((a) => a.uid).filter(Boolean).join(','),
+    [accounts]
+  );
   useEffect(() => {
-    if (!primaryAccountId) return;
+    const uids = accountUidsKey ? accountUidsKey.split(',') : [];
+    if (uids.length === 0) return;
     let cancelled = false;
     (async () => {
-      const [snoozeRes, schedRes] = await Promise.all([
-        electronApi.queueListSnoozed(primaryAccountId),
-        electronApi.queueListScheduled(primaryAccountId)
-      ]);
+      const perAccount = await Promise.all(
+        uids.map(async (uid) => ({
+          snooze: await electronApi.queueListSnoozed(uid),
+          sched: await electronApi.queueListScheduled(uid)
+        }))
+      );
       if (cancelled) return;
+      const snoozed: Record<string, SnoozedItem> = {};
+      const scheduled: Record<string, ScheduledItem> = {};
+      let anyOk = false;
+      for (const { snooze, sched } of perAccount) {
+        if (snooze.ok) {
+          anyOk = true;
+          snooze.data.items.forEach((r) => (snoozed[r.snoozeId] = snoozeRecordToItem(r)));
+        }
+        if (sched.ok) {
+          anyOk = true;
+          sched.data.items.forEach((r) => (scheduled[r.scheduleId] = scheduleRecordToItem(r)));
+        }
+      }
+      if (!anyOk) return; // all calls failed — keep the cached state
       setState((raw) => {
         const prev = resolveQueueState(raw);
-        return {
-          snoozed: snoozeRes.ok
-            ? Object.fromEntries(
-                snoozeRes.data.items.map((r) => [r.snoozeId, snoozeRecordToItem(r)])
-              )
-            : prev.snoozed,
-          scheduled: schedRes.ok
-            ? Object.fromEntries(
-                schedRes.data.items.map((r) => [r.scheduleId, scheduleRecordToItem(r)])
-              )
-            : prev.scheduled
-        };
+        return { ...prev, snoozed, scheduled };
       });
     })();
     return () => {
       cancelled = true;
     };
-  }, [primaryAccountId, setState]);
+  }, [accountUidsKey, setState]);
 
   const snoozedItems = useMemo(() => Object.values(state.snoozed), [state.snoozed]);
   const scheduledItems = useMemo(() => Object.values(state.scheduled), [state.scheduled]);
@@ -258,13 +288,42 @@ export function useQueueAtom() {
       sendAt: string;
       draftSnapshot?: DraftSnapshot;
     }) => {
-      const res = await electronApi.queueSchedule(req);
+      // Standalone: build the raw MIME now (same path as immediate send) so the
+      // main-process timer can send it at sendAt without backend/draft access.
+      // Resolve the draft under req.accountId, falling back to the primary
+      // account in case getUidFromEmail(from) mapped to a different uid.
+      let resolvedUid = req.accountId;
+      let fullDraft = await DBGetDraftById(resolvedUid, req.draftId);
+      if (!fullDraft && primaryAccountId && primaryAccountId !== resolvedUid) {
+        const alt = await DBGetDraftById(primaryAccountId, req.draftId);
+        if (alt) {
+          fullDraft = alt;
+          resolvedUid = primaryAccountId;
+        }
+      }
+      if (!fullDraft) return { ok: false as const, error: 'Draft not found' };
+      const attachmentRecords = await DBGetAttachmentsForDraft(resolvedUid, req.draftId);
+      const builtRaw = await buildRawMessage(fullDraft, attachmentRecords);
+      const threadId =
+        fullDraft.threadId && fullDraft.threadId.length < 20 ? fullDraft.threadId : undefined;
+
+      const res = await electronApi.queueSchedule({
+        ...req,
+        accountId: resolvedUid,
+        raw: builtRaw,
+        threadId
+      });
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = scheduleRecordToItem(res.data);
-      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }; });
-      return { ok: true as const, item };
+      setState((prev2) => {
+        const prev = resolveQueueState(prev2);
+        return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } };
+      });
+      // Return the uid the draft was actually resolved under so the caller cleans
+      // up the right local draft (matters when the fallback above kicked in).
+      return { ok: true as const, item, resolvedUid };
     },
-    [setState]
+    [setState, primaryAccountId]
   );
 
   const cancelSchedule = useCallback(

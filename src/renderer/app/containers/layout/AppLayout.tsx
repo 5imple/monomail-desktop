@@ -238,7 +238,11 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
               {/* Panel: always mounted, slides in/out from the right */}
               <div
                 className={cn(
-                  'absolute right-0 top-0 h-full w-[388px]',
+                  // `flex` is required: the child container uses `flex flex-1` to fill
+                  // this panel's height. Without it, the child collapses to content
+                  // height and h-full breaks all the way down to the calendar grid's
+                  // ScrollArea — which then can't scroll.
+                  'absolute right-0 top-0 flex h-full w-[388px]',
                   !sidebarLoading && 'transition-all duration-300 ease-bouncy-in-out',
                   calendarDisplayPanel ? 'translate-x-0' : 'translate-x-[388px]',
                   !calendarDisplayPanel && 'pointer-events-none'

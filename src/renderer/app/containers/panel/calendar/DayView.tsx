@@ -32,6 +32,17 @@ interface DayViewProps extends CalendarViewProps {
   numDays?: number;
 }
 
+// Remembers the day grid's vertical scroll position per day-key for the session.
+// DayView is unmounted/remounted when the user toggles DAY <-> AGENDA, which
+// would otherwise reset scroll and re-snap to "now" — overwriting a manual
+// scroll. Persisting here lets us restore the user's position across remounts.
+const dayViewScrollByKey = new Map<string, number>();
+
+// Local (not UTC) day-key — the time grid and the current-time line position
+// everything in local time, so the key must be local to match.
+const dayScrollKey = (date: Date, numDays: number): string =>
+  `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${numDays}`;
+
 export const DayView: React.FC<DayViewProps> = ({
   date,
   numDays = 1,
@@ -167,6 +178,49 @@ export const DayView: React.FC<DayViewProps> = ({
   React.useEffect(() => {
     if (!events || events.length === 0) return;
   }, [selectedTimeZone, events.length, date]);
+
+  // Auto-scroll the day grid on open / date change. Behavior per day-key:
+  //  - if the user already has a remembered scroll position for this day
+  //    (incl. after a DAY<->AGENDA remount), restore it — never fight a manual
+  //    scroll;
+  //  - otherwise scroll to ~2h before "now" for today (so now sits in view with
+  //    context above) or 8am for other days.
+  // Positioning is LOCAL time, matching the grid layout and the red current-time
+  // line in shared.tsx (CurrentTimeLine), and "today" uses the same isSameDay
+  // check the day headers / current-time line use — so the scroll lands exactly
+  // where the red line is.
+  const hasAutoScrolledRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const key = dayScrollKey(date, numDays);
+    if (hasAutoScrolledRef.current === key) return;
+    const viewport = document.getElementById('calendar-day-viewport');
+    if (!viewport) return;
+    hasAutoScrolledRef.current = key;
+
+    const remembered = dayViewScrollByKey.get(key);
+    if (remembered !== undefined) {
+      viewport.scrollTo({ top: remembered, behavior: 'auto' });
+      return;
+    }
+
+    const now = new Date();
+    const isToday = isSameDay(date, now);
+    const targetHour = isToday ? Math.max(0, now.getHours() - 2) : 8;
+    const top = targetHour * pixelsPerHour;
+    viewport.scrollTo({ top, behavior: 'auto' });
+    dayViewScrollByKey.set(key, top);
+  }, [date, numDays, pixelsPerHour]);
+
+  // Persist the user's manual scroll position per day-key so it survives the
+  // DAY<->AGENDA remount (see dayViewScrollByKey above).
+  React.useEffect(() => {
+    const viewport = document.getElementById('calendar-day-viewport');
+    if (!viewport) return;
+    const key = dayScrollKey(date, numDays);
+    const onScroll = () => dayViewScrollByKey.set(key, viewport.scrollTop);
+    viewport.addEventListener('scroll', onScroll, { passive: true });
+    return () => viewport.removeEventListener('scroll', onScroll);
+  }, [date, numDays]);
 
   // Merge live drag delta/over to reflect real-time during drag
   const getEventWithDragLive = (event: CalendarEvent): CalendarEvent => {
@@ -644,8 +698,14 @@ export const DayView: React.FC<DayViewProps> = ({
         })()}
 
         {/* Scrollable time slots section */}
-        <ScrollArea className="w-full flex-1" viewportId="calendar-day-viewport">
-          <div className="relative">
+        {/* Mirror the proven-scrolling ThreadList pattern: a bounded
+            `relative min-h-0 flex-1 overflow-hidden` wrapper + a ScrollArea with
+            `h-full`. (NOT `absolute inset-0` — Radix's ScrollArea root sets an
+            inline `position: relative` that overrides the Tailwind `absolute`
+            class, so absolute positioning silently does nothing.) */}
+        <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+          <ScrollArea className="h-full w-full" viewportId="calendar-day-viewport">
+            <div className="relative">
             <div className="flex flex-col">
               {timeSlots.map(({ hour, minute, index }) => (
                 <div key={index} className="flex">
@@ -806,8 +866,9 @@ export const DayView: React.FC<DayViewProps> = ({
                 selectedTimeZone={selectedTimeZone}
               />
             )}
-          </div>
-        </ScrollArea>
+            </div>
+          </ScrollArea>
+        </div>
       </DndContext>
     </div>
   );
