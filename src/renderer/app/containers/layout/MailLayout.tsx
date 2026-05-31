@@ -376,10 +376,10 @@ export function MailLayout({}: MailLayoutProps) {
               isReaderFullscreen ? 'flex-grow basis-[100%]' : '',
               // isDraggingHandle ? 'duration-0' : 'duration-300',
               isDraggingHandle ? 'duration-0' : 'duration-300 ease-bouncy-in-out',
-              isGroupedPanelExpanded || isReaderMounted ? 'opacity-100' : 'opacity-0',
-              isReaderMounted && !isReaderSettledOpen
-                ? 'translate-x-5 scale-[0.995]'
-                : 'translate-x-0 scale-100'
+              isGroupedPanelExpanded || isReaderMounted ? 'opacity-100' : 'opacity-0'
+              // Reader open/close motion lives in DisplayPanel (center fade+scale),
+              // not here — transforms on the resizable panel read as layout movement
+              // (the email sliding in from the side).
             )}
           >
             <DisplayPanel className="flex-1 overflow-hidden" readerPhase={readerPanelPhase} />

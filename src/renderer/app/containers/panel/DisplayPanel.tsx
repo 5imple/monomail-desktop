@@ -460,11 +460,13 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       />
       <div
         className={cn(
-          'flex flex-1 overflow-hidden'
-          // scrollAreaRef.current &&
-          //   scrollAreaRef.current.clientWidth < 700 &&
-          //   scrollAreaRef.current.offsetWidth > 0 &&
-          //   'flex-col-reverse'
+          'flex flex-1 origin-center transform-gpu overflow-hidden',
+          // Reader enter/exit motion: the content fades + scales from the center
+          // (no horizontal translate). 280ms matches MailLayout's close timer so
+          // the exit fade completes before the panel unmounts. Header stays put
+          // (this wrapper is a sibling of DisplayPanelHeader). motion-reduce off.
+          'transition-[opacity,transform] duration-[280ms] ease-out motion-reduce:transition-none',
+          readerPhase === 'open' ? 'scale-100 opacity-100' : 'scale-[0.985] opacity-0'
         )}
       >
         <ScrollArea
