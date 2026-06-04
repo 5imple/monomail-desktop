@@ -79,7 +79,8 @@ interface IpcRenderer {
       displayName?: string;
       photoURL?: string;
     } | null;
-    provider?: 'google' | 'backend';
+    provider?: 'google' | 'microsoft' | 'backend';
+    /** Legacy Google-only subset — prefer mailAccounts. */
     googleAccounts?: Array<{
       uid: string;
       email: string;
@@ -87,6 +88,22 @@ interface IpcRenderer {
       photoURL?: string;
       expiresAt: number;
       scopes: string[];
+    }>;
+    /** Provider-neutral account list (no token material). */
+    mailAccounts?: Array<{
+      uid: string;
+      provider: 'google' | 'microsoft';
+      email: string;
+      displayName?: string;
+      photoURL?: string;
+      expiresAt: number;
+      scopes: string[];
+      authError?: boolean;
+      providerMeta?: {
+        tenantId?: string;
+        objectId?: string;
+        userPrincipalName?: string;
+      };
     }>;
   } | null>;
 

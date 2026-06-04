@@ -25,7 +25,10 @@ export function registerAuthHandlers() {
       expiresAt: state.expiresAt,
       member: state.member ?? null,
       provider: state.provider ?? 'google',
-      googleAccounts: tokenManager.getGoogleAccounts()
+      // Legacy Google-only subset, kept until the renderer migrates to
+      // mailAccounts (the provider-neutral list incl. provider/authError).
+      googleAccounts: tokenManager.getGoogleAccounts(),
+      mailAccounts: tokenManager.getMailAccounts()
     };
   });
 
