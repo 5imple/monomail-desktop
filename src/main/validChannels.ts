@@ -14,6 +14,7 @@ export const validRendererChannel = [
   'renderer:auth:add-account',
   'renderer:auth:token-changed',
   'renderer:auth:signed-out',
+  'renderer:auth:accounts-changed',
 
   'renderer:queue:event',
   'renderer:system:deeplink-query',

@@ -120,6 +120,8 @@ class TokenManager extends EventEmitter {
   private activeUid: string | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
   private refreshInFlight: Promise<StoredTokens> | null = null;
+  /** Per-uid in-flight account refreshes (see refreshMailAccount). */
+  private accountRefreshInFlight = new Map<string, Promise<StoredMailAccount>>();
 
   private constructor() {
     super();
@@ -497,16 +499,31 @@ class TokenManager extends EventEmitter {
     return this.tokens!;
   }
 
-  /** Refresh a single mail account's tokens, dispatching on its provider. */
+  /**
+   * Refresh a single mail account's tokens, dispatching on its provider.
+   * Coalesces concurrent callers per uid: Microsoft ROTATES the refresh token
+   * on every redemption, so two overlapping refreshes of the same account
+   * race — the loser redeems an already-invalidated RT, gets invalid_grant,
+   * and could clobber the winner's freshly-rotated token. One in-flight
+   * refresh per uid eliminates the race at the root.
+   */
   async refreshMailAccount(accountOrUid: StoredMailAccount | string): Promise<StoredMailAccount> {
     const account =
       typeof accountOrUid === 'string'
         ? this.getMailAccountsMap(true)[accountOrUid]
         : accountOrUid;
     if (!account) throw new Error(`No mail account token found for ${String(accountOrUid)}`);
-    return account.provider === 'microsoft'
-      ? this.refreshMicrosoftAccount(account)
-      : this.refreshGoogleAccount(account);
+    const inFlight = this.accountRefreshInFlight.get(account.uid);
+    if (inFlight) return inFlight;
+    const refresh = (
+      account.provider === 'microsoft'
+        ? this.refreshMicrosoftAccount(account)
+        : this.refreshGoogleAccount(account)
+    ).finally(() => {
+      this.accountRefreshInFlight.delete(account.uid);
+    });
+    this.accountRefreshInFlight.set(account.uid, refresh);
+    return refresh;
   }
 
   /**
@@ -598,9 +615,23 @@ class TokenManager extends EventEmitter {
 
     if (response.status === 400 || response.status === 401 || response.status === 403) {
       // invalid_grant / revoked: this account needs interactive re-auth. Mark
-      // it (renderer can surface a reconnect) but do NOT clear the session —
-      // other accounts keep working.
-      this.commitRefreshedAccount({ ...account, authError: true });
+      // it (renderer is notified via mail-accounts-changed → IPC bridge) but
+      // do NOT clear the session — other accounts keep working. Guarded write:
+      // only flip authError if the stored RT is still the one this call
+      // attempted, so a concurrently-rotated good token is never clobbered
+      // with this stale snapshot.
+      const current = this.getMailAccountsMap(true)[account.uid];
+      if (current && current.refreshToken === account.refreshToken) {
+        this.tokens = {
+          ...this.tokens!,
+          mailAccounts: {
+            ...(this.tokens!.mailAccounts ?? {}),
+            [account.uid]: { ...current, authError: true }
+          }
+        };
+        this.persist();
+        this.emitAccountsChanged();
+      }
       throw new Error(`Microsoft account refresh rejected: ${response.status}`);
     }
     if (!response.ok) throw new Error(`Microsoft account refresh failed: ${response.status}`);
@@ -639,7 +670,9 @@ class TokenManager extends EventEmitter {
       throw new Error('Microsoft session has no matching mail account');
     }
     try {
-      await this.refreshMicrosoftAccount(account);
+      // Through refreshMailAccount so session + per-account callers share the
+      // same per-uid in-flight coalescing.
+      await this.refreshMailAccount(account);
     } catch (e) {
       if (this.tokens && this.getMailAccountsMap()[account.uid]?.authError) {
         this.clearTokens('microsoft-refresh-rejected');

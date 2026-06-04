@@ -134,6 +134,14 @@ export function registerAuthHandlers() {
   );
 
   // Bridge TokenManager events → renderer.
+  // Account list changes (add/remove/refresh, incl. authError marks from a
+  // rejected Microsoft refresh) push the provider-neutral account list so the
+  // renderer can rehydrate and surface reconnect affordances.
+  tokenManager.on('mail-accounts-changed', (accounts) => {
+    const mainAppWindow = windowManager.getMainAppWindow();
+    mainAppWindow?.webContents.send('renderer:auth:accounts-changed', accounts);
+  });
+
   tokenManager.on('token-changed', () => {
     apiClient.setApiClientIdToken(tokenManager.getAccessToken());
     setTrayContextMenu();
