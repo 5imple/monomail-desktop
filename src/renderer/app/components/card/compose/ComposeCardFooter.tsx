@@ -231,10 +231,11 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         toast.error(`Couldn't schedule send: ${res.error}`);
         return;
       }
-      // Standalone: the raw message is now captured in the scheduler, so remove
-      // the local draft (DB + attachment bytes + thread) — otherwise it lingers
-      // in Drafts and could be opened and sent again manually (double-send).
-      await removeDraft(res.resolvedUid, draft.id, false);
+      // The schedule is now owned by the queue (backend or local scheduler), so
+      // remove the local draft (DB + attachment bytes + thread) — otherwise it
+      // lingers in Drafts and could be opened and sent again manually
+      // (double-send). `accountId` is the uid resolved from draft.from above.
+      await removeDraft(accountId, draft.id, false);
       setActiveLayout('LATER');
       toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
     },
