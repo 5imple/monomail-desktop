@@ -108,7 +108,15 @@ const useThreadFetchHandler = () => {
   // Helper function to get limited account UIDs based on user plan and account status
   const getLimitedAccountUids = useCallback(() => {
     const currentActiveSpace = activeSpaceRef.current;
-    const allAccountUids = accounts.map((acc) => acc.uid);
+    // Mail fetch/sync is Gmail-direct for now: Microsoft accounts have no
+    // Graph mail adapter yet (M365 plan Phases 3-6), and feeding their uids
+    // into the Gmail IPC throws "No Google account token found", which flips
+    // the shared loadingStatus atom into a sticky ERROR state. Filter to
+    // google-provider uids here so every downstream per-account loop
+    // (syncThreads, history sync, fetches) skips Microsoft accounts and they
+    // render an empty inbox instead of an error.
+    const syncableAccounts = accounts.filter((acc) => acc.provider === 'google');
+    const allAccountUids = syncableAccounts.map((acc) => acc.uid);
 
     // A space cached under a previous account identity (e.g. a leftover backend
     // `mock-account-*` id from a mode switch) can leave activeAccountUids empty
@@ -121,7 +129,7 @@ const useThreadFetchHandler = () => {
     // Payment-free build — every active account is allowed; no 2-account
     // free-plan cap to enforce.
     const validAccounts = currentActiveSpace.activeAccountUids.filter((uid) =>
-      accounts.some((acc) => acc.uid === uid)
+      syncableAccounts.some((acc) => acc.uid === uid)
     );
 
     if (validAccounts.length === 0) return allAccountUids;

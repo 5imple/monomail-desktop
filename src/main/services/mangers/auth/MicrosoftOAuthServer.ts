@@ -90,6 +90,10 @@ async function fetchOwnPhotoDataUri(accessToken: string): Promise<string | undef
     const contentType = res.headers.get('content-type') || 'image/jpeg';
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.length === 0) return undefined;
+    // The data URI lives in the encrypted token store and rides every
+    // get-state/accounts-changed IPC — cap it so a misbehaving response can't
+    // bloat those paths (a 96x96 JPEG is single-digit KB).
+    if (bytes.length > 64 * 1024) return undefined;
     return `data:${contentType};base64,${bytes.toString('base64')}`;
   } catch {
     return undefined;
@@ -194,14 +198,15 @@ class MicrosoftOAuthServer {
             return;
           }
 
-          // Public client: PKCE only, no client_secret.
+          // Public client: PKCE only, no client_secret. No `scope` here —
+          // RFC 6749 doesn't use it on the code grant (scopes were fixed by
+          // the authorization request).
           const params = new URLSearchParams({
             client_id: clientId,
             code,
             code_verifier: verifier,
             grant_type: 'authorization_code',
-            redirect_uri: `http://127.0.0.1:${port}/callback`,
-            scope: MICROSOFT_SCOPES
+            redirect_uri: `http://127.0.0.1:${port}/callback`
           });
 
           const tokenRes = await net.fetch(msTokenUrl(tenant), {

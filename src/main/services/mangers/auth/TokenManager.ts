@@ -592,7 +592,12 @@ class TokenManager extends EventEmitter {
 
   private async refreshMicrosoftAccount(account: StoredMailAccount): Promise<StoredMailAccount> {
     const clientId = (import.meta.env.MONO_ENV_MICROSOFT_CLIENT_ID || '').trim();
-    const tenant = (import.meta.env.MONO_ENV_MICROSOFT_TENANT || '').trim() || 'organizations';
+    // Prefer the account's real tenant (captured at sign-in): refresh against
+    // the env tenant alias breaks tenant-pinned registrations and B2B guests.
+    const tenant =
+      account.providerMeta?.tenantId ||
+      (import.meta.env.MONO_ENV_MICROSOFT_TENANT || '').trim() ||
+      'organizations';
     if (!clientId) throw new Error('MONO_ENV_MICROSOFT_CLIENT_ID not configured');
 
     // Public client — no client_secret. `scope` is sent on refresh so the

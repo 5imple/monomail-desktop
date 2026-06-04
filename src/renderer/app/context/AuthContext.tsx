@@ -514,7 +514,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const monoAccountResponse = buildDirectMailAccountResponse(tokenState);
         if (!monoAccountResponse) {
-          throw new Error('No Google account available');
+          throw new Error('No mail account available');
         }
 
         const { accounts, member } = monoAccountResponse;
@@ -736,11 +736,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAuthState((prev) => ({ ...prev, isLoading: false }));
     });
 
+    // Toast-only: every sender of add-account also mutates the token store,
+    // which already triggers the accounts-changed rehydrate below — invoking
+    // updateAccounts here too ran the full rehydrate + data-fetch fan-out
+    // twice per added account. Null payload = removal (no toast).
     const removeAddAccountListener = electronApi.on<string>(
       'renderer:auth:add-account',
-      async () => {
-        await updateAccountsRef.current();
-        toast.success(t('toast.preferences.integration.account_added'));
+      async (accessToken) => {
+        if (accessToken) {
+          toast.success(t('toast.preferences.integration.account_added'));
+        }
       }
     );
 
