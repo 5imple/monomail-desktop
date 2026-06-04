@@ -3,6 +3,7 @@ import type {
   CreateScheduleRequest,
   CreateSnoozeRequest
 } from '@/main/api/queue/types';
+import { schedulerService } from '@/main/services/scheduler/SchedulerService';
 import { ipcMain } from 'electron';
 import log from 'electron-log';
 
@@ -66,5 +67,22 @@ export function registerQueueHandlers() {
 
   ipcMain.handle('main:queue:send-now', (_, scheduleId: string) =>
     wrap(() => queueApi.sendScheduledNow(scheduleId))
+  );
+
+  // ── reminders ────────────────────────────────────────────────────────────
+  // Reminders are local-only (electron-store via SchedulerService) — they have
+  // no backend/queueApi counterpart, and the preload bridge + renderer command
+  // palette still expose them (preload/index.ts reminderCreate/List/Delete).
+
+  ipcMain.handle(
+    'main:reminder:create',
+    (_, req: { uid: string; threadId: string; subject?: string; reminderAt: string }) =>
+      wrap(async () => schedulerService.createReminder(req))
+  );
+
+  ipcMain.handle('main:reminder:list', () => wrap(async () => schedulerService.listReminders()));
+
+  ipcMain.handle('main:reminder:delete', (_, reminderId: string) =>
+    wrap(async () => schedulerService.deleteReminder(reminderId))
   );
 }
