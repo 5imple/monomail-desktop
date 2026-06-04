@@ -1,4 +1,4 @@
-import { schedulerService } from '@/main/services/scheduler/SchedulerService';
+import { queueApi } from '@/main/api/queue/queueApi';
 import type {
   CreateScheduleRequest,
   CreateSnoozeRequest
@@ -29,53 +29,42 @@ function wrap<T>(fn: () => Promise<T>): Promise<Result<T>> {
 
 export function registerQueueHandlers() {
   ipcMain.handle('main:queue:snooze', (_, req: CreateSnoozeRequest) =>
-    wrap(() => schedulerService.createSnooze(req))
+    wrap(() => queueApi.createSnooze(req))
   );
 
   ipcMain.handle('main:queue:list-snoozed', (_, accountId: string) =>
-    wrap(async () => schedulerService.listSnoozes(accountId))
+    wrap(() => queueApi.listSnoozes(accountId))
   );
 
   ipcMain.handle('main:queue:unsnooze', (_, snoozeId: string) =>
-    wrap(() => schedulerService.unsnooze(snoozeId))
+    wrap(() => queueApi.unsnooze(snoozeId))
   );
 
   ipcMain.handle(
     'main:queue:reschedule-snooze',
     (_, args: { snoozeId: string; snoozeUntil: string }) =>
-      wrap(() => schedulerService.rescheduleSnooze(args.snoozeId, args.snoozeUntil))
+      wrap(() => queueApi.rescheduleSnooze(args.snoozeId, args.snoozeUntil))
   );
 
   ipcMain.handle('main:queue:schedule', (_, req: CreateScheduleRequest) =>
-    wrap(() => schedulerService.createSchedule(req))
+    wrap(() => queueApi.createSchedule(req))
   );
 
   ipcMain.handle('main:queue:list-scheduled', (_, accountId: string) =>
-    wrap(async () => schedulerService.listSchedules(accountId))
+    wrap(() => queueApi.listSchedules(accountId))
   );
 
   ipcMain.handle('main:queue:cancel-schedule', (_, scheduleId: string) =>
-    wrap(async () => schedulerService.cancelSchedule(scheduleId))
+    wrap(() => queueApi.cancelSchedule(scheduleId))
   );
 
   ipcMain.handle(
     'main:queue:reschedule-send',
     (_, args: { scheduleId: string; sendAt: string }) =>
-      wrap(() => schedulerService.rescheduleSend(args.scheduleId, args.sendAt))
+      wrap(() => queueApi.rescheduleSend(args.scheduleId, args.sendAt))
   );
 
   ipcMain.handle('main:queue:send-now', (_, scheduleId: string) =>
-    wrap(() => schedulerService.sendScheduledNow(scheduleId))
-  );
-
-  // ── reminders (local scheduler) ──
-  ipcMain.handle(
-    'main:reminder:create',
-    (_, req: { uid: string; threadId: string; subject?: string; reminderAt: string }) =>
-      wrap(async () => schedulerService.createReminder(req))
-  );
-  ipcMain.handle('main:reminder:list', () => wrap(async () => schedulerService.listReminders()));
-  ipcMain.handle('main:reminder:delete', (_, reminderId: string) =>
-    wrap(async () => schedulerService.deleteReminder(reminderId))
+    wrap(() => queueApi.sendScheduledNow(scheduleId))
   );
 }

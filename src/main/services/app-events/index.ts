@@ -1,6 +1,5 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { registerIpcHandlers } from '@/main/services/ipc-handlers';
-import { gmailHistoryPoller } from '@/main/services/push/GmailHistoryPoller';
 import { schedulerService } from '@/main/services/scheduler/SchedulerService';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
@@ -104,7 +103,6 @@ export function registerAppEventHandlers() {
     systemManager.initializeAutoStartSettings();
 
     updateManager.checkForUpdates();
-    gmailHistoryPoller.start();
     schedulerService.start();
     session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
       if (details.url.includes('lh3.googleusercontent.com')) {
