@@ -173,6 +173,9 @@ export function registerAppEventHandlers() {
         'https://www.googleapis.com',
         'https://gmail.googleapis.com',
         'https://people.googleapis.com',
+        // Microsoft identity + Graph direct API (M365 plan Phase 2+)
+        'https://login.microsoftonline.com',
+        'https://graph.microsoft.com',
         // Vite HMR WebSocket in dev mode
         !app.isPackaged ? 'ws://localhost:*' : ''
       ]

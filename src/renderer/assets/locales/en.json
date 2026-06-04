@@ -1128,7 +1128,8 @@
     },
     "sign_in": {
       "sign_in_with_google": "Sign in with Google",
-      "agreement": "By clicking \"Sign in with Google\" above, you acknowledge that you have read and understood, and agree to the",
+      "sign_in_with_microsoft": "Sign in with Microsoft",
+      "agreement": "By signing in above, you acknowledge that you have read and understood, and agree to the",
       "legal": "Legal Terms",
       "and": "and",
       "privacy": "Privacy Policy"

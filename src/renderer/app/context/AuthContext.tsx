@@ -97,21 +97,40 @@ export const defaultPreference: UserPreference = {
 
 type ElectronAuthState = Awaited<ReturnType<typeof electronApi.getAuthState>>;
 
-const buildDirectGoogleAccountResponse = (
+const buildDirectMailAccountResponse = (
   authState: ElectronAuthState
 ): GetMonoAccountResponse | null => {
-  if (!authState?.googleAccounts?.length) return null;
+  // Prefer the provider-neutral list; fall back to the legacy Google-only
+  // shape when talking to an older main process.
+  const sourceAccounts: Array<{
+    uid: string;
+    provider: 'google' | 'microsoft';
+    email: string;
+    displayName?: string;
+    photoURL?: string;
+    expiresAt: number;
+    scopes: string[];
+    authError?: boolean;
+  }> = authState?.mailAccounts?.length
+    ? authState.mailAccounts
+    : (authState?.googleAccounts ?? []).map((account) => ({
+        ...account,
+        provider: 'google' as const
+      }));
+  if (!sourceAccounts.length || !authState) return null;
 
-  const primaryUid = authState.member?.uid ?? authState.googleAccounts[0].uid;
-  const accounts: MonoAccount[] = authState.googleAccounts.map((account) => ({
+  const primaryUid = authState.member?.uid ?? sourceAccounts[0].uid;
+  const accounts: MonoAccount[] = sourceAccounts.map((account) => ({
     uid: account.uid,
     displayName: account.displayName || account.email,
-    provider: 'google',
+    provider: account.provider,
     email: account.email,
     profileImageUrl: account.photoURL || '',
     primary: account.uid === primaryUid,
     scopes: account.scopes,
-    isExpired: account.expiresAt <= Date.now()
+    // authError = provider rejected the refresh token; treat like expiry so
+    // the account-list reconnect affordance shows.
+    isExpired: account.expiresAt <= Date.now() || !!account.authError
   }));
 
   const primaryAccount = accounts.find((account) => account.uid === primaryUid) ?? accounts[0];
@@ -493,7 +512,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }));
         }
 
-        const monoAccountResponse = buildDirectGoogleAccountResponse(tokenState);
+        const monoAccountResponse = buildDirectMailAccountResponse(tokenState);
         if (!monoAccountResponse) {
           throw new Error('No Google account available');
         }
@@ -666,7 +685,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       const authState = await electronApi.getAuthState();
-      const monoAccountResponse = buildDirectGoogleAccountResponse(authState);
+      const monoAccountResponse = buildDirectMailAccountResponse(authState);
       if (!monoAccountResponse) throw new Error('No account data available');
 
       const newAccounts = monoAccountResponse.accounts;
@@ -725,6 +744,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     );
 
+    // Account-list changes pushed from main (add/remove/refresh, incl.
+    // authError marks when a provider rejects a refresh token) — rehydrate so
+    // expired/reconnect states render without a manual refresh.
+    const removeAccountsChangedListener = electronApi.on(
+      'renderer:auth:accounts-changed',
+      async () => {
+        await updateAccountsRef.current();
+      }
+    );
+
     // Token refresh lives in the main-process TokenManager, which schedules a
     // refresh ~60s before each access token expires. The renderer just listens
     // for `renderer:auth:token-changed` (handled inside monoAuth) and re-flows
@@ -733,6 +762,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => {
       unsubscribeAuth();
       removeAddAccountListener();
+      removeAccountsChangedListener();
     };
   }, []);
 

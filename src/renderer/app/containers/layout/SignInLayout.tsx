@@ -33,12 +33,24 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleSignIn = useCallback(async () => {
-    // Direct Google OAuth (PKCE) is the only sign-in path.
+    // Direct Google OAuth (PKCE) in the system browser.
     if (!isElectron || !(import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim()) {
       toast.error('Sign-in unavailable: set MONO_ENV_GOOGLE_CLIENT_ID and rebuild.');
       return;
     }
     const result = await electronApi.initiateSignIn();
+    if (!result.ok) {
+      toast.error(`Sign-in failed: ${result.error}`);
+    }
+  }, []);
+
+  const handleMicrosoftSignIn = useCallback(async () => {
+    // Direct Microsoft OAuth (PKCE) in the system browser — work/school accounts.
+    if (!isElectron || !(import.meta.env.MONO_ENV_MICROSOFT_CLIENT_ID || '').trim()) {
+      toast.error('Sign-in unavailable: set MONO_ENV_MICROSOFT_CLIENT_ID and rebuild.');
+      return;
+    }
+    const result = await electronApi.initiateMicrosoftSignIn();
     if (!result.ok) {
       toast.error(`Sign-in failed: ${result.error}`);
     }
@@ -66,13 +78,14 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
     setAppVersion(import.meta.env.MONO_ENV_APP_VERSION);
   }, []);
 
-  // Show a clear setup screen instead of blank when Google OAuth isn't configured.
+  // Show a clear setup screen instead of blank when no provider is configured.
   const googleConfigured = !!(import.meta.env.MONO_ENV_GOOGLE_CLIENT_ID || '').trim();
-  if (!googleConfigured) {
+  const microsoftConfigured = !!(import.meta.env.MONO_ENV_MICROSOFT_CLIENT_ID || '').trim();
+  if (!googleConfigured && !microsoftConfigured) {
     return (
       <div className="no-drag flex h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
         <div className="max-w-md space-y-3">
-          <h1 className="text-xl font-semibold">Google sign-in not configured</h1>
+          <h1 className="text-xl font-semibold">Sign-in not configured</h1>
           <p className="text-sm text-muted-foreground">
             Copy{' '}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">.env.example</code> to{' '}
@@ -80,7 +93,11 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
               MONO_ENV_GOOGLE_CLIENT_ID
             </code>{' '}
-            (and secret), then restart the app.
+            (Google, see docs/GOOGLE_OAUTH_SETUP.md) and/or{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+              MONO_ENV_MICROSOFT_CLIENT_ID
+            </code>{' '}
+            (Microsoft 365 work/school), then restart the app.
           </p>
         </div>
       </div>
@@ -140,14 +157,28 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
               automatically via tailwindcss-animate. */}
           <div className="flex flex-col items-center gap-8 duration-500 animate-in fade-in-0 slide-in-from-bottom-2">
             <MonoLogo className="h-24" />
-            <Button variant={'secondary'} disabled={isLoading} onClick={handleSignIn}>
-              {isLoading ? (
-                <Loader className="mr-2" />
-              ) : (
-                <MonoIcon type={'Google'} className="mr-2" />
+            <div className="flex flex-col items-center gap-3">
+              {googleConfigured && (
+                <Button variant={'secondary'} disabled={isLoading} onClick={handleSignIn}>
+                  {isLoading ? (
+                    <Loader className="mr-2" />
+                  ) : (
+                    <MonoIcon type={'Google'} className="mr-2" />
+                  )}
+                  {t('layout.sign_in.sign_in_with_google')}
+                </Button>
               )}
-              {t('layout.sign_in.sign_in_with_google')}
-            </Button>
+              {microsoftConfigured && (
+                <Button variant={'secondary'} disabled={isLoading} onClick={handleMicrosoftSignIn}>
+                  {isLoading ? (
+                    <Loader className="mr-2" />
+                  ) : (
+                    <MonoIcon type={'Outlook'} className="mr-2" />
+                  )}
+                  {t('layout.sign_in.sign_in_with_microsoft')}
+                </Button>
+              )}
+            </div>
           </div>
           <div>
             <div className="mt-4 text-xs text-muted-foreground">

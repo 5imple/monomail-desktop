@@ -75,6 +75,14 @@ interface IpcRenderer {
     | { ok: false; error: string; status?: number }
   >;
   removeGoogleAccount: (uid: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  initiateMicrosoftSignIn: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  initiateMicrosoftAddAccount: () => Promise<
+    { ok: true; accessToken: string } | { ok: false; error: string }
+  >;
+  removeMailAccount: (uid: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  getMailAccountToken: (
+    uid: string
+  ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
   getGoogleAccountToken: (
     uid: string
   ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;

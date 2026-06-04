@@ -36,6 +36,12 @@ const api = {
     ipcRenderer.invoke('main:auth:dev-sign-in', args),
   initiateSignIn: () => ipcRenderer.invoke('main:auth:initiate-sign-in'),
   initiateAddAccount: () => ipcRenderer.invoke('main:auth:initiate-add-account'),
+  initiateMicrosoftSignIn: () => ipcRenderer.invoke('main:auth:initiate-microsoft-sign-in'),
+  initiateMicrosoftAddAccount: () =>
+    ipcRenderer.invoke('main:auth:initiate-microsoft-add-account'),
+  removeMailAccount: (uid: string) => ipcRenderer.invoke('main:auth:remove-mail-account', uid),
+  getMailAccountToken: (uid: string) =>
+    ipcRenderer.invoke('main:auth:get-mail-account-token', uid),
   createAccountLinkIntent: (args?: { provider?: string; client?: string }) =>
     ipcRenderer.invoke('main:auth:create-account-link-intent', args),
   completeAccountLink: (args: { intent: string; code: string }) =>

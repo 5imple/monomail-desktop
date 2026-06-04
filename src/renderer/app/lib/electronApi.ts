@@ -136,6 +136,18 @@ interface IpcRenderer {
   >;
   /** Remove a secondary Google account from local token storage. Returns ok:false if not found or if uid is the primary account. */
   removeGoogleAccount: (uid: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Trigger a Microsoft OAuth PKCE flow in the system browser. Requires MONO_ENV_MICROSOFT_CLIENT_ID. */
+  initiateMicrosoftSignIn: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Trigger a Microsoft OAuth PKCE flow to add a work/school account. Requires MONO_ENV_MICROSOFT_CLIENT_ID. */
+  initiateMicrosoftAddAccount: () => Promise<
+    { ok: true; accessToken: string } | { ok: false; error: string }
+  >;
+  /** Remove a secondary mail account (any provider) from local token storage. */
+  removeMailAccount: (uid: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Resolve a bearer token for any provider's account (refreshes if needed). */
+  getMailAccountToken: (
+    uid: string
+  ) => Promise<{ ok: true; accessToken: string; expiresAt: number } | { ok: false; error: string }>;
   createAccountLinkIntent: (args?: {
     provider?: string;
     client?: string;
@@ -472,6 +484,22 @@ const electronApi: IpcRenderer = {
   },
   removeGoogleAccount: async (uid) => {
     if (isElectron) return window.electronBridge.removeGoogleAccount(uid);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  initiateMicrosoftSignIn: async () => {
+    if (isElectron) return window.electronBridge.initiateMicrosoftSignIn();
+    return { ok: false, error: 'Not in Electron' };
+  },
+  initiateMicrosoftAddAccount: async () => {
+    if (isElectron) return window.electronBridge.initiateMicrosoftAddAccount();
+    return { ok: false, error: 'Not in Electron' };
+  },
+  removeMailAccount: async (uid) => {
+    if (isElectron) return window.electronBridge.removeMailAccount(uid);
+    return { ok: false, error: 'Not in Electron' };
+  },
+  getMailAccountToken: async (uid) => {
+    if (isElectron) return window.electronBridge.getMailAccountToken(uid);
     return { ok: false, error: 'Not in Electron' };
   },
   createAccountLinkIntent: async (args) => {
