@@ -205,7 +205,8 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
   const handlePickPreset = useCallback(
     async (preset: { id: string; label: string; scheduledFor: string | null }) => {
       if (!preset.scheduledFor) return;
-      const accountId = getUidFromEmail(draft.from) || primaryAccountId;
+      const fromUid = getUidFromEmail(draft.from);
+      const accountId = fromUid || primaryAccountId;
       if (!accountId) {
         toast.error('Could not determine sending account');
         return;
@@ -234,8 +235,16 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
       // The schedule is now owned by the queue (backend or local scheduler), so
       // remove the local draft (DB + attachment bytes + thread) — otherwise it
       // lingers in Drafts and could be opened and sent again manually
-      // (double-send). `accountId` is the uid resolved from draft.from above.
-      await removeDraft(accountId, draft.id, false);
+      // (double-send). Drafts are stored under their from-uid in a per-uid DB;
+      // the primaryAccountId fallback would open the wrong DB and silently
+      // no-op, so only clean up when the from-uid actually resolved.
+      if (fromUid) {
+        await removeDraft(fromUid, draft.id, false);
+      } else {
+        toast(
+          'Scheduled — but the original draft could not be removed automatically. Delete it from Drafts to avoid a double send.'
+        );
+      }
       setActiveLayout('LATER');
       toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
     },
