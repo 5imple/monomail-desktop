@@ -542,6 +542,23 @@ As drafted (`docs/MICROSOFT_OAUTH_SETUP.md`, update `GETTING_STARTED.md`,
   email, profile`).
 - Relay endpoints move to the v2 docs (A3).
 
+## Carried items from phase reviews
+
+Adversarially-reviewed-but-deferred nits to pick up in later phases:
+
+- `persist()` swallows write failures (`TokenManager.ts`) — pre-existing, but RT
+  rotation raises the stakes: a failed disk write after a Microsoft refresh
+  strands the account on restart. Consider surfacing persist failures
+  post-rotation. (Phase 2/16)
+- Legacy account entries are migrated verbatim without field validation —
+  add per-entry validation or drop malformed entries. (Phase 16 test target)
+- `removeGoogleAccount` wrapper removes any-provider account by uid — gate or
+  migrate the IPC when `IntegrationForm` gains Microsoft accounts. (Phase 13)
+- No automated tests cover the googleAccounts→mailAccounts migration, JSON
+  round-trip, or Microsoft RT rotation persistence. (Phase 16)
+- Reminder `messageId` is dropped by the IPC handler/SchedulerService —
+  harmless today. (Phase 0 review nit)
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,
