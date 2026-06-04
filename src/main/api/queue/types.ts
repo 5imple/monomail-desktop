@@ -48,6 +48,23 @@ export interface CreateScheduleRequest {
   draftSnapshot?: DraftSnapshot;
 }
 
+/**
+ * Request shape for the LOCAL standalone scheduler (SchedulerService), which
+ * sends from the main process at fire time and therefore needs the prebuilt
+ * message. The HTTP backend contract (CreateScheduleRequest) deliberately
+ * excludes these fields — a backend builds and sends server-side.
+ */
+export interface LocalCreateScheduleRequest extends CreateScheduleRequest {
+  /**
+   * base64url RFC822 message to send at `sendAt`. Required locally: the main
+   * process has no access to renderer drafts, so the renderer builds the raw
+   * message (same path as immediate send) and hands it over at schedule time.
+   */
+  raw: string;
+  /** Gmail threadId to thread the sent message into, when this is a reply. */
+  threadId?: string;
+}
+
 export interface ScheduleRecord {
   scheduleId: string;
   draftId: string;

@@ -1,7 +1,7 @@
 import type {
-  CreateScheduleRequest,
   CreateSnoozeRequest,
   DraftSnapshot,
+  LocalCreateScheduleRequest,
   ScheduleRecord,
   SnoozeRecord,
   ThreadSnapshot
@@ -230,7 +230,7 @@ class SchedulerService {
 
   // ── scheduled send ────────────────────────────────────────────────────────
 
-  async createSchedule(req: CreateScheduleRequest): Promise<ScheduleRecord> {
+  async createSchedule(req: LocalCreateScheduleRequest): Promise<ScheduleRecord> {
     if (!req.raw) {
       throw new Error('createSchedule requires a built raw message (renderer must supply it)');
     }
