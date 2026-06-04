@@ -558,6 +558,19 @@ Adversarially-reviewed-but-deferred nits to pick up in later phases:
   round-trip, or Microsoft RT rotation persistence. (Phase 16)
 - Reminder `messageId` is dropped by the IPC handler/SchedulerService —
   harmless today. (Phase 0 review nit)
+- A Microsoft-primary session installs the Graph access token as the backend
+  API bearer + push-WS token (pre-existing token-changed bridge design;
+  matters once a backend coexists with Microsoft sessions). (Phase 4/11)
+- Both OAuth servers can run flows concurrently — last `saveTokens` wins the
+  session; gate the sign-in buttons or add a cross-provider in-flight guard.
+  Both buttons also share one `isLoading` flag. (Phase 13)
+- `useOwnAvatarUrl` fires a doomed Google People IPC for photo-less Microsoft
+  accounts — covered by the A8 gating work. (Phase 14)
+- Sign-out discards but never revokes refresh tokens server-side (both
+  providers, pre-existing pattern). (hardening backlog)
+- OAuth loopback `/callback` handles `?error=` before `state` validation —
+  local-process flow-abort only, matches the Google template. (hardening
+  backlog)
 
 ## Phase 16: Testing
 
