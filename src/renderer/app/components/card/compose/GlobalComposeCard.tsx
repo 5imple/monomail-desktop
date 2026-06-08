@@ -5,7 +5,7 @@ import { IMonoTemplate } from '@/main/api/template/types';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoAttachment } from '@/main/models/types';
-import { generateUUID } from '@/main/utils'; // Import getUidFromEmail
+import { generateUUID, isComposeDraftId } from '@/main/utils'; // Import getUidFromEmail
 import tailwindCSS from '@/renderer/app/assets/style/tailwind.css?raw';
 import ComposeCardFooter from '@/renderer/app/components/card/compose/ComposeCardFooter';
 import ComposeCardHeader from '@/renderer/app/components/card/compose/ComposeCardHeader';
@@ -322,8 +322,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       // Prepare the updated draft
       const updatedDraft: MonoDraft = new MonoDraft({
         ...composeDraft.toPlainObject(),
-        threadId: composeDraft.threadId.length > 20 ? undefined : composeDraft.threadId,
-        messageId: composeDraft.threadId.length > 20 ? undefined : composeDraft.messageId
+        threadId: isComposeDraftId(composeDraft.threadId) ? undefined : composeDraft.threadId,
+        messageId: isComposeDraftId(composeDraft.threadId) ? undefined : composeDraft.messageId
       });
 
       // Default signature logic

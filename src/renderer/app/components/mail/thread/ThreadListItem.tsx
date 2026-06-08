@@ -1,4 +1,5 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
+import { isComposeDraftId } from '@/main/utils';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
@@ -316,7 +317,7 @@ export const ThreadListItem = React.memo(
             {attachmentKeys.slice(0, 2).map((id) => (
               <AttachmentItem
                 accountId={currentThread.accountId}
-                source={variant === 'cozy' && id.length === 36 ? 'draft' : 'message'}
+                source={variant === 'cozy' && isComposeDraftId(id) ? 'draft' : 'message'}
                 itemId={currentThread.id}
                 preview
                 key={variant === 'compact' ? currentThread.attachments[id].attachmentId : id}

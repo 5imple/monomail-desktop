@@ -1,4 +1,5 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
+import { isComposeDraftId } from '@/main/utils';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { MonoRecipient } from '@/main/models/types';
 import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIcon';
@@ -35,7 +36,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
   const { getUidFromEmail } = useAuth();
   const { accounts } = useAuth();
 
-  const isDraft = thread.id.length > 20;
+  const isDraft = isComposeDraftId(thread.id);
   const accountId = isDraft ? getUidFromEmail(thread.from[0]?.email) : null;
 
   // Memoize target threads calculation
