@@ -694,6 +694,55 @@ Second review pass + expanded tests — outcomes:
   response shapes, real immutable-id formats, throttling behavior, folder
   semantics, and the worker→host→IPC round trip end to end.
 
+Third pass — exhaustive multi-agent workflow (52 agents, 11 dimensions, every
+finding adversarially verified + a completeness critic). 23 confirmed findings.
+Live-Graph-API-contract reviewer verified all 5 core assumptions (sendMail MIME
+mode, `$filter conversationId`, `/move` well-known names + immutable-id stability,
+the `$select`/`$expand` fields, `$batch`) against current v1.0 docs; security
+reviewer found no CRITICAL/HIGH/MEDIUM; the seam reviewer confirmed all 19
+dispatched methods take `uid` first.
+
+**Fixed this pass** (provider/transport-internal, low-risk while dormant; test
+suite 37→42):
+
+- Graph fetch correctness: `getThread`/`getConversationMessageIds` now page
+  through ALL messages ($top=1000 + nextLink) — previously Graph's default page
+  of 10 truncated thread detail and made mutations/trash silently skip messages
+  past the 10th. `getThreads` drops `$orderby` when a `$filter` is present (the
+  `is:unread`/`is:starred` views would otherwise 400 with InefficientFilter), and
+  recovers the well-known folder label from the `@odata.nextLink` so page-2+
+  Inbox threads keep INBOX.
+- Transport hardening: `parseTimestamp` invalid-date fallback → 0 (not "now");
+  `$batch` envelope-level 429/503 now honors Retry-After and re-batches instead
+  of failing all items; `parseRetryAfterMs` accepts the HTTP-date form; the graph
+  electron path honors AbortSignal; `graphBatch` renderer path can't break its
+  never-throws contract.
+
+**Deferred — un-gate / Phase 6/10 enablement (documented, not fixed)**:
+
+- **#1 (HIGH) — the true un-gate blocker.** `providerRegistry` is module-global
+  and only populated on the renderer main thread (`AuthContext`
+  `setMailAccountProviders`). In **worker** realms the map is empty, so after
+  un-gating, worker-driven `mailApi` dispatch resolves every Microsoft uid to
+  `googleMailProvider` → the Google token guard throws. It fails LOUDLY (not
+  silent/corrupting), so it's safe to defer. Fix when un-gating: propagate the
+  uid→provider map into both sync workers (add `provider` to `threadSyncWorker`'s
+  SYNC_START payload — `historySyncWorker` already receives it) and call
+  `setMailAccountProviders` in the worker before the first dispatch. Add a worker-
+  dispatch test then (the pure-logic harness can't reach it).
+- **#2/#7 (MEDIUM) — folder-label resolution on detail/cross-page fetches.** A
+  detail fetch (`getThread`/`getMessage`, `folderLabel:null`) or a cross-page
+  conversation split can overwrite a cached thread's INBOX label, because
+  `mapGraphMessageLabels` only derives a well-known label from a passed
+  `folderLabel`, not from `parentFolderId`. The robust fix is a per-uid
+  well-known-folder-id→label map (resolve the 5 well-known folders' ids once,
+  cached) threaded into the transform — Phase 10 folder handling, best validated
+  against a tenant. The nextLink listing case is mitigated this pass.
+- INFO items recorded: latent main-process direct-fetch bypass, dead
+  `requestGraphViaElectron` (mirrors the Gmail pattern), flag `complete` not
+  mapped to STARRED, Graph plain-text subject/preview vs Gmail's entity-encoded
+  assumption in `highlightThreadText`.
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,
