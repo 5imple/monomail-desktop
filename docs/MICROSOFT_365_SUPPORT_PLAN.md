@@ -572,6 +572,23 @@ Adversarially-reviewed-but-deferred nits to pick up in later phases:
   local-process flow-abort only, matches the Google template. (hardening
   backlog)
 
+Phase 4 (Graph IPC + client) review nits:
+
+- The worker→host Graph bridge routes every request through the main-process
+  `net.fetch` (no CORS), so the `onHeadersReceived` CORS-injection allow-list
+  (`app-events/index.ts:119`) is **not** extended to `graph.microsoft.com`. If a
+  future worker ever fetches Graph directly (bypassing the host bridge) it would
+  be CORS-blocked — add graph there if that path appears. (Phase 6/11)
+- `main:graph:batch` forwards each subrequest `url` verbatim into the `$batch`
+  envelope without validating it is version-relative — a non-relative/absolute
+  url just fails server-side. Consider a relative-path guard mirroring
+  `buildGraphUrl`. (Phase 6 hardening)
+- `graphBatch()` takes no `AbortSignal` (the single-request path does, via
+  `withAbort`). Wire cancellation when Phase 6 hydration needs it. (Phase 6)
+- No automated coverage yet asserts the immutable-id `Prefer` header is present
+  on every Graph request (single + each batch subrequest) or that delta-link
+  origin validation rejects non-graph hosts. (A1/A9 → Phase 16 test targets)
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,
