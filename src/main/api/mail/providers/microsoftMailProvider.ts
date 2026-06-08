@@ -132,6 +132,63 @@ const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) =>
   return transformGraphMessage(raw, { folderLabel: null });
 };
 
+interface GraphAttachmentContent {
+  '@odata.type'?: string;
+  id?: string;
+  name?: string;
+  contentType?: string;
+  size?: number;
+  isInline?: boolean;
+  contentId?: string | null;
+  contentBytes?: string; // standard base64 — fileAttachment only
+}
+
+const FILE_ATTACHMENT_TYPE = '#microsoft.graph.fileAttachment';
+
+function fetchAttachment(uid: string, messageId: string, id: string, signal?: AbortSignal) {
+  return graphApiClient.get<GraphAttachmentContent>(
+    `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(id)}`,
+    { uid, signal }
+  );
+}
+
+const getAttachmentInline: MailProviderAdapter['getAttachmentInline'] = async (
+  uid,
+  messageId,
+  id,
+  signal
+) => {
+  const att = await fetchAttachment(uid, messageId, id, signal);
+  // contentBytes is already standard base64 (no base64url conversion), and the
+  // real contentType comes back from the endpoint (no Gmail mimeType:'' hack).
+  return {
+    attachmentId: att.id ?? id,
+    size: att.size ?? 0,
+    data: att.contentBytes ?? '',
+    mimeType: att.contentType ?? ''
+  };
+};
+
+const getAttachmentDownload: MailProviderAdapter['getAttachmentDownload'] = async (
+  uid,
+  messageId,
+  id,
+  _fileName,
+  signal
+) => {
+  const att = await fetchAttachment(uid, messageId, id, signal);
+  // referenceAttachment / itemAttachment carry no inline bytes — surface the
+  // limitation instead of handing back an empty file (plan Phase 7).
+  if ((att['@odata.type'] ?? '') !== FILE_ATTACHMENT_TYPE || typeof att.contentBytes !== 'string') {
+    throw new Error('Unsupported attachment type — this Microsoft attachment cannot be downloaded.');
+  }
+  const binary = atob(att.contentBytes);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  // Set the Blob MIME type so preview sniffing works (Gmail's download has none).
+  return new Blob([bytes], att.contentType ? { type: att.contentType } : undefined);
+};
+
 function notImplemented(feature: string): never {
   throw new Error(
     `[microsoftMailProvider] ${feature} is not implemented yet — pending its M365 plan phase.`
@@ -150,5 +207,7 @@ export const microsoftMailProvider: MailProviderAdapter = {
   ...notImplementedAdapter,
   getThreads,
   getThread,
-  getMessage
+  getMessage,
+  getAttachmentInline,
+  getAttachmentDownload
 };
