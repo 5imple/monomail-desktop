@@ -1,5 +1,5 @@
 import log from 'electron-log';
-import { graphApiClient } from '@/main/api/apiClient';
+import { graphApiClient, graphBatch } from '@/main/api/apiClient';
 import {
   GraphMessage,
   transformGraphMessage,
@@ -189,6 +189,157 @@ const getAttachmentDownload: MailProviderAdapter['getAttachmentDownload'] = asyn
   return new Blob([bytes], att.contentType ? { type: att.contentType } : undefined);
 };
 
+// ── Mutations (Phase 9) ─────────────────────────────────────────────────────
+
+const JSON_HEADER = { 'Content-Type': 'application/json' };
+
+type GraphBatchOp = {
+  id: string;
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+};
+
+/**
+ * Translates a Mono label mutation into Graph operations: read/flag become a
+ * PATCH on the message; archive/trash/junk/restore/custom-folder become a move.
+ * Archive resolves to the `archive` well-known name only — never a localized
+ * display name (A11). Moves preserve the immutable id (A1), so the cache keeps
+ * message identity across them.
+ */
+function planMutation(
+  addLabelIds: string[],
+  removeLabelIds: string[]
+): { patch?: Record<string, unknown>; moveTo?: string } {
+  const add = new Set(addLabelIds);
+  const remove = new Set(removeLabelIds);
+
+  const patch: Record<string, unknown> = {};
+  if (add.has('UNREAD')) patch.isRead = false;
+  if (remove.has('UNREAD')) patch.isRead = true;
+  if (add.has('STARRED')) patch.flag = { flagStatus: 'flagged' };
+  if (remove.has('STARRED')) patch.flag = { flagStatus: 'notFlagged' };
+
+  const folderAdd = addLabelIds.find((l) => l.startsWith('folder:'));
+  let moveTo: string | undefined;
+  if (add.has('TRASH')) moveTo = 'deleteditems';
+  else if (add.has('SPAM')) moveTo = 'junkemail';
+  else if (folderAdd) moveTo = folderAdd.slice('folder:'.length);
+  else if (add.has('INBOX') || remove.has('TRASH') || remove.has('SPAM')) moveTo = 'inbox';
+  else if (remove.has('INBOX')) moveTo = 'archive';
+
+  return { patch: Object.keys(patch).length ? patch : undefined, moveTo };
+}
+
+function assertBatchOk(result: Awaited<ReturnType<typeof graphBatch>>, action: string): void {
+  if (!result.ok) throw new Error(`Graph ${action} failed: ${result.error}`);
+  const failed = result.responses.find((r) => r.status >= 400);
+  if (failed) throw new Error(`Graph ${action} failed (status ${failed.status})`);
+}
+
+async function getConversationMessageIds(
+  uid: string,
+  conversationId: string,
+  signal?: AbortSignal
+): Promise<string[]> {
+  const params = new URLSearchParams({
+    $filter: `conversationId eq '${conversationId.replace(/'/g, "''")}'`,
+    $select: 'id'
+  });
+  const resp = await graphApiClient.get<GraphListResponse>(`/me/messages?${params.toString()}`, {
+    uid,
+    signal
+  });
+  return (resp.value ?? []).map((m) => m.id).filter(Boolean);
+}
+
+async function applyMutation(
+  uid: string,
+  messageIds: string[],
+  addLabelIds: string[],
+  removeLabelIds: string[]
+): Promise<void> {
+  const { patch, moveTo } = planMutation(addLabelIds, removeLabelIds);
+  if ((!patch && !moveTo) || messageIds.length === 0) return;
+
+  const requests: GraphBatchOp[] = [];
+  let n = 0;
+  for (const mid of messageIds) {
+    const enc = encodeURIComponent(mid);
+    if (patch) {
+      requests.push({ id: String(n++), method: 'PATCH', url: `/me/messages/${enc}`, headers: JSON_HEADER, body: patch });
+    }
+    if (moveTo) {
+      // A move returns the message under the SAME immutable id (A1).
+      requests.push({
+        id: String(n++),
+        method: 'POST',
+        url: `/me/messages/${enc}/move`,
+        headers: JSON_HEADER,
+        body: { destinationId: moveTo }
+      });
+    }
+  }
+  assertBatchOk(await graphBatch(uid, requests), 'mutation');
+}
+
+async function moveMessages(uid: string, messageIds: string[], destinationId: string): Promise<void> {
+  if (messageIds.length === 0) return;
+  const requests: GraphBatchOp[] = messageIds.map((mid, i) => ({
+    id: String(i),
+    method: 'POST',
+    url: `/me/messages/${encodeURIComponent(mid)}/move`,
+    headers: JSON_HEADER,
+    body: { destinationId }
+  }));
+  assertBatchOk(await graphBatch(uid, requests), 'move');
+}
+
+const modifyThread: MailProviderAdapter['modifyThread'] = async (
+  uid,
+  id,
+  addLabelIds,
+  removeLabelIds,
+  signal
+) => {
+  // Thread-level read/flag/move applies per cached message of the conversation,
+  // batched via $batch (A9).
+  const ids = await getConversationMessageIds(uid, id, signal);
+  await applyMutation(uid, ids, addLabelIds, removeLabelIds);
+};
+
+const batchModifyThreads: MailProviderAdapter['batchModifyThreads'] = async (
+  uid,
+  ids,
+  addLabelIds,
+  removeLabelIds,
+  signal
+) => {
+  const messageIds = (
+    await Promise.all(ids.map((cid) => getConversationMessageIds(uid, cid, signal)))
+  ).flat();
+  await applyMutation(uid, messageIds, addLabelIds, removeLabelIds);
+};
+
+const trashThread: MailProviderAdapter['trashThread'] = async (uid, id, signal) => {
+  await moveMessages(uid, await getConversationMessageIds(uid, id, signal), 'deleteditems');
+};
+
+const untrashThread: MailProviderAdapter['untrashThread'] = async (uid, id, signal) => {
+  await moveMessages(uid, await getConversationMessageIds(uid, id, signal), 'inbox');
+};
+
+const modifyMessage: MailProviderAdapter['modifyMessage'] = async (
+  uid,
+  id,
+  addLabelIds,
+  removeLabelIds
+) => {
+  await applyMutation(uid, [id], addLabelIds, removeLabelIds);
+  return { addLabelIds, removeLabelIds };
+};
+
 function notImplemented(feature: string): never {
   throw new Error(
     `[microsoftMailProvider] ${feature} is not implemented yet — pending its M365 plan phase.`
@@ -209,5 +360,10 @@ export const microsoftMailProvider: MailProviderAdapter = {
   getThread,
   getMessage,
   getAttachmentInline,
-  getAttachmentDownload
+  getAttachmentDownload,
+  modifyThread,
+  batchModifyThreads,
+  trashThread,
+  untrashThread,
+  modifyMessage
 };
