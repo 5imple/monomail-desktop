@@ -669,10 +669,30 @@ Adversarial review + unit tests (post Phase 8) — outcomes:
   (`label:STARRED` / `label:UNREAD` with no folder token) to **Inbox** — a global
   Starred/Unread view misses other folders. Fold into the A13 query-translation
   sweep (query `/me/messages` across folders). (Phase 6/13)
-- Added `npm run test:m365`: 25 pure-logic unit tests (esbuild-bundled, `node
-  --test`) over `isComposeDraftId`, `graphRequestMapping`, and `graphTransforms`
-  — including the synthetic-payload round-trip against the real
+- Added `npm run test:m365`: pure-logic unit tests (esbuild-bundled, `node
+  --test`) over `isComposeDraftId`, `graphRequestMapping`, `graphTransforms`, and
+  `graphHttp` — including the synthetic-payload round-trip against the real
   `decodePayloadData`. A down payment on Phase 16.
+
+Second review pass + expanded tests — outcomes:
+
+- Extracted the Graph IPC handler's pure helpers into `graph/graphHttp.ts`
+  (buildGraphUrl origin guard, withImmutableIdPrefer A1 enforcement, sanitize*,
+  $batch helpers) so the security/A1-critical logic is unit-tested. Suite is now
+  **37 tests** (added SSRF origin cases incl. lookalike hosts, A1 Prefer add/
+  append/de-dup, Retry-After cap, $batch chunking).
+- A second independent adversarial review of everything added after the first
+  pass (`1f459e2..HEAD`: the 3 A2 fixes, both pure-helper extractions, the
+  getThread guard, and the tests themselves) found **no CRITICAL/HIGH/MEDIUM
+  issues**. It verified the extractions are behavior-preserving, the tests are
+  not false-passing, and — by hand-tracing the still-untested `runBatchChunk` —
+  that the $batch 429 loop terminates, preserves order, returns the last 429,
+  drops no items, passes bodies as JSON objects, and injects the A1 Prefer header
+  per subrequest. `getThread`'s not-found throw matches Gmail's 404 behavior
+  across all 4 callers.
+- Still genuinely unverified (needs the Phase 16/A14 sandbox): live Graph request/
+  response shapes, real immutable-id formats, throttling behavior, folder
+  semantics, and the worker→host→IPC round trip end to end.
 
 ## Phase 16: Testing
 
