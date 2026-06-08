@@ -106,8 +106,20 @@ async function runBatchChunk(
     });
 
     if (!response.ok) {
-      // Envelope-level failure (auth, malformed batch): surface against every
-      // still-pending subrequest so the caller never silently loses items.
+      // A 429/503 on the $batch envelope ITSELF (Graph service-protection
+      // throttling of the batch endpoint, with a top-level Retry-After) is
+      // retryable — honor Retry-After and re-batch the whole pending set rather
+      // than failing every item permanently (A9: honor Retry-After everywhere).
+      if ((response.status === 429 || response.status === 503) && attempt < MAX_BATCH_RETRIES) {
+        const waitMs = parseRetryAfterMs({
+          'retry-after': response.headers.get('retry-after') ?? ''
+        });
+        await sleep(waitMs || 1000);
+        continue;
+      }
+      // Genuinely permanent envelope failure (auth, malformed batch): surface
+      // against every still-pending subrequest so the caller never silently
+      // loses items.
       const data = await readResponseBody(response, 'json');
       const status = response.status;
       for (const req of pending) {

@@ -567,7 +567,7 @@ class ApiClient {
             : typeof config.body === 'string'
               ? config.body
               : undefined;
-        const ipcResult = await (window as any).electronBridge?.graphRequest({
+        const bridgeRequest = (window as any).electronBridge?.graphRequest({
           method,
           path: url,
           uid: accountUid ?? undefined,
@@ -575,7 +575,10 @@ class ApiClient {
           body: bodyStr,
           responseType
         });
-        if (!ipcResult) return Promise.reject(new Error('Graph IPC bridge not available'));
+        if (!bridgeRequest) return Promise.reject(new Error('Graph IPC bridge not available'));
+        // Honor a caller-supplied AbortSignal so a cancelled fetch rejects
+        // instead of hanging on the IPC round-trip.
+        const ipcResult = await this.withAbort<GmailBridgeResult<T>>(bridgeRequest, config.signal);
         if (!ipcResult.ok)
           return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
         return ipcResult.data as T;
@@ -824,7 +827,11 @@ export function graphBatch(uid: string, requests: GraphBatchSubRequest[]): Promi
     if (!bridge?.graphBatch) {
       return Promise.resolve({ ok: false, error: 'Graph batch bridge is unavailable' });
     }
-    return bridge.graphBatch(args);
+    // Preserve the never-throws contract even if the bridge rejects.
+    return bridge.graphBatch(args).catch((error: any) => ({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Graph batch failed'
+    }));
   }
 
   return Promise.resolve({ ok: false, error: 'Graph batch is only available in Electron' });

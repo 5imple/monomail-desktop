@@ -186,7 +186,9 @@ function mapGraphAttachments(attachments?: GraphAttachmentMeta[]): {
 function parseTimestamp(message: GraphMessage): number {
   const iso = message.receivedDateTime ?? message.sentDateTime ?? '';
   const ms = iso ? Date.parse(iso) : NaN;
-  return Number.isFinite(ms) ? ms : Date.now();
+  // Fall back to 0 (epoch), NOT the current time: a missing/invalid date must
+  // not make a message sort as newest or persist a bogus "now" timestamp.
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 export interface GraphTransformOptions {

@@ -93,7 +93,17 @@ export function parseRetryAfterMs(headers: Record<string, string> | undefined): 
   if (!headers) return 0;
   const key = Object.keys(headers).find((k) => k.toLowerCase() === 'retry-after');
   const raw = key ? headers[key] : undefined;
-  const seconds = raw ? Number(raw) : NaN;
-  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
-  return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
+  if (!raw) return 0;
+
+  // RFC 7231 Retry-After is EITHER delta-seconds OR an HTTP-date.
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) {
+    return seconds > 0 ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS) : 0;
+  }
+  const when = Date.parse(raw);
+  if (Number.isFinite(when)) {
+    const deltaMs = when - Date.now();
+    return deltaMs > 0 ? Math.min(deltaMs, MAX_RETRY_AFTER_MS) : 0;
+  }
+  return 0;
 }
