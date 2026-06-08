@@ -41,6 +41,40 @@ function groupByConversation(messages: GraphMessage[]): GraphMessage[][] {
   return Array.from(byConversation.values());
 }
 
+// Graph's default /messages page size is 10, so any unpaged fetch silently
+// truncates. Use the max page size and follow @odata.nextLink for fetches that
+// must see EVERY message of a conversation (detail render + mutation fan-out).
+const GRAPH_MAX_TOP = '1000';
+
+async function fetchAllMessages(
+  uid: string,
+  initialPath: string,
+  signal?: AbortSignal
+): Promise<GraphMessage[]> {
+  const all: GraphMessage[] = [];
+  // The opaque nextLink is an absolute Graph URL; the IPC handler origin-
+  // validates it, so routing it back through graphApiClient is safe.
+  let path: string | undefined = initialPath;
+  while (path) {
+    const resp: GraphListResponse = await graphApiClient.get<GraphListResponse>(path, {
+      uid,
+      signal
+    });
+    if (resp.value) all.push(...resp.value);
+    path = resp['@odata.nextLink'];
+  }
+  return all;
+}
+
+// A folder-listing @odata.nextLink echoes the original request path
+// (/me/mailFolders/<name>/messages...), so recover the well-known label from it
+// — otherwise page-2+ threads carry only folder:<id> and drop out of the Inbox
+// view (the renderer filters on the literal INBOX label).
+function folderLabelFromNextLink(nextLink: string): string | null {
+  const name = nextLink.match(/\/mailFolders\/([^/?]+)\/messages/i)?.[1];
+  return wellKnownFolderToLabel(name ? decodeURIComponent(name) : null);
+}
+
 const getThreads: MailProviderAdapter['getThreads'] = async (
   uid,
   q,
@@ -56,7 +90,9 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
   // continuation, but each message still carries its folder:<id> label.
   if (pageToken && GRAPH_NEXTLINK.test(pageToken)) {
     path = pageToken;
-    folderLabel = null;
+    // Recover the folder's well-known label from the continuation URL so page-2+
+    // Inbox threads keep INBOX (not just folder:<id>) and don't vanish.
+    folderLabel = folderLabelFromNextLink(pageToken);
   } else {
     const { folder, filter, translated } = translateQuery(q ?? '');
     if (!translated) {
@@ -65,10 +101,13 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
     folderLabel = wellKnownFolderToLabel(folder);
     const params = new URLSearchParams({
       $select: LIST_SELECT,
-      $top: maxResults || '25',
-      $orderby: 'receivedDateTime desc'
+      $top: maxResults || '25'
     });
+    // Graph rejects $orderby unless the sort property also appears in $filter
+    // (InefficientFilter). When a filter is present (is:unread / is:starred) we
+    // omit $orderby and rely on the client-side sort below.
     if (filter) params.set('$filter', filter);
+    else params.set('$orderby', 'receivedDateTime desc');
     path = `/me/mailFolders/${folder}/messages?${params.toString()}`;
   }
 
@@ -87,13 +126,12 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal) => {
   const params = new URLSearchParams({
     $filter: `conversationId eq '${id.replace(/'/g, "''")}'`,
     $select: DETAIL_SELECT,
-    $expand: ATTACHMENT_EXPAND
+    $expand: ATTACHMENT_EXPAND,
+    $top: GRAPH_MAX_TOP
   });
-  const resp = await graphApiClient.get<GraphListResponse>(`/me/messages?${params.toString()}`, {
-    uid,
-    signal
-  });
-  const messages = resp.value ?? [];
+  // Page through ALL messages — a conversation with >10 messages would otherwise
+  // render truncated (wrong recipients/attachments/labels and bad reply context).
+  const messages = await fetchAllMessages(uid, `/me/messages?${params.toString()}`, signal);
   // An empty conversation (deleted/expired) is a "not found" — surface it like
   // Gmail's 404 rather than fabricating a blank, empty-id thread that could
   // pollute the cache.
@@ -194,13 +232,13 @@ async function getConversationMessageIds(
 ): Promise<string[]> {
   const params = new URLSearchParams({
     $filter: `conversationId eq '${conversationId.replace(/'/g, "''")}'`,
-    $select: 'id'
+    $select: 'id',
+    $top: GRAPH_MAX_TOP
   });
-  const resp = await graphApiClient.get<GraphListResponse>(`/me/messages?${params.toString()}`, {
-    uid,
-    signal
-  });
-  return (resp.value ?? []).map((m) => m.id).filter(Boolean);
+  // Must collect EVERY id — an unpaged fetch (Graph default page = 10) would make
+  // mutations/trash silently affect only the first 10 messages of the thread.
+  const messages = await fetchAllMessages(uid, `/me/messages?${params.toString()}`, signal);
+  return messages.map((m) => m.id).filter(Boolean);
 }
 
 async function applyMutation(
