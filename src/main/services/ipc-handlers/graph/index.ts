@@ -1,6 +1,18 @@
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { ipcMain, net } from 'electron';
 import log from 'electron-log';
+import {
+  GRAPH_BASE_URL,
+  MAX_BATCH_OPS,
+  MAX_BATCH_RETRIES,
+  buildGraphUrl,
+  chunk,
+  getErrorMessage,
+  parseRetryAfterMs,
+  sanitizeHeaders,
+  sanitizeMethod,
+  withImmutableIdPrefer
+} from '@/main/services/ipc-handlers/graph/graphHttp';
 
 type GraphRequestArgs = {
   method?: string;
@@ -43,75 +55,7 @@ type GraphBatchResult =
   | { ok: true; responses: GraphBatchSubResponse[] }
   | { ok: false; status?: number; data?: unknown; error: string };
 
-const GRAPH_HOST = 'graph.microsoft.com';
-const GRAPH_BASE_URL = `https://${GRAPH_HOST}/v1.0`;
-const ALLOWED_METHODS = new Set(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']);
-const FORWARDED_HEADERS = new Set(['accept', 'content-type', 'prefer', 'consistencylevel']);
-
-// [A1] Every Graph request — including resumed delta nextLink/deltaLink calls —
-// must carry this. Without it Graph message ids change on folder move, so this
-// plan's own archive/trash operations (moves) would invalidate every cached id.
-const IMMUTABLE_ID_PREFER = 'IdType="ImmutableId"';
-const MAX_BATCH_OPS = 20;
-const MAX_BATCH_RETRIES = 3;
-const MAX_RETRY_AFTER_MS = 60_000;
-
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-/**
- * Accepts a path relative to the v1.0 base, or an opaque absolute Graph URL
- * (delta links). Absolute URLs are origin-validated: only graph.microsoft.com
- * over https is allowed — never fetch a stored delta URL through a raw client.
- */
-function buildGraphUrl(path: unknown): string | null {
-  if (typeof path !== 'string' || !path) return null;
-  if (/[\r\n]/.test(path)) return null;
-
-  if (path.startsWith('https://')) {
-    try {
-      const url = new URL(path);
-      if (url.protocol !== 'https:' || url.hostname !== GRAPH_HOST) return null;
-      return url.toString();
-    } catch {
-      return null;
-    }
-  }
-
-  if (!path.startsWith('/') || path.startsWith('//')) return null;
-  return `${GRAPH_BASE_URL}${path}`;
-}
-
-function sanitizeMethod(method: unknown): string | null {
-  if (typeof method !== 'string') return null;
-  const normalized = method.toUpperCase();
-  return ALLOWED_METHODS.has(normalized) ? normalized : null;
-}
-
-function sanitizeHeaders(headers: unknown): Record<string, string> {
-  if (!headers || typeof headers !== 'object') return {};
-  return Object.fromEntries(
-    Object.entries(headers as Record<string, unknown>).flatMap(([key, value]) => {
-      if (!FORWARDED_HEADERS.has(key.toLowerCase()) || typeof value !== 'string') return [];
-      return [[key, value]];
-    })
-  );
-}
-
-/**
- * Returns headers with the immutable-id Prefer guaranteed present. A caller's
- * own Prefer values (e.g. odata.maxpagesize for delta paging) are preserved and
- * the IdType token is appended — Graph honours comma-separated Prefer values.
- */
-function withImmutableIdPrefer(headers: Record<string, string>): Record<string, string> {
-  const existingKey = Object.keys(headers).find((key) => key.toLowerCase() === 'prefer');
-  const existing = existingKey ? headers[existingKey] : '';
-
-  if (!existing) return { ...headers, Prefer: IMMUTABLE_ID_PREFER };
-  if (/idtype\s*=/i.test(existing)) return headers;
-
-  const merged = `${existing}, ${IMMUTABLE_ID_PREFER}`;
-  return { ...headers, [existingKey as string]: merged };
-}
 
 async function readResponseBody(
   response: Response,
@@ -129,33 +73,6 @@ async function readResponseBody(
   const contentType = response.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) return response.json();
   return response.text();
-}
-
-function getErrorMessage(status: number, data: unknown): string {
-  if (data && typeof data === 'object') {
-    const maybeError = (data as { error?: unknown }).error;
-    if (typeof maybeError === 'string') return maybeError;
-    if (maybeError && typeof maybeError === 'object') {
-      const message = (maybeError as { message?: unknown }).message;
-      if (typeof message === 'string') return message;
-    }
-  }
-  return `Graph request failed (${status})`;
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
-
-function parseRetryAfterMs(headers: Record<string, string> | undefined): number {
-  if (!headers) return 0;
-  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'retry-after');
-  const raw = key ? headers[key] : undefined;
-  const seconds = raw ? Number(raw) : NaN;
-  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
-  return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
 }
 
 /**
