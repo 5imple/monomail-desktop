@@ -657,6 +657,23 @@ Phase 7/9/8 (Microsoft attachments, mutations, send) — done (dormant) + carrie
 - All of the above is dormant behind the Phase 2 gate and **unvalidated against a
   live tenant** — needs the Phase 16/A14 sandbox.
 
+Adversarial review + unit tests (post Phase 8) — outcomes:
+
+- **Fixed (was HIGH):** the A2 sweep had missed 3 more length-based id classifiers
+  (`ThreadItemContextMenu.tsx` `> 20`, `GlobalComposeCard.tsx` `> 20` ×2,
+  `ThreadListItem.tsx` `=== 36`) — they would have misclassified Graph ids once
+  un-gated. All now use `isComposeDraftId`; no length-based id checks remain.
+- **Fixed (was LOW):** `getThread` on an empty conversation now throws a
+  not-found error instead of returning a blank, empty-id thread.
+- **Open (LOW, A13):** `translateQuery` scopes a virtual-label-only query
+  (`label:STARRED` / `label:UNREAD` with no folder token) to **Inbox** — a global
+  Starred/Unread view misses other folders. Fold into the A13 query-translation
+  sweep (query `/me/messages` across folders). (Phase 6/13)
+- Added `npm run test:m365`: 25 pure-logic unit tests (esbuild-bundled, `node
+  --test`) over `isComposeDraftId`, `graphRequestMapping`, and `graphTransforms`
+  — including the synthetic-payload round-trip against the real
+  `decodePayloadData`. A down payment on Phase 16.
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,

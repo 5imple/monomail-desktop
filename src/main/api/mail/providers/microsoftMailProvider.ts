@@ -93,7 +93,14 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal) => {
     uid,
     signal
   });
-  return transformGraphThread(resp.value ?? [], uid, { folderLabel: null });
+  const messages = resp.value ?? [];
+  // An empty conversation (deleted/expired) is a "not found" — surface it like
+  // Gmail's 404 rather than fabricating a blank, empty-id thread that could
+  // pollute the cache.
+  if (messages.length === 0) {
+    throw new Error(`Microsoft conversation not found: ${id}`);
+  }
+  return transformGraphThread(messages, uid, { folderLabel: null });
 };
 
 const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) => {
