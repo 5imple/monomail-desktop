@@ -5,6 +5,7 @@ import { fetchAndConstructThread } from '@/renderer/app/lib/db/thread/utils';
 import { initDB } from '../db';
 import { UserPreference } from '@/main/api/auth/types/user';
 import { authCache } from '@/renderer/app/context/AuthCache';
+import { isComposeDraftId } from '@/main/utils';
 
 export type ValidLabel =
   | 'INBOX'
@@ -575,7 +576,7 @@ export async function DBGetLatestThread(uid: string): Promise<MonoThread | null>
   // Find the thread with the most recent timestamp
   // Sort by timestamp in descending order (newest first)
   const sortedThreads = allThreads
-    .filter((thread) => thread.id.length < 20)
+    .filter((thread) => !isComposeDraftId(thread.id))
     .sort((a, b) => b.timestamp - a.timestamp);
 
   // Get the newest thread

@@ -1,4 +1,5 @@
 import { MonoThread } from '@/main/models/thread/MonoThread';
+import { isComposeDraftId } from '@/main/utils';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -187,7 +188,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
             </div>
 
             {/* Action buttons — centered */}
-            {thread && thread.id.length < 20 && (
+            {thread && !isComposeDraftId(thread.id) && (
               <div className="flex w-full items-center justify-center gap-[22px]">
                 <Button
                   ref={reminderRef}

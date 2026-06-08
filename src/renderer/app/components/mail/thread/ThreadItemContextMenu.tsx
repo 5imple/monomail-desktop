@@ -55,7 +55,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
     const singleThreadSelected = selectedThreads.length === 1;
     const fromRecipient = thread.from.length > 0 ? (thread.from[0] as MonoRecipient) : null;
 
-    // If it's a draft (ID length < 20), show draft-related actions
+    // If it's a draft, show draft-related actions
     if (isDraft) {
       const isSending = sendDraftQueue.includes(thread.id);
 

@@ -3,6 +3,7 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
+import { isComposeDraftId } from '@/main/utils';
 import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
 import { buildRawMessage } from '@/renderer/app/lib/mime/buildRawMessage';
 import { DBGetDraftById, DBRemoveDraft, DBSaveDraft } from '@/renderer/app/lib/db/draft';
@@ -318,12 +319,14 @@ export function useDraftAtom() {
 
           // Standalone: every message sends straight through Gmail. Build the
           // full MIME (incl. attachments + inline images) from locally-held
-          // bytes. Only thread when threadId is a real Gmail id (< 20 chars,
-          // per the repo convention); a new-compose placeholder id would 400.
+          // bytes. Only thread when threadId is a real server id; a new-compose
+          // placeholder id (a local UUID) would 400.
           const attachmentRecords = await DBGetAttachmentsForDraft(uid, draftId);
           const raw = await buildRawMessage(fullDraft, attachmentRecords);
           const gmailThreadId =
-            fullDraft.threadId && fullDraft.threadId.length < 20 ? fullDraft.threadId : undefined;
+            fullDraft.threadId && !isComposeDraftId(fullDraft.threadId)
+              ? fullDraft.threadId
+              : undefined;
           const sent = await mailApi.sendMessage(uid, raw, gmailThreadId);
           const messageId = sent?.id;
 

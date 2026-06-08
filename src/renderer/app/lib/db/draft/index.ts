@@ -1,5 +1,6 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoThread } from '@/main/models/thread/MonoThread';
+import { isComposeDraftId } from '@/main/utils';
 import { initDB } from '@/renderer/app/lib/db/db';
 import {
   fetchAndConstructThread,
@@ -32,9 +33,8 @@ export async function DBSaveDraft(uid: string, draft: MonoDraft): Promise<void> 
   const threadData = await threadsStore.get(draft.threadId);
   const thread: MonoThread | null = threadData
     ? await fetchAndConstructThread(tx, threadData, uid)
-    : draft.threadId.length < 20
-      ? null
-      : new MonoThread({
+    : isComposeDraftId(draft.threadId)
+      ? new MonoThread({
           accountId: uid,
           id: draft.id,
           labelIds: ['DRAFT'],
@@ -46,7 +46,8 @@ export async function DBSaveDraft(uid: string, draft: MonoDraft): Promise<void> 
           historyId: null,
           timestamp: draft.timestamp,
           items: [draft]
-        });
+        })
+      : null;
   if (thread) {
     // If the thread exists, update it to include the draft
     if (!thread.items.some((item) => item.id === draft.id)) {

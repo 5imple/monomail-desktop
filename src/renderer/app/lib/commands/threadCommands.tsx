@@ -1,5 +1,5 @@
 import React from 'react';
-import { generateUUID } from '@/main/utils';
+import { generateUUID, isComposeDraftId } from '@/main/utils';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { CommandType } from '@/renderer/app/types';
 import { toast } from 'sonner';
@@ -58,7 +58,7 @@ export const createThreadCommands = (
     (
       args?.threadIds ??
       (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : [])
-    ).filter((id) => id.length < 20);
+    ).filter((id) => !isComposeDraftId(id));
 
   return {
     // THREAD_MARK_READ with promise toast
