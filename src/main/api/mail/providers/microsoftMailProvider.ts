@@ -340,6 +340,42 @@ const modifyMessage: MailProviderAdapter['modifyMessage'] = async (
   return { addLabelIds, removeLabelIds };
 };
 
+// ── Send (Phase 8) ───────────────────────────────────────────────────────────
+
+// Conservative v1 ceiling on the encoded MIME (A4). The real sendMail MIME limit
+// is undocumented; large attachments (>3 MB) need the draft + upload-session path
+// (v1.5). Verify empirically against a sandbox tenant before raising this.
+const MAX_ENCODED_MIME = 4 * 1024 * 1024;
+
+// buildRawMessage emits the envelope as base64url with padding stripped; Graph's
+// MIME sendMail wants standard base64 — restore the +/ alphabet and re-pad.
+function base64UrlToBase64(b64url: string): string {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  return b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
+}
+
+const sendMessage: MailProviderAdapter['sendMessage'] = async (uid, raw, threadId, signal) => {
+  const mimeBase64 = base64UrlToBase64(raw);
+  if (mimeBase64.length > MAX_ENCODED_MIME) {
+    throw new Error(
+      'This message is too large to send from a Microsoft account in this version — attachments over ~3 MB are not yet supported.'
+    );
+  }
+
+  // MIME mode: POST the base64 MIME as text/plain. Reply threading rides on the
+  // In-Reply-To/References headers buildRawMessage already wrote, so threadId is
+  // not needed. Graph files the message in Sent Items itself.
+  await graphApiClient.post<unknown>('/me/sendMail', mimeBase64, {
+    uid,
+    signal,
+    headers: { 'Content-Type': 'text/plain' }
+  });
+
+  // sendMail returns 202 with no body — there is no message id to surface. The
+  // sent message arrives via Sent Items sync; the caller tolerates an empty id.
+  return { id: '', threadId: threadId ?? '' };
+};
+
 function notImplemented(feature: string): never {
   throw new Error(
     `[microsoftMailProvider] ${feature} is not implemented yet — pending its M365 plan phase.`
@@ -365,5 +401,6 @@ export const microsoftMailProvider: MailProviderAdapter = {
   batchModifyThreads,
   trashThread,
   untrashThread,
-  modifyMessage
+  modifyMessage,
+  sendMessage
 };
