@@ -95,6 +95,33 @@ test('wellKnownFolderToLabel: names map (case-insensitive); archive/custom → n
   assert.equal(wellKnownFolderToLabel(null), null);
 });
 
+test('transformGraphMessage: resolveFolderLabel derives the label from parentFolderId', () => {
+  const resolver = (pid: string | undefined) => (pid === 'INBOX_FOLDER_ID' ? 'INBOX' : null);
+
+  // Resolved from parentFolderId.
+  const m = transformGraphMessage(
+    { ...baseMsg, parentFolderId: 'INBOX_FOLDER_ID' },
+    { resolveFolderLabel: resolver }
+  );
+  assert.ok(m.labelIds.includes('INBOX'));
+  assert.ok(m.labelIds.includes('folder:INBOX_FOLDER_ID'));
+
+  // Resolver takes precedence over a (stale/wrong) single folderLabel.
+  const m2 = transformGraphMessage(
+    { ...baseMsg, parentFolderId: 'INBOX_FOLDER_ID' },
+    { resolveFolderLabel: resolver, folderLabel: 'SENT' }
+  );
+  assert.ok(m2.labelIds.includes('INBOX'));
+  assert.ok(!m2.labelIds.includes('SENT'));
+
+  // Falls back to folderLabel when the resolver can't map the folder.
+  const m3 = transformGraphMessage(
+    { ...baseMsg, parentFolderId: 'UNKNOWN_ID' },
+    { resolveFolderLabel: resolver, folderLabel: 'SENT' }
+  );
+  assert.ok(m3.labelIds.includes('SENT'));
+});
+
 test('mapGraphMessageLabels: read + unflagged message omits UNREAD/STARRED', () => {
   const labels = mapGraphMessageLabels(
     { id: 'x', isRead: true, parentFolderId: 'F' },

@@ -75,6 +75,50 @@ function folderLabelFromNextLink(nextLink: string): string | null {
   return wellKnownFolderToLabel(name ? decodeURIComponent(name) : null);
 }
 
+// Well-known folders that carry a normalized label (Archive maps to no label, so
+// its id is not needed; Drafts is local-only per A5 but still labelled if seen).
+const WELL_KNOWN_LABEL_FOLDERS = ['inbox', 'sentitems', 'drafts', 'deleteditems', 'junkemail'];
+
+// Per-uid cache of parentFolderId → well-known label. Lets detail fetches,
+// cross-folder result sets, and nextLink continuations resolve INBOX/SENT/...
+// from a message's own parentFolderId rather than a single per-query folderLabel
+// (the fix for label loss on page-2 and on detail re-saves — review #2/#6/#7).
+const folderLabelMapCache = new Map<string, Map<string, string>>();
+
+async function getFolderLabelMap(uid: string): Promise<Map<string, string>> {
+  const cached = folderLabelMapCache.get(uid);
+  if (cached) return cached;
+
+  const map = new Map<string, string>();
+  const requests = WELL_KNOWN_LABEL_FOLDERS.map((name, i) => ({
+    id: String(i),
+    method: 'GET',
+    url: `/me/mailFolders/${name}?$select=id`
+  }));
+  const result = await graphBatch(uid, requests);
+  if (result.ok) {
+    for (const sub of result.responses) {
+      if (sub.status >= 400) continue;
+      const name = WELL_KNOWN_LABEL_FOLDERS[Number(sub.id)];
+      const folderId = (sub.body as { id?: string } | undefined)?.id;
+      const label = wellKnownFolderToLabel(name);
+      if (folderId && label) map.set(folderId, label);
+    }
+    // Cache only on a successful batch; a failed resolve stays uncached so the
+    // next call retries (the resolver just yields null meanwhile — degraded, not
+    // broken: getThreads still has its per-query folderLabel fallback).
+    folderLabelMapCache.set(uid, map);
+  }
+  return map;
+}
+
+async function folderLabelResolver(
+  uid: string
+): Promise<(parentFolderId: string | undefined) => string | null> {
+  const map = await getFolderLabelMap(uid);
+  return (pid) => (pid ? (map.get(pid) ?? null) : null);
+}
+
 const getThreads: MailProviderAdapter['getThreads'] = async (
   uid,
   q,
@@ -111,9 +155,12 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
     path = `/me/mailFolders/${folder}/messages?${params.toString()}`;
   }
 
-  const resp = await graphApiClient.get<GraphListResponse>(path, { uid, signal });
+  const [resp, resolveFolderLabel] = await Promise.all([
+    graphApiClient.get<GraphListResponse>(path, { uid, signal }),
+    folderLabelResolver(uid)
+  ]);
   const threads = groupByConversation(resp.value ?? [])
-    .map((messages) => transformGraphThread(messages, uid, { folderLabel }))
+    .map((messages) => transformGraphThread(messages, uid, { folderLabel, resolveFolderLabel }))
     .sort((a, b) => b.timestamp - a.timestamp);
 
   return { threads, nextPageToken: resp['@odata.nextLink'] };
@@ -138,16 +185,22 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal) => {
   if (messages.length === 0) {
     throw new Error(`Microsoft conversation not found: ${id}`);
   }
-  return transformGraphThread(messages, uid, { folderLabel: null });
+  // Resolve each message's well-known label from its parentFolderId so a detail
+  // fetch never strips INBOX/SENT from the cached thread.
+  const resolveFolderLabel = await folderLabelResolver(uid);
+  return transformGraphThread(messages, uid, { resolveFolderLabel });
 };
 
 const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) => {
   const params = new URLSearchParams({ $select: DETAIL_SELECT, $expand: ATTACHMENT_EXPAND });
-  const raw = await graphApiClient.get<GraphMessage>(
-    `/me/messages/${encodeURIComponent(id)}?${params.toString()}`,
-    { uid, signal }
-  );
-  return transformGraphMessage(raw, { folderLabel: null });
+  const [raw, resolveFolderLabel] = await Promise.all([
+    graphApiClient.get<GraphMessage>(`/me/messages/${encodeURIComponent(id)}?${params.toString()}`, {
+      uid,
+      signal
+    }),
+    folderLabelResolver(uid)
+  ]);
+  return transformGraphMessage(raw, { resolveFolderLabel });
 };
 
 interface GraphAttachmentContent {

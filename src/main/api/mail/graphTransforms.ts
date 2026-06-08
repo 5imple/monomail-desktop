@@ -195,6 +195,11 @@ export interface GraphTransformOptions {
   // The well-known label for the folder the message was read from (INBOX, SENT,
   // …) or null for Archive / custom folders. Applied to every mapped message.
   folderLabel?: string | null;
+  // Per-message resolver from parentFolderId → well-known label, backed by the
+  // account's well-known-folder-id map. Preferred over folderLabel because it is
+  // correct on cross-folder result sets, detail fetches, and nextLink
+  // continuations (where a single folderLabel is unknown or wrong).
+  resolveFolderLabel?: (parentFolderId: string | undefined) => string | null;
 }
 
 // ── Public transforms ─────────────────────────────────────────────────────────
@@ -211,13 +216,16 @@ export function transformGraphMessage(
   const { inlineImages, attachments, inlineImageSize } = mapGraphAttachments(message.attachments);
   const isHtml = (message.body?.contentType ?? '').toLowerCase() === 'html';
   const content = message.body?.content ?? '';
+  // Prefer the per-message folder resolution (correct across folders / detail /
+  // continuations); fall back to a caller-supplied single folderLabel.
+  const folderLabel = options.resolveFolderLabel?.(message.parentFolderId) ?? options.folderLabel ?? null;
 
   return {
     id: message.id,
     // conversationId is supplementary and known-unreliable across external
     // replies; v1 groups on it but never builds a composite key with it.
     threadId: message.conversationId ?? message.id,
-    labelIds: mapGraphMessageLabels(message, options.folderLabel ?? null),
+    labelIds: mapGraphMessageLabels(message, folderLabel),
     snippet: message.bodyPreview ?? null,
     historyId: null, // the Microsoft cursor lives in per-folder delta state, not here
     timestamp: parseTimestamp(message),
