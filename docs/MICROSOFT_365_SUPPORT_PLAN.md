@@ -406,6 +406,35 @@ debug code, as drafted.
 
 **[AMENDED — A3] This phase is restructured.**
 
+> **[STATUS — PAUSED] Not started.** Phases 3–10 (the dormant Microsoft provider:
+> read / mutations / send / attachments / delta-fetch + folder labels, 46 unit
+> tests) are complete. Phase 11 is deliberately paused because it is the only
+> piece that changes **live** behavior (it restores Gmail's currently-broken
+> delivery and starts background polling) and cannot be validated in this
+> environment (no tenant, can't run the app). Resume it against a real run.
+>
+> **Ground truth re-verified at this point (the plan's own caveat):**
+> - `GmailHistoryPoller` IS deleted (commit `ca534f3`); resurrect the pattern from
+>   `git show e9e37e2:src/main/services/push/GmailHistoryPoller.ts` (per-account
+>   interval, backoff, `electron-store` state, frames → `renderer:push:message-received`).
+> - `app.whenReady()` starts only `schedulerService` — no main-process delivery is
+>   live. `WebSocketPushClient` delivers only via a backend WS that is **absent in
+>   this standalone Gmail-direct build**, so delivery is genuinely broken today.
+> - Frame envelope + `normalizeGmailLabels` (`db/thread/index.ts`) consume the
+>   Phase-5 normalized labels cleanly — confirmed.
+> - **Storage-location decision to resolve first:** A3 says a MAIN-process
+>   `MailDeltaPoller`, but Phase 10 says delta state in **IndexedDB** — which the
+>   main process cannot read (renderer-only API). The deleted Gmail poller stored
+>   its cursors in `electron-store`. Decide: main-process poller → main-process
+>   (`electron-store`) delta state (recommended, consistent with A3 + the deleted
+>   pattern); or renderer-driven polling → IndexedDB `MicrosoftDeltaState`. Do NOT
+>   build the storage layer until this is settled, or it lands in the wrong place.
+> - `getMicrosoftFolderDelta` (Phase 10) is the per-folder fetch the poller drives;
+>   `MICROSOFT_TRACKED_FOLDERS` is the v1 set. The poller still needs: frame
+>   synthesis (delta upserts → MESSAGE_ADDED / removed → MESSAGE_DELETED; note the
+>   tombstone gives no threadId — verify `handleMessageDeleted`'s needs), cadence/
+>   backoff/suspend-resume, and the resumable-initial-delta beyond MAX_PAGES.
+
 ### Why
 
 1. Graph subscriptions need a public HTTPS `notificationUrl` (validation echo
