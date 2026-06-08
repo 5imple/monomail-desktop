@@ -1,7 +1,9 @@
 import log from 'electron-log';
 import { graphApiClient, graphBatch } from '@/main/api/apiClient';
 import {
+  GraphDeltaItem,
   GraphMessage,
+  splitDeltaPage,
   transformGraphMessage,
   transformGraphThread,
   wellKnownFolderToLabel
@@ -202,6 +204,84 @@ const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) =>
   ]);
   return transformGraphMessage(raw, { resolveFolderLabel });
 };
+
+// ── Delta sync (Phase 10) ────────────────────────────────────────────────────
+
+// Folders tracked by the delta poller (Phase 11). Drafts is excluded — Microsoft
+// compose drafts are local-only (A5). Archive is included for completeness.
+export const MICROSOFT_TRACKED_FOLDERS = [
+  'inbox',
+  'sentitems',
+  'deleteditems',
+  'junkemail',
+  'archive'
+] as const;
+
+export type MicrosoftDeltaStatus = 'ok' | 'reset' | 'retry' | 'expired' | 'error';
+
+export interface MicrosoftFolderDelta {
+  status: MicrosoftDeltaStatus;
+  upserts: GraphMessage[];
+  removedIds: string[];
+  // Save ONLY when status === 'ok'. On reset the caller clears stored state; on
+  // retry/expired/error it keeps the prior deltaLink (the cursor is not lost).
+  deltaLink: string | null;
+}
+
+interface GraphDeltaPage {
+  value?: GraphDeltaItem[];
+  '@odata.nextLink'?: string;
+  '@odata.deltaLink'?: string;
+}
+
+/**
+ * One delta sync of a folder. Pass the stored deltaLink to resume; omit it for an
+ * initial full delta. Pages through @odata.nextLink, returns upserts + removed
+ * ids + the new @odata.deltaLink. Error recovery follows the plan: 410 → reset
+ * (full resync), 429 → retry (Retry-After is handled by the poller's backoff),
+ * 5xx/network → keep state, auth → expired. The immutable-id Prefer header is
+ * carried on the delta + every nextLink/deltaLink automatically by the IPC
+ * handler (A1), so ids stay stable across the cursor's lifetime.
+ */
+export async function getMicrosoftFolderDelta(
+  uid: string,
+  folder: string,
+  deltaLink?: string,
+  signal?: AbortSignal
+): Promise<MicrosoftFolderDelta> {
+  const upserts: GraphMessage[] = [];
+  const removedIds: string[] = [];
+  // Graph encodes $select into the returned nextLink/deltaLink, so it is only
+  // set on the initial request; resumes use the opaque link verbatim.
+  let path: string | undefined =
+    deltaLink && GRAPH_NEXTLINK.test(deltaLink)
+      ? deltaLink
+      : `/me/mailFolders/${folder}/messages/delta?${new URLSearchParams({ $select: LIST_SELECT }).toString()}`;
+  let newDeltaLink: string | null = null;
+
+  try {
+    while (path) {
+      const page = await graphApiClient.get<GraphDeltaPage>(path, { uid, signal });
+      const { upserts: pageUpserts, removedIds: pageRemoved } = splitDeltaPage(page.value);
+      upserts.push(...pageUpserts);
+      removedIds.push(...pageRemoved);
+      if (page['@odata.deltaLink']) {
+        newDeltaLink = page['@odata.deltaLink'];
+        break;
+      }
+      path = page['@odata.nextLink'];
+    }
+    return { status: 'ok', upserts, removedIds, deltaLink: newDeltaLink };
+  } catch (err) {
+    const status = (err as { status?: number })?.status;
+    if (status === 410) return { status: 'reset', upserts: [], removedIds: [], deltaLink: null };
+    if (status === 429) return { status: 'retry', upserts, removedIds, deltaLink: deltaLink ?? null };
+    if (status === 401 || status === 403) {
+      return { status: 'expired', upserts, removedIds, deltaLink: deltaLink ?? null };
+    }
+    return { status: 'error', upserts, removedIds, deltaLink: deltaLink ?? null };
+  }
+}
 
 interface GraphAttachmentContent {
   '@odata.type'?: string;

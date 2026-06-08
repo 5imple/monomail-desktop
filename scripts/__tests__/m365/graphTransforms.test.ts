@@ -4,7 +4,8 @@ import {
   transformGraphMessage,
   transformGraphThread,
   wellKnownFolderToLabel,
-  mapGraphMessageLabels
+  mapGraphMessageLabels,
+  splitDeltaPage
 } from '@/main/api/mail/graphTransforms';
 
 // The renderer's exact reverse of the synthetic payload encoding
@@ -142,6 +143,23 @@ test('transformGraphThread: groups + sorts ascending + id is conversationId', ()
   assert.equal(thread.items.length, 2);
   assert.equal((thread.items[0] as { id: string }).id, 'id1');
   assert.equal((thread.items[1] as { id: string }).id, 'id2');
+});
+
+test('splitDeltaPage: separates upserts from @removed tombstones', () => {
+  const page = [
+    { id: 'm1', subject: 'a' },
+    { id: 'm2', '@removed': { reason: 'deleted' } },
+    { id: 'm3', subject: 'c' },
+    { id: 'm4', '@removed': { reason: 'changed' } },
+    { subject: 'no-id-ignored' }
+  ];
+  const { upserts, removedIds } = splitDeltaPage(page);
+  assert.deepEqual(
+    upserts.map((m) => m.id),
+    ['m1', 'm3']
+  );
+  assert.deepEqual(removedIds, ['m2', 'm4']);
+  assert.deepEqual(splitDeltaPage(undefined), { upserts: [], removedIds: [] });
 });
 
 test('transformGraphThread: empty input → empty-id thread (documented edge case)', () => {

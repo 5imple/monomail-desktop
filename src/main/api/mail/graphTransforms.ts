@@ -47,6 +47,31 @@ export interface GraphMessage {
   attachments?: GraphAttachmentMeta[];
 }
 
+// A delta-page entry is either a changed/added message or a tombstone carrying
+// `@removed` (with the message id).
+export type GraphDeltaItem = GraphMessage & { '@removed'?: { reason?: string } };
+
+/**
+ * Splits a /messages/delta page's `value` into upserts (new/changed messages)
+ * and removed message ids (the `@removed` tombstones). Pure — the fetch loop +
+ * cursor handling live in the provider.
+ */
+export function splitDeltaPage(value: GraphDeltaItem[] | undefined): {
+  upserts: GraphMessage[];
+  removedIds: string[];
+} {
+  const upserts: GraphMessage[] = [];
+  const removedIds: string[] = [];
+  for (const item of value ?? []) {
+    if (item && item['@removed']) {
+      if (item.id) removedIds.push(item.id);
+    } else if (item?.id) {
+      upserts.push(item);
+    }
+  }
+  return { upserts, removedIds };
+}
+
 // ── Label / folder mapping ────────────────────────────────────────────────────
 
 // Graph well-known folder names → normalized Mono labels. Archive maps to
