@@ -129,3 +129,6 @@ Mail Desktop*.app/
 .idea
 
 src/renderer/app/assets/style/tailwind.css
+
+# M365 unit-test bundle output
+scripts/__tests__/m365/.build
