@@ -589,6 +589,27 @@ Phase 4 (Graph IPC + client) review nits:
   on every Graph request (single + each batch subrequest) or that delta-link
   origin validation rejects non-graph hosts. (A1/A9 → Phase 16 test targets)
 
+Phase 5 (A2 id-heuristic + Graph data mapping) review nits:
+
+- **A2 audit list was incomplete.** The audit cited 3 `id.length < 20` sites;
+  the real functional set was 5 (`db/draft`, `db/thread`, `store/useDraftAtom`,
+  `commands/threadCommands`, `header/DisplayPanelHeader`) plus a stale comment in
+  `ThreadItemContextMenu`. All now use `isComposeDraftId`. Consider a lint guard
+  against reintroducing `id.length < 20` for id classification. (Phase 16)
+- `transformGraphThread` applies a single `folderLabel` to every message in a
+  conversation. Cross-folder threads (e.g. SENT + INBOX) need per-message folder
+  resolution at the adapter, not the transform. (Phase 6/10)
+- The display payload uses the full Graph `body` (so the existing quoted-history
+  extraction runs, matching Gmail). `uniqueBody` is intentionally deferred to the
+  reply-composition path. (Phase 8)
+- `bodyHtml`/`bodyPlain` are set on the mapped message, but the renderer reads
+  the synthetic `payload`; the direct fields are for non-render consumers.
+- `utf8ToBase64Url` relies on `btoa`/`TextEncoder` (present in renderer/worker,
+  Node 16+); guard if the transform is ever invoked in an older main context.
+- No automated coverage yet for the transforms: synthetic-payload round-trip
+  through `parsePayloadPart`, label/folder mapping, inline-image cid mapping, and
+  that the primary key is the Graph immutable id. (Phase 16 test targets)
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,
