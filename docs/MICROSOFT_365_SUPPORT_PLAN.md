@@ -638,6 +638,25 @@ Phase 3 (adapter seam) done; Phase 6 (un-gate + A13 sweep) carried:
   empty body payloads until `getThread`/`getMessage` hydrate them (parity with
   Gmail's metadata list). (Phase 6)
 
+Phase 7/9/8 (Microsoft attachments, mutations, send) — done (dormant) + carried:
+
+- microsoftMailProvider now implements 11/19 adapter methods (read, attachments,
+  mutations, send). Still stubbed: `getHistoryList` (intentional — Microsoft uses
+  delta, not historyId; Phase 10/11), `getLabels`/label CRUD (folders+categories,
+  belongs with Phase 13 UI), and `get/postMessageUnsubscribe` (edge feature).
+- **Send returns no message id** (Graph sendMail is 202/no-body); the sent
+  message appears via Sent Items sync. The ~4 MB encoded-MIME guard is
+  conservative — verify the real ceiling against a sandbox before raising, and
+  the large-attachment draft+upload-session path is v1.5. (Phase 8/16)
+- **Scheduled send is not yet provider-aware.** Phase 8 calls for a provider-aware
+  `sendRawMessage` in the scheduler (resolve provider by accountId); the
+  SchedulerService send path still assumes Gmail. (Phase 8 follow-up)
+- Mutations do N fetches (one `getConversationMessageIds` per thread) before
+  batching; fine for small selections, could be consolidated. Untrash always
+  restores to Inbox (Graph has no "previous folder"); acceptable v1.
+- All of the above is dormant behind the Phase 2 gate and **unvalidated against a
+  live tenant** — needs the Phase 16/A14 sandbox.
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,
