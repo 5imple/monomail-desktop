@@ -7,6 +7,7 @@ import {
   sanitizeHeaders,
   parseRetryAfterMs,
   chunk,
+  getErrorMessage,
   MAX_RETRY_AFTER_MS
 } from '@/main/services/ipc-handlers/graph/graphHttp';
 
@@ -27,6 +28,12 @@ test('buildGraphUrl: rejects non-Graph hosts (SSRF guard)', () => {
   assert.equal(buildGraphUrl('https://graph.microsoft.com.evil.com/x'), null);
   assert.equal(buildGraphUrl('https://notgraph.microsoft.com/x'), null);
   assert.equal(buildGraphUrl('https://attacker.example/graph.microsoft.com'), null);
+});
+
+test('buildGraphUrl: rejects the userinfo/credential host-spoof trick', () => {
+  // The host is evil.com here; graph.microsoft.com is only userinfo before the @.
+  assert.equal(buildGraphUrl('https://graph.microsoft.com@evil.com/v1.0/me'), null);
+  assert.equal(buildGraphUrl('https://user:pass@evil.com/x'), null);
 });
 
 test('buildGraphUrl: rejects non-https and malformed inputs', () => {
@@ -105,6 +112,20 @@ test('parseRetryAfterMs: seconds → ms, capped, robust to junk', () => {
   assert.equal(parseRetryAfterMs({ 'Retry-After': 'soon' }), 0);
   assert.equal(parseRetryAfterMs({ 'Retry-After': '-3' }), 0);
   assert.equal(parseRetryAfterMs({ 'Retry-After': '99999' }), MAX_RETRY_AFTER_MS); // capped
+});
+
+test('parseRetryAfterMs: accepts the RFC 7231 HTTP-date form', () => {
+  // Far-future date → positive delta, capped at the max.
+  assert.equal(parseRetryAfterMs({ 'Retry-After': 'Wed, 21 Oct 2099 07:28:00 GMT' }), MAX_RETRY_AFTER_MS);
+  // Past date → no wait.
+  assert.equal(parseRetryAfterMs({ 'Retry-After': 'Wed, 21 Oct 2000 07:28:00 GMT' }), 0);
+});
+
+test('getErrorMessage: extracts string / nested message, falls back to status', () => {
+  assert.equal(getErrorMessage(400, { error: 'bad request' }), 'bad request');
+  assert.equal(getErrorMessage(404, { error: { message: 'not found' } }), 'not found');
+  assert.equal(getErrorMessage(500, null), 'Graph request failed (500)');
+  assert.equal(getErrorMessage(503, 'plain string body'), 'Graph request failed (503)');
 });
 
 test('chunk: splits into groups of at most size (Graph $batch cap = 20)', () => {

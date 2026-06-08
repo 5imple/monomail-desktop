@@ -122,3 +122,51 @@ test('transformGraphThread: empty input → empty-id thread (documented edge cas
   assert.equal(t.id, '');
   assert.equal(t.items.length, 0);
 });
+
+test('transformGraphMessage: missing/invalid date → timestamp 0 (not the current time)', () => {
+  const noDate = transformGraphMessage({ id: 'x', body: { contentType: 'text', content: '' } }, {});
+  assert.equal(noDate.timestamp, 0);
+  const badDate = transformGraphMessage(
+    { id: 'y', receivedDateTime: 'not-a-date', body: { contentType: 'text', content: '' } },
+    {}
+  );
+  assert.equal(badDate.timestamp, 0);
+  const good = transformGraphMessage(
+    { id: 'z', receivedDateTime: '2026-06-01T12:00:00Z', body: { contentType: 'text', content: '' } },
+    {}
+  );
+  assert.equal(good.timestamp, Date.parse('2026-06-01T12:00:00Z'));
+});
+
+test('transformGraphThread: aggregates recipients (dedup), attachments, subject/snippet/timestamp', () => {
+  const a = {
+    ...baseMsg,
+    id: 'a',
+    conversationId: 'C',
+    receivedDateTime: '2026-06-01T10:00:00Z',
+    subject: 'First subject',
+    bodyPreview: 'first preview',
+    from: { emailAddress: { name: 'Alice', address: 'alice@x.com' } },
+    toRecipients: [{ emailAddress: { name: 'Me', address: 'me@x.com' } }],
+    attachments: [{ id: 'att-a', name: 'a.pdf', contentType: 'application/pdf', size: 1, isInline: false }]
+  };
+  const b = {
+    ...baseMsg,
+    id: 'b',
+    conversationId: 'C',
+    receivedDateTime: '2026-06-01T12:00:00Z',
+    subject: 'Second subject',
+    bodyPreview: 'second preview',
+    from: { emailAddress: { name: 'Alice', address: 'alice@x.com' } }, // duplicate sender
+    toRecipients: [{ emailAddress: { name: 'Bob', address: 'bob@x.com' } }],
+    attachments: [{ id: 'att-b', name: 'b.pdf', contentType: 'application/pdf', size: 2, isInline: false }]
+  };
+  const t = transformGraphThread([b, a], 'uid', {});
+  assert.equal(t.subject, 'First subject'); // earliest message's subject
+  assert.equal(t.snippet, 'second preview'); // latest message's preview
+  assert.equal(t.timestamp, Date.parse('2026-06-01T12:00:00Z')); // latest
+  assert.equal(t.from.length, 1); // Alice deduped
+  assert.equal(t.from[0].email, 'alice@x.com');
+  assert.deepEqual(new Set(t.to.map((r) => r.email)), new Set(['me@x.com', 'bob@x.com']));
+  assert.ok(t.attachments['a.pdf'] && t.attachments['b.pdf']); // union
+});

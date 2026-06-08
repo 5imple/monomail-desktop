@@ -56,6 +56,7 @@ test('planMutation: trash / junk / restore / custom-folder moves', () => {
   assert.equal(planMutation(['SPAM'], []).moveTo, 'junkemail');
   assert.equal(planMutation(['INBOX'], []).moveTo, 'inbox');
   assert.equal(planMutation([], ['TRASH']).moveTo, 'inbox');
+  assert.equal(planMutation([], ['SPAM']).moveTo, 'inbox'); // restore from junk
   assert.equal(planMutation(['folder:AAMk123'], []).moveTo, 'AAMk123');
 });
 
@@ -72,8 +73,17 @@ test('planMutation: unrecognized labels are a no-op (no patch, no move)', () => 
 });
 
 test('base64UrlToBase64: round-trips through atob for the MIME sendMail envelope', () => {
-  for (const sample of ['M365', 'Hello, world!', 'a', 'ab', 'abc', '<p>x</p>\r\n']) {
+  const samples = ['M365', 'Hello, world!', 'a', 'ab', 'abc', '<p>x</p>\r\n'];
+  // Include byte sequences whose standard base64 contains BOTH '+' and '/', so
+  // the '-'→'+' AND '_'→'/' replacement branches are both exercised (regression
+  // guard: deleting either replace() would otherwise still pass).
+  samples.push(String.fromCharCode(0, 0, 255)); // → 'AAD/' → url 'AAD_'
+  samples.push(String.fromCharCode(255, 224, 255)); // → '/+D/'-ish, exercises '+'
+  for (const sample of samples) {
     const url = btoa(sample).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
     assert.equal(atob(base64UrlToBase64(url)), sample);
   }
+  // Explicit: the underscore branch.
+  assert.equal(base64UrlToBase64('AAD_'), 'AAD/');
+  assert.equal(base64UrlToBase64('a-b_c'), 'a+b/c===');
 });
