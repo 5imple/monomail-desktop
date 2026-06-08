@@ -259,6 +259,10 @@ interface GraphDeltaPage {
  * 5xx/network → keep state, auth → expired. The immutable-id Prefer header is
  * carried on the delta + every nextLink/deltaLink automatically by the IPC
  * handler (A1), so ids stay stable across the cursor's lifetime.
+ *
+ * Caller contract: on a non-'ok' status, `upserts`/`removedIds` hold whatever
+ * pages were read before the failure — treat them as provisional and do NOT
+ * advance the cursor (the returned deltaLink is the prior one, unchanged).
  */
 export async function getMicrosoftFolderDelta(
   uid: string,

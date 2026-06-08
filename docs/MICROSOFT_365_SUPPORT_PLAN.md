@@ -743,6 +743,39 @@ suite 37→42):
   mapped to STARRED, Graph plain-text subject/preview vs Gmail's entity-encoded
   assumption in `highlightThreadText`.
 
+Phase 10 (delta sync) built + the deferred #2/#6/#7 folder-label resolution fixed:
+
+- Added the per-uid well-known-folder-id→label map (resolveFolderLabel threaded
+  through the transforms) — closes the deferred #2/#6/#7: detail fetches,
+  nextLink continuations, and cross-folder results now keep INBOX/SENT labels.
+- Added `getMicrosoftFolderDelta` (cursor handling, `@removed`, error recovery)
+  + `MICROSOFT_TRACKED_FOLDERS` (Drafts excluded, A5). The IndexedDB
+  `MicrosoftDeltaState` store + the localStorage-watermark migration land with
+  the Phase 11 poller that consumes this.
+
+Phase 10 verification (focused workflow, 10 confirmed; fixes shipped) —
+**found real bugs in the just-added code**:
+
+- **[MEDIUM, fixed]** Delta cursor expiry: Graph's common cursor-invalidation is
+  the 4xx `syncStateNotFound` (NOT 410), which fell through to "keep cursor" — the
+  poller would have wedged on a dead cursor forever. `classifyGraphDeltaError` now
+  maps 410 / syncStateNotFound / resyncRequired → reset; the catch inspects
+  `err.data.error.code` (verified reachable on both renderer + worker paths).
+- **[MEDIUM, fixed]** Folder-label map cached a partial-success batch permanently,
+  silently stripping a folder's label for the session. Now caches only a complete
+  map (404/absent is fine, transient failure is not) + in-flight de-dup.
+- **[LOW, fixed]** A successful delta with no new deltaLink no longer clears a
+  valid cursor; pagination loops gained a MAX_PAGES guard.
+- The fix commit was itself adversarially re-verified (all 6 fixes correct). Test
+  suite 42→46.
+- **Residual (LOW, Phase 11):** the delta loop's MAX_PAGES=100 is ample for a
+  conversation fetch but low for a *huge mailbox's initial full delta* — proper
+  resumable initial sync (persist the nextLink, not just the deltaLink) belongs
+  with the Phase 11 poller. Also: `getThread` unions labelIds across a
+  conversation's messages from different folders (INBOX+TRASH), same as the
+  existing Gmail thread behavior — flagged for the Phase 13 renderer
+  label-semantics pass, not a Microsoft-specific regression.
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,
