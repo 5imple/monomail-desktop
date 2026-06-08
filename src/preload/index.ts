@@ -71,6 +71,24 @@ const api = {
     body?: string;
     responseType?: 'json' | 'blob' | 'text';
   }) => ipcRenderer.invoke('main:calendar:request', args),
+  graphRequest: (args: {
+    method: string;
+    path: string;
+    uid: string;
+    headers?: Record<string, string>;
+    body?: string;
+    responseType?: 'json' | 'blob' | 'text';
+  }) => ipcRenderer.invoke('main:graph:request', args),
+  graphBatch: (args: {
+    uid: string;
+    requests: Array<{
+      id: string;
+      method: string;
+      url: string;
+      headers?: Record<string, string>;
+      body?: unknown;
+    }>;
+  }) => ipcRenderer.invoke('main:graph:batch', args),
   devAddAccount: (args: { accessToken: string; refreshToken: string; expiresInSec?: number }) =>
     ipcRenderer.invoke('main:auth:dev-add-account', args),
   // ---------- P8 Later Queue ----------

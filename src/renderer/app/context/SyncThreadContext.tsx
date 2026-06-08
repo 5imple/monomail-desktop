@@ -183,10 +183,34 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
     });
   };
 
+  const handleWorkerGraphRequest = async (payload: any) => {
+    const requestId = payload?.requestId;
+    if (typeof requestId !== 'string') return;
+
+    const { requestId: _requestId, batch, ...args } = payload;
+    let result;
+    try {
+      result = batch ? await electronApi.graphBatch(args) : await electronApi.graphRequest(args);
+    } catch (error) {
+      result = {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Graph request failed'
+      };
+    }
+
+    workerRef.current?.postMessage({
+      type: 'GRAPH_API_RESPONSE',
+      payload: { requestId, result }
+    });
+  };
+
   const handleWorkerMessage = (type: string, payload: any) => {
     switch (type) {
       case 'MAIL_API_REQUEST':
         void handleWorkerGmailRequest(payload);
+        break;
+      case 'GRAPH_API_REQUEST':
+        void handleWorkerGraphRequest(payload);
         break;
       case 'SYNC_PROGRESS':
         handleSyncProgress(payload);

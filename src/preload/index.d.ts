@@ -117,6 +117,30 @@ interface IpcRenderer {
     | { ok: true; status: number; data: any }
     | { ok: false; status?: number; data?: any; error: string }
   >;
+  graphRequest: (args: {
+    method: string;
+    path: string;
+    uid: string;
+    headers?: Record<string, string>;
+    body?: string;
+    responseType?: 'json' | 'blob' | 'text';
+  }) => Promise<
+    | { ok: true; status: number; data: any }
+    | { ok: false; status?: number; data?: any; error: string }
+  >;
+  graphBatch: (args: {
+    uid: string;
+    requests: Array<{
+      id: string;
+      method: string;
+      url: string;
+      headers?: Record<string, string>;
+      body?: unknown;
+    }>;
+  }) => Promise<
+    | { ok: true; responses: Array<{ id: string; status: number; headers?: Record<string, string>; body?: unknown }> }
+    | { ok: false; status?: number; data?: any; error: string }
+  >;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;

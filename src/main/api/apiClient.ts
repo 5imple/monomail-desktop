@@ -75,6 +75,58 @@ function ensureWorkerGmailResponseListener() {
   });
 }
 
+// Microsoft Graph worker bridge — mirrors the Gmail one but on its own message
+// pair (GRAPH_API_REQUEST/GRAPH_API_RESPONSE) so the host can route requests to
+// electronBridge.graphRequest. Workers can't reach window.electronBridge.
+type GraphBatchSubRequest = {
+  id: string;
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+};
+type GraphBatchSubResponse = {
+  id: string;
+  status: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+};
+type GraphBatchResult =
+  | { ok: true; responses: GraphBatchSubResponse[] }
+  | { ok: false; status?: number; data?: any; error: string };
+
+let workerGraphListenerAttached = false;
+const workerGraphRequests = new Map<string, WorkerGmailResolver>();
+
+function ensureWorkerGraphResponseListener() {
+  if (!isWebWorker || workerGraphListenerAttached) return;
+  workerGraphListenerAttached = true;
+
+  self.addEventListener('message', (event: MessageEvent) => {
+    const message = event.data;
+    if (message?.type !== 'GRAPH_API_RESPONSE') return;
+
+    const { requestId, result } = message.payload ?? {};
+    if (typeof requestId !== 'string') return;
+
+    const pending = workerGraphRequests.get(requestId);
+    if (!pending) return;
+    workerGraphRequests.delete(requestId);
+
+    if (result?.ok) {
+      // Batch results resolve to the whole envelope; single requests to .data.
+      pending.resolve('responses' in result ? result : result.data);
+      return;
+    }
+
+    pending.reject({
+      status: result?.status ?? 500,
+      data: result?.data,
+      message: result?.error ?? 'Graph request failed'
+    });
+  });
+}
+
 // Helper to safely check online status
 const isOnline = (): boolean => {
   return isBrowser ? navigator.onLine : true;
@@ -155,8 +207,16 @@ class ApiClient {
     return this.baseURL.startsWith('https://www.googleapis.com/calendar/v3');
   }
 
+  private isGraphApiClient() {
+    return this.baseURL.startsWith('https://graph.microsoft.com/');
+  }
+
   private shouldProxyGmailRequest() {
     return this.isGmailApiClient() && (isWebWorker || isElectron);
+  }
+
+  private shouldProxyGraphRequest() {
+    return this.isGraphApiClient() && (isWebWorker || isElectron);
   }
 
   private toPlainHeaders(headers: HeadersInit | undefined): Record<string, string> {
@@ -272,6 +332,68 @@ class ApiClient {
     return this.requestGmailViaElectron<T>(payload, config.signal);
   }
 
+  private requestGraphViaElectron<T>(
+    payload: GmailBridgeRequest,
+    signal?: AbortSignal | null
+  ): Promise<T> {
+    const bridge = (window as any).electronBridge;
+    if (!bridge?.graphRequest) {
+      return Promise.reject(new Error('Graph bridge is unavailable'));
+    }
+
+    const request = bridge
+      .graphRequest(payload)
+      .then((result: GmailBridgeResult<T>) => this.normalizeGmailResult(result));
+    return this.withAbort(request, signal);
+  }
+
+  private requestGraphViaWorkerHost<T>(
+    payload: GmailBridgeRequest,
+    signal?: AbortSignal | null
+  ): Promise<T> {
+    ensureWorkerGraphResponseListener();
+
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const request = new Promise<T>((resolve, reject) => {
+      workerGraphRequests.set(requestId, { resolve: resolve as (value: unknown) => void, reject });
+      self.postMessage({
+        type: 'GRAPH_API_REQUEST',
+        payload: { requestId, ...payload }
+      });
+    });
+
+    return this.withAbort(request, signal).catch((error) => {
+      workerGraphRequests.delete(requestId);
+      throw error;
+    });
+  }
+
+  private requestGraphViaMain<T>(
+    method: string,
+    path: string,
+    config: RequestInit,
+    responseType: RequestOptions['responseType'],
+    uid?: string | null
+  ): Promise<T> {
+    if (!uid) return Promise.reject(new Error('Graph account uid is required'));
+
+    const body = typeof config.body === 'string' ? config.body : undefined;
+    const payload: GmailBridgeRequest = {
+      method,
+      path,
+      uid,
+      headers: this.toPlainHeaders(config.headers),
+      body,
+      responseType
+    };
+
+    if (isWebWorker) {
+      return this.requestGraphViaWorkerHost<T>(payload, config.signal);
+    }
+
+    return this.requestGraphViaElectron<T>(payload, config.signal);
+  }
+
   /**
    * Makes a network request with retry logic
    */
@@ -299,7 +421,10 @@ class ApiClient {
 
     const accountUid = uid || this.activeUid;
     const shouldProxyGmail = this.shouldProxyGmailRequest();
-    let token = shouldProxyGmail ? null : idToken || this.idToken;
+    const shouldProxyGraph = this.shouldProxyGraphRequest();
+    // Graph (like Gmail) resolves its own Microsoft bearer in the main process;
+    // never attach the backend idToken here.
+    let token = shouldProxyGmail || shouldProxyGraph ? null : idToken || this.idToken;
 
     if (
       !shouldProxyGmail &&
@@ -432,6 +557,30 @@ class ApiClient {
         return ipcResult.data as T;
       }
 
+      // Microsoft Graph requests also route through the main process (CORS,
+      // bearer injection, and the unconditional immutable-id Prefer header all
+      // live there). The renderer never fetches graph.microsoft.com directly.
+      if (isBrowser && isElectron && this.isGraphApiClient()) {
+        const bodyStr =
+          config.body instanceof FormData
+            ? undefined
+            : typeof config.body === 'string'
+              ? config.body
+              : undefined;
+        const ipcResult = await (window as any).electronBridge?.graphRequest({
+          method,
+          path: url,
+          uid: accountUid ?? undefined,
+          headers: this.toPlainHeaders(config.headers),
+          body: bodyStr,
+          responseType
+        });
+        if (!ipcResult) return Promise.reject(new Error('Graph IPC bridge not available'));
+        if (!ipcResult.ok)
+          return Promise.reject({ status: ipcResult.status, data: ipcResult.data });
+        return ipcResult.data as T;
+      }
+
       // Per-attempt AbortController gives us a hard timeout. Without it
       // a stalled connection (server up, no response) hangs forever and
       // can deadlock app shutdown (before-quit awaits pubsub stop, which
@@ -455,6 +604,16 @@ class ApiClient {
 
         if (shouldProxyGmail) {
           return await this.requestGmailViaMain<T>(
+            method,
+            url,
+            attemptConfig,
+            responseType,
+            accountUid
+          );
+        }
+
+        if (shouldProxyGraph) {
+          return await this.requestGraphViaMain<T>(
             method,
             url,
             attemptConfig,
@@ -618,6 +777,58 @@ export const gmailApiClient = new ApiClient('https://gmail.googleapis.com/gmail/
 // goes through the main-process IPC bridge so OAuth tokens stay out of browser
 // fetch and renderer CORS rules.
 export const calendarApiClient = new ApiClient('https://www.googleapis.com/calendar/v3');
+
+// Separate client for direct Microsoft Graph API calls. Base URL resolves to
+// https://graph.microsoft.com/v1.0/<path>. Like Gmail, every request routes
+// through the main-process IPC bridge, where the Microsoft bearer and the
+// unconditional immutable-id Prefer header (A1) are injected.
+export const graphApiClient = new ApiClient('https://graph.microsoft.com/v1.0');
+
+function graphBatchViaWorkerHost(args: {
+  uid: string;
+  requests: GraphBatchSubRequest[];
+}): Promise<GraphBatchResult> {
+  ensureWorkerGraphResponseListener();
+
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return new Promise<GraphBatchResult>((resolve) => {
+    workerGraphRequests.set(requestId, {
+      // The shared GRAPH_API_RESPONSE listener resolves a batch reply with the
+      // full envelope ({ ok, responses }) and rejects on failure — fold both
+      // back into the GraphBatchResult union so graphBatch never throws.
+      resolve: (value) => resolve(value as GraphBatchResult),
+      reject: (reason: any) =>
+        resolve({
+          ok: false,
+          status: reason?.status,
+          data: reason?.data,
+          error: reason?.message ?? 'Graph batch failed'
+        })
+    });
+    self.postMessage({ type: 'GRAPH_API_REQUEST', payload: { requestId, batch: true, ...args } });
+  });
+}
+
+/**
+ * Runs a Graph $batch (JSON batching). Returns the per-subrequest responses in
+ * request order; the main process resolves 429 throttling at the subrequest
+ * level (A9). Never throws — failures come back as { ok: false, error }.
+ */
+export function graphBatch(uid: string, requests: GraphBatchSubRequest[]): Promise<GraphBatchResult> {
+  const args = { uid, requests };
+
+  if (isWebWorker) return graphBatchViaWorkerHost(args);
+
+  if (isBrowser && isElectron) {
+    const bridge = (window as any).electronBridge;
+    if (!bridge?.graphBatch) {
+      return Promise.resolve({ ok: false, error: 'Graph batch bridge is unavailable' });
+    }
+    return bridge.graphBatch(args);
+  }
+
+  return Promise.resolve({ ok: false, error: 'Graph batch is only available in Electron' });
+}
 
 /**
  * Set the Mono API token.

@@ -25,6 +25,24 @@ type PeopleBridgeRequest = {
   responseType?: 'json' | 'blob' | 'text';
 };
 type CalendarBridgeRequest = GmailBridgeRequest;
+type GraphBridgeRequest = GmailBridgeRequest;
+type GraphBatchSubRequest = {
+  id: string;
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+};
+type GraphBatchSubResponse = {
+  id: string;
+  status: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+};
+type GraphBatchRequest = { uid: string; requests: GraphBatchSubRequest[] };
+type GraphBatchResult =
+  | { ok: true; responses: GraphBatchSubResponse[] }
+  | { ok: false; status?: number; data?: any; error: string };
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import {
   INativeNotificationOptions,
@@ -167,6 +185,8 @@ interface IpcRenderer {
   gmailRequest: <T = any>(args: GmailBridgeRequest) => Promise<GmailBridgeResult<T>>;
   peopleRequest: <T = any>(args: PeopleBridgeRequest) => Promise<GmailBridgeResult<T>>;
   calendarRequest: <T = any>(args: CalendarBridgeRequest) => Promise<GmailBridgeResult<T>>;
+  graphRequest: <T = any>(args: GraphBridgeRequest) => Promise<GmailBridgeResult<T>>;
+  graphBatch: (args: GraphBatchRequest) => Promise<GraphBatchResult>;
   devAddAccount: (args: {
     accessToken: string;
     refreshToken: string;
@@ -535,6 +555,18 @@ const electronApi: IpcRenderer = {
   calendarRequest: async (args) => {
     if (isElectron) {
       return window.electronBridge.calendarRequest(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  graphRequest: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.graphRequest(args);
+    }
+    return { ok: false, error: 'Not in Electron' };
+  },
+  graphBatch: async (args) => {
+    if (isElectron) {
+      return window.electronBridge.graphBatch(args);
     }
     return { ok: false, error: 'Not in Electron' };
   },
