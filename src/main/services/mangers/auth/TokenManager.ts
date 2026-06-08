@@ -427,6 +427,22 @@ class TokenManager extends EventEmitter {
     return this.getMailAccountAccessToken(uid);
   }
 
+  /**
+   * Microsoft-only resolution for the Graph IPC path — throws for non-Microsoft
+   * uids so a Graph API call can never be issued with a Google bearer token
+   * (the mirror of {@link getGoogleAccountAccessToken}).
+   */
+  async getMicrosoftAccountAccessToken(
+    uid: string
+  ): Promise<{ accessToken: string; expiresAt: number }> {
+    if (!this.tokens) throw new Error('Not signed in');
+    const account = this.getMailAccountsMap(true)[uid];
+    if (!account || account.provider !== 'microsoft') {
+      throw new Error(`No Microsoft account token found for ${uid}`);
+    }
+    return this.getMailAccountAccessToken(uid);
+  }
+
   setActiveUid(uid: string | null): void {
     this.activeUid = uid;
   }
