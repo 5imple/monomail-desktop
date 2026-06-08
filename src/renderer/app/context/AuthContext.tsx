@@ -6,6 +6,7 @@ import {
   UserPreference
 } from '@/main/api/auth/types';
 import draftApi from '@/main/api/draft/draftApi';
+import { setMailAccountProviders } from '@/main/api/mail/providerRegistry';
 import signatureApi from '@/main/api/signature/signatureApi';
 import templateApi from '@/main/api/template/templateApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
@@ -724,6 +725,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     updateAccountsRef.current = updateAccounts;
   });
+
+  // Keep the mailApi provider registry in sync with the account list, so
+  // provider-specific calls dispatch to the Gmail or Graph adapter by uid.
+  useEffect(() => {
+    setMailAccountProviders(Object.fromEntries(accounts.map((a) => [a.uid, a.provider])));
+  }, [accounts]);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
