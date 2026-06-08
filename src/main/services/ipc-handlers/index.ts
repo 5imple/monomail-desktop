@@ -1,5 +1,6 @@
 import { registerAuthHandlers } from '@/main/services/ipc-handlers/auth';
 import { registerGmailHandlers } from '@/main/services/ipc-handlers/gmail';
+import { registerGraphHandlers } from '@/main/services/ipc-handlers/graph';
 import { registerNotificationHandlers } from '@/main/services/ipc-handlers/notification';
 import { registerQueueHandlers } from '@/main/services/ipc-handlers/queue';
 import { registerSystemHandlers } from '@/main/services/ipc-handlers/system';
@@ -9,6 +10,7 @@ export function registerIpcHandlers() {
   registerNotificationHandlers();
   registerAuthHandlers();
   registerGmailHandlers();
+  registerGraphHandlers();
   registerQueueHandlers();
   // FCM IPC handlers retired in Phase B — push lives on a backend
   // WebSocket now (see services/push/WebSocketPushClient.ts).

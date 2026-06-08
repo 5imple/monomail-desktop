@@ -39,6 +39,8 @@ export const validMainChannel = [
   'main:auth:get-mail-account-token',
   'main:auth:remove-mail-account',
   'main:gmail:request',
+  'main:graph:request',
+  'main:graph:batch',
   'main:system:set-offline-status',
   'main:system:set-alert-sound',
   'main:system:set-window-fullsize-on-creation',
