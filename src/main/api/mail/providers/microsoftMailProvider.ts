@@ -10,6 +10,7 @@ import {
   googleMailProvider,
   MailProviderAdapter
 } from '@/main/api/mail/providers/googleMailProvider';
+import { base64UrlToBase64, planMutation, translateQuery } from '@/main/api/mail/graphRequestMapping';
 
 // Fields the list view needs (no body — kept lightweight, like Gmail's
 // format=metadata list). `from`/`sender` cover delegated/shared mailboxes.
@@ -22,43 +23,12 @@ const LIST_SELECT =
 const DETAIL_SELECT = `${LIST_SELECT},body,bccRecipients,internetMessageHeaders`;
 const ATTACHMENT_EXPAND = 'attachments($select=id,name,contentType,size,isInline,contentId)';
 
-// Gmail label / `in:` token → Graph well-known folder. Drafts is intentionally
-// absent (M365 plan A5: Microsoft compose drafts are local-only).
-const FOLDER_BY_LABEL: Record<string, string> = {
-  INBOX: 'inbox',
-  SENT: 'sentitems',
-  TRASH: 'deleteditems',
-  SPAM: 'junkemail',
-  JUNK: 'junkemail'
-};
-
 interface GraphListResponse {
   value?: GraphMessage[];
   '@odata.nextLink'?: string;
 }
 
 const GRAPH_NEXTLINK = /^https:\/\/graph\.microsoft\.com\//i;
-
-/**
- * v1 Gmail-query → Graph translation. Handles the folder + read/flag tokens the
- * unified inbox actually emits today; anything else falls back to Inbox. The
- * full search-query translation (customSearch / convertToAccurateQuery) is the
- * A13 sweep, tracked for Phase 6/13 — unhandled tokens are logged, not dropped
- * silently.
- */
-function translateQuery(q: string): { folder: string; filter?: string } {
-  const token = (q.match(/(?:label|in):(\S+)/i)?.[1] ?? '').toUpperCase();
-  const folder = FOLDER_BY_LABEL[token] ?? 'inbox';
-
-  const filters: string[] = [];
-  if (/is:unread|label:UNREAD/i.test(q)) filters.push('isRead eq false');
-  if (/is:starred|label:STARRED/i.test(q)) filters.push("flag/flagStatus eq 'flagged'");
-
-  if (q && !token && !/is:(unread|starred)/i.test(q)) {
-    log.info(`[microsoftMailProvider] query "${q}" not translated — defaulting to Inbox (A13).`);
-  }
-  return { folder, filter: filters.length ? filters.join(' and ') : undefined };
-}
 
 function groupByConversation(messages: GraphMessage[]): GraphMessage[][] {
   const byConversation = new Map<string, GraphMessage[]>();
@@ -88,7 +58,10 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
     path = pageToken;
     folderLabel = null;
   } else {
-    const { folder, filter } = translateQuery(q ?? '');
+    const { folder, filter, translated } = translateQuery(q ?? '');
+    if (!translated) {
+      log.info(`[microsoftMailProvider] query "${q}" not translated — defaulting to Inbox (A13).`);
+    }
     folderLabel = wellKnownFolderToLabel(folder);
     const params = new URLSearchParams({
       $select: LIST_SELECT,
@@ -200,37 +173,6 @@ type GraphBatchOp = {
   headers?: Record<string, string>;
   body?: unknown;
 };
-
-/**
- * Translates a Mono label mutation into Graph operations: read/flag become a
- * PATCH on the message; archive/trash/junk/restore/custom-folder become a move.
- * Archive resolves to the `archive` well-known name only — never a localized
- * display name (A11). Moves preserve the immutable id (A1), so the cache keeps
- * message identity across them.
- */
-function planMutation(
-  addLabelIds: string[],
-  removeLabelIds: string[]
-): { patch?: Record<string, unknown>; moveTo?: string } {
-  const add = new Set(addLabelIds);
-  const remove = new Set(removeLabelIds);
-
-  const patch: Record<string, unknown> = {};
-  if (add.has('UNREAD')) patch.isRead = false;
-  if (remove.has('UNREAD')) patch.isRead = true;
-  if (add.has('STARRED')) patch.flag = { flagStatus: 'flagged' };
-  if (remove.has('STARRED')) patch.flag = { flagStatus: 'notFlagged' };
-
-  const folderAdd = addLabelIds.find((l) => l.startsWith('folder:'));
-  let moveTo: string | undefined;
-  if (add.has('TRASH')) moveTo = 'deleteditems';
-  else if (add.has('SPAM')) moveTo = 'junkemail';
-  else if (folderAdd) moveTo = folderAdd.slice('folder:'.length);
-  else if (add.has('INBOX') || remove.has('TRASH') || remove.has('SPAM')) moveTo = 'inbox';
-  else if (remove.has('INBOX')) moveTo = 'archive';
-
-  return { patch: Object.keys(patch).length ? patch : undefined, moveTo };
-}
 
 function assertBatchOk(result: Awaited<ReturnType<typeof graphBatch>>, action: string): void {
   if (!result.ok) throw new Error(`Graph ${action} failed: ${result.error}`);
@@ -346,13 +288,6 @@ const modifyMessage: MailProviderAdapter['modifyMessage'] = async (
 // is undocumented; large attachments (>3 MB) need the draft + upload-session path
 // (v1.5). Verify empirically against a sandbox tenant before raising this.
 const MAX_ENCODED_MIME = 4 * 1024 * 1024;
-
-// buildRawMessage emits the envelope as base64url with padding stripped; Graph's
-// MIME sendMail wants standard base64 — restore the +/ alphabet and re-pad.
-function base64UrlToBase64(b64url: string): string {
-  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-  return b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
-}
 
 const sendMessage: MailProviderAdapter['sendMessage'] = async (uid, raw, threadId, signal) => {
   const mimeBase64 = base64UrlToBase64(raw);
