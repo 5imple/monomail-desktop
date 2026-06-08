@@ -610,6 +610,34 @@ Phase 5 (A2 id-heuristic + Graph data mapping) review nits:
   through `parsePayloadPart`, label/folder mapping, inline-image cid mapping, and
   that the primary key is the Graph immutable id. (Phase 16 test targets)
 
+Phase 3 (adapter seam) done; Phase 6 (un-gate + A13 sweep) carried:
+
+- **The Phase 2 gate is still in place — Microsoft accounts do not sync yet.**
+  The adapter (`mailApi` → `getProviderForUid` → google/microsoftMailProvider)
+  and the Microsoft read paths are wired but dormant.
+- **Un-gating is non-trivial.** `getLimitedAccountUids`
+  (`useThreadFetchHandler.tsx:118`) filters to `provider === 'google'` and feeds
+  **8 call sites** that drive *both* thread fetch (now adapter-backed, safe for
+  Microsoft) *and* Gmail `historyId` sync (Google-only until Phase 10/11 delta).
+  The un-gate must split "fetchable" (all providers) from "Gmail-history-
+  syncable" (Google only) per call site — not just delete the filter — and
+  handle the `historySyncWorker` `provider === 'microsoft'` branch
+  (`historySyncWorker.ts:142`). Doing it wrong flips the shared `loadingStatus`
+  atom into a sticky ERROR or freezes the inbox.
+- **A13 is smaller than feared** because Phase 5 emits *normalized* labels
+  (INBOX/SENT/UNREAD/STARRED…), so label-filter consumers already work. The real
+  remaining leak is the Gmail **query-string builders** (`convertToAccurateQuery`,
+  `customSearch`); `microsoftMailProvider.translateQuery` is only a v1 cut
+  (folder + is:unread/is:starred). Full search translation is the Phase 6/13 item.
+- **microsoftMailProvider read paths are unvalidated against a live tenant.**
+  No automated coverage; needs the Phase 16/A14 M365 sandbox before un-gating
+  ships, since un-gating changes the live primary-inbox behavior for anyone with
+  a Microsoft account connected.
+- `getThread` filters by `conversationId` with no `$orderby` (Graph's sort-
+  complexity guard); `transformGraphThread` sorts client-side. List items carry
+  empty body payloads until `getThread`/`getMessage` hydrate them (parity with
+  Gmail's metadata list). (Phase 6)
+
 ## Phase 16: Testing
 
 As drafted (typecheck; token-migration, OAuth-URL, Graph-IPC validation, transform,
