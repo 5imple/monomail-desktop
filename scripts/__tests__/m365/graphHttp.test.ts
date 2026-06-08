@@ -119,6 +119,11 @@ test('parseRetryAfterMs: accepts the RFC 7231 HTTP-date form', () => {
   assert.equal(parseRetryAfterMs({ 'Retry-After': 'Wed, 21 Oct 2099 07:28:00 GMT' }), MAX_RETRY_AFTER_MS);
   // Past date → no wait.
   assert.equal(parseRetryAfterMs({ 'Retry-After': 'Wed, 21 Oct 2000 07:28:00 GMT' }), 0);
+  // Near-future date → the actual when-minus-now delta (NOT the cap), proving the
+  // arithmetic, not just the ceiling. ~10s, comfortably under the 60s cap.
+  const near = new Date(Date.now() + 10_000).toUTCString();
+  const ms = parseRetryAfterMs({ 'Retry-After': near });
+  assert.ok(ms > 5_000 && ms <= 10_000, `expected ~10s delta, got ${ms}`);
 });
 
 test('getErrorMessage: extracts string / nested message, falls back to status', () => {

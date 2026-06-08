@@ -1,6 +1,7 @@
 import log from 'electron-log';
 import { graphApiClient, graphBatch } from '@/main/api/apiClient';
 import {
+  buildFolderLabelMap,
   GraphDeltaItem,
   GraphMessage,
   splitDeltaPage,
@@ -12,7 +13,17 @@ import {
   googleMailProvider,
   MailProviderAdapter
 } from '@/main/api/mail/providers/googleMailProvider';
-import { base64UrlToBase64, planMutation, translateQuery } from '@/main/api/mail/graphRequestMapping';
+import {
+  base64UrlToBase64,
+  classifyGraphDeltaError,
+  planMutation,
+  translateQuery
+} from '@/main/api/mail/graphRequestMapping';
+
+// Defensive cap on pagination loops so a malformed/looping server nextLink can
+// never spin forever (Graph pages are ~10–1000 items; real result sets are far
+// under this).
+const MAX_PAGES = 100;
 
 // Fields the list view needs (no body — kept lightweight, like Gmail's
 // format=metadata list). `from`/`sender` cover delegated/shared mailboxes.
@@ -57,7 +68,7 @@ async function fetchAllMessages(
   // The opaque nextLink is an absolute Graph URL; the IPC handler origin-
   // validates it, so routing it back through graphApiClient is safe.
   let path: string | undefined = initialPath;
-  while (path) {
+  for (let page = 0; path && page < MAX_PAGES; page++) {
     const resp: GraphListResponse = await graphApiClient.get<GraphListResponse>(path, {
       uid,
       signal
@@ -86,32 +97,38 @@ const WELL_KNOWN_LABEL_FOLDERS = ['inbox', 'sentitems', 'drafts', 'deleteditems'
 // from a message's own parentFolderId rather than a single per-query folderLabel
 // (the fix for label loss on page-2 and on detail re-saves — review #2/#6/#7).
 const folderLabelMapCache = new Map<string, Map<string, string>>();
+// In-flight de-dup so concurrent first reads (e.g. getThreads + getMessage) share
+// one folder-resolution $batch instead of each firing their own.
+const folderLabelMapInflight = new Map<string, Promise<Map<string, string>>>();
 
-async function getFolderLabelMap(uid: string): Promise<Map<string, string>> {
-  const cached = folderLabelMapCache.get(uid);
-  if (cached) return cached;
-
-  const map = new Map<string, string>();
+function fetchFolderLabelMap(uid: string): Promise<Map<string, string>> {
   const requests = WELL_KNOWN_LABEL_FOLDERS.map((name, i) => ({
     id: String(i),
     method: 'GET',
     url: `/me/mailFolders/${name}?$select=id`
   }));
-  const result = await graphBatch(uid, requests);
-  if (result.ok) {
-    for (const sub of result.responses) {
-      if (sub.status >= 400) continue;
-      const name = WELL_KNOWN_LABEL_FOLDERS[Number(sub.id)];
-      const folderId = (sub.body as { id?: string } | undefined)?.id;
-      const label = wellKnownFolderToLabel(name);
-      if (folderId && label) map.set(folderId, label);
-    }
-    // Cache only on a successful batch; a failed resolve stays uncached so the
-    // next call retries (the resolver just yields null meanwhile — degraded, not
-    // broken: getThreads still has its per-query folderLabel fallback).
-    folderLabelMapCache.set(uid, map);
-  }
-  return map;
+  return graphBatch(uid, requests).then((result) => {
+    if (!result.ok) return new Map<string, string>();
+    const { map, complete } = buildFolderLabelMap(result.responses, WELL_KNOWN_LABEL_FOLDERS);
+    // Cache ONLY a complete map: a transient per-folder failure must not bake a
+    // permanently-incomplete map that silently strips a folder's label for the
+    // whole session. An absent (404) folder is fine and still cacheable. While
+    // uncached, the resolver yields null and getThreads falls back to its
+    // per-query folderLabel (degraded, not broken).
+    if (complete) folderLabelMapCache.set(uid, map);
+    return map;
+  });
+}
+
+async function getFolderLabelMap(uid: string): Promise<Map<string, string>> {
+  const cached = folderLabelMapCache.get(uid);
+  if (cached) return cached;
+  const inflight = folderLabelMapInflight.get(uid);
+  if (inflight) return inflight;
+
+  const promise = fetchFolderLabelMap(uid).finally(() => folderLabelMapInflight.delete(uid));
+  folderLabelMapInflight.set(uid, promise);
+  return promise;
 }
 
 async function folderLabelResolver(
@@ -260,26 +277,28 @@ export async function getMicrosoftFolderDelta(
   let newDeltaLink: string | null = null;
 
   try {
-    while (path) {
-      const page = await graphApiClient.get<GraphDeltaPage>(path, { uid, signal });
-      const { upserts: pageUpserts, removedIds: pageRemoved } = splitDeltaPage(page.value);
+    for (let page = 0; path && page < MAX_PAGES; page++) {
+      const result = await graphApiClient.get<GraphDeltaPage>(path, { uid, signal });
+      const { upserts: pageUpserts, removedIds: pageRemoved } = splitDeltaPage(result.value);
       upserts.push(...pageUpserts);
       removedIds.push(...pageRemoved);
-      if (page['@odata.deltaLink']) {
-        newDeltaLink = page['@odata.deltaLink'];
+      if (result['@odata.deltaLink']) {
+        newDeltaLink = result['@odata.deltaLink'];
         break;
       }
-      path = page['@odata.nextLink'];
+      path = result['@odata.nextLink'];
     }
-    return { status: 'ok', upserts, removedIds, deltaLink: newDeltaLink };
+    // Keep the prior cursor if (defensively) no new deltaLink came back, so a
+    // successful sync never clears a valid cursor.
+    return { status: 'ok', upserts, removedIds, deltaLink: newDeltaLink ?? deltaLink ?? null };
   } catch (err) {
     const status = (err as { status?: number })?.status;
-    if (status === 410) return { status: 'reset', upserts: [], removedIds: [], deltaLink: null };
-    if (status === 429) return { status: 'retry', upserts, removedIds, deltaLink: deltaLink ?? null };
-    if (status === 401 || status === 403) {
-      return { status: 'expired', upserts, removedIds, deltaLink: deltaLink ?? null };
-    }
-    return { status: 'error', upserts, removedIds, deltaLink: deltaLink ?? null };
+    const code = (err as { data?: { error?: { code?: string } } })?.data?.error?.code;
+    const outcome = classifyGraphDeltaError(status, code);
+    // reset = the cursor is dead (410 / syncStateNotFound / resyncRequired) → drop
+    // it for a full resync; retry/expired/error keep the prior cursor.
+    if (outcome === 'reset') return { status: 'reset', upserts: [], removedIds: [], deltaLink: null };
+    return { status: outcome, upserts, removedIds, deltaLink: deltaLink ?? null };
   }
 }
 

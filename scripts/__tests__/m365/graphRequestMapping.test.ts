@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   translateQuery,
   planMutation,
-  base64UrlToBase64
+  base64UrlToBase64,
+  classifyGraphDeltaError
 } from '@/main/api/mail/graphRequestMapping';
 
 test('translateQuery: folder tokens map to Graph well-known folders', () => {
@@ -70,6 +71,20 @@ test('planMutation: unrecognized labels are a no-op (no patch, no move)', () => 
   const p = planMutation(['CATEGORY_PROMOTIONS'], []);
   assert.equal(p.patch, undefined);
   assert.equal(p.moveTo, undefined);
+});
+
+test('classifyGraphDeltaError: maps cursor failures to recovery actions', () => {
+  // The crux fix: the COMMON cursor-expiry is syncStateNotFound (a 4xx, not 410).
+  assert.equal(classifyGraphDeltaError(410), 'reset');
+  assert.equal(classifyGraphDeltaError(400, 'syncStateNotFound'), 'reset');
+  assert.equal(classifyGraphDeltaError(400, 'SyncStateNotFound'), 'reset'); // case-insensitive
+  assert.equal(classifyGraphDeltaError(400, 'resyncRequired'), 'reset');
+  assert.equal(classifyGraphDeltaError(429), 'retry');
+  assert.equal(classifyGraphDeltaError(401), 'expired');
+  assert.equal(classifyGraphDeltaError(403), 'expired');
+  assert.equal(classifyGraphDeltaError(503), 'error'); // transient — keep cursor
+  assert.equal(classifyGraphDeltaError(undefined, undefined), 'error');
+  assert.equal(classifyGraphDeltaError(400, 'someOtherCode'), 'error'); // generic 4xx keeps cursor
 });
 
 test('base64UrlToBase64: round-trips through atob for the MIME sendMail envelope', () => {

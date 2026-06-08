@@ -90,6 +90,37 @@ export function wellKnownFolderToLabel(wellKnownName?: string | null): string | 
   return WELL_KNOWN_FOLDER_LABELS[wellKnownName.toLowerCase()] ?? null;
 }
 
+export interface FolderBatchSubResponse {
+  id: string; // the batch subrequest id = index into folderNames
+  status: number;
+  body?: unknown;
+}
+
+/**
+ * Builds a folderId → well-known-label map from a $batch of GET /me/mailFolders/
+ * <name> responses. `complete` is false when any folder hit a TRANSIENT failure
+ * (so the caller must NOT cache — it should retry); a 404 (folder not
+ * provisioned) is treated as definitively-absent and does not block caching.
+ */
+export function buildFolderLabelMap(
+  responses: FolderBatchSubResponse[],
+  folderNames: readonly string[]
+): { map: Map<string, string>; complete: boolean } {
+  const map = new Map<string, string>();
+  let complete = true;
+  for (const sub of responses) {
+    if (sub.status === 404) continue; // folder absent — nothing to resolve, still cacheable
+    if (sub.status >= 400) {
+      complete = false; // transient failure — don't cache; retry next read
+      continue;
+    }
+    const label = wellKnownFolderToLabel(folderNames[Number(sub.id)]);
+    const folderId = (sub.body as { id?: string } | undefined)?.id;
+    if (folderId && label) map.set(folderId, label);
+  }
+  return { map, complete };
+}
+
 /**
  * Builds normalized labelIds for a Graph message. `folderLabel` is the
  * already-resolved well-known label for the message's folder (the caller knows

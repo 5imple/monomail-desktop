@@ -81,3 +81,26 @@ export function base64UrlToBase64(b64url: string): string {
   const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
   return b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
 }
+
+export type GraphDeltaErrorStatus = 'reset' | 'retry' | 'expired' | 'error';
+
+// Graph error codes that mean the stored deltaLink is unusable and a FULL resync
+// is required. syncStateNotFound is a 4xx (NOT 410) and is the common cursor-
+// expiry case — mapping only on status 410 would leave the cursor wedged.
+const DELTA_RESET_CODES = new Set(['syncstatenotfound', 'resyncrequired', 'synchronizationrestart']);
+
+/**
+ * Classifies a failed delta request into a recovery action: `reset` → drop the
+ * cursor and full-resync; `retry` → throttled, keep cursor; `expired` → auth
+ * failure, keep cursor; `error` → transient (5xx/network), keep cursor.
+ */
+export function classifyGraphDeltaError(
+  status?: number,
+  errorCode?: string
+): GraphDeltaErrorStatus {
+  const code = (errorCode ?? '').toLowerCase();
+  if (status === 410 || DELTA_RESET_CODES.has(code)) return 'reset';
+  if (status === 429) return 'retry';
+  if (status === 401 || status === 403) return 'expired';
+  return 'error';
+}

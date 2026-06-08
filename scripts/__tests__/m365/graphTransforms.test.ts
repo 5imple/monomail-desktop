@@ -5,7 +5,8 @@ import {
   transformGraphThread,
   wellKnownFolderToLabel,
   mapGraphMessageLabels,
-  splitDeltaPage
+  splitDeltaPage,
+  buildFolderLabelMap
 } from '@/main/api/mail/graphTransforms';
 
 // The renderer's exact reverse of the synthetic payload encoding
@@ -107,6 +108,11 @@ test('transformGraphMessage: resolveFolderLabel derives the label from parentFol
   assert.ok(m.labelIds.includes('INBOX'));
   assert.ok(m.labelIds.includes('folder:INBOX_FOLDER_ID'));
 
+  // Negative control: WITHOUT the resolver, INBOX is not derived — proving the
+  // INBOX label above genuinely comes from the resolver, not from elsewhere.
+  const noResolver = transformGraphMessage({ ...baseMsg, parentFolderId: 'INBOX_FOLDER_ID' }, {});
+  assert.ok(!noResolver.labelIds.includes('INBOX'));
+
   // Resolver takes precedence over a (stale/wrong) single folderLabel.
   const m2 = transformGraphMessage(
     { ...baseMsg, parentFolderId: 'INBOX_FOLDER_ID' },
@@ -143,6 +149,36 @@ test('transformGraphThread: groups + sorts ascending + id is conversationId', ()
   assert.equal(thread.items.length, 2);
   assert.equal((thread.items[0] as { id: string }).id, 'id1');
   assert.equal((thread.items[1] as { id: string }).id, 'id2');
+});
+
+test('buildFolderLabelMap: resolves folders; 404 is cacheable, transient failure is not', () => {
+  const names = ['inbox', 'sentitems', 'drafts', 'deleteditems', 'junkemail'];
+  const ok = buildFolderLabelMap(
+    [
+      { id: '0', status: 200, body: { id: 'INBOX_ID' } },
+      { id: '1', status: 200, body: { id: 'SENT_ID' } },
+      { id: '2', status: 404 }, // drafts not provisioned — still complete
+      { id: '3', status: 200, body: { id: 'TRASH_ID' } },
+      { id: '4', status: 200, body: { id: 'JUNK_ID' } }
+    ],
+    names
+  );
+  assert.equal(ok.complete, true);
+  assert.equal(ok.map.get('INBOX_ID'), 'INBOX');
+  assert.equal(ok.map.get('SENT_ID'), 'SENT');
+  assert.equal(ok.map.get('TRASH_ID'), 'TRASH');
+  assert.equal(ok.map.get('JUNK_ID'), 'SPAM');
+
+  // A transient (5xx) failure → complete=false so the caller must NOT cache.
+  const transient = buildFolderLabelMap(
+    [
+      { id: '0', status: 200, body: { id: 'INBOX_ID' } },
+      { id: '1', status: 503 }
+    ],
+    ['inbox', 'sentitems']
+  );
+  assert.equal(transient.complete, false);
+  assert.equal(transient.map.get('INBOX_ID'), 'INBOX');
 });
 
 test('splitDeltaPage: separates upserts from @removed tombstones', () => {
