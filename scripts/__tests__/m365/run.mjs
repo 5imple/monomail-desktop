@@ -26,8 +26,13 @@ await build({
   outdir,
   outExtension: { '.js': '.mjs' },
   alias: {
+    // Most specific first: the apiClient stub lets integration tests drive the
+    // real provider against canned Graph responses. electron-log + dompurify are
+    // stubbed so the provider (and its transform chain) bundle DOM/electron-free.
+    '@/main/api/apiClient': join(here, 'stubs', 'apiClient.mjs'),
     '@': join(root, 'src'),
-    dompurify: join(here, 'stubs', 'dompurify.mjs')
+    dompurify: join(here, 'stubs', 'dompurify.mjs'),
+    'electron-log': join(here, 'stubs', 'electron-log.mjs')
   },
   logLevel: 'warning'
 });
