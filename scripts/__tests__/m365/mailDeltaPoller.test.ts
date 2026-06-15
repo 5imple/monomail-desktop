@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   MailDeltaFrame,
   POLL_INTERVAL_MS,
+  diffPolledAccounts,
   nextPollDelay,
   splitDelta,
   synthesizeDeltaFrames
@@ -101,6 +102,25 @@ test('synthesizeDeltaFrames: mixed page yields both frame kinds; empty page yiel
   assert.equal(added(frames).length, 2);
   assert.equal(deleted(frames).length, 1);
   assert.deepEqual(synthesizeDeltaFrames('u', 'inbox', [], []), []);
+});
+
+// ── diffPolledAccounts (the feedback-loop guard) ───────────────────────────────
+
+test('diffPolledAccounts: unchanged set → nothing to start/stop (no re-poll on token refresh)', () => {
+  const same = ['microsoft:t:a', 'microsoft:t:b'];
+  assert.deepEqual(diffPolledAccounts(same, same), { toStart: [], toStop: [] });
+  // order-insensitive
+  assert.deepEqual(diffPolledAccounts(['a', 'b'], ['b', 'a']), { toStart: [], toStop: [] });
+});
+
+test('diffPolledAccounts: added account → toStart; removed account → toStop', () => {
+  assert.deepEqual(diffPolledAccounts(['a', 'b'], ['a']), { toStart: ['b'], toStop: [] });
+  assert.deepEqual(diffPolledAccounts(['a'], ['a', 'b']), { toStart: [], toStop: ['b'] });
+  assert.deepEqual(diffPolledAccounts(['a', 'c'], ['a', 'b']), { toStart: ['c'], toStop: ['b'] });
+});
+
+test('diffPolledAccounts: empty desired (signed out) stops everything', () => {
+  assert.deepEqual(diffPolledAccounts([], ['a', 'b']), { toStart: [], toStop: ['a', 'b'] });
 });
 
 // ── nextPollDelay ──────────────────────────────────────────────────────────────

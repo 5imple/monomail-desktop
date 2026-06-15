@@ -116,6 +116,25 @@ export function synthesizeDeltaFrames(
 }
 
 /**
+ * Diffs the desired set of polled accounts against the currently-polled set.
+ * The poller uses this to reconcile on account-change events INSTEAD of blanket
+ * restarting: when the set is unchanged it returns empty lists, so a token
+ * refresh (which re-emits the change events) does NOT trigger a re-poll — which
+ * would refresh again, a 100% CPU feedback loop.
+ */
+export function diffPolledAccounts(
+  desired: string[],
+  current: string[]
+): { toStart: string[]; toStop: string[] } {
+  const desiredSet = new Set(desired);
+  const currentSet = new Set(current);
+  return {
+    toStart: [...desiredSet].filter((uid) => !currentSet.has(uid)),
+    toStop: [...currentSet].filter((uid) => !desiredSet.has(uid))
+  };
+}
+
+/**
  * Delay until the next poll for one account. `ok`/`reset` resume the base
  * cadence; `retry` (429) honors Retry-After (floored at the base interval);
  * transient/auth failures back off exponentially, capped at MAX_BACKOFF_MS.

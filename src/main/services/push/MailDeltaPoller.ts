@@ -10,6 +10,7 @@ import { handlePushFrame } from '@/main/services/push/pushHandler';
 import {
   DeltaPollStatus,
   POLL_INTERVAL_MS,
+  diffPolledAccounts,
   nextPollDelay,
   splitDelta,
   synthesizeDeltaFrames
@@ -89,30 +90,44 @@ class MailDeltaPoller {
   start(): void {
     if (!this.wired) {
       this.wired = true;
-      tokenManager.on('mail-accounts-changed', () => this.restart());
-      tokenManager.on('token-changed', () => this.restart());
+      // Reconcile (NOT restart) on these: TokenManager re-emits both events on
+      // every token refresh, and the poller's own refresh-on-poll would then
+      // re-emit → if we re-polled immediately here we'd spin (100% CPU). reconcile
+      // is a no-op when the account set is unchanged.
+      tokenManager.on('mail-accounts-changed', () => this.reconcile());
+      tokenManager.on('token-changed', () => this.reconcile());
       tokenManager.on('signed-out', () => this.stopAll());
       powerMonitor.on('suspend', () => this.stopAll());
-      powerMonitor.on('resume', () => this.restart());
+      powerMonitor.on('resume', () => this.reconcile());
       // Window focus → poll now (cheap freshness when the user returns).
       app.on('browser-window-focus', () => this.pollAllNow());
     }
-    this.restart();
+    this.reconcile();
   }
 
   stopAll(): void {
     for (const uid of [...this.timers.keys()]) this.clearTimer(uid);
   }
 
-  private restart(): void {
-    this.stopAll();
-    for (const uid of this.microsoftUids()) this.schedule(uid, 0);
+  /**
+   * Reconcile the polled set against the signed-in Microsoft accounts: start
+   * polling newly-added uids, stop removed ones, and LEAVE running timers
+   * untouched. It MUST be a no-op when the account set is unchanged — a token
+   * refresh re-emits the change events, and re-polling here would refresh again,
+   * a tight feedback loop. (This replaces a blanket restart() that did exactly
+   * that and pegged the main process.)
+   */
+  private reconcile(): void {
+    const { toStart, toStop } = diffPolledAccounts(this.microsoftUids(), [...this.timers.keys()]);
+    for (const uid of toStop) this.clearTimer(uid);
+    for (const uid of toStart) this.schedule(uid, 0);
   }
 
   private pollAllNow(): void {
     // Only re-arm accounts that already have a timer (i.e. polling is active);
-    // never start a fresh poll loop here.
-    for (const uid of this.timers.keys()) this.schedule(uid, 0);
+    // never start a fresh poll loop here. Snapshot the keys — schedule() mutates
+    // the map.
+    for (const uid of [...this.timers.keys()]) this.schedule(uid, 0);
   }
 
   private microsoftUids(): string[] {
