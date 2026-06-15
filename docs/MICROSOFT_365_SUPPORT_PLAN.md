@@ -422,13 +422,29 @@ debug code, as drafted.
 >   this standalone Gmail-direct build**, so delivery is genuinely broken today.
 > - Frame envelope + `normalizeGmailLabels` (`db/thread/index.ts`) consume the
 >   Phase-5 normalized labels cleanly — confirmed.
-> - **Storage-location decision to resolve first:** A3 says a MAIN-process
->   `MailDeltaPoller`, but Phase 10 says delta state in **IndexedDB** — which the
->   main process cannot read (renderer-only API). The deleted Gmail poller stored
->   its cursors in `electron-store`. Decide: main-process poller → main-process
->   (`electron-store`) delta state (recommended, consistent with A3 + the deleted
->   pattern); or renderer-driven polling → IndexedDB `MicrosoftDeltaState`. Do NOT
->   build the storage layer until this is settled, or it lands in the wrong place.
+> - **Storage-location decision — RESOLVED (2026-06-15): main-process poller →
+>   main-process `electron-store` delta state.** A3's MAIN-process `MailDeltaPoller`
+>   wins; the drafted IndexedDB `MicrosoftDeltaState` store is **abandoned, not
+>   built**. Ground-truth verification that settled it: (a) `getMicrosoftFolderDelta`
+>   is stateless — cursor in via `deltaLink?: string`, out via the return; the caller
+>   owns persistence (`microsoftMailProvider.ts:267-307`), so a main poller drives it
+>   with zero IPC; (b) the main process structurally cannot read renderer IndexedDB —
+>   no file under `src/main` imports `idb`/`indexedDB`; (c) `MicrosoftDeltaState` does
+>   not exist in code (0 hits in `src/`; DB still at v3) — nothing to undo; (d) exact
+>   precedent: the deleted `GmailHistoryPoller` stored per-account cursors in
+>   `new Store({ name: 'gmail-poller' })`, and `electron-store` is already the live
+>   pattern in `TokenManager` / `SystemManager` / `SchedulerService`. **Build:** a new
+>   `new Store({ name: 'mail-delta' })` (provider-neutral) shaped
+>   `{ [uid]: { [folder]: { deltaLink, lastSyncedAt } } }`; write only on
+>   `status === 'ok'`, clear on `'reset'` (the Graph analog of the old poller's
+>   clear-on-404). Plain store, **not** safeStorage — delta links are opaque resume
+>   URLs, not secrets. Other MS state is unchanged and correctly placed: tokens/account
+>   identity in `TokenManager` safeStorage; folder-label cache in the in-memory main
+>   `Map`; cached messages/threads in renderer IndexedDB (poller dispatches
+>   `renderer:push:message-received` frames the renderer materializes, as Gmail did).
+>   Note: this re-introduces a main-process sync path that was deliberately deleted
+>   (`ca534f3`) and supersedes today's renderer-driven `provider==='google'` loop —
+>   per A3, the Google path also moves back to main (`history.list`).
 > - `getMicrosoftFolderDelta` (Phase 10) is the per-folder fetch the poller drives;
 >   `MICROSOFT_TRACKED_FOLDERS` is the v1 set. The poller still needs: frame
 >   synthesis (delta upserts → MESSAGE_ADDED / removed → MESSAGE_DELETED; note the
@@ -778,9 +794,11 @@ Phase 10 (delta sync) built + the deferred #2/#6/#7 folder-label resolution fixe
   through the transforms) — closes the deferred #2/#6/#7: detail fetches,
   nextLink continuations, and cross-folder results now keep INBOX/SENT labels.
 - Added `getMicrosoftFolderDelta` (cursor handling, `@removed`, error recovery)
-  + `MICROSOFT_TRACKED_FOLDERS` (Drafts excluded, A5). The IndexedDB
-  `MicrosoftDeltaState` store + the localStorage-watermark migration land with
-  the Phase 11 poller that consumes this.
+  + `MICROSOFT_TRACKED_FOLDERS` (Drafts excluded, A5). Cursor persistence lands
+  with the Phase 11 poller that consumes this — **in main-process `electron-store`
+  (`mail-delta`), not IndexedDB** (storage-location decision resolved; see Phase
+  11). The drafted IndexedDB `MicrosoftDeltaState` store is dropped. The existing
+  `outlookWatermark.ts` localStorage scheme stays as removable migration/debug code.
 
 Phase 10 verification (focused workflow, 10 confirmed; fixes shipped) —
 **found real bugs in the just-added code**:
