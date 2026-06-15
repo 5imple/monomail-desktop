@@ -105,36 +105,50 @@ const useThreadFetchHandler = () => {
       activeSpaceRef.current = activeSpace;
   }, [activeSpace]);
 
-  // Helper function to get limited account UIDs based on user plan and account status
-  const getLimitedAccountUids = useCallback(() => {
-    const currentActiveSpace = activeSpaceRef.current;
-    // Mail fetch/sync is Gmail-direct for now: Microsoft accounts have no
-    // Graph mail adapter yet (M365 plan Phases 3-6), and feeding their uids
-    // into the Gmail IPC throws "No Google account token found", which flips
-    // the shared loadingStatus atom into a sticky ERROR state. Filter to
-    // google-provider uids here so every downstream per-account loop
-    // (syncThreads, history sync, fetches) skips Microsoft accounts and they
-    // render an empty inbox instead of an error.
-    const syncableAccounts = accounts.filter((acc) => acc.provider === 'google');
-    const allAccountUids = syncableAccounts.map((acc) => acc.uid);
+  // Resolve active account uids for a given eligible-account set, honoring the
+  // active space's selection (with recovery when the space points at stale /
+  // nonexistent account ids).
+  const computeAccountUids = useCallback(
+    (eligibleAccounts: typeof accounts) => {
+      const currentActiveSpace = activeSpaceRef.current;
+      const allAccountUids = eligibleAccounts.map((acc) => acc.uid);
 
-    // A space cached under a previous account identity (e.g. a leftover backend
-    // `mock-account-*` id from a mode switch) can leave activeAccountUids empty
-    // or pointing at accounts that no longer exist. When that happens Gmail sync
-    // would either not run or run under a uid that has no Google token, freezing
-    // the inbox on stale cache. Recover by syncing all signed-in accounts so
-    // sync always runs under the real (Google) account identity.
-    if (!currentActiveSpace?.activeAccountUids?.length) return allAccountUids;
+      // A space cached under a previous account identity (e.g. a leftover
+      // backend `mock-account-*` id from a mode switch) can leave
+      // activeAccountUids empty or pointing at accounts that no longer exist.
+      // Recover by using every eligible account.
+      if (!currentActiveSpace?.activeAccountUids?.length) return allAccountUids;
 
-    // Payment-free build — every active account is allowed; no 2-account
-    // free-plan cap to enforce.
-    const validAccounts = currentActiveSpace.activeAccountUids.filter((uid) =>
-      syncableAccounts.some((acc) => acc.uid === uid)
-    );
+      const validAccounts = currentActiveSpace.activeAccountUids.filter((uid) =>
+        eligibleAccounts.some((acc) => acc.uid === uid)
+      );
 
-    if (validAccounts.length === 0) return allAccountUids;
-    return validAccounts;
-  }, [activeSpaceRef, accounts]);
+      if (validAccounts.length === 0) return allAccountUids;
+      return validAccounts;
+    },
+    [activeSpaceRef]
+  );
+
+  // Worker-driven sync (full thread sync + Gmail history sync) is Gmail-only:
+  // those web-workers run in a separate JS realm where the mail provider
+  // registry is empty, so a Microsoft uid would misroute to the Gmail adapter
+  // and throw "No Google account token found" — which flips the shared
+  // loadingStatus atom into a sticky ERROR state. Keep Microsoft out of the
+  // worker loops until the Phase 11 delta poller lands.
+  const getLimitedAccountUids = useCallback(
+    () => computeAccountUids(accounts.filter((acc) => acc.provider === 'google')),
+    [computeAccountUids, accounts]
+  );
+
+  // The initial thread fetch runs on the MAIN renderer thread, where mailApi
+  // dispatches Microsoft uids to the built Graph read adapter — so the inbox
+  // can populate for all providers. Per-account fetch errors are isolated, so
+  // a Graph failure can't freeze the Gmail accounts. Live refresh of Microsoft
+  // mail still requires Phase 11; this only covers the one-shot fetch.
+  const getFetchableAccountUids = useCallback(
+    () => computeAccountUids(accounts),
+    [computeAccountUids, accounts]
+  );
 
   useEffect(() => {
     // Skip on initial mount
@@ -560,8 +574,10 @@ const useThreadFetchHandler = () => {
               (field === 'in' || field === 'is' || field === 'category') &&
               (validLabels.includes(label.toUpperCase() as ValidLabel) ||
                 label.toLowerCase() === 'all');
-            // Get limited account IDs based on user plan
-            const activeAccountUids = getLimitedAccountUids();
+            // Initial fetch runs on the main thread (provider-routed), so
+            // include all providers — a connected Microsoft account's inbox
+            // loads via the Graph adapter here too.
+            const activeAccountUids = getFetchableAccountUids();
 
             if (activeAccountUids.length === 0) {
               setLoadingStatus('DONE');

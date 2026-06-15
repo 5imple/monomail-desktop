@@ -135,10 +135,14 @@ export function useLabelAtom() {
       // Then fetch fresh data from server
       console.log('Fetching fresh labels from server...');
 
-      // Fetch labels for each account and merge into a single map
-      const responses = await Promise.all(uids.map((uid) => mailApi.getLabels(uid)));
-      const merged = responses.reduce<{ labels: Record<string, any[]> }>(
-        (acc, r) => ({ labels: { ...acc.labels, ...r.labels } }),
+      // Fetch labels for each account and merge into a single map. Use
+      // allSettled so a provider without a label adapter (Microsoft's
+      // getLabels is not implemented yet and throws) can't drop every other
+      // account's labels.
+      const settled = await Promise.allSettled(uids.map((uid) => mailApi.getLabels(uid)));
+      const merged = settled.reduce<{ labels: Record<string, any[]> }>(
+        (acc, r) =>
+          r.status === 'fulfilled' ? { labels: { ...acc.labels, ...r.value.labels } } : acc,
         { labels: {} }
       );
       const response = merged;
