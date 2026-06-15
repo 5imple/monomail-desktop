@@ -34,7 +34,12 @@ const MAX_DELTA_PAGES = 50;
 const GRAPH_NEXTLINK = /^https:\/\/graph\.microsoft\.com\//i;
 
 interface FolderCursor {
+  // Set once the initial sync reaches the end: the resumable incremental cursor.
   deltaLink?: string;
+  // Set while an initial sync is still paging (mailbox too large to finish in one
+  // poll): the next page to resume from, so the next poll continues forward
+  // instead of restarting the whole mailbox every cycle.
+  nextLink?: string;
   lastSyncedAt?: number;
 }
 
@@ -56,6 +61,10 @@ interface FolderDeltaResult {
   upserts: GraphMessage[];
   removedIds: string[];
   deltaLink: string | null;
+  // Resume point when an initial sync didn't finish this cycle (else undefined).
+  nextLink?: string;
+  // True while the initial sync is still in progress (no deltaLink anchored yet).
+  initialSyncInProgress: boolean;
   retryAfterMs: number;
 }
 
@@ -163,18 +172,22 @@ class MailDeltaPoller {
     let delay = POLL_INTERVAL_MS;
     try {
       const cursor = this.getCursor(uid, POLL_FOLDER);
-      const result = await this.runFolderDelta(uid, POLL_FOLDER, cursor.deltaLink);
+      const result = await this.runFolderDelta(uid, POLL_FOLDER, cursor);
 
       switch (result.status) {
         case 'ok':
           this.failures.set(uid, 0);
           this.setCursor(uid, POLL_FOLDER, {
             deltaLink: result.deltaLink ?? cursor.deltaLink,
+            nextLink: result.nextLink,
             lastSyncedAt: Date.now()
           });
-          // No prior cursor → this was the initial anchoring delta; don't replay
-          // the whole inbox as "new mail" (matches the deleted GmailHistoryPoller).
-          if (cursor.deltaLink) this.dispatch(uid, result.upserts, result.removedIds);
+          // Only dispatch for a true incremental sync (we already had an anchored
+          // deltaLink). An initial sync — even a multi-cycle resumable one — must
+          // not replay the whole inbox as "new mail" (matches GmailHistoryPoller).
+          if (cursor.deltaLink && !result.initialSyncInProgress) {
+            this.dispatch(uid, result.upserts, result.removedIds);
+          }
           break;
         case 'reset':
           // Cursor is dead (410 / syncStateNotFound); drop it and re-anchor next poll.
@@ -198,35 +211,49 @@ class MailDeltaPoller {
   }
 
   /**
-   * One Inbox delta sync. Pages @odata.nextLink to the @odata.deltaLink, reusing
-   * the provider's error classification. Transport-only duplicate of
-   * getMicrosoftFolderDelta (which is renderer/worker-bound via graphApiClient).
+   * One Inbox delta sync. Pages @odata.nextLink toward the @odata.deltaLink,
+   * reusing the provider's error classification. Resume priority: an anchored
+   * deltaLink (incremental) → a saved nextLink (an initial sync still paging) →
+   * a fresh initial delta. A large mailbox's initial sync can exceed
+   * MAX_DELTA_PAGES in one poll, so the unfinished nextLink is returned and
+   * persisted — the next poll continues forward instead of restarting the whole
+   * mailbox every cycle (which hammered Graph and never anchored).
    */
-  private async runFolderDelta(
-    uid: string,
-    folder: string,
-    deltaLink?: string
-  ): Promise<FolderDeltaResult> {
+  private async runFolderDelta(uid: string, folder: string, cursor: FolderCursor): Promise<FolderDeltaResult> {
     const upserts: GraphMessage[] = [];
     const removedIds: string[] = [];
+    const anchored = !!cursor.deltaLink;
+    // nextLink (a paging resume point) wins over deltaLink so a sync that spans
+    // multiple cycles continues forward rather than restarting from the anchor.
+    const resume = cursor.nextLink ?? cursor.deltaLink;
     let path: string | undefined =
-      deltaLink && GRAPH_NEXTLINK.test(deltaLink)
-        ? deltaLink
+      resume && GRAPH_NEXTLINK.test(resume)
+        ? resume
         : `/me/mailFolders/${folder}/messages/delta?$select=${encodeURIComponent(DELTA_SELECT)}`;
     let newDeltaLink: string | null = null;
+    let pendingNextLink: string | undefined;
 
     for (let page = 0; path && page < MAX_DELTA_PAGES; page++) {
       const res = await graphGetMain<GraphDeltaPage>(uid, path);
       if (!res.ok) {
         const outcome = classifyGraphDeltaError(res.status, res.code);
         if (outcome === 'reset') {
-          return { status: 'reset', upserts: [], removedIds: [], deltaLink: null, retryAfterMs: 0 };
+          return {
+            status: 'reset',
+            upserts: [],
+            removedIds: [],
+            deltaLink: null,
+            initialSyncInProgress: false,
+            retryAfterMs: 0
+          };
         }
         return {
           status: outcome,
           upserts,
           removedIds,
-          deltaLink: deltaLink ?? null,
+          deltaLink: cursor.deltaLink ?? null,
+          nextLink: cursor.nextLink,
+          initialSyncInProgress: !anchored,
           retryAfterMs: res.retryAfterMs ?? 0
         };
       }
@@ -238,17 +265,36 @@ class MailDeltaPoller {
         break;
       }
       path = res.data?.['@odata.nextLink'];
+      pendingNextLink = path; // where to resume if we stop before the deltaLink
     }
 
-    if (!newDeltaLink && !deltaLink) {
-      // Hit MAX_DELTA_PAGES on an initial sync without reaching a deltaLink — the
-      // cursor stays unanchored and the next poll restarts. Acceptable for v1;
-      // resumable initial sync is the documented residual.
-      log.warn('[mail-delta] %s initial delta exceeded %d pages without a cursor', uid, MAX_DELTA_PAGES);
+    if (newDeltaLink) {
+      // Reached the end — fully anchored; clear any resume nextLink.
+      return {
+        status: 'ok',
+        upserts,
+        removedIds,
+        deltaLink: newDeltaLink,
+        nextLink: undefined,
+        initialSyncInProgress: false,
+        retryAfterMs: 0
+      };
     }
-    // Never clear a valid cursor on a successful sync that returned no new link.
-    // A success needs no backoff, so retryAfterMs is 0.
-    return { status: 'ok', upserts, removedIds, deltaLink: newDeltaLink ?? deltaLink ?? null, retryAfterMs: 0 };
+
+    // Stopped at the page cap before the deltaLink: still in progress. Persist
+    // the nextLink so the next poll resumes forward. Keep any anchored deltaLink.
+    if (!anchored) {
+      log.info('[mail-delta] %s initial sync in progress (%d pages this cycle), resuming next poll', uid, MAX_DELTA_PAGES);
+    }
+    return {
+      status: 'ok',
+      upserts,
+      removedIds,
+      deltaLink: cursor.deltaLink ?? null,
+      nextLink: pendingNextLink ?? cursor.nextLink,
+      initialSyncInProgress: !anchored,
+      retryAfterMs: 0
+    };
   }
 
   private dispatch(uid: string, upserts: GraphMessage[], removedIds: string[]): void {
