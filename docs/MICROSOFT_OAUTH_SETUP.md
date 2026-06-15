@@ -40,12 +40,15 @@ the system browser.
    and enter exactly:
 
    ```
-   http://127.0.0.1
+   http://127.0.0.1/callback
    ```
 
    Entra treats `127.0.0.1` as a loopback exception — the ephemeral port the
    app binds at sign-in time is ignored during matching, so no port needs to
-   be registered.
+   be registered. The **path** is *not* exempt, though: the app listens on
+   `/callback` and sends that as its `redirect_uri`, so the registered URI must
+   include `/callback` exactly. (Omitting it yields `AADSTS900971: No reply
+   address provided` or `AADSTS50011: redirect URI mismatch`.)
 5. Click **Register**.
 6. On the Overview page, copy the **Application (client) ID** — this is
    `MONO_ENV_MICROSOFT_CLIENT_ID`. (For single-tenant, also copy the
@@ -131,7 +134,8 @@ public client ID.
 | Problem | Fix |
 |---|---|
 | Microsoft button doesn't appear | `MONO_ENV_MICROSOFT_CLIENT_ID` unset, or `npm run dev` not restarted after editing `.env.development`. |
-| `AADSTS50011: redirect URI mismatch` | The registration's redirect URI must be exactly `http://127.0.0.1` under the **Public client/native** platform (not Web). |
+| `AADSTS900971: No reply address provided` | No redirect URI is registered for this app (or none under **Public client/native**). Add `http://127.0.0.1/callback` under **Public client/native (mobile & desktop)** and save. |
+| `AADSTS50011: redirect URI mismatch` | The registration's redirect URI must be exactly `http://127.0.0.1/callback` — including the `/callback` path — under the **Public client/native** platform (not Web). The port is ignored for loopback; the path is not. |
 | `AADSTS65001` / "Need admin approval" | Tenant blocks user consent — use the admin-consent URL from Step 2, or the app is unverified-multitenant (see publisher verification). |
 | `AADSTS700016: application not found in directory` | Tenant mismatch: `MONO_ENV_MICROSOFT_TENANT` points at a tenant that doesn't know this app. Use `organizations` for multitenant registrations or the correct tenant ID for single-tenant. |
 | `AADSTS7000218: client_assertion or client_secret required` | The redirect URI was registered under the **Web** platform (confidential client). Re-register it under **Public client/native (mobile & desktop)**. |
