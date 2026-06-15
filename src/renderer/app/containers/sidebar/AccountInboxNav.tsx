@@ -468,17 +468,20 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
   const getAccountStatusTooltip = useCallback(() => {
     if (!account) return '';
 
+    // Label loading and the Gmail-scope check are Gmail-specific; only Google
+    // accounts can be "missing Gmail permissions" or hit the label-load path.
+    const isGoogle = account.provider === 'google';
     const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
 
     if (account.isExpired) {
       return t('tooltips.account_status.authentication_expired');
     }
 
-    if (hasLabelsLoaded && !labelsMapByAccount[account.uid]) {
+    if (isGoogle && hasLabelsLoaded && !labelsMapByAccount[account.uid]) {
       return t('tooltips.account_status.too_many_requests');
     }
 
-    if (!account.scopes.some((scope) => scope.includes('https://mail.google.com'))) {
+    if (isGoogle && !account.scopes.some((scope) => scope.includes('https://mail.google.com'))) {
       return t('tooltips.account_status.missing_gmail_permissions');
     }
 
@@ -672,9 +675,12 @@ const AccountInboxNav: FC<AccountInboxNavProps> = ({ accountId }) => {
                   {account.email}
                 </span>
               </div>
-              {((Object.keys(labelsMapByAccount).length > 0 && !labelsMapByAccount[account.uid]) ||
+              {((account.provider === 'google' &&
+                Object.keys(labelsMapByAccount).length > 0 &&
+                !labelsMapByAccount[account.uid]) ||
                 account.isExpired ||
-                !account.scopes.some((scope) => scope.includes('https://mail.google.com'))) && (
+                (account.provider === 'google' &&
+                  !account.scopes.some((scope) => scope.includes('https://mail.google.com')))) && (
                 <Tooltip>
                   <TooltipTrigger>
                     <MonoIcon

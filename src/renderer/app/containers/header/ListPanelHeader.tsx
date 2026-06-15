@@ -43,14 +43,18 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     // Account error detection logic
     const accountsWithErrors = useMemo(() => {
       return accounts.filter((account) => {
-        // Don't show label-related errors during initial load when labels are still loading
+        // Label loading and the Gmail-scope check are Gmail-specific — gate them
+        // on provider so Microsoft accounts (Graph scopes, no Gmail labels yet)
+        // aren't falsely flagged "missing Gmail permissions" / "too many
+        // requests". Microsoft accounts are still flagged when genuinely expired.
+        const isGoogle = account.provider === 'google';
         const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
-        const hasLabelError = hasLabelsLoaded && !labelsMapByAccount[account.uid];
+        const hasLabelError = isGoogle && hasLabelsLoaded && !labelsMapByAccount[account.uid];
 
         return (
           hasLabelError ||
           account.isExpired ||
-          !account.scopes.some((scope) => scope.includes('https://mail.google.com'))
+          (isGoogle && !account.scopes.some((scope) => scope.includes('https://mail.google.com')))
         );
       });
     }, [accounts, labelsMapByAccount]);
@@ -63,11 +67,12 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
       const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
 
       accountsWithErrors.forEach((account) => {
+        const isGoogle = account.provider === 'google';
         if (account.isExpired) {
           errorMessagesSet.add(t('tooltips.account_status.authentication_expired'));
-        } else if (hasLabelsLoaded && !labelsMapByAccount[account.uid]) {
+        } else if (isGoogle && hasLabelsLoaded && !labelsMapByAccount[account.uid]) {
           errorMessagesSet.add(t('tooltips.account_status.too_many_requests'));
-        } else if (!account.scopes.some((scope) => scope.includes('https://mail.google.com'))) {
+        } else if (isGoogle && !account.scopes.some((scope) => scope.includes('https://mail.google.com'))) {
           errorMessagesSet.add(t('tooltips.account_status.missing_gmail_permissions'));
         } else {
           errorMessagesSet.add(t('tooltips.account_status.requires_reconnecting'));

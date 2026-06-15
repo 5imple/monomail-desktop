@@ -97,7 +97,13 @@ export function IntegrationForm() {
         return t('tooltips.account_status.authentication_expired');
       }
 
-      if (!account.scopes.some((scope) => scope.includes('https://mail.google.com'))) {
+      // The Gmail-scope check only applies to Google accounts; a Microsoft
+      // account holds Graph scopes and must not be flagged "missing Gmail
+      // permissions".
+      if (
+        account.provider === 'google' &&
+        !account.scopes.some((scope) => scope.includes('https://mail.google.com'))
+      ) {
         return t('tooltips.account_status.missing_gmail_permissions');
       }
 
@@ -109,7 +115,8 @@ export function IntegrationForm() {
   const shouldShowReconnectButton = useCallback((account: MonoAccount) => {
     return (
       account.isExpired ||
-      !account.scopes.some((scope) => scope.includes('https://mail.google.com'))
+      (account.provider === 'google' &&
+        !account.scopes.some((scope) => scope.includes('https://mail.google.com')))
     );
   }, []);
 
