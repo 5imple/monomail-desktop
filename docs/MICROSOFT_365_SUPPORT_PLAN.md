@@ -406,12 +406,38 @@ debug code, as drafted.
 
 **[AMENDED — A3] This phase is restructured.**
 
-> **[STATUS — PAUSED] Not started.** Phases 3–10 (the dormant Microsoft provider:
-> read / mutations / send / attachments / delta-fetch + folder labels, 46 unit
-> tests) are complete. Phase 11 is deliberately paused because it is the only
-> piece that changes **live** behavior (it restores Gmail's currently-broken
-> delivery and starts background polling) and cannot be validated in this
-> environment (no tenant, can't run the app). Resume it against a real run.
+> **[STATUS — v1 BUILT, pending live validation] (2026-06-15).** The Microsoft
+> Inbox delta poller (this phase's v1) is now implemented, wired into
+> `app.whenReady()`, and unit-tested (suite 57→68). Phases 3–10 (the dormant
+> Microsoft provider: read / mutations / send / attachments / delta-fetch +
+> folder labels) remain complete. What shipped vs. what is still deferred:
+>
+> - **Built:** `MailDeltaPoller` (`src/main/services/push/MailDeltaPoller.ts`) —
+>   main-process, per-Microsoft-account Inbox `messages/delta` on a ~60s cadence;
+>   cursor persisted in `new Store({ name: 'mail-delta' })` shaped
+>   `{ cursors: { [uid]: { [folder]: { deltaLink, lastSyncedAt } } } }` (written
+>   only on `ok`, cleared on `reset`, kept on retry/expired/error); 429
+>   Retry-After + exponential backoff; `powerMonitor` suspend/resume; immediate
+>   poll on window focus; frames synthesized → `handlePushFrame` +
+>   `renderer:push:message-received`. A new main-native Graph transport
+>   `graphGetMain` (`src/main/services/push/graphFetchMain.ts`) backs it because
+>   the renderer/worker `graphApiClient` routes through `window.electronBridge`,
+>   absent in main. Pure logic (frame synthesis, delta split, backoff) lives in
+>   `mailDeltaFrames.ts` and is unit-tested. Renderer `handleMessageDeleted` now
+>   resolves the threadId from the local cache when a frame omits it (Graph
+>   tombstones carry only the message id).
+> - **Deferred (needs a live tenant run):** (1) the A3 **Gmail history.list →
+>   main** migration — this slice is additive and deliberately leaves the
+>   renderer-driven Gmail sync untouched so live Gmail delivery is not disturbed
+>   before validation; (2) **resumable initial sync** for a huge mailbox's first
+>   delta (persist the `nextLink`, not just the `deltaLink`) — capped at
+>   `MAX_DELTA_PAGES=50` and logged for now; (3) the wider tracked-folder set
+>   (Sent/Trash/Junk/Archive) — the poller drives only Inbox per the v1 plan.
+>   The poller is shaped provider-neutrally so (1) folds in cleanly.
+> - **Still cannot be validated here** (no tenant / can't drive a signed-in app):
+>   real Graph delta request/response shapes, immutable-id stability across the
+>   cursor's life, the notification + thread-list materialization of a live
+>   Microsoft `MESSAGE_ADDED`/`MESSAGE_DELETED` frame end to end.
 >
 > **Ground truth re-verified at this point (the plan's own caveat):**
 > - `GmailHistoryPoller` IS deleted (commit `ca534f3`); resurrect the pattern from

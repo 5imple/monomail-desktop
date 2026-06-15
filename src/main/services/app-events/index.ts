@@ -1,6 +1,7 @@
 import mailApi from '@/main/api/mail/mailApi';
 import { registerIpcHandlers } from '@/main/services/ipc-handlers';
 import { schedulerService } from '@/main/services/scheduler/SchedulerService';
+import { mailDeltaPoller } from '@/main/services/push/MailDeltaPoller';
 import { authManager } from '@/main/services/mangers/auth/AuthManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
@@ -104,6 +105,9 @@ export function registerAppEventHandlers() {
 
     updateManager.checkForUpdates();
     schedulerService.start();
+    // Microsoft 365 new-mail delivery (plan Phase 11 v1): main-process Inbox
+    // delta poller. No-op until a Microsoft account is signed in.
+    mailDeltaPoller.start();
     session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
       if (details.url.includes('lh3.googleusercontent.com')) {
         delete details.requestHeaders['Referer'];

@@ -203,11 +203,18 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const handleMessageDeleted = useCallback(
     async (deletedMessage: MessageDeletedPayload) => {
+      // Gmail tombstones carry the threadId; the Microsoft delta poller's
+      // @removed tombstones carry only the message id, so resolve the thread
+      // from the local cache before pruning it.
+      let threadId = deletedMessage.threadId;
+      if (!threadId) {
+        threadId = (await DBGetMessage(deletedMessage.aAUid, deletedMessage.id))?.threadId ?? '';
+      }
       await DBRemoveMessage(deletedMessage.aAUid, deletedMessage.id);
       notifySubscribers([
         {
           type: 'removed',
-          threadId: deletedMessage.threadId,
+          threadId,
           accountId: deletedMessage.aAUid
         }
       ]);
