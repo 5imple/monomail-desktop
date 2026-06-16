@@ -192,6 +192,51 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
   return { threads, nextPageToken: resp['@odata.nextLink'] };
 };
 
+interface GraphAttachmentsResponse {
+  value?: Array<{ id?: string; contentId?: string | null; isInline?: boolean }>;
+}
+
+/**
+ * Recover `contentId` for a message's inline attachments so `<img src="cid:…">`
+ * in the body can be mapped to images. The detail fetch can't `$select`
+ * `contentId` (a fileAttachment-only property on the polymorphic attachments
+ * collection → Graph 400s the whole message), so it comes back without it.
+ * Fetch the message's inline attachments separately (filtered, so non-inline
+ * attachments' bytes aren't pulled) — those full objects carry `contentId` —
+ * and merge it into the attachment metadata so the existing inlineImages mapping
+ * builds. Best-effort: any failure leaves the body intact, just without inline
+ * images.
+ */
+async function enrichInlineContentIds(
+  uid: string,
+  message: GraphMessage,
+  signal?: AbortSignal
+): Promise<GraphMessage> {
+  const hasInline = (message.attachments ?? []).some((att) => att.isInline && att.id);
+  if (!hasInline) return message;
+  try {
+    const resp = await graphApiClient.get<GraphAttachmentsResponse>(
+      `/me/messages/${encodeURIComponent(message.id)}/attachments?${new URLSearchParams({
+        $filter: 'isInline eq true'
+      }).toString()}`,
+      { uid, signal }
+    );
+    const contentIdById = new Map<string, string>();
+    for (const att of resp.value ?? []) {
+      if (att?.id && att.contentId) contentIdById.set(att.id, att.contentId);
+    }
+    if (contentIdById.size === 0) return message;
+    return {
+      ...message,
+      attachments: (message.attachments ?? []).map((att) =>
+        att.id && contentIdById.has(att.id) ? { ...att, contentId: contentIdById.get(att.id) } : att
+      )
+    };
+  } catch {
+    return message;
+  }
+}
+
 const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal) => {
   // No Graph "thread" resource — a thread is a conversation. Fetch its messages
   // and let transformGraphThread sort + assemble them (no $orderby: combining it
@@ -214,7 +259,9 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal) => {
   // Resolve each message's well-known label from its parentFolderId so a detail
   // fetch never strips INBOX/SENT from the cached thread.
   const resolveFolderLabel = await folderLabelResolver(uid);
-  return transformGraphThread(messages, uid, { resolveFolderLabel });
+  // Recover inline-image contentIds (best-effort, per message in parallel).
+  const enriched = await Promise.all(messages.map((m) => enrichInlineContentIds(uid, m, signal)));
+  return transformGraphThread(enriched, uid, { resolveFolderLabel });
 };
 
 const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) => {
@@ -226,7 +273,8 @@ const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) =>
     }),
     folderLabelResolver(uid)
   ]);
-  return transformGraphMessage(raw, { resolveFolderLabel });
+  const enriched = await enrichInlineContentIds(uid, raw, signal);
+  return transformGraphMessage(enriched, { resolveFolderLabel });
 };
 
 // ── Delta sync (Phase 10) ────────────────────────────────────────────────────
