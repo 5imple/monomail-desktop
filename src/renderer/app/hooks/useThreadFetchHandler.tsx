@@ -349,6 +349,12 @@ const useThreadFetchHandler = () => {
     // label/folder views miss it (cache + Gmail-only workers).
     if (!isLabelView) return;
 
+    // Drive the shared loading state so the list shows its skeleton (not the
+    // "All caught up" empty state) while this fetch is in flight, including the
+    // debounce window. The skeleton only renders when there are no threads yet,
+    // so this never disrupts a view that already has content.
+    setLoadingStatus('LOADING');
+
     const abort = new AbortController();
     // Debounce: data-load re-renders can re-run this effect in a burst; collapse
     // them into a single fetch per settled (accounts, query) state instead of
@@ -383,6 +389,7 @@ const useThreadFetchHandler = () => {
             }
           }
         }
+        if (!abort.signal.aborted) setLoadingStatus('DONE');
       })();
     }, 500);
 

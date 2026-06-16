@@ -7,6 +7,7 @@ import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import FilterOptionDropdownMenu from '@/renderer/app/containers/filter/FilterOptionDropdownMenu';
+import ThreadListSkeleton from '@/renderer/app/containers/list/ThreadListSkeleton';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
@@ -184,12 +185,37 @@ function ThreadList({ onScroll }: ThreadListProps) {
     return null;
   }, [deduplicatedThreadIds, threadsMap]);
 
+  // First-load skeleton: only when there's nothing cached to show yet and a
+  // fetch/sync is in flight. With cached threads we render content immediately.
+  const isInitialLoading =
+    deduplicatedThreadIds.length === 0 &&
+    loadingStatus !== 'ERROR' &&
+    (loadingStatus === 'LOADING' ||
+      loadingStatus === 'INIT' ||
+      aggregatedSyncState.isSyncing);
+
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
       {/* <ThreadListToolbar className="absolute left-2 top-2 z-50" /> */}
       <ScrollArea onScroll={onScroll} className="h-full" id="thread-list">
-        <div className="flex h-full w-full flex-col pt-2">
-          {groupedThreads.map((group, groupIndex) => (
+        <AnimatePresence mode="wait" initial={false}>
+          {isInitialLoading ? (
+            <motion.div
+              key="thread-list-skeleton"
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <ThreadListSkeleton density={preference.appearance.density} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="thread-list-content"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="flex h-full w-full flex-col pt-2"
+            >
+              {groupedThreads.map((group, groupIndex) => (
             <div key={group.label}>
               <div className="flex items-center justify-between px-[10%] pb-1 pt-3">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
@@ -263,7 +289,9 @@ function ThreadList({ onScroll }: ThreadListProps) {
               {/* Loading */}
             </div>
           )}
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </ScrollArea>
       {(hasMore || loadingStatus === 'LOADING' || aggregatedSyncState.isSyncing) && (
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent dark:from-background" />
