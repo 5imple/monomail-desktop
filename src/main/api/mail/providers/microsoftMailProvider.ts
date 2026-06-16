@@ -34,7 +34,14 @@ const LIST_SELECT =
 // Detail view adds the body, bcc, and headers. internetMessageHeaders is kept
 // for reply threading; uniqueBody is fetched for the eventual reply-fragment path.
 const DETAIL_SELECT = `${LIST_SELECT},body,bccRecipients,internetMessageHeaders`;
-const ATTACHMENT_EXPAND = 'attachments($select=id,name,contentType,size,isInline,contentId)';
+// `contentId` is a `fileAttachment`-only property; selecting it on the
+// polymorphic `attachments` collection makes Graph 400 the whole message GET
+// ("Could not find a property named 'contentId' on type
+// 'microsoft.graph.attachment'"), which blanks the message body. Select only the
+// base-type properties. (Inline cid→image mapping that relied on contentId is a
+// known follow-up: there's no OData way to select a derived-type property here
+// without `$expand=attachments` pulling every attachment's contentBytes.)
+const ATTACHMENT_EXPAND = 'attachments($select=id,name,contentType,size,isInline)';
 
 interface GraphListResponse {
   value?: GraphMessage[];

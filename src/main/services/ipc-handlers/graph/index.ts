@@ -181,7 +181,9 @@ export function registerGraphHandlers() {
 
       const data = await readResponseBody(response, args?.responseType ?? 'json');
       if (!response.ok) {
-        log.warn(`[graph:ipc] FAIL ${method} ${args?.path} uid=${uid} status=${response.status}`);
+        log.warn(
+          `[graph:ipc] FAIL ${method} ${args?.path} uid=${uid} status=${response.status} :: ${getErrorMessage(response.status, data)}`
+        );
         return {
           ok: false,
           status: response.status,
