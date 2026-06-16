@@ -341,83 +341,59 @@ const useThreadFetchHandler = () => {
   // load-more. A present token = that account/view has more pages.
   const msPageTokensRef = useRef<Record<string, Record<string, string>>>({});
 
-  useEffect(() => {
-    const microsoftUids = microsoftAccountUidsKey ? microsoftAccountUidsKey.split(',') : [];
+  // Fetch the Microsoft inbox for the active label/folder view and commit it
+  // through the standard setThreads → updateThreadIds → DB pipeline. Called from
+  // the main query/space effect AFTER resetThreadsArray + fetchThreadsHandler, so
+  // its threads are applied last and are never clobbered by the reset (the bug
+  // that made the inbox load only after a manual refresh). The Gmail workers
+  // can't run Microsoft (empty worker provider registry), so this fills the gap
+  // on the main thread; free-text search already fetches Microsoft separately.
+  const fetchMicrosoftInbox = useCallback(async () => {
+    const microsoftUids = computeAccountUids(
+      accounts.filter((acc) => acc.provider === 'microsoft')
+    );
     if (microsoftUids.length === 0) return;
 
-    const currentQuery = globalSearchQuery || '';
+    const currentQuery = globalSearchQueryRef.current || '';
     const { field } = parseQueryFieldLabel(currentQuery, true);
     const isLabelView =
       !currentQuery.trim() || field === 'in' || field === 'is' || field === 'category';
-    // Free-text search already fetches Microsoft via the search path; only the
-    // label/folder views miss it (cache + Gmail-only workers).
     if (!isLabelView) return;
 
-    // Drive the shared loading state so the list shows its skeleton (not the
-    // "All caught up" empty state) while this fetch is in flight, including the
-    // debounce window. The skeleton only renders when there are no threads yet,
-    // so this never disrupts a view that already has content.
+    // Show the skeleton (not "All caught up") while the Graph fetch is in flight.
     setLoadingStatus('LOADING');
-
     const queryKey = currentQuery || 'default';
-    const abort = new AbortController();
-    // Debounce: data-load re-renders can re-run this effect in a burst; collapse
-    // them into a single fetch per settled (accounts, query) state instead of
-    // firing dozens of Graph requests at startup.
-    const timer = setTimeout(() => {
-      void (async () => {
-        msPageTokensRef.current[queryKey] = msPageTokensRef.current[queryKey] || {};
-        for (const uid of microsoftUids) {
-          if (abort.signal.aborted) return;
-          try {
-            // Call the Microsoft adapter DIRECTLY, not via mailApi: mailApi
-            // dispatches by getProviderForUid(uid), and the provider registry can
-            // still be unpopulated for this uid at mount (it then defaults to the
-            // Gmail adapter → "No Google account token"). We already know these
-            // uids are Microsoft. translateQuery reads the folder/is: tokens
-            // straight from the label query (Gmail category expansion is ignored).
-            const response = await microsoftMailProvider.getThreads(
-              uid,
-              currentQuery,
-              undefined,
-              FETCH_THREADS_LIMIT.toString(),
-              abort.signal
-            );
-            if (abort.signal.aborted) return;
-            // Remember the continuation token (or clear it) for load-more.
-            if (response?.nextPageToken) {
-              msPageTokensRef.current[queryKey][uid] = response.nextPageToken;
-            } else {
-              delete msPageTokensRef.current[queryKey][uid];
-            }
-            if (!response?.threads?.length) continue;
-            const monoThreads = response.threads.map((thread) =>
-              MonoThread.fromPlainObject(thread)
-            );
-            await setThreads(uid, monoThreads, false, true);
-            updateThreadIds(monoThreads.map((thread) => thread.id));
-          } catch (error) {
-            if (!abort.signal.aborted) {
-              console.error(`[ms-inbox] fetch failed for ${uid}:`, error);
-            }
-          }
-        }
-        if (!abort.signal.aborted) {
-          // Enable load-more if any Microsoft account has another page.
-          if (Object.values(msPageTokensRef.current[queryKey]).some(Boolean)) setHasMore(true);
-          setLoadingStatus('DONE');
-        }
-      })();
-    }, 500);
+    msPageTokensRef.current[queryKey] = msPageTokensRef.current[queryKey] || {};
 
-    return () => {
-      clearTimeout(timer);
-      abort.abort();
-    };
-    // setThreads/updateThreadIds are intentionally omitted: setThreads' identity
-    // changes on every threadsMap update, which would re-fire this fetch in a
-    // loop. Re-run only when the account set or the active label query changes.
-  }, [microsoftAccountUidsKey, globalSearchQuery]);
+    for (const uid of microsoftUids) {
+      try {
+        // Call the Microsoft adapter DIRECTLY, not via mailApi: mailApi dispatches
+        // by getProviderForUid(uid), and the provider registry can still be
+        // unpopulated for this uid at mount (it then defaults to the Gmail adapter
+        // → "No Google account token"). We already know these uids are Microsoft.
+        const response = await microsoftMailProvider.getThreads(
+          uid,
+          currentQuery,
+          undefined,
+          FETCH_THREADS_LIMIT.toString()
+        );
+        // Remember the continuation token (or clear it) for load-more.
+        if (response?.nextPageToken) {
+          msPageTokensRef.current[queryKey][uid] = response.nextPageToken;
+        } else {
+          delete msPageTokensRef.current[queryKey][uid];
+        }
+        if (!response?.threads?.length) continue;
+        const monoThreads = response.threads.map((thread) => MonoThread.fromPlainObject(thread));
+        await setThreads(uid, monoThreads, false, true);
+        updateThreadIds(monoThreads.map((thread) => thread.id));
+      } catch (error) {
+        console.error(`[ms-inbox] fetch failed for ${uid}:`, error);
+      }
+    }
+    if (Object.values(msPageTokensRef.current[queryKey]).some(Boolean)) setHasMore(true);
+    setLoadingStatus('DONE');
+  }, [accounts, computeAccountUids, setThreads, updateThreadIds, setLoadingStatus]);
 
   // Implementation of updateFromMessageSubscribe with space awareness and category handling
   const updateFromMessageSubscribe = useCallback(
@@ -1725,6 +1701,9 @@ const useThreadFetchHandler = () => {
       async () => {
         resetThreadsArray();
         await fetchThreadsHandler(false);
+        // Microsoft inbox: fetched here, AFTER the reset + cache read, so its
+        // threads are applied last and survive (fixes "loads only after refresh").
+        await fetchMicrosoftInbox();
 
         const limitedAccountUids = getLimitedAccountUids();
         if (limitedAccountUids.length > 0) {
@@ -1751,7 +1730,9 @@ const useThreadFetchHandler = () => {
         apiCallsRef.current = null;
       }
     };
-  }, [globalSearchQuery, activeSpace?.id, activeSpace?.activeAccountUids]);
+    // microsoftAccountUidsKey: re-run when Microsoft accounts finish loading
+    // (their uids appear after the initial render), so the inbox fetches them.
+  }, [globalSearchQuery, activeSpace?.id, activeSpace?.activeAccountUids, microsoftAccountUidsKey]);
 
   return {
     resetThreadsArray,
