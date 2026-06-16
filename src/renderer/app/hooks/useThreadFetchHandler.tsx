@@ -337,6 +337,10 @@ const useThreadFetchHandler = () => {
     [accounts, computeAccountUids, activeSpace?.id, activeSpace?.activeAccountUids]
   );
 
+  // Per-query, per-Microsoft-account next-page tokens (Graph @odata.nextLink) for
+  // load-more. A present token = that account/view has more pages.
+  const msPageTokensRef = useRef<Record<string, Record<string, string>>>({});
+
   useEffect(() => {
     const microsoftUids = microsoftAccountUidsKey ? microsoftAccountUidsKey.split(',') : [];
     if (microsoftUids.length === 0) return;
@@ -355,12 +359,14 @@ const useThreadFetchHandler = () => {
     // so this never disrupts a view that already has content.
     setLoadingStatus('LOADING');
 
+    const queryKey = currentQuery || 'default';
     const abort = new AbortController();
     // Debounce: data-load re-renders can re-run this effect in a burst; collapse
     // them into a single fetch per settled (accounts, query) state instead of
     // firing dozens of Graph requests at startup.
     const timer = setTimeout(() => {
       void (async () => {
+        msPageTokensRef.current[queryKey] = msPageTokensRef.current[queryKey] || {};
         for (const uid of microsoftUids) {
           if (abort.signal.aborted) return;
           try {
@@ -377,7 +383,14 @@ const useThreadFetchHandler = () => {
               FETCH_THREADS_LIMIT.toString(),
               abort.signal
             );
-            if (abort.signal.aborted || !response?.threads?.length) continue;
+            if (abort.signal.aborted) return;
+            // Remember the continuation token (or clear it) for load-more.
+            if (response?.nextPageToken) {
+              msPageTokensRef.current[queryKey][uid] = response.nextPageToken;
+            } else {
+              delete msPageTokensRef.current[queryKey][uid];
+            }
+            if (!response?.threads?.length) continue;
             const monoThreads = response.threads.map((thread) =>
               MonoThread.fromPlainObject(thread)
             );
@@ -389,7 +402,11 @@ const useThreadFetchHandler = () => {
             }
           }
         }
-        if (!abort.signal.aborted) setLoadingStatus('DONE');
+        if (!abort.signal.aborted) {
+          // Enable load-more if any Microsoft account has another page.
+          if (Object.values(msPageTokensRef.current[queryKey]).some(Boolean)) setHasMore(true);
+          setLoadingStatus('DONE');
+        }
       })();
     }, 500);
 
@@ -1464,12 +1481,60 @@ const useThreadFetchHandler = () => {
     ]
   );
 
+  // Microsoft load-more: fetch the next page for each Microsoft account that has
+  // a stored continuation token, append, and refresh tokens. The Gmail worker
+  // path doesn't page Microsoft, so this runs alongside it (directly via the
+  // provider, like the initial Microsoft fetch).
+  const loadMoreMicrosoft = useCallback(async () => {
+    const queryKey = (globalSearchQueryRef.current || '') || 'default';
+    const tokens = msPageTokensRef.current[queryKey] || {};
+    const uids = Object.keys(tokens).filter((uid) => tokens[uid]);
+    if (uids.length === 0) return;
+    const currentQuery = globalSearchQueryRef.current || '';
+
+    await Promise.all(
+      uids.map(async (uid) => {
+        try {
+          const response = await microsoftMailProvider.getThreads(
+            uid,
+            currentQuery,
+            tokens[uid],
+            FETCH_THREADS_LIMIT.toString()
+          );
+          if (response?.nextPageToken) {
+            msPageTokensRef.current[queryKey][uid] = response.nextPageToken;
+          } else {
+            delete msPageTokensRef.current[queryKey][uid];
+          }
+          if (response?.threads?.length) {
+            const monoThreads = response.threads.map((thread) => MonoThread.fromPlainObject(thread));
+            await setThreads(uid, monoThreads, false, true);
+            updateThreadIds(monoThreads.map((thread) => thread.id));
+          }
+        } catch (error) {
+          console.error(`[ms-inbox] load-more failed for ${uid}:`, error);
+          delete msPageTokensRef.current[queryKey][uid]; // stop paging this account on error
+        }
+      })
+    );
+
+    // No Microsoft pages left → clear hasMore (unless a Gmail account still has more).
+    const microsoftHasMore = Object.values(msPageTokensRef.current[queryKey] || {}).some(Boolean);
+    const hasGoogle = accounts.some((acc) => acc.provider === 'google');
+    if (!microsoftHasMore && !hasGoogle) setHasMore(false);
+  }, [accounts, setThreads, updateThreadIds]);
+
   const loadMore = useCallback(() => {
-    if (loadingStatusRef.current === 'DONE' && hasMore && !isLoadingMore) {
-      setIsLoadingMore(true);
-      fetchThreadsHandler(true).finally(() => setIsLoadingMore(false));
-    }
-  }, [loadingStatusRef, hasMore, isLoadingMore]);
+    if (loadingStatusRef.current !== 'DONE' || !hasMore || isLoadingMore) return;
+    setIsLoadingMore(true);
+    // Gmail pages via the worker-backed handler; Microsoft via its own paginator.
+    // Skip the Gmail handler when there are no Google accounts so it can't reset
+    // Microsoft's hasMore.
+    const hasGoogle = accounts.some((acc) => acc.provider === 'google');
+    const tasks: Promise<unknown>[] = [loadMoreMicrosoft()];
+    if (hasGoogle) tasks.push(Promise.resolve(fetchThreadsHandler(true)));
+    Promise.all(tasks).finally(() => setIsLoadingMore(false));
+  }, [loadingStatusRef, hasMore, isLoadingMore, accounts, fetchThreadsHandler, loadMoreMicrosoft]);
 
   const handlePostSync = useCallback(
     (accountId: string) => {
