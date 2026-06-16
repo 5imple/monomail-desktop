@@ -1,4 +1,6 @@
 import { apiClient, calendarApiClient } from '@/main/api/apiClient';
+import { getProviderForUid } from '@/main/api/mail/providerRegistry';
+import { microsoftCalendarProvider } from '@/main/api/calendar/microsoftCalendarProvider';
 import {
   CalendarRsvpRequest,
   CalendarRsvpResponse,
@@ -158,6 +160,10 @@ const getGoogleCalendarEvents = async (
   options: GetGoogleCalendarEventsOptions,
   signal?: AbortSignal
 ): Promise<GoogleCalendarEventsResponse> => {
+  // Microsoft accounts read from the Outlook calendar via Graph.
+  if (options.uid && getProviderForUid(options.uid) === 'microsoft') {
+    return microsoftCalendarProvider.getEvents(options, signal);
+  }
   const {
     calendarId = 'primary',
     timeMin,
@@ -214,6 +220,9 @@ const getGoogleCalendarEvents = async (
  * @returns {Promise<CalendarRsvpResponse>} The response from the API
  */
 const sendEventRsvp = async (request: CalendarRsvpRequest): Promise<CalendarRsvpResponse> => {
+  if (request.uid && getProviderForUid(request.uid) === 'microsoft') {
+    return microsoftCalendarProvider.sendRsvp(request);
+  }
   if (!request.uid) {
     return apiClient.post<CalendarRsvpResponse>('/calendar/events/rsvp', request);
   }
@@ -282,6 +291,9 @@ const sendEventRsvp = async (request: CalendarRsvpRequest): Promise<CalendarRsvp
 const createCalendarEvent = async (
   request: CreateCalendarEventRequest
 ): Promise<CalendarEventResponse> => {
+  if (request.uid && getProviderForUid(request.uid) === 'microsoft') {
+    return microsoftCalendarProvider.createEvent(request);
+  }
   // Exclude uid from the JSON body; it's used to set X-Mono-Account header
   const { uid, ...body } = request as CreateCalendarEventRequest & { [key: string]: any };
   if (!uid) {
@@ -310,6 +322,9 @@ const createCalendarEvent = async (
 const updateCalendarEvent = async (
   request: UpdateCalendarEventRequest
 ): Promise<CalendarEventResponse> => {
+  if (request.uid && getProviderForUid(request.uid) === 'microsoft') {
+    return microsoftCalendarProvider.updateEvent(request);
+  }
   const { uid, eventId, ...body } = request as UpdateCalendarEventRequest & {
     [key: string]: any;
   };
@@ -347,6 +362,9 @@ const deleteCalendarEvent = async (
   uid?: string,
   sendNotifications: boolean = true
 ): Promise<void> => {
+  if (uid && getProviderForUid(uid) === 'microsoft') {
+    return microsoftCalendarProvider.deleteEvent(eventId, uid);
+  }
   const params = new URLSearchParams({
     calendarId,
     sendNotifications: sendNotifications.toString()

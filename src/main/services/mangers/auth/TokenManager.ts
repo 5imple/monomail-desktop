@@ -100,7 +100,8 @@ const DIRECT_MICROSOFT_SCOPES = [
   'offline_access',
   'User.Read',
   'Mail.ReadWrite',
-  'Mail.Send'
+  'Mail.Send',
+  'Calendars.ReadWrite'
 ];
 
 /**

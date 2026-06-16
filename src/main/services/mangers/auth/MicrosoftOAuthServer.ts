@@ -14,8 +14,8 @@ const GRAPH_ME_URL =
   'https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName';
 const GRAPH_ME_PHOTO_URL = 'https://graph.microsoft.com/v1.0/me/photos/96x96/$value';
 
-// Keep in sync with DIRECT_MICROSOFT_SCOPES in TokenManager.ts — mail only
-// for v1 (calendar/contacts are explicit non-goals).
+// Keep in sync with DIRECT_MICROSOFT_SCOPES in TokenManager.ts — mail +
+// calendar (Calendars.ReadWrite powers the Outlook calendar).
 const MICROSOFT_SCOPES = [
   'openid',
   'email',
@@ -23,7 +23,8 @@ const MICROSOFT_SCOPES = [
   'offline_access',
   'User.Read',
   'Mail.ReadWrite',
-  'Mail.Send'
+  'Mail.Send',
+  'Calendars.ReadWrite'
 ].join(' ');
 const FLOW_TIMEOUT_MS = 5 * 60_000;
 
