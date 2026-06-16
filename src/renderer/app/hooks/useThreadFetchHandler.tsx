@@ -2,6 +2,7 @@ import { apiClient } from '@/main/api/apiClient';
 import log from 'electron-log';
 import { UserPreference } from '@/main/api/auth/types/user';
 import mailApi from '@/main/api/mail/mailApi';
+import { microsoftMailProvider } from '@/main/api/mail/providers/microsoftMailProvider';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { authCache } from '@/renderer/app/context/AuthCache';
 import { useAuth } from '@/renderer/app/context/AuthContext';
@@ -28,7 +29,7 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { OperationPriority, useThreadOperationsQueue } from './useThreadOperationsQueue';
 
 const useThreadFetchHandler = () => {
@@ -317,6 +318,82 @@ const useThreadFetchHandler = () => {
     },
     [setThreadIds, enqueueOperation, threadsMapRef]
   );
+
+  // ── Microsoft inbox fetch (main-thread, provider-routed) ───────────────────
+  // Gmail mail syncs in web workers (getLimitedAccountUids). Those workers can't
+  // run Microsoft — the worker realm's provider registry is empty, so a
+  // Microsoft uid dispatches to the Gmail adapter and throws. So Microsoft mail
+  // is fetched here on the main thread, where `mailApi` routes to the Graph
+  // adapter, for label/folder views, and committed through the same
+  // threadsMap → threadIds → DB pipeline the rest of the list uses. Additive:
+  // Gmail accounts are untouched, and free-text search already fetches Microsoft
+  // via the search path, so this only handles label/category/is views.
+  const microsoftAccountUidsKey = useMemo(
+    () =>
+      computeAccountUids(accounts.filter((acc) => acc.provider === 'microsoft'))
+        .slice()
+        .sort()
+        .join(','),
+    [accounts, computeAccountUids, activeSpace?.id, activeSpace?.activeAccountUids]
+  );
+
+  useEffect(() => {
+    const microsoftUids = microsoftAccountUidsKey ? microsoftAccountUidsKey.split(',') : [];
+    if (microsoftUids.length === 0) return;
+
+    const currentQuery = globalSearchQuery || '';
+    const { field } = parseQueryFieldLabel(currentQuery, true);
+    const isLabelView =
+      !currentQuery.trim() || field === 'in' || field === 'is' || field === 'category';
+    // Free-text search already fetches Microsoft via the search path; only the
+    // label/folder views miss it (cache + Gmail-only workers).
+    if (!isLabelView) return;
+
+    const abort = new AbortController();
+    // Debounce: data-load re-renders can re-run this effect in a burst; collapse
+    // them into a single fetch per settled (accounts, query) state instead of
+    // firing dozens of Graph requests at startup.
+    const timer = setTimeout(() => {
+      void (async () => {
+        for (const uid of microsoftUids) {
+          if (abort.signal.aborted) return;
+          try {
+            // Call the Microsoft adapter DIRECTLY, not via mailApi: mailApi
+            // dispatches by getProviderForUid(uid), and the provider registry can
+            // still be unpopulated for this uid at mount (it then defaults to the
+            // Gmail adapter → "No Google account token"). We already know these
+            // uids are Microsoft. translateQuery reads the folder/is: tokens
+            // straight from the label query (Gmail category expansion is ignored).
+            const response = await microsoftMailProvider.getThreads(
+              uid,
+              currentQuery,
+              undefined,
+              FETCH_THREADS_LIMIT.toString(),
+              abort.signal
+            );
+            if (abort.signal.aborted || !response?.threads?.length) continue;
+            const monoThreads = response.threads.map((thread) =>
+              MonoThread.fromPlainObject(thread)
+            );
+            await setThreads(uid, monoThreads, false, true);
+            updateThreadIds(monoThreads.map((thread) => thread.id));
+          } catch (error) {
+            if (!abort.signal.aborted) {
+              console.error(`[ms-inbox] fetch failed for ${uid}:`, error);
+            }
+          }
+        }
+      })();
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      abort.abort();
+    };
+    // setThreads/updateThreadIds are intentionally omitted: setThreads' identity
+    // changes on every threadsMap update, which would re-fire this fetch in a
+    // loop. Re-run only when the account set or the active label query changes.
+  }, [microsoftAccountUidsKey, globalSearchQuery]);
 
   // Implementation of updateFromMessageSubscribe with space awareness and category handling
   const updateFromMessageSubscribe = useCallback(
