@@ -64,7 +64,7 @@ interface ThreadListCozyItemProps {
 
 export const ThreadListCozyItem = React.memo(
   React.forwardRef<HTMLDivElement, ThreadListCozyItemProps>(
-    ({ threadId, onClick, index = 0 }, ref) => {
+    ({ threadId, onClick }, ref) => {
       const { activeThreadId, selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
       const { labelsMapByAccount } = useLabelAtom();
       const executeCommand = useExecuteCommand();
@@ -72,7 +72,11 @@ export const ThreadListCozyItem = React.memo(
       const { getAccountByUid, accounts, preference } = useAuth();
 
       const [isRendering, setIsRendering] = useState(false);
-      const [opacity, setOpacity] = useState(0);
+      // Start fully visible so the first screenful paints at once. This used to
+      // begin at 0 and fade to 100 per row; staggered by list index, that read as
+      // a left-to-right "sweep" as the inbox loaded. The IntersectionObserver still
+      // gates content rendering (isRendering) for long-list virtualization.
+      const [opacity, setOpacity] = useState(100);
       const containerRef = useRef<HTMLDivElement | null>(null);
       const hasBeenVisibleRef = useRef(false);
       const lastThreadRef = useRef<MonoThread | null>(null);
@@ -287,10 +291,6 @@ export const ThreadListCozyItem = React.memo(
           data-thread-selected={isChecked}
           tabIndex={0}
           role="button"
-          style={{
-            transitionDelay:
-              opacity === 0 && !hasBeenVisibleRef.current ? `${Math.min(index, 12) * 20}ms` : '0ms'
-          }}
           className={cn(
             // `group` enables hover-revealed children (e.g. SnoozeButton).
             'group relative mx-[10%] overflow-hidden rounded-md transition-colors transition-opacity duration-150 duration-200 ease-out',

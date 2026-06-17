@@ -65,9 +65,13 @@ interface ThreadListDenseItemProps {
 
 export const ThreadListDenseItem = React.memo(
   React.forwardRef<HTMLDivElement, ThreadListDenseItemProps>(
-    ({ threadId, onClick, index = 0 }, forwardedRef) => {
+    ({ threadId, onClick }, forwardedRef) => {
       const [isRendering, setIsRendering] = useState(false);
-      const [opacity, setOpacity] = useState(0);
+      // Start fully visible so the first screenful paints at once. This used to
+      // begin at 0 and fade to 100 per row; staggered by list index, that read as
+      // a left-to-right "sweep" as the inbox loaded. The IntersectionObserver still
+      // gates content rendering (isRendering) for long-list virtualization.
+      const [opacity, setOpacity] = useState(100);
       const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
       const { getAccountByUid, accounts, preference } = useAuth();
       const memoizedSearchQuery = useCallback(searchNewQuery, [searchNewQuery]);
@@ -292,10 +296,6 @@ export const ThreadListDenseItem = React.memo(
           data-thread={threadId}
           data-thread-focused={isActive}
           data-read-motion={readMotion ?? undefined}
-          style={{
-            transitionDelay:
-              opacity === 0 && !hasBeenVisibleRef.current ? `${Math.min(index, 12) * 20}ms` : '0ms'
-          }}
           data-thread-selected={isChecked}
           tabIndex={0}
           role="button"
