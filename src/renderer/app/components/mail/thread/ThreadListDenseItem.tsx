@@ -196,10 +196,11 @@ export const ThreadListDenseItem = React.memo(
       }, [currentThread]);
 
       useEffect(() => {
+        // Never drop opacity back to 0 when a row leaves the viewport: isRendering
+        // already gates content for virtualization, and re-fading on re-entry made
+        // the inbox fade in again when returning from the reader.
         if (isRendering) {
           requestAnimationFrame(() => setOpacity(100));
-        } else {
-          setOpacity(0);
         }
       }, [isRendering]);
 
@@ -232,7 +233,7 @@ export const ThreadListDenseItem = React.memo(
       const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
       const isChecked = selectedThreads.includes(threadId);
       const isActive = activeThreadId === threadId;
-      const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null);
+      const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null, isActive);
 
       // Same sender renderer used by the other two row variants.
       const renderSenderNames = () => {

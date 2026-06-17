@@ -170,10 +170,11 @@ export const ThreadListCozyItem = React.memo(
       }, [threadId, threadsMap]);
 
       useEffect(() => {
+        // Never drop opacity back to 0 when a row leaves the viewport: isRendering
+        // already gates content for virtualization, and re-fading on re-entry made
+        // the inbox fade in again when returning from the reader.
         if (isRendering) {
           setTimeout(() => setOpacity(100), 0);
-        } else {
-          setOpacity(0);
         }
       }, [isRendering]);
 
@@ -222,7 +223,7 @@ export const ThreadListCozyItem = React.memo(
       const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
       const isChecked = selectedThreads.includes(threadId);
       const isActive = activeThreadId === threadId;
-      const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null);
+      const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null, isActive);
 
       // Newton senders renderer (inlined — identical to ThreadListItem's
       // version). DraggableSender handles dnd-kit drag handles for "Me"

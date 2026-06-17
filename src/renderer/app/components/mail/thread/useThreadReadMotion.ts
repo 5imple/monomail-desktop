@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 
 export type ThreadReadMotion = 'to-read' | 'to-unread' | null;
 
-export function useThreadReadMotion(threadId: string, isUnread: boolean | null | undefined) {
+export function useThreadReadMotion(
+  threadId: string,
+  isUnread: boolean | null | undefined,
+  suppress = false
+) {
   const previousStateRef = useRef<{ threadId: string; isUnread: boolean } | null>(null);
   const [motion, setMotion] = useState<ThreadReadMotion>(null);
 
@@ -24,11 +28,22 @@ export function useThreadReadMotion(threadId: string, isUnread: boolean | null |
     if (previousState.isUnread === isUnread) return;
 
     previousStateRef.current = { threadId, isUnread };
+
+    // Skip the sweep when the read/unread change belongs to the thread that's
+    // open in the reader (e.g. read-on-open). That row is hidden in the
+    // collapsed list panel while open; animating it only surfaces the sweep's
+    // tail as a left-to-right wipe when the reader closes and the list returns.
+    // previousStateRef is still advanced so a later genuine change animates.
+    if (suppress) {
+      setMotion(null);
+      return;
+    }
+
     setMotion(isUnread ? 'to-unread' : 'to-read');
 
     const timeout = window.setTimeout(() => setMotion(null), 680);
     return () => window.clearTimeout(timeout);
-  }, [isUnread, threadId]);
+  }, [isUnread, threadId, suppress]);
 
   return motion;
 }
