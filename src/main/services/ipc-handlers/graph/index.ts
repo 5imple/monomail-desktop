@@ -57,6 +57,44 @@ type GraphBatchResult =
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Microsoft Graph throttles a single mailbox at ~4 concurrent requests (429
+// "Application is over its MailboxConcurrency limit."). Cap our own per-mailbox
+// single-request fan-out below that so bursts — e.g. the calendar fetching
+// several month windows of /me/calendarView at once — don't throttle
+// themselves. A tiny per-uid FIFO hands an in-flight slot to the next waiter on
+// release; any 429/503 that still slips through is retried on Retry-After.
+const GRAPH_MAX_CONCURRENCY_PER_UID = 3;
+const GRAPH_REQUEST_MAX_RETRIES = 3;
+
+const graphInflightByUid = new Map<string, number>();
+const graphWaitersByUid = new Map<string, Array<() => void>>();
+
+function acquireGraphSlot(uid: string): Promise<void> {
+  const inflight = graphInflightByUid.get(uid) ?? 0;
+  if (inflight < GRAPH_MAX_CONCURRENCY_PER_UID) {
+    graphInflightByUid.set(uid, inflight + 1);
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    const waiters = graphWaitersByUid.get(uid) ?? [];
+    waiters.push(resolve);
+    graphWaitersByUid.set(uid, waiters);
+  });
+}
+
+function releaseGraphSlot(uid: string): void {
+  const waiters = graphWaitersByUid.get(uid);
+  if (waiters && waiters.length > 0) {
+    const next = waiters.shift();
+    if (waiters.length === 0) graphWaitersByUid.delete(uid);
+    next?.(); // hand the in-flight slot straight to the next waiter (count unchanged)
+    return;
+  }
+  const inflight = graphInflightByUid.get(uid) ?? 1;
+  if (inflight <= 1) graphInflightByUid.delete(uid);
+  else graphInflightByUid.set(uid, inflight - 1);
+}
+
 async function readResponseBody(
   response: Response,
   responseType: GraphRequestArgs['responseType']
@@ -173,26 +211,51 @@ export function registerGraphHandlers() {
         Authorization: `Bearer ${accessToken}`
       };
 
-      const response = await net.fetch(url, {
-        method,
-        headers,
-        body: typeof args?.body === 'string' ? args.body : undefined
-      });
+      const requestBody = typeof args?.body === 'string' ? args.body : undefined;
 
-      const data = await readResponseBody(response, args?.responseType ?? 'json');
-      if (!response.ok) {
-        log.warn(
-          `[graph:ipc] FAIL ${method} ${args?.path} uid=${uid} status=${response.status} :: ${getErrorMessage(response.status, data)}`
-        );
-        return {
-          ok: false,
-          status: response.status,
-          data,
-          error: getErrorMessage(response.status, data)
-        } satisfies GraphResult;
+      await acquireGraphSlot(uid);
+      try {
+        let response = await net.fetch(url, { method, headers, body: requestBody });
+
+        // Honor Graph throttling: retry 429/503 on the server's Retry-After
+        // (capped by parseRetryAfterMs) rather than dropping the request. With
+        // the per-uid concurrency cap above, this keeps the calendar's
+        // multi-month /me/calendarView burst from failing to load.
+        for (
+          let attempt = 0;
+          (response.status === 429 || response.status === 503) &&
+          attempt < GRAPH_REQUEST_MAX_RETRIES;
+          attempt++
+        ) {
+          const waitMs = parseRetryAfterMs({
+            'retry-after': response.headers.get('retry-after') ?? ''
+          });
+          try {
+            await response.text(); // drain the throttled response so the socket frees
+          } catch {
+            // ignore — only releasing the connection
+          }
+          await sleep(waitMs || 1000);
+          response = await net.fetch(url, { method, headers, body: requestBody });
+        }
+
+        const data = await readResponseBody(response, args?.responseType ?? 'json');
+        if (!response.ok) {
+          log.warn(
+            `[graph:ipc] FAIL ${method} ${args?.path} uid=${uid} status=${response.status} :: ${getErrorMessage(response.status, data)}`
+          );
+          return {
+            ok: false,
+            status: response.status,
+            data,
+            error: getErrorMessage(response.status, data)
+          } satisfies GraphResult;
+        }
+
+        return { ok: true, status: response.status, data } satisfies GraphResult;
+      } finally {
+        releaseGraphSlot(uid);
       }
-
-      return { ok: true, status: response.status, data } satisfies GraphResult;
     } catch (error) {
       log.error(
         `[graph:ipc] ERROR ${args?.method} ${args?.path} uid=${args?.uid}:`,
