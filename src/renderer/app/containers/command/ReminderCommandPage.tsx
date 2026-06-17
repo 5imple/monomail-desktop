@@ -38,7 +38,7 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
   const { t } = useTranslation();
   const suggestions = getReminderSuggestions(reminderValue);
   const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
-  const { addLabelToThread } = useThreadLabelAtom();
+  const { updateLabelFromThread } = useThreadLabelAtom();
   const { labelsMapByAccount } = useLabelAtom();
   const { closeDialog } = useDialogs();
 
@@ -88,14 +88,24 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
                 (label) => label.name === 'Mono/Reminder'
               );
 
-              if (reminderLabel) {
-                // updateThreadState(accountId, threadId, [reminderLabel.id], [], true);
-                await addLabelToThread(accountId, [threadId], reminderLabel.id);
-              } else {
-                // If label doesn't exist, it should be created, but this should be
-                // handled by the loadLabels function in useLabelAtom which creates required labels
+              // Move the thread out of the inbox (provider-aware: a Graph archive
+              // move on Microsoft, INBOX-label removal on Gmail) and tag it
+              // Mono/Reminder, pruning it from the local inbox list — the same
+              // mechanism markThreadAsDone uses. shouldRemoveThread=true does the
+              // local prune so it disappears from the inbox immediately; it
+              // resurfaces via the OS notification at the reminder time.
+              if (!reminderLabel) {
+                // The label is normally created by loadLabels in useLabelAtom.
                 console.warn(`Reminder label not found for account ${accountId}`);
               }
+              await updateLabelFromThread(
+                accountId,
+                [threadId],
+                reminderLabel ? [reminderLabel.id] : [],
+                ['INBOX'],
+                true,
+                true
+              );
               toast.success(t('toast.reminder_set'));
             }
           })
