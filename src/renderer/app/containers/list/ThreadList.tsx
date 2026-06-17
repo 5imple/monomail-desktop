@@ -228,7 +228,10 @@ function ThreadList({ onScroll }: ThreadListProps) {
                   <motion.div
                     key={threadId}
                     ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
-                    layout
+                    // No `layout` here: when an email is open the list panel collapses
+                    // to 0 width, and `layout` tweened each row's box from 0 -> full
+                    // width on close — a left-to-right "sweep" of the inbox on every
+                    // reader close. The exit slide-out below is unaffected.
                     initial={false}
                     animate={{ opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' }}
                     exit={{
@@ -238,7 +241,6 @@ function ThreadList({ onScroll }: ThreadListProps) {
                       filter: 'blur(2px)',
                       transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] }
                     }}
-                    transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
                   >
                     <MemoizedThreadItem
                       threadId={threadId}
