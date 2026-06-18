@@ -10,6 +10,7 @@ import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { notificationManager } from '@/main/services/notification/NotificationManager';
 import { findOrCreateLabel, modifyThread, sendRawMessage } from '@/main/services/scheduler/gmailMain';
+import { restoreThreadToInbox as restoreMicrosoftThreadToInbox } from '@/main/services/scheduler/microsoftMain';
 import { generateUUID } from '@/main/utils';
 import { BrowserWindow } from 'electron';
 import log from 'electron-log';
@@ -46,6 +47,8 @@ interface ReminderTask {
   subject: string;
   reminderAt: string; // ISO 8601
   createdAt: string; // ISO 8601
+  notifiedAt?: string; // ISO 8601 — set once the notification fired, so a failed
+  // restore-to-inbox retry on a later sweep doesn't re-fire the notification.
 }
 
 interface ScheduleTask {
@@ -307,17 +310,40 @@ class SchedulerService {
 
     for (const reminder of Object.values(this.getReminders())) {
       if (new Date(reminder.reminderAt).getTime() > now) continue;
-      try {
-        log.info('[scheduler] firing reminder %s (thread %s)', reminder.reminderId, reminder.threadId);
-        notificationManager.createNativeNotification({
-          id: `reminder-${reminder.reminderId}`,
-          title: 'Reminder',
-          body: reminder.subject || 'You have a reminder',
-          metadata: { threadId: reminder.threadId, accountId: reminder.accountId }
+
+      // Fire the OS notification once, persisting notifiedAt so a failed restore
+      // retry on a later sweep doesn't pop the notification again.
+      if (!reminder.notifiedAt) {
+        try {
+          log.info('[scheduler] firing reminder %s (thread %s)', reminder.reminderId, reminder.threadId);
+          notificationManager.createNativeNotification({
+            id: `reminder-${reminder.reminderId}`,
+            title: 'Reminder',
+            body: reminder.subject || 'You have a reminder',
+            metadata: { threadId: reminder.threadId, accountId: reminder.accountId }
+          });
+        } catch (e) {
+          log.warn('[scheduler] reminder notification failed for %s:', reminder.reminderId, (e as Error).message);
+        }
+        this.setReminders({
+          ...this.getReminders(),
+          [reminder.reminderId]: { ...reminder, notifiedAt: new Date().toISOString() }
         });
+      }
+
+      // The reminder "completing" returns the email to the inbox (it was moved
+      // out when the reminder was set). Best-effort: if the move fails (offline /
+      // throttled), keep the reminder and retry the restore on the next sweep —
+      // the notification won't re-fire because notifiedAt is set above.
+      try {
+        await this.restoreReminderThreadToInbox(reminder.accountId, reminder.threadId);
         this.removeReminder(reminder.reminderId);
       } catch (e) {
-        log.warn('[scheduler] reminder sweep failed for %s:', reminder.reminderId, (e as Error).message);
+        log.warn(
+          '[scheduler] reminder restore-to-inbox failed for %s (will retry):',
+          reminder.reminderId,
+          (e as Error).message
+        );
       }
     }
 
@@ -378,6 +404,20 @@ class SchedulerService {
       ['INBOX'],
       task.snoozedLabelId ? [task.snoozedLabelId] : []
     );
+  }
+
+  /** Reminder restore: return the thread to the inbox, provider-aware. The
+   *  scheduler runs in main, where the renderer-only mailProvider can't run, so
+   *  Microsoft goes through the main-native Graph move (move conversation back to
+   *  the Inbox folder) and Gmail re-adds the INBOX label. The MailDeltaPoller then
+   *  surfaces the restored thread in an open inbox with no renderer change. */
+  private async restoreReminderThreadToInbox(accountId: string, threadId: string): Promise<void> {
+    const provider = tokenManager.getMailAccounts().find((a) => a.uid === accountId)?.provider;
+    if (provider === 'microsoft') {
+      await restoreMicrosoftThreadToInbox(accountId, threadId);
+    } else {
+      await modifyThread(accountId, threadId, ['INBOX'], []);
+    }
   }
 
   private getSnoozes(): Record<string, SnoozeTask> {
