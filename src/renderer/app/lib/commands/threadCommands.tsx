@@ -65,7 +65,10 @@ export const createThreadCommands = (
     THREAD_MARK_READ: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_mark_read'),
-      hotkeys: ['SHIFT+MOD+U', 'U'],
+      // U toggles based on thread state via useRegisterHotkeys' pairedCommands
+      // table — SHIFT+MOD+U is a different, real binding (THREAD_SELECT_UNREAD)
+      // and was never actually registered for this command; don't display it.
+      hotkeys: ['U'],
       icon: 'Envelope',
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
@@ -134,7 +137,7 @@ export const createThreadCommands = (
     THREAD_MARK_UNREAD: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_mark_unread'),
-      hotkeys: ['SHIFT+MOD+U', 'U'],
+      hotkeys: ['U'],
       icon: 'EnvelopeOpen',
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
@@ -358,7 +361,9 @@ export const createThreadCommands = (
     THREAD_STAR: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_star'),
-      hotkeys: ['SHIFT+MOD+L', 'S'],
+      // S toggles based on thread state via useRegisterHotkeys' pairedCommands
+      // table — SHIFT+MOD+L was never actually registered for this command.
+      hotkeys: ['S'],
       icon: 'Star',
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
@@ -426,7 +431,7 @@ export const createThreadCommands = (
     THREAD_UNSTAR: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_unstar'),
-      hotkeys: ['SHIFT+MOD+L', 'S'],
+      hotkeys: ['S'],
       icon: 'Star',
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
@@ -494,7 +499,9 @@ export const createThreadCommands = (
     THREAD_DONE: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_done'),
-      hotkeys: ['CTRL+MOD+A', 'E'],
+      // E toggles based on thread state via useRegisterHotkeys' pairedCommands
+      // table — CTRL+MOD+A was never actually registered for this command.
+      hotkeys: ['E'],
       icon: 'CheckCircle',
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
@@ -578,7 +585,7 @@ export const createThreadCommands = (
     THREAD_UNDONE: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_undone'),
-      hotkeys: ['CTRL+MOD+A', 'E'],
+      hotkeys: ['E'],
       icon: 'Inbox',
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
