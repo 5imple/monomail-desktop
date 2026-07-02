@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@/renderer/app/components/ui/alert';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import OfflineIndicator from '@/renderer/app/components/OfflineIndicator';
+import InboxFilterTabs from '@/renderer/app/containers/filter/InboxFilterTabs';
 import PinHeader from '@/renderer/app/containers/header/PinHeader';
 import ThreadSelectionToast from '@/renderer/app/containers/list/ThreadSelectionToast';
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
@@ -157,6 +158,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
         <div id="pin-header" className={cn('no-drag flex items-center px-6')}>
           <PinHeader />
         </div>
+        <InboxFilterTabs />
         {globalSearchQuery === 'in:trash' && (
           <div className={cn('no-drag p-2 transition-all', isScrolled && 'border-b shadow-sm')}>
             <Alert className="">
