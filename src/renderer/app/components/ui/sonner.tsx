@@ -1,16 +1,19 @@
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import Loader from '@/renderer/app/components/ui/loader';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/renderer/app/components/ThemeProvider';
 import { Toaster as Sonner } from 'sonner';
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = 'dark' } = useTheme();
+  // 'black' and 'pure-light' are dark/light variants respectively — sonner only
+  // understands light/dark/system, so fold the app's 4-theme model down to that.
+  const { currentTheme } = useTheme();
+  const sonnerTheme: ToasterProps['theme'] = currentTheme === 'black' ? 'dark' : currentTheme === 'pure-light' ? 'light' : currentTheme;
 
   return (
     <Sonner
-      theme={theme as ToasterProps['theme']}
+      theme={sonnerTheme}
       className="toaster no-drag dark group ease-bouncy-in-out"
       position={'bottom-center'}
       pauseWhenPageIsHidden
