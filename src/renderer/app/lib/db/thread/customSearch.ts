@@ -756,6 +756,19 @@ function checkOperator(
           to.email.toLowerCase().includes(lowerValue) || to.name.toLowerCase().includes(lowerValue)
       );
 
+    case 'cc':
+      return thread.cc.some(
+        (cc) =>
+          cc.email.toLowerCase().includes(lowerValue) || cc.name.toLowerCase().includes(lowerValue)
+      );
+
+    case 'bcc':
+      return thread.bcc.some(
+        (bcc) =>
+          bcc.email.toLowerCase().includes(lowerValue) ||
+          bcc.name.toLowerCase().includes(lowerValue)
+      );
+
     case 'subject':
       return (thread.subject || '').toLowerCase().includes(lowerValue);
 
