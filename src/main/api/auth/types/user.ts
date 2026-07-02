@@ -24,6 +24,8 @@ export interface UserPreference {
   compose: {
     cancelWindow: number;
     fullscreen: boolean;
+    /** Default for the per-message "track when this email is opened" toggle. Off by default — see GlobalComposeCard. */
+    trackReadReceipts: boolean;
   };
   account: {
     accentColor: Record<string, string>;

@@ -108,7 +108,7 @@ const getDraggedFiles = (dataTransfer: DataTransfer): File[] => {
 };
 
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
-  const { preference, getUidFromEmail, accounts } = useAuth();
+  const { preference, getUidFromEmail, accounts, updatePreference } = useAuth();
   const { templates } = useTemplateAtom();
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
@@ -125,7 +125,19 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { trackEvent } = useUserTrackingData();
   const [isSending, setIsSending] = useState(false);
   const [isAttachmentDropActive, setIsAttachmentDropActive] = useState(false);
-  const trackingEnabled = true;
+  // Off by default (see defaultPreference.compose.trackReadReceipts) — this was
+  // previously hardcoded to `true` with no UI, so every send was silently
+  // read-tracked. Per-draft, but persisted as the default for the next compose.
+  const [trackingEnabled, setTrackingEnabled] = useState(
+    () => preference.compose.trackReadReceipts
+  );
+  const handleToggleTracking = useCallback(() => {
+    setTrackingEnabled((prev) => {
+      const next = !prev;
+      updatePreference({ compose: { ...preference.compose, trackReadReceipts: next } });
+      return next;
+    });
+  }, [preference.compose, updatePreference]);
 
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
@@ -1320,6 +1332,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                     draftSaveStatus === 'LOADING'
                   }
                   onDiscard={handleDiscard}
+                  trackingEnabled={trackingEnabled}
+                  onToggleTracking={handleToggleTracking}
                 />
               </div>
             </>

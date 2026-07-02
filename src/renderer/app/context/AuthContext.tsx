@@ -64,7 +64,8 @@ export const defaultPreference: UserPreference = {
   },
   compose: {
     cancelWindow: 5,
-    fullscreen: false
+    fullscreen: false,
+    trackReadReceipts: false
   },
   account: {
     accentColor: {}
@@ -178,7 +179,9 @@ const mergeWithDefaultPreference = (
     },
     compose: {
       cancelWindow: userPreference.compose.cancelWindow || defaultPreference.compose.cancelWindow,
-      fullscreen: userPreference.compose.fullscreen
+      fullscreen: userPreference.compose.fullscreen,
+      trackReadReceipts:
+        userPreference.compose.trackReadReceipts ?? defaultPreference.compose.trackReadReceipts
     },
     signature: {
       includeInForwards: userPreference.signature.includeInForwards,

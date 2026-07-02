@@ -25,6 +25,8 @@ interface ComposeCardFooterProps {
   draftSaveStatus: 'INITIALIZED' | 'LOADING' | 'SAVED' | 'ERROR';
   sendDisabled: boolean;
   onDiscard: () => void;
+  trackingEnabled: boolean;
+  onToggleTracking: () => void;
 }
 
 const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
@@ -33,7 +35,9 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   handleSendMessage,
   handleFileChange,
   sendDisabled,
-  onDiscard
+  onDiscard,
+  trackingEnabled,
+  onToggleTracking
 }) => {
   const { t } = useTranslation();
   const { accounts } = useAuth();
@@ -161,6 +165,30 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
             multiple
             onChange={handleFileInputChange}
           />
+
+          {/* Read-tracking toggle — off by default; nothing else in compose
+              discloses that this exists, so it needs to be visible here. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                sizeVariant="sm"
+                typeVariant="icon"
+                aria-pressed={trackingEnabled}
+                className={cn(
+                  trackingEnabled ? 'text-accent' : 'text-muted-foreground'
+                )}
+                onClick={onToggleTracking}
+              >
+                <MonoIcon type={trackingEnabled ? 'Eye' : 'EyeSlash'} className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {trackingEnabled
+                ? "Read tracking on — you'll be notified when this email is opened"
+                : 'Read tracking off — turn on to see when this email is opened'}
+            </TooltipContent>
+          </Tooltip>
 
           {/* Discard */}
           <Tooltip>
