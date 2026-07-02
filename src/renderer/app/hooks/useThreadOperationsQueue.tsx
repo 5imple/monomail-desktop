@@ -78,34 +78,15 @@ export const useThreadOperationsQueue = () => {
         type: `batched-${operations[0].type}`,
         timestamp: Date.now(),
         execute: async () => {
-          // For thread updates, we can combine the data
-          if (key.startsWith('update-threads')) {
-            // Collect all thread data from the batched operations
-            const allThreadsData: Record<string, any[]> = {};
-
-            for (const op of operations) {
-              // Extract the data - this would need to adapt to your actual operation structure
-              const opData = (op as any).data || {};
-
-              // Group by account ID
-              Object.entries(opData).forEach(([accountId, threads]) => {
-                if (!allThreadsData[accountId]) allThreadsData[accountId] = [];
-                allThreadsData[accountId].push(...(threads as any[]));
-              });
-            }
-
-            // Execute a single update with the combined data
-            // This would need to be adapted to your setThreads function
-            for (const [accountId, threads] of Object.entries(allThreadsData)) {
-              // Update threads with all batched data
-              // await setThreads(accountId, threads, false, false);
-              console.log(`Batched update for account ${accountId}: ${threads.length} threads`);
-            }
-          } else {
-            // For other operations that can't be combined easily, execute them in sequence
-            for (const op of operations) {
-              await op.execute();
-            }
+          // Batching here only coalesces scheduling (one queue slot per batch
+          // key instead of one per operation) — each operation's own execute()
+          // still runs. A prior "combine thread data" fast path for
+          // update-threads* keys never actually called setThreads (it only
+          // console.logged), so any real batchKey using that prefix would have
+          // silently dropped its updates. Removed rather than fixed: nothing
+          // in this generic queue has access to a thread store to merge into.
+          for (const op of operations) {
+            await op.execute();
           }
         }
       };
@@ -257,19 +238,20 @@ const handleUserAction = () => {
   );
 };
 
-// Low priority, batchable operation (history sync)
+// Low priority, batchable operation (history sync) — batching here only
+// coalesces scheduling; each queued execute() still runs individually, so
+// don't rely on the queue to merge data across operations of the same key.
 const handleHistoryUpdate = (updates) => {
   enqueueOperation(
     async () => {
-      // Process history updates
+      await applyHistoryUpdates(accountId, updates);
     },
     {
       priority: OperationPriority.LOW,
       type: 'history-update',
-      batch: true, 
-      batchKey: `update-threads-${accountId}`,
-      batchDelay: 200,
-      data: { [accountId]: updates }
+      batch: true,
+      batchKey: `history-update-${accountId}`,
+      batchDelay: 200
     }
   );
 };

@@ -2,6 +2,7 @@ import { Contact } from '@/renderer/app/lib/db/contact';
 import { upgradeToVersion1 } from '@/renderer/app/lib/db/migrations/v1';
 import { upgradeToVersion2 } from '@/renderer/app/lib/db/migrations/v2';
 import { upgradeToVersion3 } from '@/renderer/app/lib/db/migrations/v3';
+import { upgradeToVersion4 } from '@/renderer/app/lib/db/migrations/v4';
 import {
   DraftAttachmentRecord,
   MonoDraftRecord,
@@ -36,6 +37,7 @@ export interface MonoCacheDB {
       byThreadId: string;
       byMessageId: string;
       byTimestamp: number;
+      byLabelIds: string;
     };
   };
   drafts: {
@@ -67,6 +69,9 @@ const migrations = [
   },
   (db, transaction) => {
     upgradeToVersion3(db, transaction);
+  },
+  (db, transaction) => {
+    upgradeToVersion4(db, transaction);
   }
 ];
 
@@ -78,7 +83,7 @@ export async function initDB(uid: string): Promise<IDBPDatabase<MonoCacheDB>> {
   }
 
   // Initialize the new database if it doesn't exist
-  const newDb = await openDB<MonoCacheDB>(`mono-db-${uid}`, 3, {
+  const newDb = await openDB<MonoCacheDB>(`mono-db-${uid}`, 4, {
     upgrade(db, oldVersion, newVersion, transaction) {
       for (let version = oldVersion + 1; version <= newVersion!; version++) {
         const migration = migrations[version - 1];

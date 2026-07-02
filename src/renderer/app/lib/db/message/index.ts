@@ -249,19 +249,12 @@ export async function DBGetMessagesByLabel(
   const tx = db.transaction(['messages'], 'readonly');
   const messagesStore = tx.objectStore('messages');
 
-  // NOTE: Messages don't have a byLabelIds index like threads do, so we need to scan all messages
-  // TODO: Consider adding a byLabelIds multiEntry index to messages store in a future migration
-  const allMessages = await messagesStore.getAll();
-
-  // Filter messages that have the specified label
-  const messagesMatchingLabel = allMessages.filter((messageData) => {
-    return (
-      messageData && messageData.labelIds && messageData.labelIds.includes(label.toUpperCase())
-    );
-  });
+  // Uses the byLabelIds multiEntry index instead of scanning every message.
+  const messagesMatchingLabel = await messagesStore.index('byLabelIds').getAll(label.toUpperCase());
 
   // Sort by timestamp in descending order and apply pagination
   const sortedMessages = messagesMatchingLabel
+    .filter((messageData) => !!messageData)
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(offset, offset + limit);
 
