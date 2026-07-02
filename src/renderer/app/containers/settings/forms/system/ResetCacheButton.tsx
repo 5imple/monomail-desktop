@@ -40,18 +40,20 @@ export function ResetCacheButton() {
 
           // Delete the database
           await window.indexedDB.deleteDatabase(`mono-db-${account.uid}`);
-          await clearSpaceCache();
-          await clearLabelsCache();
-
-          window.location.reload();
           console.log(`Reset cache for account: ${account.uid}`);
         } catch (error) {
           console.error(`Failed to reset thread cache for account ${account.uid}:`, error);
           // Continue with other accounts even if one fails
         }
       }
+      await clearSpaceCache();
+      await clearLabelsCache();
 
       toast.success(t('settings.system.cache.reset_success'));
+      // Reload only after every account's cache has actually been cleared —
+      // this used to sit inside the loop above and reload after the first
+      // account, silently leaving every other account's cache untouched.
+      window.location.reload();
     } catch (error) {
       console.error('Failed to reset thread cache:', error);
       toast.error(t('settings.system.cache.reset_error'));
