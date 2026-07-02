@@ -165,7 +165,7 @@ interface IpcRenderer {
   reminderDelete: (reminderId: string) => Promise<any>;
   setAlertSound: (audio: AudioType) => void;
   setIsFullSizeWindowOnCreation: (value: boolean) => void;
-  setOfflineStatus: (status: boolean) => void;
+  setOnlineStatus: (isOnline: boolean) => void;
   setStrictPubSub: (status: boolean) => void;
   setActiveUid: (uid: string | null) => void;
   openNewWindow: (

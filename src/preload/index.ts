@@ -113,8 +113,8 @@ const api = {
   setIsFullSizeWindowOnCreation: (value: boolean) =>
     ipcRenderer.invoke('main:system:set-window-fullsize-on-creation', value),
   setStrictPubSub: (value: boolean) => ipcRenderer.invoke('main:system:set-strict-pubsub', value),
-  setOfflineStatus: (status: boolean) =>
-    ipcRenderer.invoke('main:system:set-offline-status', status),
+  setOnlineStatus: (isOnline: boolean) =>
+    ipcRenderer.invoke('main:system:set-online-status', isOnline),
   setActiveUid: (uid: string | null) => ipcRenderer.invoke('main:auth:set-active-uid', uid),
   openNewWindow: (
     route: string,

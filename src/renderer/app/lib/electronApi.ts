@@ -222,11 +222,11 @@ interface IpcRenderer {
   reminderList: () => Promise<QueueResult<{ items: unknown[] }>>;
   reminderDelete: (reminderId: string) => Promise<QueueResult<{ ok: boolean }>>;
   /**
-   * Set the app offline
-   * @param {boolean} status - Offline status
+   * Update the tray icon to reflect connectivity
+   * @param {boolean} isOnline - Whether the app currently has a network connection
    * @returns {Promise<void>}
    */
-  setOfflineStatus: (status: boolean) => Promise<void>;
+  setOnlineStatus: (isOnline: boolean) => Promise<void>;
   /**
    * Set the app alert sound
    * @param {AudioType} audio - Audio type
@@ -428,11 +428,11 @@ const electronApi: IpcRenderer = {
       );
     }
   },
-  setOfflineStatus: async (status) => {
+  setOnlineStatus: async (isOnline) => {
     if (isElectron) {
-      return window.electronBridge.setOfflineStatus(status);
+      return window.electronBridge.setOnlineStatus(isOnline);
     } else {
-      console.warn(`Electron API 'setIdToken' is not available in web environment`);
+      console.warn(`Electron API 'setOnlineStatus' is not available in web environment`);
       return Promise.resolve();
     }
   },

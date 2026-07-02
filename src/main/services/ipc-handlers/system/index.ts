@@ -76,12 +76,8 @@ function isSafeRoute(route: unknown): route is string {
 }
 
 export function registerSystemHandlers() {
-  ipcMain.handle('main:system:set-offline-status', (_, status: boolean) => {
-    if (status) {
-      systemManager.updateTrayIcon(true);
-    } else {
-      systemManager.updateTrayIcon(false);
-    }
+  ipcMain.handle('main:system:set-online-status', (_, isOnline: boolean) => {
+    systemManager.updateTrayIcon(isOnline);
   });
 
   ipcMain.handle('main:system:set-alert-sound', (_, audio: AudioType) => {

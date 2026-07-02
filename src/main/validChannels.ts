@@ -41,7 +41,7 @@ export const validMainChannel = [
   'main:gmail:request',
   'main:graph:request',
   'main:graph:batch',
-  'main:system:set-offline-status',
+  'main:system:set-online-status',
   'main:system:set-alert-sound',
   'main:system:set-window-fullsize-on-creation',
   'main:system:set-strict-pubsub',

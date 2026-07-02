@@ -192,7 +192,7 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const handleOnline = async () => {
       console.log('Internet connection restored');
-      electronApi.setOfflineStatus(true);
+      electronApi.setOnlineStatus(true);
       setIsOnline(true);
       setIsOfflineMode(false);
 
@@ -206,7 +206,7 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const handleOffline = () => {
       console.log('Internet connection lost - entering offline mode');
-      electronApi.setOfflineStatus(false);
+      electronApi.setOnlineStatus(false);
       setIsOnline(false);
       setIsOfflineMode(true);
     };
