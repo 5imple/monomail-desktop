@@ -1272,11 +1272,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                     />
                   </div>
                   <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
-                    {!composeDraft.body.replace(/<[^>]*>/g, '').trim() && (
-                      <div className="pointer-events-none absolute left-9 top-4 z-10 text-[14px] font-medium text-muted-foreground/75">
-                        Tip: Hit ⌘J for AI
-                      </div>
-                    )}
                     {renderEditor}
                     <div className="px-4 text-sm">
                       <SignatureSwitcher
