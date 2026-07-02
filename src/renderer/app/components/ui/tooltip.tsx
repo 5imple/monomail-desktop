@@ -39,7 +39,7 @@ const TooltipContent = React.forwardRef<
       // calm card background. Drops the prior `dark` class — that forced
       // dark-on-dark even in light mode, which read as a chunky black
       // pill against the otherwise light UI.
-      'z-50 inline-flex items-center gap-1.5 overflow-hidden rounded-md border border-border/60 bg-popover px-2 py-1 text-[12px] font-medium text-popover-foreground shadow-md',
+      'no-drag z-50 inline-flex items-center gap-1.5 overflow-hidden rounded-md border border-border/60 bg-popover px-2 py-1 text-[12px] font-medium text-popover-foreground shadow-md',
       // Open/close animations tied to Radix's data-state so the fade +
       // zoom-in fires reliably every time the tooltip opens, not just
       // on initial mount.
