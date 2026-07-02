@@ -106,6 +106,13 @@ const UserAvatar: FC<UserAvatarProps> = ({ user, className }) => {
               <ShortcutKeyboard variant={'flat'} shortcut={'?'} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              openDialog('feedback');
+            }}
+          >
+            <span>{t('sidebar.send_feedback')}</span>
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
