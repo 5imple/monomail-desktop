@@ -11,7 +11,7 @@ import {
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
 import { animated, useSpring, useTrail } from '@react-spring/web';
-import { FC, useState } from 'react';
+import { FC, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface OnBoardingAddAccountsProps {
@@ -47,6 +47,7 @@ const EMAIL_PROVIDERS = [
     color: '#0078d4',
     description: 'Microsoft Outlook and Office 365 accounts',
     popular: true,
+    // Overridden below based on whether MONO_ENV_MICROSOFT_CLIENT_ID is configured.
     supported: false
   },
   {
@@ -91,6 +92,15 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
   const { t } = useTranslation();
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
 
+  const microsoftConfigured = !!(import.meta.env.MONO_ENV_MICROSOFT_CLIENT_ID || '').trim();
+  const providers = useMemo(
+    () =>
+      EMAIL_PROVIDERS.map((provider) =>
+        provider.id === 'outlook' ? { ...provider, supported: microsoftConfigured } : provider
+      ),
+    [microsoftConfigured]
+  );
+
   const leftTrail = useTrail(5, {
     from: { opacity: 0, transform: 'translateY(40px)' },
     to: { opacity: 1, transform: 'translateY(0px)' },
@@ -98,7 +108,7 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
     delay: 300
   });
 
-  const providersTrail = useTrail(EMAIL_PROVIDERS.length, {
+  const providersTrail = useTrail(providers.length, {
     from: { opacity: 0, transform: 'translateY(20px) scale(0.95)' },
     to: { opacity: 1, transform: 'translateY(0px) scale(1)' },
     config: { tension: 280, friction: 20 },
@@ -192,11 +202,15 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
     );
 
     if (!isSupported) {
+      const tooltipText =
+        provider.id === 'outlook'
+          ? 'Set MONO_ENV_MICROSOFT_CLIENT_ID and rebuild to enable Microsoft 365 accounts'
+          : 'Coming soon - Not supported yet';
       return (
         <Tooltip>
           <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
           <TooltipContent>
-            <p>Coming soon - Not supported yet</p>
+            <p>{tooltipText}</p>
           </TooltipContent>
         </Tooltip>
       );
@@ -377,7 +391,7 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
               <div className="space-y-3">
                 <div className="space-y-3">
                   {providersTrail.map((springStyle, providerIndex) => {
-                    const provider = EMAIL_PROVIDERS[providerIndex];
+                    const provider = providers[providerIndex];
                     if (!provider.popular) return null;
 
                     return (
@@ -387,7 +401,7 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
                     );
                   })}
                   {providersTrail.map((springStyle, providerIndex) => {
-                    const provider = EMAIL_PROVIDERS[providerIndex];
+                    const provider = providers[providerIndex];
                     if (provider.popular) return null;
 
                     return (

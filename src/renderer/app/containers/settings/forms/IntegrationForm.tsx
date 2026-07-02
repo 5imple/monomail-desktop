@@ -17,6 +17,12 @@ import {
   TableRow
 } from '@/renderer/app/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/renderer/app/components/ui/dropdown-menu';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useEffect, useCallback, useState } from 'react';
 import { toast } from 'sonner';
@@ -120,10 +126,12 @@ export function IntegrationForm() {
     );
   }, []);
 
-  const handleAddAccount = useCallback(async () => {
+  const microsoftConfigured = !!(import.meta.env.MONO_ENV_MICROSOFT_CLIENT_ID || '').trim();
+
+  const handleAddAccount = useCallback(async (provider: 'gmail' | 'microsoft' = 'gmail') => {
     setIsAddingAccount(true);
     try {
-      await startEmailAccountLink('gmail');
+      await startEmailAccountLink(provider);
     } finally {
       setIsAddingAccount(false);
     }
@@ -215,17 +223,45 @@ export function IntegrationForm() {
             </Table>
           </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            className="mt-2"
-            disabled={isAddingAccount}
-            onClick={() => {
-              void handleAddAccount();
-            }}
-          >
-            {t('settings.integration.add_account')}
-          </Button>
+          {microsoftConfigured ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="secondary" className="mt-2" disabled={isAddingAccount}>
+                  {t('settings.integration.add_account')}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void handleAddAccount('gmail');
+                  }}
+                >
+                  <MonoIcon type="Gmail" className="mr-2 h-4 w-4" />
+                  Add Gmail account
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void handleAddAccount('microsoft');
+                  }}
+                >
+                  <MonoIcon type="Outlook" className="mr-2 h-4 w-4" />
+                  Add Microsoft 365 account
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-2"
+              disabled={isAddingAccount}
+              onClick={() => {
+                void handleAddAccount('gmail');
+              }}
+            >
+              {t('settings.integration.add_account')}
+            </Button>
+          )}
         </div>
       </form>
     </Form>
