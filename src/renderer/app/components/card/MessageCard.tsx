@@ -750,33 +750,40 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     useEffect(() => {
       const fetchUnsubscribeInfo = async () => {
         if (accountId && currentMessage.labelIds.includes('CATEGORY_PROMOTIONS') && !isCollapsed) {
+          setUnsubscribedLoading(true);
+          apiClient.setApiActiveUid(accountId);
+
+          // Provider-native List-Unsubscribe info needs no backend — fetch it
+          // first so the Unsubscribe button still works in a standalone build.
+          // The backend-only "already unsubscribed" check below is best-effort
+          // on top and must not gate this call.
           try {
-            setUnsubscribedLoading(true);
-            apiClient.setApiActiveUid(accountId);
+            const unsubscribeInfo = await mailApi.getMessageUnsubscribe(
+              accountId,
+              currentMessage.id
+            );
+            if (unsubscribeInfo?.listUnsubscribe) {
+              setCurrentMessage((prev) => ({
+                ...prev,
+                listUnsubscribe: unsubscribeInfo.listUnsubscribe
+              }));
+            }
+          } catch (error) {
+            console.error('Failed to get provider unsubscribe info:', error);
+          }
+
+          try {
             const unsubscribedCheck = await unsubscribeApi.checkUnsubscribedEmail({
               email: currentMessage.from.email
             });
             setIsUnsubscribed(unsubscribedCheck);
-            if (!unsubscribedCheck) {
-              const unsubscribeInfo = await mailApi.getMessageUnsubscribe(
-                accountId,
-                currentMessage.id
-              );
-
-              if (unsubscribeInfo && unsubscribeInfo.listUnsubscribe && !unsubscribedCheck) {
-                setCurrentMessage((prev) => ({
-                  ...prev,
-                  listUnsubscribe: unsubscribeInfo.listUnsubscribe
-                }));
-              }
-            }
-
-            setTimeout(() => {
-              setUnsubscribedLoading(false);
-            }, 0);
           } catch (error) {
-            console.error('Failed to get unsubscribe info:', error);
+            console.error('Failed to check unsubscribed status:', error);
           }
+
+          setTimeout(() => {
+            setUnsubscribedLoading(false);
+          }, 0);
         }
       };
 

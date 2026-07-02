@@ -1,7 +1,7 @@
 // types.ts
 
 // unsubscribeApi.ts
-import { apiClient } from '@/main/api/apiClient';
+import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import { UnsubscribeEmailRequest } from './types';
 
 /**
@@ -10,6 +10,10 @@ import { UnsubscribeEmailRequest } from './types';
  * @returns {Promise<void>} - Returns nothing
  */
 const addUnsubscribedEmail = ({ email }: UnsubscribeEmailRequest): Promise<void> => {
+  // Standalone: "already unsubscribed" tracking is a dropped backend-only
+  // feature. The provider-native unsubscribe (List-Unsubscribe header) still
+  // works without a backend — this just skips persisting the flag.
+  if (!isBackendConfigured()) return Promise.resolve();
   return apiClient.post('/mono/unsubscribed', { email });
 };
 
@@ -19,6 +23,7 @@ const addUnsubscribedEmail = ({ email }: UnsubscribeEmailRequest): Promise<void>
  * @returns {Promise<boolean>} - Returns true if email is unsubscribed, false otherwise
  */
 const checkUnsubscribedEmail = ({ email }: UnsubscribeEmailRequest): Promise<boolean> => {
+  if (!isBackendConfigured()) return Promise.resolve(false);
   return apiClient.post<boolean>('/mono/unsubscribed/check', { email });
 };
 
@@ -27,6 +32,7 @@ const checkUnsubscribedEmail = ({ email }: UnsubscribeEmailRequest): Promise<boo
  * @returns {Promise<string[]>} - Returns array of unsubscribed email addresses
  */
 const getUnsubscribedEmails = (): Promise<string[]> => {
+  if (!isBackendConfigured()) return Promise.resolve([]);
   return apiClient.get<string[]>('/mono/unsubscribed');
 };
 
