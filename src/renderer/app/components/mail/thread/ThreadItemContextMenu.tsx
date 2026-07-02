@@ -297,11 +297,11 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
                   <MonoIcon className="mr-2 text-muted-foreground" type={menuItem.icon} />
                 )}
                 <span className="line-clamp-1">{menuItem.label}</span>
-                {/* {menuItem.shortcut && (
+                {menuItem.shortcut && (
                   <ContextMenuShortcut>
                     <ShortcutKeyboard variant={'flat'} shortcut={menuItem.shortcut} />
                   </ContextMenuShortcut>
-                )} */}
+                )}
               </ContextMenuItem>
             )}
           </div>
