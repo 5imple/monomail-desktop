@@ -26,7 +26,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
   const { member, accounts, preference, updatePreference } = useAuth();
   const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
   const { theme, setTheme } = useTheme();
-  const { updateDraft } = useDraftAtom();
+  const { updateDraft, removeDraft } = useDraftAtom();
   const { activeSpace, spaces } = useSpaceAtom();
   // Payment-free build — getUserPlan no longer needed.
   const { openDialog, dialogState } = useDialogs();
@@ -89,7 +89,11 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     getAccountEmailById,
     setGlobalDraftWindows,
     openDialog,
-    globalSearchQuery
+    globalSearchQuery,
+    selectedThreads,
+    activeThreadId,
+    groupThreadsByAccount,
+    removeDraft
   });
 
   const navigationCommands = createNavigationCommands({

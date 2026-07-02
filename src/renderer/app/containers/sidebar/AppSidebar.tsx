@@ -24,7 +24,7 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
   const { isWindowFocused } = useWindowFocus();
   const { openDialog } = useDialogs();
   const { t } = useTranslation();
-  const { activateScope } = useHotkeyScope();
+  const { activateScope, deactivateScope } = useHotkeyScope();
   const { sidebarLoading } = useSidebarAtom();
 
   const executeCommand = useExecuteCommand();
@@ -53,6 +53,14 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
     });
   }, [openDialog]);
 
+  // Clicking anywhere in the sidebar activates the SIDEBAR hotkey scope, but
+  // nothing previously deactivated it — once activated it stayed on for the
+  // rest of the session, so any future SIDEBAR-scoped hotkey would fire
+  // globally after the first sidebar click. Deactivate on mouse-leave and unmount.
+  useEffect(() => {
+    return () => deactivateScope('SIDEBAR');
+  }, [deactivateScope]);
+
   return (
     <div
       ref={sidebarRef}
@@ -63,6 +71,9 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
       )}
       onClick={() => {
         activateScope('SIDEBAR');
+      }}
+      onMouseLeave={() => {
+        deactivateScope('SIDEBAR');
       }}
     >
       {/* HEADER */}

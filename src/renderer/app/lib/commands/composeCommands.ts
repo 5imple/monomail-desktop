@@ -4,7 +4,8 @@ import {
   MonoCommand,
   MessageCommandArgs,
   ComposeCommandArgs,
-  PinContactCommandArgs
+  PinContactCommandArgs,
+  ThreadCommandArgs
 } from './types';
 import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
 import { toast } from 'sonner';
@@ -16,6 +17,10 @@ interface ComposeCommandDependencies {
   setGlobalDraftWindows: (drafts: MonoDraft[]) => void;
   openDialog: (dialog: any, options?: any) => void;
   globalSearchQuery: string;
+  selectedThreads: string[];
+  activeThreadId: string | null;
+  groupThreadsByAccount: (threadIds: string[]) => Record<string, string[]>;
+  removeDraft: (accountId: string, draftId: string) => Promise<void>;
 }
 
 export const createComposeCommands = (
@@ -27,7 +32,11 @@ export const createComposeCommands = (
     getAccountEmailById,
     setGlobalDraftWindows,
     openDialog,
-    globalSearchQuery
+    globalSearchQuery,
+    selectedThreads,
+    activeThreadId,
+    groupThreadsByAccount,
+    removeDraft
   } = deps;
 
   return {
@@ -130,8 +139,18 @@ export const createComposeCommands = (
       scope: 'CONVERSATION_SELECTED',
       title: t('command.discard_draft'),
       icon: 'Trash',
-      action: () => {
-        // TODO
+      action: async (args?: ThreadCommandArgs) => {
+        const threadIds =
+          args?.threadIds ??
+          (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : []);
+        if (threadIds.length === 0) return;
+
+        const threadsByAccount = groupThreadsByAccount(threadIds);
+        await Promise.all(
+          Object.entries(threadsByAccount).flatMap(([accountId, ids]) =>
+            ids.map((threadId) => removeDraft(accountId, threadId))
+          )
+        );
       }
     },
 
