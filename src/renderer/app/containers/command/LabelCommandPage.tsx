@@ -218,11 +218,11 @@ const LabelCommandPage: React.FC<LabelCommandPageProps> = ({
 
           if (newLabel) {
             // Get threads for this account
-            // const accountThreads = selectedThreadsData
-            //   .filter((thread) => thread.accountId === accountId)
-            //   .map((thread) => thread.id);
+            const accountThreads = selectedThreadsData
+              .filter((thread) => thread.accountId === accountId)
+              .map((thread) => thread.id);
             // Apply the label to those threads
-            // await addLabelToThread(accountId, accountThreads, newLabel.id);
+            await addLabelToThread(accountId, accountThreads, newLabel.id);
           } else {
             console.error(`Failed to create label "${labelName}" for account ${accountId}`);
           }
