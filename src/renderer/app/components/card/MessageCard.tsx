@@ -64,7 +64,6 @@ interface MessageCardProps {
 const ALLOWED_INLINE_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
 const shouldTransformEmailForDarkMode = false;
-const failedRemoteImageUrls = new Set<string>();
 
 function normalizeContentId(value?: string | null): string {
   if (!value) return '';
@@ -626,10 +625,9 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       ].filter(Boolean) as HTMLDivElement[];
       if (roots.length === 0) return () => {};
 
-      const markRemoteImageUnavailable = (img: HTMLImageElement, src: string) => {
+      const markRemoteImageUnavailable = (img: HTMLImageElement) => {
         if (img.dataset.monoRemoteImageState === 'error') return;
 
-        failedRemoteImageUrls.add(src);
         img.dataset.monoRemoteImageState = 'error';
         img.removeAttribute('src');
         img.style.display = 'none';
@@ -650,6 +648,12 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         )
       );
 
+      // Attach a one-shot error handler per render. A failed load shows the
+      // fallback for THIS view only; reopening the message re-attempts the
+      // image, so a transient network blip does not permanently hide it.
+      // (A module-level Set previously suppressed the URL for the whole
+      // session with no retry — one hiccup left the image broken until
+      // restart.)
       const cleanups = images.map((img) => {
         const src = img.getAttribute('src');
         if (!src) return () => {};
@@ -658,12 +662,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         img.decoding = 'async';
         img.referrerPolicy = 'no-referrer';
 
-        if (failedRemoteImageUrls.has(src)) {
-          markRemoteImageUnavailable(img, src);
-          return () => {};
-        }
-
-        const handleError = () => markRemoteImageUnavailable(img, src);
+        const handleError = () => markRemoteImageUnavailable(img);
         img.addEventListener('error', handleError, { once: true });
         return () => img.removeEventListener('error', handleError);
       });
