@@ -246,38 +246,80 @@ function wrapCssRules(cssText: string, wrapper: string): string {
     // { selector: '.footer', properties: ['background-color', 'border'] },
   ];
 
-  const rules = cssText.split('}');
-  return rules
-    .map((rule) => {
-      const [selectors, properties] = rule.split('{');
-      if (!properties) return rule; // Skip invalid rules
-
-      // Check for exclusions and filter properties
-      let processedProperties = properties;
-      const selectorList = selectors.split(',').map((s) => s.trim());
-
-      for (const exclusion of exclusions) {
-        const hasExcludedSelector = selectorList.some((selector) =>
-          selector.includes(exclusion.selector)
-        );
-
-        if (hasExcludedSelector) {
-          processedProperties = processedProperties
-            .split(';')
-            .filter((prop) => {
-              const propName = prop.trim().toLowerCase().split(':')[0];
-              return !exclusion.properties.some((excluded) =>
-                propName.startsWith(excluded.toLowerCase())
-              );
-            })
-            .join(';');
-        }
+  const filterExcludedProperties = (selectorList: string[], body: string): string => {
+    let result = body;
+    for (const exclusion of exclusions) {
+      const hasExcludedSelector = selectorList.some((selector) =>
+        selector.includes(exclusion.selector)
+      );
+      if (hasExcludedSelector) {
+        result = result
+          .split(';')
+          .filter((prop) => {
+            const propName = prop.trim().toLowerCase().split(':')[0];
+            return !exclusion.properties.some((excluded) =>
+              propName.startsWith(excluded.toLowerCase())
+            );
+          })
+          .join(';');
       }
+    }
+    return result;
+  };
 
-      const wrappedSelectors = selectorList.map((selector) => `${wrapper} ${selector}`).join(', ');
-      return `${wrappedSelectors} { ${processedProperties}`;
-    })
-    .join('} ');
+  const prefixSelectors = (selectors: string): string =>
+    selectors
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => `${wrapper} ${s}`)
+      .join(', ');
+
+  // Walk the stylesheet honoring brace nesting. A naive split on `{`/`}`
+  // flattens `@media`/`@supports` blocks, hoisting their inner rules to the
+  // top level — so a mobile-only override like `@media (max-width:480px){
+  // .x{width:25px} }` would apply at every width and collapse the layout.
+  const scope = (css: string): string => {
+    let out = '';
+    let i = 0;
+    while (i < css.length) {
+      const brace = css.indexOf('{', i);
+      if (brace === -1) {
+        out += css.slice(i);
+        break;
+      }
+      const prelude = css.slice(i, brace).trim();
+      let depth = 1;
+      let j = brace + 1;
+      while (j < css.length && depth > 0) {
+        const ch = css[j];
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+        j++;
+      }
+      const body = css.slice(brace + 1, j - 1);
+      i = j;
+      if (!prelude) continue;
+
+      if (prelude.startsWith('@')) {
+        const at = prelude.toLowerCase();
+        if (at.startsWith('@media') || at.startsWith('@supports') || at.startsWith('@container')) {
+          // Keep the conditional wrapper, scope the rules inside it.
+          out += `${prelude} { ${scope(body)} } `;
+        } else {
+          // @font-face / @keyframes / @page etc. — leave the block intact;
+          // their inner blocks are not element selectors.
+          out += `${prelude} { ${body} } `;
+        }
+      } else {
+        const selectorList = prelude.split(',').map((s) => s.trim());
+        out += `${prefixSelectors(prelude)} { ${filterExcludedProperties(selectorList, body)} } `;
+      }
+    }
+    return out;
+  };
+
+  return scope(cssText);
 }
 
 function setAnchorAttributes(anchor: HTMLAnchorElement) {
