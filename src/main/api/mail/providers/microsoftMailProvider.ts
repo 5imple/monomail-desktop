@@ -108,6 +108,17 @@ const folderLabelMapCache = new Map<string, Map<string, string>>();
 // one folder-resolution $batch instead of each firing their own.
 const folderLabelMapInflight = new Map<string, Promise<Map<string, string>>>();
 
+// Inline-image bytes for a given (uid, messageId, attachmentId) are immutable,
+// but the reader re-fetches them on every render / re-open / scroll-back /
+// dark-mode toggle — each a full base64 download from Graph over IPC, which is
+// why embedded pictures felt slow to load. Cache the fetched bytes in a bounded
+// in-memory LRU so only the first view of an image pays the network; repeat
+// views resolve instantly.
+type InlineAttachmentResult = { attachmentId: string; size: number; data: string; mimeType: string };
+const INLINE_ATTACHMENT_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+const inlineAttachmentCache = new Map<string, InlineAttachmentResult>();
+let inlineAttachmentCacheBytes = 0;
+
 function fetchFolderLabelMap(uid: string): Promise<Map<string, string>> {
   const requests = WELL_KNOWN_LABEL_FOLDERS.map((name, i) => ({
     id: String(i),
@@ -387,15 +398,42 @@ const getAttachmentInline: MailProviderAdapter['getAttachmentInline'] = async (
   id,
   signal
 ) => {
+  const cacheKey = `${uid} ${messageId} ${id}`;
+  const cached = inlineAttachmentCache.get(cacheKey);
+  if (cached) {
+    // Refresh LRU recency.
+    inlineAttachmentCache.delete(cacheKey);
+    inlineAttachmentCache.set(cacheKey, cached);
+    return cached;
+  }
+
   const att = await fetchAttachment(uid, messageId, id, signal);
   // contentBytes is already standard base64 (no base64url conversion), and the
   // real contentType comes back from the endpoint (no Gmail mimeType:'' hack).
-  return {
+  const result: InlineAttachmentResult = {
     attachmentId: att.id ?? id,
     size: att.size ?? 0,
     data: att.contentBytes ?? '',
     mimeType: att.contentType ?? ''
   };
+
+  // Cache the immutable bytes; evict least-recently-used entries until back
+  // under the byte budget.
+  const bytes = result.data.length;
+  if (bytes > 0 && bytes <= INLINE_ATTACHMENT_CACHE_MAX_BYTES) {
+    inlineAttachmentCache.set(cacheKey, result);
+    inlineAttachmentCacheBytes += bytes;
+    while (
+      inlineAttachmentCacheBytes > INLINE_ATTACHMENT_CACHE_MAX_BYTES &&
+      inlineAttachmentCache.size > 1
+    ) {
+      const oldestKey = inlineAttachmentCache.keys().next().value as string;
+      inlineAttachmentCacheBytes -= inlineAttachmentCache.get(oldestKey)?.data.length ?? 0;
+      inlineAttachmentCache.delete(oldestKey);
+    }
+  }
+
+  return result;
 };
 
 const getAttachmentDownload: MailProviderAdapter['getAttachmentDownload'] = async (
