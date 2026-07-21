@@ -3,7 +3,6 @@ import mailApi from '@/main/api/mail/mailApi';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 
 import MonoIcon from '@/renderer/app/components/icons/icons';
-import { Button } from '@/renderer/app/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/renderer/app/components/ui/card';
 import {
   ScrollArea,
@@ -117,8 +116,18 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
 
   return (
     <Card className="border-border/60 shadow-sm transition-all duration-400 ease-bouncy-in-out">
-      <CardHeader className={cn('px-4 py-3', isExpanded && 'border-b border-border/40')}>
-        <div className="flex items-center gap-3">
+      <CardHeader className={cn('p-0', isExpanded && 'border-b border-border/40')}>
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          onClick={toggleExpand}
+          title={expandedLabel}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-[inherit] px-4 py-3 text-left',
+            'transition-colors hover:bg-muted/40',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+          )}
+        >
           <div className="min-w-0 flex-1">
             <div className="line-clamp-1 text-[13px] font-medium tracking-tight text-foreground">
               {summary}
@@ -127,19 +136,11 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
               {subject} · {formattedDate}
             </div>
           </div>
-          <Button
-            aria-expanded={isExpanded}
-            onClick={toggleExpand}
-            tooltip={expandedLabel}
-            variant="ghost"
-            sizeVariant="sm"
-            typeVariant="inline"
-            className="h-7 shrink-0 gap-1.5 rounded px-2 text-xs text-muted-foreground hover:text-foreground"
-          >
+          <span className="flex h-7 shrink-0 items-center gap-1.5 rounded px-2 text-xs text-muted-foreground">
             <MonoIcon type={isExpanded ? 'ChevronUp' : 'ChevronDown'} className="h-3.5 w-3.5" />
             <span>{expandedLabel}</span>
-          </Button>
-        </div>
+          </span>
+        </button>
       </CardHeader>
       <CardContent className="p-0">
         <div
