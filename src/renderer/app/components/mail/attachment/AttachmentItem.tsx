@@ -106,7 +106,10 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
       className={cn(
         // Newton attachment chip (button variant for inline-flow use):
         // icon tile on the left, file name + mono size stacked on the right.
-        'group flex w-fit items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2 shadow-sm transition-colors hover:border-border hover:bg-muted/40'
+        // h-auto overrides the Button sizeVariant's fixed height (e.g. sm=h-8),
+        // which otherwise clamps the chip shorter than its h-9 icon tile + two
+        // text lines and makes the content spill outside the rounded border.
+        'group flex h-auto w-fit items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2 text-left shadow-sm transition-colors hover:border-border hover:bg-muted/40'
       )}
       disabled={isDownloading || disabled}
       tabIndex={tabIndex}
