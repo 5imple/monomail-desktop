@@ -10,7 +10,11 @@
     display: revert;
     box-sizing: unset;
     user-select: auto !important;
-    word-break: break-word;
+    /* Break only words that would otherwise overflow. NOT `word-break:
+       break-word`, which in Chromium collapses an element's intrinsic
+       min-content width to one character and starves text cells in
+       width-constrained email tables (survey/NPS widgets). */
+    overflow-wrap: break-word;
     cursor: auto;
   }
   p {
