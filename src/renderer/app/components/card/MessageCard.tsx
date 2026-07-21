@@ -139,6 +139,10 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const [showQuotedContent, setShowQuotedContent] = useState(false);
     const [showCcDropdown, setShowCcDropdown] = useState(false);
     const [showBccDropdown, setShowBccDropdown] = useState(false);
+    // The To/Reply-to/Cc/Bcc detail rows are collapsed by default; the user
+    // expands them by clicking the recipient summary line. The message body
+    // stays visible regardless — this only toggles the header detail block.
+    const [showRecipientDetails, setShowRecipientDetails] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const itemRef = useRef<HTMLDivElement | null>(null);
@@ -957,6 +961,36 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           >
             <div ref={contentRef}>
               <div className={cn('ml-12 grid gap-1 px-4 pb-4 pt-0', isCollapsed ? '' : '')}>
+                {!preview && !showRecipientDetails && (
+                  <button
+                    type="button"
+                    aria-expanded={false}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowRecipientDetails(true);
+                    }}
+                    className="inline-flex w-fit items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <span className="font-medium">{t('message_card.to')}:</span>
+                    <span className="max-w-[52ch] truncate text-foreground">
+                      {currentMessage.to.length === 0
+                        ? `(${t('message_card.no_recipient')})`
+                        : currentMessage.to
+                            .map((r) => r.name || r.email)
+                            .slice(0, 2)
+                            .join(', ')}
+                      {(() => {
+                        const hidden =
+                          Math.max(0, currentMessage.to.length - 2) +
+                          (currentMessage.cc?.length ?? 0);
+                        return hidden > 0 ? ` +${hidden}` : '';
+                      })()}
+                    </span>
+                    <MonoIcon type="ChevronDown" className="h-3 w-3" />
+                  </button>
+                )}
+                {(preview || showRecipientDetails) && (
+                  <>
                 <div className="inline-flex items-start gap-1 text-xs">
                   <span className="mt-0.5 font-medium text-muted-foreground">
                     {t('message_card.to')}:
@@ -1174,6 +1208,8 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                       </div>
                     )}
                   </div>
+                )}
+                  </>
                 )}
 
                 {/* Tracking History - Show tracking icon based on tracking state */}
