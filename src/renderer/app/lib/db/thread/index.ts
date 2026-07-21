@@ -523,9 +523,19 @@ export async function DBGetThreadsByLabelMultiUser(
       return true;
     });
 
+    // Only construct the page we will actually return. The caller keeps the
+    // top `limit` threads by timestamp across all accounts (flatten + sort +
+    // slice below), and the global top `limit` is always contained in each
+    // account's own top `limit` — so slicing per account here is lossless.
+    // This avoids reconstructing (with per-message IndexedDB reads) the entire
+    // label, ~99% of which the final slice would discard on a large inbox.
+    const pageThreads = filteredThreads
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+
     // Construct the threads
     const constructedThreads = await Promise.all(
-      filteredThreads.map(async (threadData) => {
+      pageThreads.map(async (threadData) => {
         // Construct the thread
         const thread = await fetchAndConstructThread(tx, threadData, uid);
         if (thread) {

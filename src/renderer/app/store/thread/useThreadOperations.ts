@@ -42,10 +42,14 @@ export function useThreadOperationAtom() {
             };
 
         if (saveToLocal) {
-          // Group threads by their actual accountId to ensure proper database isolation
+          // Group threads by their actual accountId to ensure proper database
+          // isolation. Persist only the incoming `newThreads` — the rest of
+          // `updatedMap` was already saved by earlier calls, so re-writing the
+          // whole accumulated map on every page turned paginated load into
+          // O(n^2) IndexedDB writes.
           const threadsByAccount: Record<string, MonoThread[]> = {};
 
-          Object.values(updatedMap).forEach((thread) => {
+          newThreads.forEach((thread) => {
             // Use thread's accountId if available, otherwise fall back to uid
             const accountId =
               Object.getOwnPropertyDescriptor(thread, 'accountId')?.value ||
@@ -78,7 +82,8 @@ export function useThreadOperationAtom() {
           ...Object.fromEntries(newThreads.map((thread) => [thread.id, thread]))
         };
         if (saveToLocal) {
-          DBSaveThreads(uid, Object.values(updatedMap));
+          // Persist only the incoming batch, not the whole accumulated map.
+          DBSaveThreads(uid, newThreads);
         }
         return updatedMap;
       });
