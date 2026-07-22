@@ -58,6 +58,10 @@ export function parsePayloadPart(message: MonoMessage) {
       });
       doc.querySelectorAll('a').forEach(setAnchorAttributes);
 
+      // Upgrade http:// image references before history extraction so both
+      // the visible body and quoted fragments are covered.
+      upgradeInsecureImageSources(doc);
+
       // Remove img tags with data-mono-tracking attribute
       const trackingResult = removeTrackingImages(doc);
       trackingImagesRemoved += trackingResult.count;
@@ -477,6 +481,36 @@ function getInlineAttachment(
       ([key]) => normalizeContentId(key) === normalizedContentId
     )?.[1]
   );
+}
+
+/**
+ * The renderer CSP only allows https:/data:/blob: images (`img-src`), so a
+ * plaintext-HTTP `<img>` never loads — Chromium blocks it, the error handler
+ * fires, and the card shows "Image unavailable" (e.g. Zoom webinar mail
+ * references `http://servicenow.zoom.us/...` banners). Upgrade the scheme the
+ * same way browser mixed-content autoupgrade does. Protocol-relative `//host`
+ * URLs are upgraded too: they resolve against the app origin
+ * (`monomail-app://` in the packaged build), which is never right for mail.
+ * Hosts that genuinely can't serve https fall into the existing fallback.
+ */
+function upgradeInsecureImageSources(doc: Document) {
+  const upgrade = (value: string | null): string | null => {
+    if (!value) return null;
+    if (/^http:\/\//i.test(value)) return value.replace(/^http:\/\//i, 'https://');
+    if (/^\/\//.test(value)) return `https:${value}`;
+    return null;
+  };
+
+  doc.querySelectorAll('img').forEach((img) => {
+    const upgraded = upgrade(img.getAttribute('src'));
+    if (upgraded) img.setAttribute('src', upgraded);
+  });
+
+  // `background` on table/td/body is an image fetch governed by img-src too.
+  doc.querySelectorAll('[background]').forEach((element) => {
+    const upgraded = upgrade(element.getAttribute('background'));
+    if (upgraded) element.setAttribute('background', upgraded);
+  });
 }
 
 function prepareEmailImages(root: HTMLElement) {
