@@ -394,7 +394,16 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             inlineImage.attachmentId,
             abortController.signal
           );
-          if (abortController.signal.aborted) return;
+          if (abortController.signal.aborted) {
+            // The effect was torn down mid-fetch (a re-render / dep change
+            // aborted us). Undo the loading state so the re-created effect
+            // retries — otherwise the skeleton stays forever and the
+            // monoInlineState==='loading' guard makes every retry a no-op.
+            skeleton.remove();
+            img.style.display = '';
+            delete img.dataset.monoInlineState;
+            return;
+          }
 
           img.onload = () => {
             skeleton.remove();
@@ -409,7 +418,13 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           img.onerror = () => markImageUnavailable(img, skeleton);
           img.src = `data:${inlineImage.mimeType};base64,${inlineAttachment.data}`;
         } catch (error) {
-          if (!abortController.signal.aborted) {
+          if (abortController.signal.aborted) {
+            // Aborted by teardown — reset so the re-created effect can retry
+            // instead of leaving a stuck skeleton.
+            skeleton.remove();
+            img.style.display = '';
+            delete img.dataset.monoInlineState;
+          } else {
             console.error('Failed to load inline image', error);
             markImageUnavailable(img, skeleton);
           }
@@ -448,10 +463,13 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     }, [
       accountId,
       item.id,
-      item.inlineImages,
+      // item.inlineImages intentionally omitted: it is stable per item.id, and
+      // including it re-ran this effect on every render (its object identity
+      // churns), which aborted the in-flight inline-image fetch before it could
+      // finish — leaving the loading skeleton stuck forever. isDarkMode is also
+      // omitted (only used for a cosmetic image border) to avoid the same churn.
       parsedPayload?.content,
-      showQuotedContent,
-      isDarkMode
+      showQuotedContent
     ]);
 
     const updateHeight = () => {
