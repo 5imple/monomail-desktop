@@ -471,7 +471,14 @@ type GraphBatchOp = {
 function assertBatchOk(result: Awaited<ReturnType<typeof graphBatch>>, action: string): void {
   if (!result.ok) throw new Error(`Graph ${action} failed: ${result.error}`);
   const failed = result.responses.find((r) => r.status >= 400);
-  if (failed) throw new Error(`Graph ${action} failed (status ${failed.status})`);
+  if (failed) {
+    const graphError = (failed.body as { error?: { code?: string; message?: string } } | null)
+      ?.error;
+    const detail = [graphError?.code, graphError?.message].filter(Boolean).join(': ');
+    throw new Error(
+      `Graph ${action} failed (status ${failed.status}${detail ? ` — ${detail}` : ''})`
+    );
+  }
 }
 
 async function getConversationMessageIds(

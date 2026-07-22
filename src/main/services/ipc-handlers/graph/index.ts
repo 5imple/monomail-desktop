@@ -291,6 +291,21 @@ export function registerGraphHandlers() {
         responses.push(...(await runBatchChunk(accessToken, group)));
       }
 
+      // A >=400 subresponse inside a 200 envelope still resolves ok:true (the
+      // caller decides what a partial failure means), but it must not be
+      // invisible here — an archive move failing per-message used to surface
+      // only as an opaque renderer error with a clean main.log.
+      const subRequestById = new Map(
+        requests.map((req) => [req.id, `${req.method.toUpperCase()} ${req.url}`])
+      );
+      for (const sub of responses) {
+        if (sub.status >= 400) {
+          log.warn(
+            `[graph:ipc] batch sub FAIL ${subRequestById.get(sub.id) ?? `id=${sub.id}`} uid=${uid} status=${sub.status} :: ${getErrorMessage(sub.status, sub.body)}`
+          );
+        }
+      }
+
       return { ok: true, responses } satisfies GraphBatchResult;
     } catch (error) {
       log.error('[graph:ipc] batch ERROR:', error instanceof Error ? error.message : error);
