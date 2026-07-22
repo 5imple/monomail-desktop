@@ -71,6 +71,17 @@ export function useThreadAtom() {
           setActiveThreadId(nextThreadId);
           // focusThreadById(nextThreadId);
         }
+      } else if (!keepPrevious) {
+        // The current thread is the last one in the list. When it is removed
+        // (e.g. trashed/archived from the reader) there is no "next", so land
+        // on the previous thread instead of leaving the reader stuck on the
+        // just-removed thread; if it was the only thread, clear the reader.
+        if (selectedIndex > 0) {
+          setActiveThreadId(validThreadIds[selectedIndex - 1]);
+        } else {
+          setActiveThreadId(null);
+          setSelectedThreads([]);
+        }
       }
     },
     [

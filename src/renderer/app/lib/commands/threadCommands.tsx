@@ -213,7 +213,13 @@ export const createThreadCommands = (
         if (threadIds.length === 0) return;
         const shouldAdvanceAfterTrash =
           args?.advanceAfterAction === true ||
-          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId);
+          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId) ||
+          // Acting on the currently-open thread (the reader toolbar passes its
+          // explicit id, which otherwise reads as "list context" and skips the
+          // advance) must move the reader off the thread being trashed. Only
+          // fires when a thread is already open, so it never opens the reader
+          // from a pure list view.
+          (!!activeThreadId && threadIds.includes(activeThreadId));
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
@@ -512,7 +518,13 @@ export const createThreadCommands = (
         // go fullscreen, hiding the whole inbox.
         const shouldAdvanceAfterDone =
           args?.advanceAfterAction === true ||
-          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId);
+          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId) ||
+          // Acting on the currently-open thread (the reader toolbar passes its
+          // explicit id, which otherwise reads as "list context" and skips the
+          // advance) must move the reader off the thread being archived. Only
+          // fires when a thread is already open, so it never opens the reader
+          // from a pure list view.
+          (!!activeThreadId && threadIds.includes(activeThreadId));
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
