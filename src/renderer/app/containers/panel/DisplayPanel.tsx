@@ -154,7 +154,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       setThread(targetThread);
     } catch (error) {
       console.error('Error fetching thread:', error);
-      toast.error(t('toast.error.thread_fetch'));
+      toast.error(t('toast.error.fetch_thread'));
     }
   };
 
@@ -177,7 +177,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       }
     } catch (error) {
       console.error('Error fetching thread:', error);
-      toast.error(t('toast.error.thread_fetch'));
+      toast.error(t('toast.error.fetch_thread'));
     }
   }, 200);
 

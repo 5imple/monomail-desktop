@@ -1418,7 +1418,8 @@
     "info": {
       "sync_limited_365_days": "Sync limited to 365 days",
       "sync_limited_365_days_description": "Upgrade to Plus or Pro to access your complete email history",
-      "switched_from_expired_account": "Switched to {{email}} (previous account expired)"
+      "switched_from_expired_account": "Switched to {{email}} (previous account expired)",
+      "attachment_not_supported": "Attachment upload not available in this context"
     },
     "error": {
       "send_mail": "An error occurred while sending your mail",
@@ -1455,6 +1456,12 @@
       "auth_error": "Authentication error",
       "sync_account": "Sync failed. Please try again later.",
       "undo_action": "Failed to undo action",
+      "reminder_set": "Failed to set reminder",
+      "reminder_move": "Reminder set, but the conversation couldn't be moved out of the inbox",
+      "select_account": "Please select an account",
+      "label_remove": "Failed to remove label",
+      "label_update": "Failed to update label",
+      "shortcut_update": "Failed to update shortcut",
       "image_upload": "Image upload failed",
       "pin_email": "Failed to pin email",
       "pin_emails": "Failed to pin emails",

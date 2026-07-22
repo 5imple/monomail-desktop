@@ -58,62 +58,82 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
     const reminderAt = dayjs(parsedDate).format();
 
     closeDialog('commandPalette');
-    if (targetThreadIds.length > 0) {
-      try {
-        await Promise.all(
-          targetThreadIds.map(async (threadId) => {
-            const thread = threadsMap[threadId];
-            if (!thread) return;
+    if (targetThreadIds.length === 0) return;
 
-            const accountId = thread.accountId;
-            if (!accountId) {
-              console.error(`No account ID found for thread ${thread.id}`);
-              return;
-            }
+    let remindersSet = 0;
+    let reminderFailures = 0;
+    let moveFailures = 0;
 
-            const message = thread.getLastMessage();
+    await Promise.all(
+      targetThreadIds.map(async (threadId) => {
+        const thread = threadsMap[threadId];
+        if (!thread) return;
 
-            if (message) {
-              await mailApi.createReminder({
-                uid: accountId,
-                threadId: thread.id,
-                messageId: message.id,
-                reminderAt: reminderAt,
-                subject: thread.subject
-              });
+        const accountId = thread.accountId;
+        if (!accountId) {
+          console.error(`No account ID found for thread ${thread.id}`);
+          return;
+        }
 
-              // Find the Mono/Reminder label for this specific account
-              const accountLabels = labelsMapByAccount[accountId] || {};
-              const reminderLabel = Object.values(accountLabels).find(
-                (label) => label.name === 'Mono/Reminder'
-              );
+        const message = thread.getLastMessage();
+        if (!message) return;
 
-              // Move the thread out of the inbox (provider-aware: a Graph archive
-              // move on Microsoft, INBOX-label removal on Gmail) and tag it
-              // Mono/Reminder, pruning it from the local inbox list — the same
-              // mechanism markThreadAsDone uses. shouldRemoveThread=true does the
-              // local prune so it disappears from the inbox immediately; it
-              // resurfaces via the OS notification at the reminder time.
-              if (!reminderLabel) {
-                // The label is normally created by loadLabels in useLabelAtom.
-                console.warn(`Reminder label not found for account ${accountId}`);
-              }
-              await updateLabelFromThread(
-                accountId,
-                [threadId],
-                reminderLabel ? [reminderLabel.id] : [],
-                ['INBOX'],
-                true,
-                true
-              );
-              toast.success(t('toast.reminder_set'));
-            }
-          })
+        try {
+          await mailApi.createReminder({
+            uid: accountId,
+            threadId: thread.id,
+            messageId: message.id,
+            reminderAt: reminderAt,
+            subject: thread.subject
+          });
+          remindersSet++;
+        } catch (error) {
+          console.error('Error setting reminder:', error);
+          reminderFailures++;
+          return;
+        }
+
+        // Find the Mono/Reminder label for this specific account
+        const accountLabels = labelsMapByAccount[accountId] || {};
+        const reminderLabel = Object.values(accountLabels).find(
+          (label) => label.name === 'Mono/Reminder'
         );
-      } catch (error) {
-        console.error('Error setting reminder:', error);
-        toast.error(t('toast.error.reminder_set'));
-      }
+
+        // Move the thread out of the inbox (provider-aware: a Graph archive
+        // move on Microsoft, INBOX-label removal on Gmail) and tag it
+        // Mono/Reminder, pruning it from the local inbox list — the same
+        // mechanism markThreadAsDone uses. shouldRemoveThread=true does the
+        // local prune so it disappears from the inbox immediately; it
+        // resurfaces via the OS notification at the reminder time.
+        if (!reminderLabel) {
+          // The label is normally created by loadLabels in useLabelAtom.
+          console.warn(`Reminder label not found for account ${accountId}`);
+        }
+        try {
+          await updateLabelFromThread(
+            accountId,
+            [threadId],
+            reminderLabel ? [reminderLabel.id] : [],
+            ['INBOX'],
+            true,
+            true
+          );
+        } catch (error) {
+          // The reminder is already persisted at this point. Reporting a
+          // failed inbox move as "reminder failed" both lies to the user and
+          // invites a retry that sets a duplicate reminder.
+          console.error('Reminder set, but moving the thread failed:', error);
+          moveFailures++;
+        }
+      })
+    );
+
+    if (reminderFailures > 0) {
+      toast.error(t('toast.error.reminder_set'));
+    } else if (moveFailures > 0) {
+      toast.warning(t('toast.error.reminder_move'));
+    } else if (remindersSet > 0) {
+      toast.success(t('toast.reminder_set'));
     }
   };
 

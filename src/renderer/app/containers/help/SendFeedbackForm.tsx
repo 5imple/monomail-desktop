@@ -147,7 +147,7 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
         onSubmit(data);
       } catch (error) {
         console.error('Error sending feedback:', error);
-        toast.error(t('toast.error.feedback_submit'));
+        toast.error(t('toast.error.feedback_send'));
       }
       setIsLoading(false);
     } else {
