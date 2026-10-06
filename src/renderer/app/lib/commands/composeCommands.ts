@@ -10,6 +10,7 @@ import {
 } from './types';
 import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
 import { toast } from 'sonner';
+import { buildReplyAllRecipients, replySubject } from '@/renderer/app/lib/replyRecipients';
 
 interface ComposeCommandDependencies {
   t: (key: string, options?: any) => string;
@@ -139,6 +140,38 @@ export const createComposeCommands = (
             : `Re: ${item.subject}`
         });
         setGlobalDraftWindows([draft]);
+      }
+    },
+
+    // Enter in the reader (see useRegisterHotkeys): everyone on the latest
+    // message — sender + To on To, Cc on Cc, minus your own addresses.
+    COMPOSE_REPLY_ALL_MESSAGE: {
+      scope: 'CONVERSATION_DISPLAY',
+      title: t('command.compose_reply_all_message'),
+      hotkeys: ['Enter'],
+      icon: 'Reply',
+      action: (rawArgs?: MessageCommandArgs) => {
+        const args = resolveMessageArgs(rawArgs, false);
+        const item = args?.message;
+        if (!item) return;
+
+        const accountEmail = getAccountEmailById(args?.accountId);
+        if (!accountEmail) return;
+
+        const own = ownEmails();
+        own.add(accountEmail.toLowerCase());
+        const { to, cc } = buildReplyAllRecipients(item, own);
+
+        setGlobalDraftWindows([
+          new MonoDraft({
+            from: accountEmail,
+            messageId: item.id,
+            threadId: item.threadId,
+            to,
+            cc,
+            subject: replySubject(item.subject)
+          })
+        ]);
       }
     },
 

@@ -1319,10 +1319,12 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     );
   }, [focusPosition, getItemList, setSelectedThreads, activateFocusedItem]);
 
-  // Enter opens the focused item.
+  // Enter opens the focused item. With the reader open the thread list is
+  // hidden behind it, and Enter means Reply All there (useRegisterHotkeys).
   useHotkeys(
     'enter',
     () => {
+      if (activeThreadId && focusPosition.area === 'thread-list') return;
       activateFocusedItem();
     },
     { scopes: ['GLOBAL'] }

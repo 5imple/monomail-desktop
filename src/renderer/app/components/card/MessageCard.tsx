@@ -31,6 +31,7 @@ import {
 } from '@/renderer/app/lib/formatDate';
 import { isCalendarAttachment } from '@/renderer/app/lib/icsParser';
 import { cleanHistorySnippet, MessageStackPosition } from '@/renderer/app/lib/messageHistory';
+import { buildReplyAllRecipients, replySubject } from '@/renderer/app/lib/replyRecipients';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -240,23 +241,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 
       const ownEmails = new Set(accounts.map((account) => account.email.toLowerCase()));
       ownEmails.add(accountEmail.toLowerCase());
-
-      const addUniqueRecipient = (target: string[], email?: string) => {
-        const normalizedEmail = email?.trim().toLowerCase();
-        if (!normalizedEmail || ownEmails.has(normalizedEmail)) return;
-        if (target.some((existingEmail) => existingEmail.toLowerCase() === normalizedEmail)) return;
-        target.push(email!.trim());
-      };
-
-      const to: string[] = [];
-      addUniqueRecipient(to, item.from.email);
-      item.to.forEach((recipient) => addUniqueRecipient(to, recipient.email));
-
-      const cc: string[] = [];
-      item.cc.forEach((recipient) => {
-        if (to.some((email) => email.toLowerCase() === recipient.email.toLowerCase())) return;
-        addUniqueRecipient(cc, recipient.email);
-      });
+      const { to, cc } = buildReplyAllRecipients(item, ownEmails);
 
       setIsCollapsed(false);
       onFocusRequest?.();
@@ -267,9 +252,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           threadId: item.threadId,
           to,
           cc,
-          subject: item.subject.toLowerCase().startsWith('re: ')
-            ? item.subject
-            : `Re: ${item.subject}`
+          subject: replySubject(item.subject)
         })
       ]);
     };
@@ -1032,6 +1015,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                                 className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
                                 tooltipSide="bottom"
                                 tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
+                                shortcut={isLastCard ? 'Enter' : undefined}
                                 onClick={handleReplyAllMessage}
                               >
                                 <ReplyAll className="h-4 w-4" strokeWidth={1.8} />

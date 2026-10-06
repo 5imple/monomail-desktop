@@ -104,6 +104,7 @@
     "compose_new_message": "Compose New Message",
     "sidebar_favorite_add": "Add Bookmark",
     "compose_reply_message": "Reply",
+    "compose_reply_all_message": "Reply All",
     "compose_forward_message": "Forward",
     "thread_mark_read": "Mark as Read",
     "thread_trash": "Move to Trash",
