@@ -228,6 +228,26 @@
   box-shadow: inset 0 0 0 1px hsl(var(--foreground) / 0.15);
 }
 
+/* Thread rows: four states, each readable on its own —
+     hover            faint neutral tint (mouse only, see pointer-hover)
+     keyboard cursor  neutral tint + a crisp outline: "you are here"
+     selected         blue tint + blue hairline (--selection)
+     cursor on a selected row keeps the blue tint, outline turns blue */
+[data-thread].keyboard-focused {
+  background-color: hsl(var(--foreground) / 0.06);
+  box-shadow: inset 0 0 0 1.5px hsl(var(--foreground) / 0.22);
+}
+
+.dark [data-thread].keyboard-focused,
+.black [data-thread].keyboard-focused {
+  background-color: hsl(var(--foreground) / 0.09);
+  box-shadow: inset 0 0 0 1.5px hsl(var(--foreground) / 0.32);
+}
+
+[data-thread][data-thread-selected='true'].keyboard-focused {
+  box-shadow: inset 0 0 0 1.5px hsl(var(--selection) / 0.7);
+}
+
 @keyframes thread-read-motion-sweep {
   0% {
     opacity: 0;

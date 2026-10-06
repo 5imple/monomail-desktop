@@ -1,4 +1,4 @@
-import { apiClient } from '@/main/api/apiClient';
+import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import { MonoMember, GetMonoAccountResponse, UserPreference } from '@/main/api/auth/types';
 import {
   networkFirstCache,
@@ -47,6 +47,11 @@ const getUserPreference = (signal?: AbortSignal): Promise<UserPreference> => {
  * @returns {Promise<void>} The response from the API.
  */
 const updateUserPreference = (preference: Partial<UserPreference>, signal?: AbortSignal) => {
+  // Preferences are local-only (AuthContext persists them); the backend copy
+  // is an optional mirror. Rejecting here in standalone mode made the
+  // Notification/Inbox/Thread-list/Signature forms bail before saving locally
+  // and show "Preference update error" on every Save.
+  if (!isBackendConfigured()) return Promise.resolve();
   return apiClient.patch(`/mono/preference`, { preference }, { signal });
 };
 

@@ -48,7 +48,7 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
       });
     } catch (e) {
       console.error(e);
-      toast.error(t('dialog.attachement_preview.error_downloading'));
+      toast.error(t('dialog.attachment_preview.error_downloading'));
     }
   };
 
@@ -88,7 +88,7 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
       URL.revokeObjectURL(blobUrl);
     } catch (e) {
       console.error(e);
-      toast.error(t('dialog.attachement_preview.error_downloading'));
+      toast.error(t('dialog.attachment_preview.error_downloading'));
     } finally {
       setIsDownloading(false);
     }

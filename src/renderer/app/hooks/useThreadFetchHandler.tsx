@@ -259,16 +259,36 @@ const useThreadFetchHandler = () => {
     []
   );
 
+  // While > 0, list mutations (reset / add ids) apply immediately instead of
+  // being enqueued. Callers that are already inside a queued operation set it:
+  // enqueueing from there runs the mutation only AFTER that operation — on
+  // startup that held the cached inbox off screen until the Microsoft network
+  // fetch finished (~5 s), even though the cache read itself took ~25 ms.
+  const applyNowDepthRef = useRef(0);
+  const runApplyingNow = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    applyNowDepthRef.current += 1;
+    try {
+      return await fn();
+    } finally {
+      applyNowDepthRef.current -= 1;
+    }
+  }, []);
+
   const resetThreadsArray = useCallback(() => {
+    const reset = async () => {
+      setThreadIds([]);
+      // Reset timestamp and loaded state
+      setLastTimestamps({});
+      setQueriesLoaded({});
+      setPageTokens({});
+      cacheOffsetRef.current = 0;
+    };
+    if (applyNowDepthRef.current > 0) {
+      void reset();
+      return;
+    }
     enqueueOperation(
-      async () => {
-        setThreadIds([]);
-        // Reset timestamp and loaded state
-        setLastTimestamps({});
-        setQueriesLoaded({});
-        setPageTokens({});
-        cacheOffsetRef.current = 0;
-      },
+      reset,
       {
         priority: OperationPriority.HIGH,
         type: 'reset-threads-array',
@@ -279,8 +299,7 @@ const useThreadFetchHandler = () => {
 
   const updateThreadIds = useCallback(
     (newThreads: string[]) => {
-      enqueueOperation(
-        async () => {
+      const apply = async () => {
           setThreadIds((prev) => {
             // Start with previous thread IDs
             const allThreadIds = [...prev];
@@ -306,7 +325,13 @@ const useThreadFetchHandler = () => {
               return threadB.timestamp - threadA.timestamp;
             });
           });
-        },
+        };
+      if (applyNowDepthRef.current > 0) {
+        void apply();
+        return;
+      }
+      enqueueOperation(
+        apply,
         {
           priority: OperationPriority.MEDIUM,
           type: 'update-thread-ids',
@@ -355,6 +380,9 @@ const useThreadFetchHandler = () => {
     if (microsoftUids.length === 0) return;
 
     const currentQuery = globalSearchQueryRef.current || '';
+    // Runs outside the operation queue, so the view can change while this is
+    // in flight: never apply results to a different view than requested.
+    const isStale = () => (globalSearchQueryRef.current || '') !== currentQuery;
     const { field } = parseQueryFieldLabel(currentQuery, true);
     const isLabelView =
       !currentQuery.trim() || field === 'in' || field === 'is' || field === 'category';
@@ -383,6 +411,7 @@ const useThreadFetchHandler = () => {
         } else {
           delete msPageTokensRef.current[queryKey][uid];
         }
+        if (isStale()) return;
         if (!response?.threads?.length) continue;
         const monoThreads = response.threads.map((thread) => MonoThread.fromPlainObject(thread));
         await setThreads(uid, monoThreads, false, true);
@@ -391,6 +420,7 @@ const useThreadFetchHandler = () => {
         console.error(`[ms-inbox] fetch failed for ${uid}:`, error);
       }
     }
+    if (isStale()) return;
     if (Object.values(msPageTokensRef.current[queryKey]).some(Boolean)) setHasMore(true);
     setLoadingStatus('DONE');
   }, [accounts, computeAccountUids, setThreads, updateThreadIds, setLoadingStatus]);
@@ -617,8 +647,12 @@ const useThreadFetchHandler = () => {
 
   // Fetch threads using the multi-user functions
   const fetchThreadsHandler = useCallback(
-    async (loadMore = false) => {
-      enqueueOperation(
+    // `immediate`: run now instead of enqueueing — for callers that are already
+    // inside a queued operation. Enqueueing from there put this (fast, cache-
+    // first) read BEHIND the running operation, so on startup the inbox waited
+    // for the Microsoft network fetch (~5 s) before showing cached threads.
+    async (loadMore = false, options?: { immediate?: boolean }) => {
+      const operation =
         async () => {
           setLoadingStatus('LOADING');
           if (!loadMore) {
@@ -1435,13 +1469,13 @@ const useThreadFetchHandler = () => {
             }
           }
           updateBadgeWithLabelCount(accounts.map((account) => account.uid));
-        },
-        {
-          priority: OperationPriority.HIGH, // User-initiated search should be high priority
-          type: 'fetch-threads',
-          batch: false // Don't batch user searches
-        }
-      );
+        };
+      if (options?.immediate) return operation();
+      enqueueOperation(operation, {
+        priority: OperationPriority.HIGH, // User-initiated search should be high priority
+        type: 'fetch-threads',
+        batch: false // Don't batch user searches
+      });
     },
     [
       globalSearchQueryRef,
@@ -1532,8 +1566,9 @@ const useThreadFetchHandler = () => {
             const queryKey = globalSearchQueryRef.current || 'default';
             setLastTimestamps((prev) => ({ ...prev, [queryKey]: undefined }));
             setQueriesLoaded((prev) => ({ ...prev, [queryKey]: false }));
-            // Use await to ensure this completes before continuing
-            await fetchThreadsHandler(false);
+            // Use await to ensure this completes before continuing (immediate:
+            // we're inside a queued operation, enqueueing would not wait).
+            await fetchThreadsHandler(false, { immediate: true });
           }
         },
         {
@@ -1653,9 +1688,15 @@ const useThreadFetchHandler = () => {
       .map((acc) => acc.uid)
       .filter((uid) => uid && !reconciledUidsRef.current.has(uid));
     if (toReconcile.length === 0) return;
-    toReconcile.forEach((uid) => reconciledUidsRef.current.add(uid));
 
-    enqueueOperation(
+    // Deferred past the first paint: this full-cache scan (~0.3 s) used to grab
+    // the queue first on every launch, ahead of showing the cached inbox. It
+    // reloads the list itself if it actually changes anything. Uids are marked
+    // only when it really runs, so a re-render cancelling the timer (accounts
+    // settle during startup) doesn't skip it.
+    const timer = setTimeout(() => {
+      toReconcile.forEach((uid) => reconciledUidsRef.current.add(uid));
+      enqueueOperation(
       async () => {
         let removed = 0;
         let normalized = 0;
@@ -1671,13 +1712,17 @@ const useThreadFetchHandler = () => {
           log.info(
             `[cache] reconciled: purged ${removed} stub thread(s), normalized labels on ${normalized} record(s)`
           );
-          resetThreadsArray();
-          await fetchThreadsHandler(false);
+          await runApplyingNow(async () => {
+            resetThreadsArray();
+            await fetchThreadsHandler(false, { immediate: true });
+          });
         }
       },
-      { priority: OperationPriority.HIGH, type: 'reconcile-cache', batch: false }
-    );
-  }, [accounts, enqueueOperation, resetThreadsArray, fetchThreadsHandler]);
+      { priority: OperationPriority.LOW, type: 'reconcile-cache', batch: false }
+      );
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [accounts, enqueueOperation, resetThreadsArray, fetchThreadsHandler, runApplyingNow]);
 
   // Check sync metadata when component mounts or active space changes
   useEffect(() => {
@@ -1699,11 +1744,19 @@ const useThreadFetchHandler = () => {
   useEffect(() => {
     enqueueOperation(
       async () => {
-        resetThreadsArray();
-        await fetchThreadsHandler(false);
-        // Microsoft inbox: fetched here, AFTER the reset + cache read, so its
-        // threads are applied last and survive (fixes "loads only after refresh").
-        await fetchMicrosoftInbox();
+        // We're inside a queued operation: apply the reset and the cached
+        // threads now (cache-first paint).
+        await runApplyingNow(async () => {
+          resetThreadsArray();
+          await fetchThreadsHandler(false, { immediate: true });
+        });
+        // Microsoft inbox: started AFTER the reset + cache read, so its threads
+        // are applied last and survive (fixes "loads only after refresh") — but
+        // NOT awaited here. Holding the queue for this network call (which can
+        // take seconds at startup) also held the next query handler's cache
+        // read: when the first run's cache read was empty because startup state
+        // wasn't settled yet, the cached inbox stayed hidden for up to ~10 s.
+        void fetchMicrosoftInbox();
 
         const limitedAccountUids = getLimitedAccountUids();
         if (limitedAccountUids.length > 0) {

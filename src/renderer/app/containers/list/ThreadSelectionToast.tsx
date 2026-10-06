@@ -112,7 +112,7 @@ const ThreadSelectionToast = () => {
   const trashIconColor = allTrashed ? 'text-destructive' : 'text-muted-foreground';
   // For read/unread: if any are unread, highlight in accent (mark as read); otherwise, show an open envelope.
   const readIcon = anyUnread ? 'Envelope' : 'EnvelopeOpen';
-  const readIconColor = anyUnread ? 'text-accent' : 'text-muted-foreground';
+  const readIconColor = anyUnread ? 'text-foreground' : 'text-muted-foreground';
 
   // Function to render toast content
   const renderToastContent = () => {

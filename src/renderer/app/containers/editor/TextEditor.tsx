@@ -49,7 +49,8 @@ const TextEditor = React.forwardRef(
       onUploadInlineImage,
       onUploadAttachment,
       onSelectTemplate,
-      draftId
+      draftId,
+      autofocus = true
     }: {
       className?: string;
       value: string;
@@ -63,6 +64,7 @@ const TextEditor = React.forwardRef(
       onUploadAttachment?: (file: File) => Promise<void>;
       onSelectTemplate?: (template: IMonoTemplate) => void;
       draftId?: string;
+      autofocus?: boolean;
     },
     ref
   ) => {
@@ -95,7 +97,7 @@ const TextEditor = React.forwardRef(
         })
       ],
       content: processedContent,
-      autofocus: true,
+      autofocus,
 
       onUpdate: ({ editor }) => {
         const htmlContent = editor.getHTML();

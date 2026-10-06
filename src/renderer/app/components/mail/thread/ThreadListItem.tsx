@@ -172,7 +172,7 @@ export const ThreadListItem = React.memo(
             });
           },
           {
-            root: document.getElementById('thread-list-scoll-root'),
+            root: document.getElementById('thread-list-scroll-root'),
             threshold: 0,
             rootMargin: variant === 'compact' ? '210px 0px 210px 0px' : '402.5px 0px 402.5px 0px'
           }

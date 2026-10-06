@@ -2,6 +2,11 @@
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
+import {
+  beginRangeGesture,
+  rangeGestureSelection,
+  setSelectionAnchor
+} from '@/renderer/app/store/thread/threadRangeSelection';
 
 /**
  * Defines the main focusable areas in the email application
@@ -164,7 +169,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
   // Refs to main container elements for scrolling and focus visualization
   const areaRefs = useRef<Partial<AreaRefsMap>>({});
 
-  const { setSelectedThreads } = useThreadAtom();
+  const { setSelectedThreads, selectedThreads, activeThreadId } = useThreadAtom();
 
   // Define area configurations with orientation and navigation relationships
   const areaConfigs: Record<FocusableArea, AreaConfig> = {
@@ -341,9 +346,11 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       const itemList = getItemList(area);
 
       if (area === 'thread-list' && !isKeyboardModeRef.current && hoveredThreadIdRef.current) {
-        return itemList.some((item) => item.id === hoveredThreadIdRef.current)
-          ? hoveredThreadIdRef.current
-          : null;
+        // hoveredThreadIdRef only updates on mousemove, so after a wheel /
+        // trackpad scroll under a still cursor it named a row that had scrolled
+        // off-screen — and Backspace trashed it. Trust :hover, which the
+        // browser re-evaluates after scrolling.
+        return itemList.find((item) => item.ref?.matches?.(':hover'))?.id ?? null;
       }
 
       if (!isKeyboardModeRef.current || focusPosition.area !== area || focusPosition.index < 0) {
@@ -711,8 +718,10 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       // (instead of jumping from a stale position).
       let current = focusPosition;
       if (enteringKeyboardMode && hoveredThreadIdRef.current) {
-        const hoveredIndex = getItemList('thread-list').findIndex(
-          (item) => item.id === hoveredThreadIdRef.current
+        // Same staleness as getHighlightedItemId: after a scroll under a still
+        // cursor the ref names a row that's gone — trust :hover.
+        const hoveredIndex = getItemList('thread-list').findIndex((item) =>
+          item.ref?.matches?.(':hover')
         );
         if (hoveredIndex >= 0) {
           current = { area: 'thread-list', index: hoveredIndex };
@@ -1003,6 +1012,17 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     const exitKeyboardMode = () => {
       if (!isKeyboardModeRef.current) return;
       setIsKeyboardMode(false);
+      // Arrow nav gave the item real DOM focus, and focus that followed a key
+      // press keeps matching :focus-visible. Drop it, or the row stays lit
+      // after the mouse has moved elsewhere (or off the list entirely).
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active?.classList.contains('keyboard-focused') &&
+        !active.isContentEditable &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)
+      ) {
+        active.blur();
+      }
       // Remove all keyboard focus indicators
       document.querySelectorAll('.keyboard-focused').forEach((el) => {
         el.classList.remove('keyboard-focused');
@@ -1026,14 +1046,27 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       hoveredThreadIdRef.current = row ? row.getAttribute('data-thread') : null;
       exitKeyboardMode();
     };
+    // Leaving the window fires no mousemove over a non-row, so forget the row
+    // here — otherwise the next arrow key resumes from a row the mouse left.
+    const handleMouseLeave = () => {
+      hoveredThreadIdRef.current = null;
+    };
 
     document.addEventListener('mousedown', exitKeyboardMode);
     document.addEventListener('mousemove', handleMouseMove);
+    document.documentElement.addEventListener('mouseleave', handleMouseLeave);
     return () => {
       document.removeEventListener('mousedown', exitKeyboardMode);
       document.removeEventListener('mousemove', handleMouseMove);
+      document.documentElement.removeEventListener('mouseleave', handleMouseLeave);
     };
   }, []);
+
+  // Lets CSS (the pointer-hover / group-pointer-hover Tailwind variants) mute
+  // hover styles while the keyboard drives, so only one row is ever lit.
+  useEffect(() => {
+    document.body.dataset.navMode = isKeyboardMode ? 'keyboard' : 'pointer';
+  }, [isKeyboardMode]);
 
   // Set up global hotkeys for arrow navigation with key repeat support
   useHotkeys(
@@ -1068,6 +1101,64 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     (e) => {
       e.preventDefault();
       handleArrowNavigation('ArrowRight');
+    },
+    { scopes: ['GLOBAL'] }
+  );
+
+  // Shift+↑/↓ in the thread list: move the keyboard cursor and grow (or
+  // shrink) a range selection from where it started — same gesture model as
+  // Shift+click / Shift+sweep with the mouse (threadRangeSelection).
+  const extendThreadSelection = useCallback(
+    (direction: 1 | -1) => {
+      // The list is hidden behind the full-screen reader, which uses
+      // Shift+arrows to scroll.
+      if (activeThreadId || isAreaDisabled('thread-list')) return;
+      const items = getItemList('thread-list');
+      if (items.length === 0) return;
+      const order = items.map((item) => item.id);
+
+      // Where the cursor is: the keyboard highlight, else the hovered row.
+      let index =
+        isKeyboardModeRef.current && focusPosition.area === 'thread-list'
+          ? focusPosition.index
+          : -1;
+      if (index < 0) index = items.findIndex((item) => item.ref?.matches?.(':hover'));
+      const start = index < 0 ? (direction > 0 ? 0 : order.length - 1) : index;
+      const next = index < 0 ? start : Math.min(order.length - 1, Math.max(0, index + direction));
+
+      beginRangeGesture(selectedThreads, order, order[start]);
+      const selection = rangeGestureSelection(order, order[next]);
+      if (selection) setSelectedThreads(selection);
+
+      setIsKeyboardMode(true);
+      setFocusPosition({ area: 'thread-list', index: next });
+      updatePivotIndex('thread-list', next);
+    },
+    [
+      activeThreadId,
+      focusPosition,
+      getItemList,
+      isAreaDisabled,
+      selectedThreads,
+      setSelectedThreads,
+      updatePivotIndex
+    ]
+  );
+
+  useHotkeys(
+    'shift+down',
+    (e) => {
+      e.preventDefault();
+      extendThreadSelection(1);
+    },
+    { scopes: ['GLOBAL'] }
+  );
+
+  useHotkeys(
+    'shift+up',
+    (e) => {
+      e.preventDefault();
+      extendThreadSelection(-1);
     },
     { scopes: ['GLOBAL'] }
   );
@@ -1222,6 +1313,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     }
     const threadId = getItemList('thread-list')[focusPosition.index]?.id;
     if (!threadId) return;
+    setSelectionAnchor(threadId);
     setSelectedThreads((prev) =>
       prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
     );

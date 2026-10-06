@@ -7,20 +7,19 @@ import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadI
 import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
 import { useThreadReadMotion } from '@/renderer/app/components/mail/thread/useThreadReadMotion';
 import { Badge } from '@/renderer/app/components/ui/badge';
-import { Button } from '@/renderer/app/components/ui/button';
-import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { formatListDate } from '@/renderer/app/lib/formatDate';
 import { highlightThreadText } from '@/renderer/app/lib/highlightThreadText';
 import { cn } from '@/renderer/app/lib/utils';
+import { setSelectionAnchor } from '@/renderer/app/store/thread/threadRangeSelection';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraggable } from '@dnd-kit/core';
-import { ScrollAreaScrollbar } from '@radix-ui/react-scroll-area';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
 interface DraggableSenderProps {
   sender: string;
@@ -79,6 +78,8 @@ export const ThreadListDenseItem = React.memo(
       const { labelsMapByAccount } = useLabelAtom();
       const { activeThreadId, threadsMap, selectedThreads, setSelectedThreads } = useThreadAtom();
       const containerRef = useRef<HTMLDivElement | null>(null);
+      // Last measured height; the default approximates a rendered row.
+      const placeholderHeightRef = useRef<number | null>(null);
       const itemRef = useRef<HTMLDivElement | null>(null);
       const hasBeenVisibleRef = useRef(false);
       const lastThreadRef = useRef<MonoThread | null>(null);
@@ -169,12 +170,17 @@ export const ThreadListDenseItem = React.memo(
                   setIsRendering(true);
                 }
               } else {
+                // Keep the row's real height for its placeholder so the list
+                // doesn't shrink (and the scroll position jump) off-screen.
+                if (containerRef.current?.offsetHeight) {
+                  placeholderHeightRef.current = containerRef.current.offsetHeight;
+                }
                 setIsRendering(false);
               }
             });
           },
           {
-            root: document.getElementById('thread-list-scoll-root'),
+            root: document.getElementById('thread-list-scroll-root'),
             threshold: 0, // Trigger as soon as it intersects
             rootMargin: '210px 0px 210px 0px' // Trigger 50px before it enters the viewport
           }
@@ -301,27 +307,29 @@ export const ThreadListDenseItem = React.memo(
           tabIndex={0}
           role="button"
           className={cn(
-            'group relative mx-[10%] overflow-hidden rounded-md transition-colors transition-opacity duration-150 duration-200 ease-out',
+            'group relative mx-[10%] overflow-hidden rounded-md outline-none transition-colors transition-opacity duration-150 duration-200 ease-out',
             isChecked
-              ? '!bg-foreground/[0.07] ring-1 ring-inset ring-foreground/10 hover:!bg-foreground/[0.07] dark:!bg-foreground/[0.12] dark:ring-foreground/15 dark:hover:!bg-foreground/[0.12]'
+              ? '!bg-selection/[0.08] ring-1 ring-inset ring-selection/25 pointer-hover:!bg-selection/[0.12] dark:!bg-selection/[0.15] dark:ring-selection/30 dark:pointer-hover:!bg-selection/[0.2]'
               : isActive
                 ? 'bg-foreground/[0.07] ring-1 ring-inset ring-foreground/10 hover:bg-foreground/[0.07] dark:bg-foreground/[0.12] dark:ring-foreground/15 dark:hover:bg-foreground/[0.12]'
-                : 'bg-card hover:bg-foreground/[0.07] dark:hover:bg-foreground/[0.12]',
+                : 'bg-card pointer-hover:bg-foreground/[0.045] dark:pointer-hover:bg-foreground/[0.07]',
             currentThread && !isUnread && 'text-muted-foreground',
             opacity == 0 ? 'opacity-0' : 'opacity-100',
-            'focus-visible:bg-foreground/[0.07] dark:focus-visible:bg-foreground/[0.12]',
             !currentThread && 'hidden'
           )}
         >
           {!currentThread || !isRendering ? (
-            <div className="h-[36px] transition-[height] duration-200 ease-bouncy-in-out" />
+            <div
+              className="transition-[height] duration-200 ease-bouncy-in-out"
+              style={{ height: placeholderHeightRef.current ?? 45 }}
+            />
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
               <div className="relative">
                 {isChecked && (
                   <span
                     aria-hidden
-                    className="absolute inset-y-[3px] left-0 z-20 w-[3px] rounded-r-full bg-muted-foreground/70"
+                    className="absolute inset-y-[3px] left-0 z-20 w-[3px] rounded-r-full bg-selection"
                   />
                 )}
                 {/* Unread is indicated by the bold font only — no left accent bar. */}
@@ -340,7 +348,7 @@ export const ThreadListDenseItem = React.memo(
                         <span
                           aria-hidden
                           data-unread-dot
-                          className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 transition-opacity duration-150 group-hover:opacity-0"
+                          className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 transition-opacity duration-150 group-pointer-hover:opacity-0"
                         />
                       )}
                       <button
@@ -359,6 +367,7 @@ export const ThreadListDenseItem = React.memo(
                             onClick(e, threadId);
                             return;
                           }
+                          setSelectionAnchor(threadId);
                           setSelectedThreads((prev) =>
                             prev.includes(threadId)
                               ? prev.filter((id) => id !== threadId)
@@ -370,7 +379,7 @@ export const ThreadListDenseItem = React.memo(
                           isChecked
                             ? 'opacity-100'
                             : cn(
-                                'hover:!opacity-100 focus-visible:!opacity-100 group-hover:!opacity-100',
+                                'focus-visible:!opacity-100 pointer-hover:!opacity-100 group-pointer-hover:!opacity-100',
                                 isUnread ? 'opacity-0' : 'opacity-20'
                               )
                         )}
@@ -379,8 +388,8 @@ export const ThreadListDenseItem = React.memo(
                           className={cn(
                             'flex h-5 w-5 items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,color,transform] duration-150',
                             isChecked
-                              ? 'border-muted-foreground bg-muted-foreground text-background shadow-none'
-                              : 'border-muted-foreground/20 text-muted-foreground/45 hover:scale-105 hover:border-muted-foreground/70 hover:bg-muted/70 hover:text-foreground group-hover:scale-105 group-hover:border-muted-foreground/70 group-hover:bg-muted/70 group-hover:text-foreground'
+                              ? 'border-selection bg-selection text-selection-foreground shadow-none'
+                              : 'border-muted-foreground/20 text-muted-foreground/45 pointer-hover:scale-105 pointer-hover:border-muted-foreground/70 pointer-hover:bg-muted/70 pointer-hover:text-foreground group-pointer-hover:scale-105 group-pointer-hover:border-muted-foreground/70 group-pointer-hover:bg-muted/70 group-pointer-hover:text-foreground'
                           )}
                         >
                           <MonoIcon
@@ -388,7 +397,9 @@ export const ThreadListDenseItem = React.memo(
                             className={cn(
                               'stroke-[1.5]',
                               isChecked ? 'h-3.5 w-3.5' : 'h-3 w-3',
-                              isChecked ? 'opacity-100' : 'opacity-80 group-hover:text-foreground'
+                              isChecked
+                                ? 'opacity-100'
+                                : 'opacity-80 group-pointer-hover:text-foreground'
                             )}
                           />
                         </div>
@@ -465,7 +476,7 @@ export const ThreadListDenseItem = React.memo(
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  memoizedSearchQuery(`label:${label.name}`, [currentThread.id]);
+                                  memoizedSearchQuery(buildLabelQuery(label.name));
                                 }}
                                 className="rounded-sm"
                                 style={{
@@ -489,12 +500,12 @@ export const ThreadListDenseItem = React.memo(
                         <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground/60" />
                       )}
 
-                      <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-muted-foreground/70 transition-opacity duration-150 group-hover:opacity-0">
+                      <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-muted-foreground/70 transition-opacity duration-150 group-pointer-hover:opacity-0">
                         {formatListDate(currentThread.timestamp)}
                       </span>
 
                       {/* Hover action bar */}
-                      <div className="absolute right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                      <div className="absolute right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-pointer-hover:opacity-100">
                         <button
                           type="button"
                           tabIndex={-1}
@@ -533,38 +544,30 @@ export const ThreadListDenseItem = React.memo(
                     </div>
                   </div>
 
-                  {/* Attachment thumbnails — tucked under the subject column */}
+                  {/* Attachment chips — tucked under the subject column. One line,
+                      sized like the row's metadata, so they read as a detail of
+                      the email rather than a card stacked under it. */}
                   {Object.keys(currentThread.attachments).length > 0 && (
-                    <div className="pl-[calc(2rem+0.75rem+8rem+1.5rem)] pr-6 sm:pl-[calc(2rem+1rem+8rem+2rem)]">
-                      <ScrollArea className="mr-3">
-                        <div className="mb-2 flex items-center gap-1.5 p-1">
-                          {Object.keys(currentThread.attachments)
-                            .slice(0, 2)
-                            .map((id) => (
-                              <AttachmentItem
-                                accountId={currentThread.accountId}
-                                source={'message'}
-                                size={'sm'}
-                                itemId={currentThread.id}
-                                key={currentThread.attachments[id].attachmentId}
-                                preview
-                                tabIndex={-1}
-                                attachment={currentThread.attachments[id]}
-                              />
-                            ))}
-                          {Object.keys(currentThread.attachments).length > 2 && (
-                            <Button
-                              variant={'secondary'}
-                              sizeVariant={'sm'}
-                              tabIndex={-1}
-                              className="font-mono text-[11px] font-normal"
-                            >
-                              + {Object.keys(currentThread.attachments).length - 2}
-                            </Button>
-                          )}
-                        </div>
-                        <ScrollAreaScrollbar orientation={'horizontal'} />
-                      </ScrollArea>
+                    <div className="-mt-1 flex items-center gap-1.5 overflow-hidden pb-2 pl-[calc(2rem+0.75rem+8rem+1.5rem)] pr-6 sm:pl-[calc(2rem+1rem+8rem+2rem)]">
+                      {Object.keys(currentThread.attachments)
+                        .slice(0, 2)
+                        .map((id) => (
+                          <AttachmentItem
+                            variant="chip"
+                            accountId={currentThread.accountId}
+                            source={'message'}
+                            itemId={currentThread.id}
+                            key={currentThread.attachments[id].attachmentId}
+                            preview
+                            tabIndex={-1}
+                            attachment={currentThread.attachments[id]}
+                          />
+                        ))}
+                      {Object.keys(currentThread.attachments).length > 2 && (
+                        <span className="shrink-0 rounded-md border border-border/60 px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+                          +{Object.keys(currentThread.attachments).length - 2}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

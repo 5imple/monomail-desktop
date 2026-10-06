@@ -14,7 +14,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={sonnerTheme}
-      className="toaster no-drag dark group ease-bouncy-in-out"
+      className="toaster no-drag group ease-bouncy-in-out"
       position={'bottom-center'}
       pauseWhenPageIsHidden
       offset={50}

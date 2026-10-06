@@ -54,10 +54,14 @@ export const createThreadCommands = (
     markThreadAsTrash
   } = deps;
 
+  // An open thread wins over the selection: the reader is full-screen while a
+  // thread is open (MailLayout), so any selection left in the hidden list —
+  // e.g. a row checked by a right-click — is invisible, and acting on it
+  // archived/trashed emails the user couldn't see instead of the one on screen.
   const getTargetThreadIds = (args?: ThreadCommandArgs) =>
     (
       args?.threadIds ??
-      (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : [])
+      (activeThreadId ? [activeThreadId] : selectedThreads.length > 0 ? selectedThreads : [])
     ).filter((id) => !isComposeDraftId(id));
 
   return {
@@ -123,7 +127,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -192,7 +196,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -284,7 +288,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -353,7 +357,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -423,7 +427,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -491,7 +495,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -584,7 +588,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -652,7 +656,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()
@@ -720,7 +724,7 @@ export const createThreadCommands = (
           action: {
             label: (
               <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
               </span>
             ),
             onClick: () => undoFunction && undoFunction()

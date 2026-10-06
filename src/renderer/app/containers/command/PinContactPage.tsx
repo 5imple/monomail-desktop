@@ -231,7 +231,7 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
                     {ellipsisEmailString(contact.emailAddress)})
                   </span>
                   {pinnedEmails.includes(contact.emailAddress) && (
-                    <div className="ml-auto mr-2 text-accent">
+                    <div className="ml-auto mr-2 text-foreground">
                       <MonoIcon type="Pin" />
                     </div>
                   )}

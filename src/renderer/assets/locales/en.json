@@ -331,7 +331,9 @@
       "description": "Organize and categorize emails using labels.",
       "add_label": "Add a new label",
       "no_labels": "No labels found",
-      "label_name": "Label Name"
+      "label_name": "Label Name",
+      "delete": "Delete label",
+      "confirm_delete": "Delete the label \"{{name}}\"? Emails keep their other labels."
     },
     "profile": {
       "title": "Profile",
@@ -792,16 +794,16 @@
       "placeholder": "Search labels...",
       "no_labels_found": "No labels found.",
       "create_in_accounts": "Create in {{count}} account",
-      "create_in_accounts_plural": "Create in {{count}} accounts",
+      "create_in_accounts_other": "Create in {{count}} accounts",
       "will_affect_conversations": "Will affect {{count}} conversation",
-      "will_affect_conversations_plural": "Will affect {{count}} conversations in {{accountCount}} account",
+      "will_affect_conversations_other": "Will affect {{count}} conversations in {{accountCount}} account",
       "will_affect_conversations_plural_accounts": "Will affect {{count}} conversations in {{accountCount}} accounts"
     },
     "move": {
       "placeholder": "Search destinations...",
       "no_destinations_found": "No destinations found.",
       "will_move_conversations": "Will move {{count}} conversation",
-      "will_move_conversations_plural": "Will move {{count}} conversations"
+      "will_move_conversations_other": "Will move {{count}} conversations"
     },
     "pin": {
       "placeholder": "Type contact names or emails...",
@@ -901,7 +903,7 @@
         "description": "Messages that have a Google Drive attachment or link"
       },
       "has:document": {
-        "description": "Messages that have a Google Slides attachment or link"
+        "description": "Messages that have a Google Docs attachment or link"
       },
       "has:youtube": {
         "description": "Messages that have a YouTube video"
@@ -952,7 +954,7 @@
         "existing_heading": "Existing Spaces",
         "create_space": "Create \"{{name}}\" Space",
         "accounts_count": "{{count}} account",
-        "accounts_count_plural": "{{count}} accounts"
+        "accounts_count_other": "{{count}} accounts"
       },
       "options": {
         "placeholder": "Edit space options",
@@ -1140,21 +1142,26 @@
     "beta_limited": "Beta version is limited to 60 days",
     "try_again": "Try again",
     "selected_count": "{{count}} selected",
+    "no_loaded_matches": "No matching emails in what’s loaded so far",
     "toolbar": {
       "done": "Done",
       "star": "Star",
       "unstar": "Unstar",
       "read": "Read",
       "unread": "Unread",
-      "undone:": "Not done",
+      "undone": "Not done",
       "trash": "Trash",
+      "untrash": "Restore",
       "label": "Label",
       "share": "Share",
       "clear_selection": "Clear selection"
     }
   },
   "message_card": {
+    "earlier_messages_one": "earlier message",
+    "earlier_messages_other": "earlier messages",
     "reply": "Reply",
+    "hide_details": "Hide details",
     "forward": "Forward",
     "reply_to": "Reply to",
     "to": "To",

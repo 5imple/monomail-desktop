@@ -10,6 +10,10 @@ i18n.use(initReactI18next).init({
   interpolation: {
     escapeValue: false // React already escapes by default
   },
+  // Single namespace. With the default ':' separator, operator keys like
+  // `command_palette.search.has:attachment.description` were parsed as
+  // namespace "command_palette.search.has" and rendered "attachment.description".
+  nsSeparator: false,
   resources: {
     en: { translation: en }
   }

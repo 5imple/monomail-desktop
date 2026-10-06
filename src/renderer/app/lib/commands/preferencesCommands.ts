@@ -79,6 +79,17 @@ export const createPreferencesCommands = (
       }
     },
 
+    // Fired by the tray menu's "Send Feedback" item. Without a registered
+    // command, executeCommand threw "Command with ID OPEN_FEEDBACK not found".
+    OPEN_FEEDBACK: {
+      scope: 'GLOBAL',
+      title: t('sidebar.send_feedback'),
+      icon: 'Megaphone',
+      action: (_: any) => {
+        openDialog('feedback');
+      }
+    },
+
     OPEN_PREFERENCES_COMPOSE: {
       scope: 'GLOBAL',
       title: t('command.open_preferences_compose'),

@@ -16,6 +16,7 @@ import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import React, { useCallback, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { isBackendConfigured } from '@/main/api/apiClient';
 
 interface ComposeCardFooterProps {
   className?: string;
@@ -131,10 +132,16 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
             {t('compose_card.footer.send_now')}
           </Button>
 
-          <SendLaterButton
-            draft={draft}
-            disabled={sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0}
-          />
+          {/* Scheduling is a backend endpoint (queueApi); without one every
+              pick failed with "requires a backend" after the user chose a time. */}
+          {isBackendConfigured() && (
+            <SendLaterButton
+              draft={draft}
+              disabled={
+                sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0
+              }
+            />
+          )}
         </div>
 
         {/* Right: secondary icon actions */}
@@ -167,28 +174,33 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
           />
 
           {/* Read-tracking toggle — off by default; nothing else in compose
-              discloses that this exists, so it needs to be visible here. */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                sizeVariant="sm"
-                typeVariant="icon"
-                aria-pressed={trackingEnabled}
-                className={cn(
-                  trackingEnabled ? 'text-accent' : 'text-muted-foreground'
-                )}
-                onClick={onToggleTracking}
-              >
-                <MonoIcon type={trackingEnabled ? 'Eye' : 'EyeSlash'} className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {trackingEnabled
-                ? "Read tracking on — you'll be notified when this email is opened"
-                : 'Read tracking off — turn on to see when this email is opened'}
-            </TooltipContent>
-          </Tooltip>
+              discloses that this exists, so it needs to be visible here.
+              Tracking needs the optional backend, so without one the toggle
+              would promise open notifications that can never arrive. */}
+          {isBackendConfigured() && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  sizeVariant="sm"
+                  typeVariant="icon"
+                  aria-pressed={trackingEnabled}
+                  className={cn(
+                    // text-accent is the near-white neutral token — invisible here.
+                    trackingEnabled ? 'text-foreground' : 'text-muted-foreground'
+                  )}
+                  onClick={onToggleTracking}
+                >
+                  <MonoIcon type={trackingEnabled ? 'Eye' : 'EyeSlash'} className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {trackingEnabled
+                  ? "Read tracking on — you'll be notified when this email is opened"
+                  : 'Read tracking off — turn on to see when this email is opened'}
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           {/* Discard */}
           <Tooltip>

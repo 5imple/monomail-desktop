@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import electronApi from '@/renderer/app/lib/electronApi';
+import { getProviderForUid } from '@/main/api/mail/providerRegistry';
 
 // Resolved own-photo URLs, keyed by account uid, for the app session.
 const ownPhotoCache = new Map<string, string>();
@@ -37,6 +38,8 @@ export function useOwnAvatarUrl(uid?: string, initial?: string): string | undefi
       setUrl(cached);
       return;
     }
+    // Google People only serves Google accounts.
+    if (getProviderForUid(uid) !== 'google' || uid.startsWith('microsoft:')) return;
 
     let cancelled = false;
     (async () => {

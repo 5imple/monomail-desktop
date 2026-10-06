@@ -3,12 +3,14 @@ import { Clock3, Inbox, Send, Star, type LucideIcon } from 'lucide-react';
 import { cn } from '@/renderer/app/lib/utils';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 
 type MailNavItemBase = {
   id: 'inbox' | 'snooze' | 'starred' | 'sent';
   label: string;
   Icon: LucideIcon;
-  shortcut: string;
+  // Must match the go-to hotkey in navigationCommands; omit when none exists.
+  shortcut?: string;
 };
 
 type MailNavItem = MailNavItemBase &
@@ -27,12 +29,11 @@ const NAV_ITEMS: MailNavItem[] = [
     id: 'inbox',
     label: 'Inbox',
     Icon: Inbox,
-    query: 'category:primary',
-    shortcut: 'G I'
+    query: 'category:primary'
   },
-  { id: 'snooze', label: 'Later', Icon: Clock3, layout: 'LATER' as const, shortcut: 'G S' },
-  { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G T' },
-  { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G E' }
+  { id: 'snooze', label: 'Later', Icon: Clock3, layout: 'LATER' as const },
+  { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G S' },
+  { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G T' }
 ];
 
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -50,6 +51,7 @@ const queryMatchesInbox = (normalizedQuery: string) => {
 const MailNavTabs = React.memo(() => {
   const { activeLayout, globalSearchQuery, searchNewQuery, setActiveLayout } = useGlobalAtom();
   const { threadsMap } = useThreadAtom();
+  const { activeSpace, setActiveAccountsInSpace } = useSpaceAtom();
   const [loadingTabId, setLoadingTabId] = useState<string | null>(null);
 
   const inboxUnreadCount = useMemo(
@@ -82,13 +84,16 @@ const MailNavTabs = React.memo(() => {
     (item: MailNavItem) => {
       setLoadingTabId(item.id);
       setTimeout(() => setLoadingTabId(null), 1500);
+      // Tabs are all-account views, like the sidebar's unified items. Without
+      // this, a single-account filter picked in the sidebar silently stayed on.
+      if (activeSpace) setActiveAccountsInSpace(activeSpace.accountUids);
       if (item.layout) {
         setActiveLayout(item.layout);
       } else {
         searchNewQuery(item.query, undefined, false);
       }
     },
-    [setActiveLayout, searchNewQuery]
+    [setActiveLayout, searchNewQuery, activeSpace, setActiveAccountsInSpace]
   );
 
   return (
@@ -100,7 +105,7 @@ const MailNavTabs = React.memo(() => {
           <button
             key={item.id}
             type="button"
-            title={`${item.label} (${item.shortcut})`}
+            title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
             onClick={() => handleTabClick(item)}
             className={cn(
               'no-drag relative flex h-[29px] min-w-[86px] items-center justify-center gap-[6px] rounded-[7px] px-[9px] text-[13px] transition-colors',

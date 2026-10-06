@@ -10,6 +10,7 @@ import {
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
 // Migration utility to convert from old sidebar to new customizable sidebar
 export function useSidebarMigration() {
@@ -161,7 +162,7 @@ export function useSidebarMigration() {
               title: parts[parts.length - 1], // Use last part as display title
               icon: 'Tag',
               iconColor: label.color?.backgroundColor,
-              query: `label:${label.name.toLowerCase()}`,
+              query: buildLabelQuery(label.name),
               accountId,
               labelId: label.id,
               parentId,

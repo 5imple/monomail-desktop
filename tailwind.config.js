@@ -110,6 +110,11 @@ module.exports = {
           DEFAULT: 'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))'
         },
+        'reader-well': 'hsl(var(--reader-well))',
+        selection: {
+          DEFAULT: 'hsl(var(--selection))',
+          foreground: 'hsl(var(--selection-foreground))'
+        },
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))'
@@ -219,6 +224,14 @@ module.exports = {
       };
       addUtilities(newUtilities);
     }),
-    require('@tailwindcss/typography')
+    require('@tailwindcss/typography'),
+    // Hover styles that only apply while the mouse is driving. During arrow-key
+    // navigation (body[data-nav-mode="keyboard"], set by useKeyboardNavigation)
+    // the row under a still cursor would otherwise keep a hover highlight next
+    // to the keyboard one as the list scrolls beneath it.
+    function ({ addVariant }) {
+      addVariant('pointer-hover', 'body:not([data-nav-mode="keyboard"]) &:hover');
+      addVariant('group-pointer-hover', 'body:not([data-nav-mode="keyboard"]) .group:hover &');
+    }
   ]
 };

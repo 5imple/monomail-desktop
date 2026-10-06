@@ -34,6 +34,9 @@ await build({
     dompurify: join(here, 'stubs', 'dompurify.mjs'),
     'electron-log': join(here, 'stubs', 'electron-log.mjs')
   },
+  // jsdom is CJS with dynamic requires; load it from node_modules at runtime
+  // (DOM-dependent tests) instead of bundling it into the ESM output.
+  external: ['jsdom'],
   logLevel: 'warning'
 });
 

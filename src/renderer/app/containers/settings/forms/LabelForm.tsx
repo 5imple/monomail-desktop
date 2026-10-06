@@ -131,7 +131,7 @@ export const LabelForm = () => {
     }
   }, [accountUids, selectedAccountId]);
 
-  const { control, handleSubmit, reset, watch, setValue } = useForm<LabelFormValues>({
+  const { control, handleSubmit, reset, watch, setValue, getValues } = useForm<LabelFormValues>({
     defaultValues: {
       labels: [] // Start empty; we'll populate on mount below
     }
@@ -182,12 +182,23 @@ export const LabelForm = () => {
   // Remove a label both locally and in the store
   const handleRemoveLabel = async (index: number, labelId: string, accountId: string) => {
     if (labelId) {
+      // This permanently deletes the label from the mail account, so confirm.
+      const name = getValues(`labels.${index}.name`);
+      const confirmed = window.confirm(
+        t('settings.label.confirm_delete', {
+          name,
+          defaultValue: 'Delete the label "{{name}}"? Emails keep their other labels.'
+        })
+      );
+      if (!confirmed) return;
       try {
         await removeLabel(labelId, accountId);
         toast.success(t('toast.preferences.label.removed'));
       } catch (error) {
         console.error('Error removing label:', error);
         toast.error(t('toast.error.label_remove'));
+        // Keep the row: the label still exists on the server.
+        return;
       }
     }
     remove(index);
@@ -327,6 +338,7 @@ export const LabelForm = () => {
                           typeVariant="icon"
                           type="button"
                           sizeVariant={'sm'}
+                          tooltip={t('settings.label.delete', { defaultValue: 'Delete label' })}
                           onClick={() =>
                             handleRemoveLabel(index, fields[index].labelId, fields[index].accountId)
                           }

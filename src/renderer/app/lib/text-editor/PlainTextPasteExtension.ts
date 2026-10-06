@@ -1,4 +1,25 @@
 import { Extension } from '@tiptap/core';
+import { Fragment, Node as PMNode } from '@tiptap/pm/model';
+import { EditorView } from '@tiptap/pm/view';
+
+/**
+ * Replace the selection with plain text, keeping its line breaks. Inserting a
+ * single text node kept raw "\n" characters, which the editor displayed
+ * (pre-wrap) but recipients received as one run-on paragraph.
+ */
+export function insertPlainText(view: EditorView, text: string) {
+  const { state } = view;
+  const { schema } = state;
+  const hardBreak = schema.nodes.hardBreak;
+  const nodes: PMNode[] = [];
+  text.replace(/\r\n?/g, '\n').split('\n').forEach((line, index) => {
+    if (index > 0 && hardBreak) nodes.push(hardBreak.create());
+    if (line) nodes.push(schema.text(line));
+  });
+  if (nodes.length === 0) return;
+  const { from, to } = state.selection;
+  view.dispatch(state.tr.replaceWith(from, to, Fragment.from(nodes)).scrollIntoView());
+}
 
 /**
  * PlainTextPasteExtension
@@ -29,12 +50,7 @@ export const PlainTextPasteExtension = Extension.create({
             .then((text) => {
               if (text) {
                 // Insert plain text at current selection without any formatting
-                const { state, view } = editor;
-                const { from, to } = state.selection;
-
-                // Create a transaction that replaces the selection with plain text
-                const tr = state.tr.replaceWith(from, to, state.schema.text(text));
-                view.dispatch(tr);
+                insertPlainText(editor.view, text);
               }
             })
             .catch((error) => {

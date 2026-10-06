@@ -148,8 +148,18 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
       // Check if message already exists to prevent duplicates
       const existingMessage = await DBGetMessage(addedMessage.aAUid, addedMessage.id);
       if (existingMessage) {
-        // Message already exists, skip adding it again
-        return;
+        // Usually a duplicate frame — skip. But a mailbox delta also reports a
+        // message that moved INTO the Inbox (un-archived / restored elsewhere),
+        // and its cached copy still carries the old labels: skipping left it
+        // hidden until a full refresh. Refresh it when the frame says Inbox and
+        // the cache disagrees.
+        const frameSaysInbox = /\bINBOX\b/.test(addedMessage.labels ?? '');
+        const cachedLabels = existingMessage.labelIds ?? [];
+        const cacheDisagrees =
+          !cachedLabels.includes('INBOX') ||
+          cachedLabels.includes('TRASH') ||
+          cachedLabels.includes('SPAM');
+        if (!(frameSaysInbox && cacheDisagrees)) return;
       }
 
       const messageResponse = await mailApi.getMessage(addedMessage.aAUid, addedMessage.id);

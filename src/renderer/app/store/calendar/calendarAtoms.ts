@@ -330,6 +330,8 @@ export const dayEventsAtom = atom((get) => {
     // Filter by status (exclude deleted)
     const status = eventStatus[event.id];
     if (status === 'deleted') return false;
+    // Outlook reports cancelled meetings (isCancelled) rather than dropping them.
+    if (event.status === 'cancelled') return false;
 
     return eventSpansDay(event, selectedDate, selectedTimeZone);
   });

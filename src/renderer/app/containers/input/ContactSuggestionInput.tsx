@@ -249,7 +249,6 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
       onChange={setSelectedContacts}
       options={options}
       onSearchSync={handleSearchSync}
-      maxSelected={10}
       // hideOnEmpty
       creatable
       // minLetters={1}

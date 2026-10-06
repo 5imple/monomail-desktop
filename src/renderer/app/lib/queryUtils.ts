@@ -25,3 +25,9 @@ export const isValidQueryFormat = (query: string, firstChunkOnly = true): boolea
   const { field, label } = parseQueryFieldLabel(query, firstChunkOnly);
   return field !== '' && label !== '';
 };
+
+// Gmail's search form for a label name. Spaces split the query into separate
+// terms ("label:my receipts" = label "my" AND the word "receipts"); Gmail
+// expects them hyphenated ("label:my-receipts").
+export const buildLabelQuery = (labelName: string): string =>
+  `label:${labelName.trim().toLowerCase().replace(/\s+/g, '-')}`;

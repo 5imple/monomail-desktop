@@ -1,4 +1,4 @@
-import { differenceInMinutes, endOfDay, startOfDay } from 'date-fns';
+import { differenceInMinutes, endOfDay, format, startOfDay } from 'date-fns';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { CalendarEvent } from '@/renderer/app/store/calendar/calendarAtoms';
 
@@ -112,7 +112,10 @@ export const eventSpansDay = (event: CalendarEvent, date: Date, timeZone?: strin
       (event.end.date ||
         (event.end.date && typeof event.end.date === 'object' && 'value' in event.end.date))
     ) {
-      const targetDay = date.toISOString().split('T')[0];
+      // The local calendar day being shown. toISOString() gave the UTC date,
+      // so after ~8 PM in the US (or all day east of UTC) all-day events
+      // showed on the wrong day.
+      const targetDay = format(date, 'yyyy-MM-dd');
       // Google all-day end.date is exclusive
       const startDate =
         typeof event.start.date === 'string'
@@ -136,9 +139,12 @@ export const eventSpansDay = (event: CalendarEvent, date: Date, timeZone?: strin
 
     if (startDateTime && endDateTime) {
       const targetDay = formatInTimeZone(date, tz, 'yyyy-MM-dd');
-      const startStr = formatInTimeZone(new Date(startDateTime), tz, 'yyyy-MM-dd');
-      const endStr = formatInTimeZone(new Date(endDateTime), tz, 'yyyy-MM-dd');
-      // Treat timed event end as exclusive
+      const startMs = new Date(startDateTime).getTime();
+      const endMs = new Date(endDateTime).getTime();
+      const startStr = formatInTimeZone(new Date(startMs), tz, 'yyyy-MM-dd');
+      // Treat timed event end as exclusive: an 11 PM–12 AM event must not
+      // also appear on the next day, so take the day of the last instant.
+      const endStr = formatInTimeZone(new Date(Math.max(startMs, endMs - 1)), tz, 'yyyy-MM-dd');
       return targetDay >= startStr && targetDay <= endStr;
     }
 

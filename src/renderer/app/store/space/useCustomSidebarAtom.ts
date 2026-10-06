@@ -108,6 +108,10 @@ const syncSidebarFromServer = async (spaceId: string): Promise<CustomSidebarStat
   try {
     const response = await spaceApi.fetchCustomSidebar(spaceId);
     const serverSidebarState = response.sidebarState;
+    // The standalone stub (and a server with nothing stored) answers with an
+    // empty config. Treat that as "no server sidebar" so the caller falls
+    // through to the defaults instead of caching an empty sidebar.
+    if (!serverSidebarState?.order?.length) return null;
 
     // NOTE: Don't update cache here - let the caller handle atom/cache updates
     console.log('Sidebar synced from server successfully for space:', spaceId);
@@ -460,8 +464,10 @@ export function useCustomSidebarAtom() {
       }
 
       // 2. Try cache if not in atom
+      // An empty cached sidebar is the residue of the empty-stub bug above
+      // (no Inbox/Sent/Drafts on a fresh install) — ignore it so defaults load.
       const cachedSidebar = await getCachedCustomSidebar(spaceId);
-      if (cachedSidebar) {
+      if (cachedSidebar?.order?.length) {
         console.log('Using cached sidebar for space:', spaceId);
 
         // Update atom with cached data

@@ -78,7 +78,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   return (
     <>
       {/* To row */}
-      <div className="no-drag flex items-start px-9 pt-3">
+      <div className="no-drag flex items-start px-9 pt-3" data-compose-to>
         <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
           To
         </span>

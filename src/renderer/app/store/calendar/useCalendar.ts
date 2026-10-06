@@ -72,7 +72,7 @@ export function useCalendar() {
   // CORE STATE
   // ============================================================================
 
-  const [today] = useAtom(todayAtom);
+  const [today, setToday] = useAtom(todayAtom);
   const [selectedDate, setSelectedDate] = useAtom(selectedDateAtom);
   const [currentMonth, setCurrentMonth] = useAtom(currentMonthAtom);
   const [viewMode, setViewMode] = useAtom(viewModeAtom);
@@ -143,9 +143,13 @@ export function useCalendar() {
 
   /** Load events from Google Calendar API response */
   const loadGoogleEvents = useCallback(
-    (googleEvents: GoogleCalendarEvent[], accountUid: CalendarAccountUID) => {
+    (
+      googleEvents: GoogleCalendarEvent[],
+      accountUid: CalendarAccountUID,
+      window?: { timeMin: Date; timeMax: Date }
+    ) => {
       const events = googleEvents.map((ge) => convertFromGoogleEvent(ge, accountUid));
-      loadEvents(events);
+      loadEvents(events, window ? { accountUid, ...window } : undefined);
     },
     [loadEvents]
   );
@@ -223,7 +227,8 @@ export function useCalendar() {
       source: CalendarEventDraft['source'] = 'user',
       userAccounts?: Array<{ uid: string; email: string }>
     ) => {
-      smartCreateDraft({
+      // Returned so drag callers can await the auto-apply outcome.
+      return smartCreateDraft({
         eventId,
         changes,
         source,
@@ -344,6 +349,7 @@ export function useCalendar() {
   return {
     // Core state
     today,
+    setToday,
     selectedDate,
     setSelectedDate,
     currentMonth,

@@ -26,7 +26,12 @@ import {
   getCachedActiveSpaceId,
   useSpaceAtom
 } from '@/renderer/app/store/space/useSpaceAtom';
+import {
+  clearCustomSidebarCache,
+  customSidebarBySpaceAtom
+} from '@/renderer/app/store/space/useCustomSidebarAtom';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
+import { useSetAtom } from 'jotai';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 import React, {
   createContext,
@@ -244,6 +249,15 @@ interface AuthState {
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // The custom sidebar is cached under the single 'local-space' id, which every
+  // user shares — so it must be cleared with the rest of the account state, or
+  // the next user inherited the previous user's label shortcuts.
+  const setCustomSidebarBySpace = useSetAtom(customSidebarBySpaceAtom);
+  const clearSidebarState = useCallback(async () => {
+    await clearCustomSidebarCache('local-space');
+    setCustomSidebarBySpace({});
+  }, [setCustomSidebarBySpace]);
+
   const [authState, setAuthState] = useState<AuthState>({
     isLoggedIn: false,
     user: null,
@@ -331,6 +345,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         preference: updatedPreference
       }));
       await authCache.updateCachedPreference(updatedPreference);
+      // Main only learned the alert sound at startup (fetchPreference), so a
+      // sound picked in Settings didn't play until the app was relaunched.
+      if (isElectron && newPreference.notification?.alertSound) {
+        electronApi.setAlertSound(newPreference.notification.alertSound);
+      }
     },
     [user, preference]
   );
@@ -475,6 +494,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           await authCache.clearCache();
           await clearSpaceCache();
           await clearLabelsCache();
+          await clearSidebarState();
           cachedData = null;
         }
 
@@ -644,6 +664,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await authCache.clearCache();
     await clearSpaceCache();
     await clearLabelsCache();
+    await clearSidebarState();
     apiClient.setApiClientIdToken(null);
     apiClient.setApiActiveUid(null);
     gmailApiClient.setApiClientIdToken(null);
@@ -659,7 +680,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isLoading: false,
       idToken: null
     });
-  }, []);
+  }, [clearSidebarState]);
 
   const signOut = useCallback(async () => {
     try {

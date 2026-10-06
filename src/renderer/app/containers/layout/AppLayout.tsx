@@ -21,7 +21,7 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { CommandType } from '@/renderer/app/types';
 import { CalendarDays, CircleUserRound, SquarePen } from 'lucide-react';
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
@@ -37,7 +37,8 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { gmailStatusInvalid, calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
   const { globalDraftWindows } = useComposeWindowAtom();
-  const { activeThreadId, setActiveThreadId } = useThreadAtom();
+  const { activeThreadId, setActiveThreadId, selectedThreads, setSelectedThreads } =
+    useThreadAtom();
   const [isLoaded, setIsLoaded] = useState(false);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
   const { accounts } = useAuth();
@@ -52,7 +53,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   }, [setActiveThreadId, threadIdParam]);
 
   // Escape returns to the previous view: close the open email (back to the
-  // list). Dialogs/menus handle their own Escape (Radix), and we don't hijack
+  // list), or on the list clear the selection. Dialogs/menus handle their own Escape (Radix), and we don't hijack
   // it while the user is typing in a field. Capture phase so we can read the
   // still-open dialog state before Radix dismisses it.
   useEffect(() => {
@@ -82,16 +83,29 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
       if (activeThreadId) {
         e.preventDefault();
         setActiveThreadId(null);
+      } else if (selectedThreads.length > 0) {
+        // Back on the list, Escape clears a multi-selection.
+        e.preventDefault();
+        setSelectedThreads([]);
       }
     };
 
     document.addEventListener('keydown', handleEscape, true);
     return () => document.removeEventListener('keydown', handleEscape, true);
-  }, [activeThreadId, setActiveThreadId]);
+  }, [activeThreadId, setActiveThreadId, selectedThreads, setSelectedThreads]);
+
+  // The trigger listener below is registered once, so read the latest
+  // executeCommand through a ref. Capturing it directly froze the command
+  // table at first render: tray "Compose Message" kept the initial (possibly
+  // still-empty) account list and told signed-in users to connect Gmail.
+  const executeCommandRef = useRef(executeCommand);
+  executeCommandRef.current = executeCommand;
 
   useEffect(() => {
     const handleCommandTrigger = (commandId: CommandType) => {
-      executeCommand(commandId);
+      executeCommandRef.current(commandId).catch((error) => {
+        console.error(`[AppLayout] command ${commandId} failed`, error);
+      });
     };
 
     electronApi.mainLayoutReady();

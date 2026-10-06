@@ -100,8 +100,7 @@ function extractSearchTerms(query) {
  */
 function highlightTextNodes(node, searchTerms) {
   if (node.nodeType === Node.TEXT_NODE) {
-    let content = node.textContent || '';
-    let highlighted = false;
+    const content = node.textContent || '';
 
     // Skip empty text nodes
     if (!content.trim()) return;
@@ -115,34 +114,37 @@ function highlightTextNodes(node, searchTerms) {
       return;
     }
 
-    for (const term of searchTerms) {
-      // Create a case-insensitive regex for the search term
-      const regex = new RegExp(`(${escapeRegExp(term)})`, 'gi');
+    const terms = searchTerms.filter((term) => term);
+    if (terms.length === 0) return;
+    // One alternation (longest first) so a later term can never match inside
+    // the markup of an earlier term's highlight.
+    const regex = new RegExp(
+      `(${[...terms].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})`,
+      'gi'
+    );
+    const parts = content.split(regex);
+    if (parts.length === 1) return;
 
-      if (regex.test(content)) {
-        highlighted = true;
-        content = content.replace(
-          regex,
-          '<span class="bg-amber-300 dark:bg-yellow-80 rounded-sm mono-search-highlight" style="color: black !important;">$1</span>'
-        );
+    // Build the highlight with DOM nodes. Re-parsing the decoded text through
+    // innerHTML turned escaped text like "&lt;img src=…&gt;" (or the
+    // "<john@example.com>" in a plain-text "… wrote:" line) back into live
+    // markup after sanitization had already run.
+    const doc = node.ownerDocument;
+    const fragment = doc.createDocumentFragment();
+    parts.forEach((part, index) => {
+      if (!part) return;
+      // split() with a capture group puts the matches at the odd indices.
+      if (index % 2 === 1) {
+        const span = doc.createElement('span');
+        span.className = 'bg-amber-300 dark:bg-yellow-80 rounded-sm mono-search-highlight';
+        span.setAttribute('style', 'color: black !important;');
+        span.textContent = part;
+        fragment.appendChild(span);
+      } else {
+        fragment.appendChild(doc.createTextNode(part));
       }
-    }
-
-    if (highlighted) {
-      // Create a temporary element to hold the new HTML
-      const temp = document.createElement('div');
-      temp.innerHTML = content;
-
-      // Replace the text node with the highlighted content
-      const parent = node.parentNode;
-      if (parent) {
-        const fragment = document.createDocumentFragment();
-        while (temp.firstChild) {
-          fragment.appendChild(temp.firstChild);
-        }
-        parent.replaceChild(fragment, node);
-      }
-    }
+    });
+    node.parentNode?.replaceChild(fragment, node);
   } else if (node.nodeType === Node.ELEMENT_NODE) {
     // Skip script, style, and already highlighted elements
     if (

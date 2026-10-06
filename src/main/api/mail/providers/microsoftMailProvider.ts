@@ -34,14 +34,20 @@ const LIST_SELECT =
 // Detail view adds the body, bcc, and headers. internetMessageHeaders is kept
 // for reply threading; uniqueBody is fetched for the eventual reply-fragment path.
 const DETAIL_SELECT = `${LIST_SELECT},body,bccRecipients,internetMessageHeaders`;
-// `contentId` is a `fileAttachment`-only property; selecting it on the
+// First pass of a progressive thread load: everything but the (often huge)
+// bodies and headers.
+const PARTIAL_SELECT = `${LIST_SELECT},bccRecipients`;
+// `contentId` is a `fileAttachment`-only property: selecting it bare on the
 // polymorphic `attachments` collection makes Graph 400 the whole message GET
 // ("Could not find a property named 'contentId' on type
-// 'microsoft.graph.attachment'"), which blanks the message body. Select only the
-// base-type properties. (Inline cid→image mapping that relied on contentId is a
-// known follow-up: there's no OData way to select a derived-type property here
-// without `$expand=attachments` pulling every attachment's contentBytes.)
-const ATTACHMENT_EXPAND = 'attachments($select=id,name,contentType,size,isInline)';
+// 'microsoft.graph.attachment'"), which blanks the message body. The OData
+// type-cast form `microsoft.graph.fileAttachment/contentId` is accepted and
+// returns contentId WITHOUT contentBytes — so inline cid→image mapping comes
+// back with the detail fetch itself, no extra round trip.
+const ATTACHMENT_EXPAND =
+  'attachments($select=id,name,contentType,size,isInline,microsoft.graph.fileAttachment/contentId)';
+// Same type-cast, for the per-message fallback lookup below.
+const INLINE_CONTENT_ID_SELECT = 'id,microsoft.graph.fileAttachment/contentId';
 
 interface GraphListResponse {
   value?: GraphMessage[];
@@ -223,12 +229,21 @@ async function enrichInlineContentIds(
   message: GraphMessage,
   signal?: AbortSignal
 ): Promise<GraphMessage> {
-  const hasInline = (message.attachments ?? []).some((att) => att.isInline && att.id);
-  if (!hasInline) return message;
+  // ATTACHMENT_EXPAND normally returns contentId already; only fall back to a
+  // separate lookup for inline attachments that still lack one.
+  const missingContentId = (message.attachments ?? []).some(
+    (att) => att.isInline && att.id && !att.contentId
+  );
+  if (!missingContentId) return message;
   try {
+    // $select keeps this metadata-only. The unselected form returned every
+    // inline image's full contentBytes (~330 KB for a 5-image message) on the
+    // critical path of opening an email — then the reader downloaded each
+    // image again to display it.
     const resp = await graphApiClient.get<GraphAttachmentsResponse>(
       `/me/messages/${encodeURIComponent(message.id)}/attachments?${new URLSearchParams({
-        $filter: 'isInline eq true'
+        $filter: 'isInline eq true',
+        $select: INLINE_CONTENT_ID_SELECT
       }).toString()}`,
       { uid, signal }
     );
@@ -248,31 +263,104 @@ async function enrichInlineContentIds(
   }
 }
 
-const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal) => {
-  // No Graph "thread" resource — a thread is a conversation. Fetch its messages
-  // and let transformGraphThread sort + assemble them (no $orderby: combining it
-  // with the conversationId filter trips Graph's "too complex" sort guard).
-  const params = new URLSearchParams({
-    $filter: `conversationId eq '${id.replace(/'/g, "''")}'`,
-    $select: DETAIL_SELECT,
-    $expand: ATTACHMENT_EXPAND,
-    $top: GRAPH_MAX_TOP
+// Conversations at least this long get a newest-message-first partial result.
+const PROGRESSIVE_MIN_MESSAGES = 3;
+
+const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal, onPartial) => {
+  const conversationFilter = `conversationId eq '${id.replace(/'/g, "''")}'`;
+
+  // The complete thread. Started immediately and never delayed by the partial
+  // pass below.
+  let fullSettled = false;
+  const fullThread = (async () => {
+    // No Graph "thread" resource — a thread is a conversation. Fetch its
+    // messages and let transformGraphThread sort + assemble them (no $orderby:
+    // combining it with the conversationId filter trips Graph's "too complex"
+    // sort guard).
+    const params = new URLSearchParams({
+      $filter: conversationFilter,
+      $select: DETAIL_SELECT,
+      $expand: ATTACHMENT_EXPAND,
+      $top: GRAPH_MAX_TOP
+    });
+    // Page through ALL messages — a conversation with >10 messages would
+    // otherwise render truncated (wrong recipients/attachments/labels and bad
+    // reply context).
+    const messages = await fetchAllMessages(uid, `/me/messages?${params.toString()}`, signal);
+    // An empty conversation (deleted/expired) is a "not found" — surface it
+    // like Gmail's 404 rather than fabricating a blank, empty-id thread that
+    // could pollute the cache.
+    if (messages.length === 0) {
+      throw new Error(`Microsoft conversation not found: ${id}`);
+    }
+    // Resolve each message's well-known label from its parentFolderId so a
+    // detail fetch never strips INBOX/SENT from the cached thread.
+    const resolveFolderLabel = await folderLabelResolver(uid);
+    // Recover any inline-image contentIds the $expand didn't return.
+    const enriched = await Promise.all(messages.map((m) => enrichInlineContentIds(uid, m, signal)));
+    return transformGraphThread(enriched, uid, { resolveFolderLabel });
+  })().finally(() => {
+    fullSettled = true;
   });
-  // Page through ALL messages — a conversation with >10 messages would otherwise
-  // render truncated (wrong recipients/attachments/labels and bad reply context).
-  const messages = await fetchAllMessages(uid, `/me/messages?${params.toString()}`, signal);
-  // An empty conversation (deleted/expired) is a "not found" — surface it like
-  // Gmail's 404 rather than fabricating a blank, empty-id thread that could
-  // pollute the cache.
-  if (messages.length === 0) {
-    throw new Error(`Microsoft conversation not found: ${id}`);
-  }
-  // Resolve each message's well-known label from its parentFolderId so a detail
-  // fetch never strips INBOX/SENT from the cached thread.
-  const resolveFolderLabel = await folderLabelResolver(uid);
-  // Recover inline-image contentIds (best-effort, per message in parallel).
-  const enriched = await Promise.all(messages.map((m) => enrichInlineContentIds(uid, m, signal)));
-  return transformGraphThread(enriched, uid, { resolveFolderLabel });
+
+  // Partial pass, in parallel. Long conversations quote their whole history in
+  // every reply (one real 36-message thread was 4.2 MB, ~2 s), so fetch the
+  // messages without bodies plus only the newest in full — the one message the
+  // reader expands — and hand that over first if the full fetch is still out.
+  // Best-effort: any failure just leaves the full fetch to land on its own.
+  const partialDelivered = onPartial
+    ? (async () => {
+        try {
+          const listPath = (select: string) =>
+            `/me/messages?${new URLSearchParams({
+              $filter: conversationFilter,
+              $select: select,
+              $top: GRAPH_MAX_TOP
+            }).toString()}`;
+          // Ids first (~50 ms): enough to pick the newest message. Expanding
+          // attachments is what makes a conversation listing slow (~600 ms for
+          // 36 messages / 152 inline images), so neither query here expands —
+          // the collapsed older messages don't need attachments until the
+          // full thread lands.
+          const ids = await fetchAllMessages(uid, listPath('id,receivedDateTime'), signal);
+          if (fullSettled || ids.length < PROGRESSIVE_MIN_MESSAGES) return;
+          const newest = ids.reduce((latest, message) =>
+            Date.parse(message.receivedDateTime ?? '') >= Date.parse(latest.receivedDateTime ?? '')
+              ? message
+              : latest
+          );
+          const detailParams = new URLSearchParams({
+            $select: DETAIL_SELECT,
+            $expand: ATTACHMENT_EXPAND
+          });
+          const [light, rawNewest, resolveFolderLabel] = await Promise.all([
+            fetchAllMessages(uid, listPath(PARTIAL_SELECT), signal),
+            graphApiClient.get<GraphMessage>(
+              `/me/messages/${encodeURIComponent(newest.id)}?${detailParams.toString()}`,
+              { uid, signal }
+            ),
+            folderLabelResolver(uid)
+          ]);
+          const fullNewest = await enrichInlineContentIds(uid, rawNewest, signal);
+          if (fullSettled) return;
+          await onPartial(
+            transformGraphThread(
+              light.map((m) => (m.id === newest.id ? fullNewest : m)),
+              uid,
+              { resolveFolderLabel }
+            )
+          );
+        } catch {
+          // Best-effort (see above).
+        }
+      })()
+    : undefined;
+
+  const result = await fullThread;
+  // A partial already being applied must finish first, so the caller's update
+  // with the full thread always lands last.
+  await partialDelivered;
+  return result;
 };
 
 const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) => {

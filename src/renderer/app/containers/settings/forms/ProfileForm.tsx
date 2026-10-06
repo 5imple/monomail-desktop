@@ -26,7 +26,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/componen
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 
 const profileFormSchema = z.object({
   displayName: z
@@ -60,12 +59,11 @@ export function ProfileForm() {
     mode: 'onChange'
   });
 
-  async function onSubmit(_data: ProfileFormValues) {
-    if (!member) return;
-    // Display name and primary account are sourced from the connected Google
-    // account in Gmail-direct mode; there is no backend to persist edits to.
-    toast.success(t('toast.preferences.updated'));
-  }
+  // Display name and primary account are sourced from the connected Google
+  // account in Gmail-direct mode; there is no backend to persist edits to.
+  // The fields are shown read-only — a Save button here reported success
+  // while discarding the edit.
+  async function onSubmit(_data: ProfileFormValues) {}
 
   return (
     <Form {...form}>
@@ -100,7 +98,7 @@ export function ProfileForm() {
               <FormItem className="flex-1">
                 <FormLabel>@{member?.memberName}</FormLabel>
                 <FormControl>
-                  <Input placeholder={t('settings.profile.your_name')} {...field} />
+                  <Input placeholder={t('settings.profile.your_name')} readOnly {...field} />
                 </FormControl>
                 {/* <FormDescription>
                 This is your public display name. It can be your real name or a pseudonym. You can
@@ -130,7 +128,7 @@ export function ProfileForm() {
               <FormControl>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="secondary" className="w-[200px] justify-between">
+                    <Button variant="secondary" className="w-[200px] justify-between" disabled>
                       {field.value
                         ? accounts.find((account) => account.email === field.value)?.email
                         : ''}
@@ -155,7 +153,6 @@ export function ProfileForm() {
             </FormItem>
           )}
         />
-        <Button type="submit">{t('settings.buttons.save_changes')}</Button>
         <Separator />
         <div className="flex justify-end gap-3 text-end">
           <span className="text-xs text-muted-foreground">{appVersion}</span>

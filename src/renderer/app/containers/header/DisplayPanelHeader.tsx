@@ -16,6 +16,7 @@ import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { forwardRef, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
+import { toast } from 'sonner';
 
 interface DisplayPanelHeaderProps {
   thread: MonoThread | null;
@@ -93,6 +94,15 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
         });
       }
     };
+    // Trash / restore the open thread. THREAD_TRASH advances the reader to the
+    // next email (it acts on the active thread), like the Backspace hotkey.
+    const handleTrashToggle = async () => {
+      if (!thread) return;
+      const inTrash = thread.labelIds.includes('TRASH');
+      executeCommand(inTrash ? 'THREAD_UNTRASH' : 'THREAD_TRASH', { threadIds: [thread.id] });
+      trackEvent(inTrash ? 'thread_untrashed' : 'thread_trashed', { thread_id: thread.id });
+    };
+
     const handleUnDone = async () => {
       if (thread) {
         executeCommand('THREAD_UNDONE', { threadIds: [thread.id] });
@@ -120,7 +130,13 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       if (!thread) return;
       const accountId = thread.accountId;
       if (!accountId) return;
-      await removeLabelFromThread(accountId, [thread.id], labelId);
+      try {
+        await removeLabelFromThread(accountId, [thread.id], labelId);
+      } catch (error) {
+        console.error('Failed to remove label:', error);
+        toast.error(t('toast.error.label_remove'));
+        return;
+      }
 
       trackEvent('removed_label', { thread_id: thread.id });
     };
@@ -150,11 +166,14 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     }, [thread, labelsMapByAccount]);
 
     // Get unique label IDs to avoid React key warnings
+    // Keyed on the label list itself: label edits mutate thread.labelIds on the
+    // same thread object, so memoizing on [thread] left removed/added badges stale.
+    const labelIdsKey = thread?.labelIds.join(',') ?? '';
     const uniqueLabelIds = useMemo(() => {
-      if (!thread) return [];
+      if (!labelIdsKey) return [];
       // Create a Set of labelIds that start with 'Label_' to ensure uniqueness
-      return [...new Set(thread.labelIds.filter((label) => label.includes('Label_')))];
-    }, [thread]);
+      return [...new Set(labelIdsKey.split(',').filter((label) => label.includes('Label_')))];
+    }, [labelIdsKey]);
 
     return (
       <div className="drag relative">
@@ -183,7 +202,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 onClick={handleClosePanel}
                 data-keyboard-item="close-panel"
               >
-                <MonoIcon type="ChevronsRight" />
+                <MonoIcon type="ChevronsLeft" />
               </Button>
             </div>
 
@@ -192,7 +211,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
               <div className="flex w-full items-center justify-center gap-[22px]">
                 <Button
                   ref={reminderRef}
-                  className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground"
                   tooltip={t('header.display.reminder')}
                   shortcut="H"
                   sizeVariant="sm"
@@ -209,7 +228,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 </Button>
                 <Button
                   ref={labelRef}
-                  className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground"
                   tooltip={t('header.display.label')}
                   shortcut="L"
                   sizeVariant="sm"
@@ -227,7 +246,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 {thread.labelIds.includes('STARRED') ? (
                   <Button
                     ref={starRef}
-                    className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                    className="text-muted-foreground hover:bg-muted hover:text-foreground"
                     tooltip={t('header.display.unstar')}
                     shortcut="SHIFT+S"
                     sizeVariant="sm"
@@ -241,7 +260,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 ) : (
                   <Button
                     ref={starRef}
-                    className="text-[#8c8c88] hover:bg-white/[0.06] hover:text-[#f4f2ed]"
+                    className="text-muted-foreground hover:bg-muted hover:text-foreground"
                     tooltip={t('header.display.star')}
                     shortcut="S"
                     sizeVariant="sm"
@@ -256,12 +275,17 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 <Button
                   ref={doneRef}
                   className={cn(
-                    'hover:bg-white/[0.06]',
+                    'hover:bg-muted',
                     !thread?.labelIds.includes('INBOX')
                       ? 'text-green-500'
-                      : 'text-[#8c8c88] hover:text-[#f4f2ed]'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
-                  tooltip={t('header.display.done')}
+                  // Once done, clicking moves it back to the inbox — say so.
+                  tooltip={
+                    thread?.labelIds.includes('INBOX')
+                      ? t('header.display.done')
+                      : t('thread_list.toolbar.undone')
+                  }
                   shortcut="E"
                   sizeVariant="sm"
                   variant="ghost"
@@ -271,6 +295,22 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                   data-keyboard-item="done-toggle"
                 >
                   <MonoIcon type="CheckCircle" />
+                </Button>
+                <Button
+                  className="text-muted-foreground hover:bg-muted hover:text-destructive"
+                  tooltip={
+                    thread.labelIds.includes('TRASH')
+                      ? t('header.display.untrash')
+                      : t('header.display.trash')
+                  }
+                  shortcut="Backspace"
+                  sizeVariant="sm"
+                  variant="ghost"
+                  typeVariant="icon"
+                  onClick={handleTrashToggle}
+                  data-keyboard-item="trash-toggle"
+                >
+                  <MonoIcon type="Trash" />
                 </Button>
               </div>
             )}
@@ -309,6 +349,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                             }}
                             className="ml-2 shrink-0 text-primary-foreground hover:text-primary-foreground"
                             style={{ color: label.color.textColor || '' }}
+                            aria-label={`Remove label ${label.name.replace('Mono/', '')}`}
                             variant={'text'}
                             typeVariant={'inline'}
                           >

@@ -1,4 +1,4 @@
-import { app, powerMonitor } from 'electron';
+import { app, BrowserWindow, powerMonitor } from 'electron';
 import log from 'electron-log';
 import Store from 'electron-store';
 import { classifyGraphDeltaError } from '@/main/api/mail/graphRequestMapping';
@@ -8,6 +8,7 @@ import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { graphGetMain } from '@/main/services/push/graphFetchMain';
 import { handlePushFrame } from '@/main/services/push/pushHandler';
 import {
+  BACKGROUND_POLL_INTERVAL_MS,
   DeltaPollStatus,
   POLL_INTERVAL_MS,
   diffPolledAccounts,
@@ -70,7 +71,8 @@ interface FolderDeltaResult {
 
 /**
  * Main-process new-mail delivery for Microsoft 365 accounts (plan Phase 11 v1).
- * Polls each account's Inbox via Graph message-delta on a ~60s cadence, persists
+ * Polls each account's Inbox via Graph message-delta every 10 s (30 s in the
+ * background), persists
  * the per-folder delta cursor in a main-process electron-store (`mail-delta`),
  * and synthesizes the existing push-frame shapes so MessageContext + the
  * notification pipeline consume Microsoft mail unchanged.
@@ -169,7 +171,9 @@ class MailDeltaPoller {
   }
 
   private async poll(uid: string): Promise<void> {
-    let delay = POLL_INTERVAL_MS;
+    // Fast while the user is looking at the app; window focus also triggers an
+    // immediate poll (pollAllNow), so returning to the app is always fresh.
+    let delay = BrowserWindow.getFocusedWindow() ? POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
     try {
       const cursor = this.getCursor(uid, POLL_FOLDER);
       const result = await this.runFolderDelta(uid, POLL_FOLDER, cursor);

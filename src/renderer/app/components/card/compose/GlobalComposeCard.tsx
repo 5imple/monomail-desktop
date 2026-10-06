@@ -51,6 +51,7 @@ import React, {
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { insertPlainText } from '@/renderer/app/lib/text-editor/PlainTextPasteExtension';
 
 // Lazy load the TextEditor component
 const TextEditor = lazy(() => import('@/renderer/app/containers/editor/TextEditor'));
@@ -115,7 +116,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const { signatures, getSignatureById } = useSignatureAtom();
   const { contactArray } = useContactAtom();
   const { openDialog } = useDialogs();
-  const { updateDraft, sendDraft, removeDraft } = useDraftAtom();
+  const { updateDraft, sendDraft, removeDraft, getDraftsForAccount } = useDraftAtom();
   const { setGlobalDraftWindows } = useComposeWindowAtom();
   const { activateScope, deactivateScope } = useHotkeyScope();
   const [isMinimized, setIsMinimized] = useState(false);
@@ -262,17 +263,48 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     [updateDraft, getUidFromEmail, handleDraftSaveError]
   );
 
+  // Whether this draft was already saved before the window opened. "Don't
+  // Save" restores that saved copy; a brand-new compose has none, and
+  // re-saving the original empty draft left a blank "(No subject)" in Drafts.
+  const draftExistedAtOpenRef = useRef<boolean | null>(null);
+  if (draftExistedAtOpenRef.current === null && draft?.from) {
+    const uid = getUidFromEmail(draft.from);
+    draftExistedAtOpenRef.current = !!(uid && getDraftsForAccount(uid)[draft.id]);
+  }
+
   const handleClose = useCallback(() => {
+    // A pending autosave firing after close resurrected a just-discarded
+    // draft (or kept edits the user chose not to save).
+    debouncedUpdateDraft.cancel();
     setIsMaximized(false);
     setIsClosing(true);
     setTimeout(() => {
       setGlobalDraftWindows((prev) => prev.filter((win) => win.id !== draft?.id));
     }, 400);
-  }, [draft, isMaximized]);
+  }, [draft, isMaximized, debouncedUpdateDraft]);
+
+  // A new message / forward with no recipients yet should start in To, not
+  // the body (the editor's autofocus used to win, so typing went to the body).
+  const [focusToOnOpen] = useState(() => (draft?.to?.length ?? 0) === 0);
+  const composeRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsVisible(true); // Trigger grow animation
-    requestAnimationFrame(() => editorRef.current?.focus());
+    let attempts = 0;
+    const focusInitialField = () => {
+      if (!focusToOnOpen) {
+        editorRef.current?.focus();
+        return;
+      }
+      const toInput = composeRootRef.current?.querySelector<HTMLInputElement>(
+        '[data-compose-to] input'
+      );
+      if (toInput) toInput.focus();
+      // The header can mount a frame or two late; never leave nothing focused.
+      else if (attempts++ < 10) requestAnimationFrame(focusInitialField);
+      else editorRef.current?.focus();
+    };
+    requestAnimationFrame(focusInitialField);
     activateScope('GLOBAL_COMPOSE');
     return () => {
       deactivateScope('GLOBAL_COMPOSE');
@@ -325,10 +357,20 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     </div>
   );
 
-  const handleSendMessage = useCallback(async () => {
-    if (isSending || composeDraft.to.length === 0 || !composeDraft.from) return;
+  // Synchronous once-per-card send guard. `isSending` is state (stale inside a
+  // double-click / Cmd+Enter-then-click burst) and was reset in `finally`
+  // while the card was still fading out, so a second Send scheduled a second
+  // countdown — and Undo then cancelled only one of the two copies.
+  const sendStartedRef = useRef(false);
 
+  const handleSendMessage = useCallback(async () => {
+    if (sendStartedRef.current || isSending || composeDraft.to.length === 0 || !composeDraft.from)
+      return;
+
+    sendStartedRef.current = true;
     setIsSending(true);
+    // Don't let a queued autosave re-add the draft after sendDraft removes it.
+    debouncedUpdateDraft.cancel();
 
     try {
       // Prepare the updated draft
@@ -440,7 +482,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
             executeCommand('COMPOSE_NEW_MESSAGE', { draft: composeDraft });
           },
           <span className="inline-flex items-end gap-1">
-            Undo <ShortcutKeyboard variant="text" className="gap-0 p-0" shortcut={'MOD+Z'} />
+            Undo <ShortcutKeyboard variant="text" className="gap-0 p-0" shortcut={'Z'} />
           </span>,
           trackingEnabled
         );
@@ -463,6 +505,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         executeCommand('COMPOSE_NEW_MESSAGE', { draft: composeDraft });
       }
     } catch (e) {
+      sendStartedRef.current = false;
       updateMessage(composeDraft);
       setGlobalDraftWindows((drafts) => {
         const draftExists = drafts.some((draftWindow) => draftWindow.id === composeDraft.id);
@@ -484,7 +527,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     preference.compose.cancelWindow,
     sendDraft,
     openDialog,
-    trackingEnabled
+    trackingEnabled,
+    debouncedUpdateDraft
   ]);
 
   const [historyMessage, setHistoryMessages] = useState<MonoMessage | null>(null);
@@ -559,7 +603,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           },
           onDiscard: async () => {
             handleClose();
-            await updateMessage(draft);
+            const uid = getUidFromEmail(draft.from);
+            if (!draftExistedAtOpenRef.current && uid) {
+              await removeDraft(uid, draft.id);
+            } else {
+              await updateMessage(draft);
+            }
             onComplete?.();
           }
         });
@@ -568,7 +617,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         onComplete?.();
       }
     },
-    [composeDraft, draft, handleClose, openDialog, updateMessage]
+    [composeDraft, draft, handleClose, openDialog, updateMessage, getUidFromEmail, removeDraft]
   );
 
   const onSignatureChange = useCallback(
@@ -1080,6 +1129,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       <Suspense fallback={<EditorLoadingFallback />}>
         <TextEditor
           ref={editorRef}
+          autofocus={!focusToOnOpen}
           className="min-h-[210px] px-9 py-4 text-[14px]"
           value={composeDraft.body}
           onChange={handleInputChange.bind(null, 'body')}
@@ -1125,11 +1175,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                   .then((text) => {
                     if (text) {
                       // Insert plain text at current selection without any formatting
-                      const { from, to } = view.state.selection;
-
-                      // Create a transaction that replaces the selection with plain text
-                      const tr = view.state.tr.replaceWith(from, to, view.state.schema.text(text));
-                      view.dispatch(tr);
+                      insertPlainText(view, text);
                     }
                   })
                   .catch((error) => {
@@ -1166,7 +1212,10 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
 
   return (
     <div
+      ref={composeRootRef}
       tabIndex={-1}
+      // Read by useRegisterHotkeys to mute plain-key app shortcuts while open.
+      data-compose-expanded={!isMinimized && !isClosing}
       className={cn(
         'absolute inset-0 z-40 origin-bottom transition-all duration-300',
         isMinimized

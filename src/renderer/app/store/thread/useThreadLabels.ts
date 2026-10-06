@@ -3,7 +3,8 @@ import { useMessage } from '@/renderer/app/context/MessageContext';
 import { useOffline } from '@/renderer/app/context/OfflineContext';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
+import { threadExitIntentAtom, ThreadExitIntent } from '@/renderer/app/store/thread/exitIntentAtom';
 import { useCallback } from 'react';
 import { threadsMapAtom } from './atoms';
 
@@ -46,6 +47,20 @@ export interface IPerformThreadsAction {
 
 export function useThreadLabelAtom() {
   const [threadsMap] = useAtom(threadsMapAtom);
+  // Tells the thread list how a leaving row should animate (see exitIntentAtom).
+  const setExitIntents = useSetAtom(threadExitIntentAtom);
+  const setExitIntent = useCallback(
+    (threadIds: string[], intent: ThreadExitIntent | null) =>
+      setExitIntents((prev) => {
+        const next = { ...prev };
+        threadIds.forEach((id) => {
+          if (intent) next[id] = intent;
+          else delete next[id];
+        });
+        return next;
+      }),
+    [setExitIntents]
+  );
   const { updateThreadsState } = useThreadOperationAtom();
   const { addThreadsToDebounce } = useMessage();
   const { isOnline, queueAction } = useOffline();
@@ -128,8 +143,9 @@ export function useThreadLabelAtom() {
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
       afterStateUpdate?: () => void
-    ) =>
-      performThreadsAction({
+    ) => {
+      setExitIntent(threadIds, 'archive');
+      return performThreadsAction({
         uid,
         threadIds,
         removeLabels: ['INBOX'],
@@ -137,8 +153,9 @@ export function useThreadLabelAtom() {
         shouldRemoveThread,
         shouldRestoreThread,
         afterStateUpdate
-      }),
-    [performThreadsAction, threadsMap]
+      });
+    },
+    [performThreadsAction, threadsMap, setExitIntent]
   );
 
   const unmarkThreadAsDone = useCallback(
@@ -149,8 +166,9 @@ export function useThreadLabelAtom() {
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
       afterStateUpdate?: () => void
-    ) =>
-      performThreadsAction({
+    ) => {
+      setExitIntent(threadIds, null);
+      return performThreadsAction({
         uid,
         threadIds,
         addLabels: ['INBOX'],
@@ -158,8 +176,9 @@ export function useThreadLabelAtom() {
         shouldRemoveThread,
         shouldRestoreThread,
         afterStateUpdate
-      }),
-    [performThreadsAction, threadsMap]
+      });
+    },
+    [performThreadsAction, threadsMap, setExitIntent]
   );
 
   const markThreadAsSpam = useCallback(
@@ -170,8 +189,9 @@ export function useThreadLabelAtom() {
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
       afterStateUpdate?: () => void
-    ) =>
-      performThreadsAction({
+    ) => {
+      setExitIntent(threadIds, 'trash');
+      return performThreadsAction({
         uid,
         threadIds,
         addLabels: ['SPAM'],
@@ -179,8 +199,9 @@ export function useThreadLabelAtom() {
         shouldRemoveThread,
         shouldRestoreThread,
         afterStateUpdate
-      }),
-    [performThreadsAction, threadsMap]
+      });
+    },
+    [performThreadsAction, threadsMap, setExitIntent]
   );
 
   const unmarkThreadAsSpam = useCallback(
@@ -191,8 +212,9 @@ export function useThreadLabelAtom() {
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
       afterStateUpdate?: () => void
-    ) =>
-      performThreadsAction({
+    ) => {
+      setExitIntent(threadIds, null);
+      return performThreadsAction({
         uid,
         threadIds,
         removeLabels: ['SPAM'],
@@ -200,8 +222,9 @@ export function useThreadLabelAtom() {
         shouldRemoveThread,
         shouldRestoreThread,
         afterStateUpdate
-      }),
-    [performThreadsAction, threadsMap]
+      });
+    },
+    [performThreadsAction, threadsMap, setExitIntent]
   );
 
   const unmarkThreadsAsUnread = useCallback(
@@ -255,8 +278,9 @@ export function useThreadLabelAtom() {
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
       afterStateUpdate?: () => void
-    ) =>
-      performThreadsAction({
+    ) => {
+      setExitIntent(threadIds, 'trash');
+      return performThreadsAction({
         uid,
         threadIds,
         addLabels: ['TRASH'],
@@ -264,8 +288,9 @@ export function useThreadLabelAtom() {
         shouldRemoveThread,
         shouldRestoreThread,
         afterStateUpdate
-      }),
-    [performThreadsAction, threadsMap]
+      });
+    },
+    [performThreadsAction, threadsMap, setExitIntent]
   );
 
   const unmarkThreadAsTrash = useCallback(
@@ -276,8 +301,9 @@ export function useThreadLabelAtom() {
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
       afterStateUpdate?: () => void
-    ) =>
-      performThreadsAction({
+    ) => {
+      setExitIntent(threadIds, null);
+      return performThreadsAction({
         uid,
         threadIds,
         removeLabels: ['TRASH'],
@@ -285,8 +311,9 @@ export function useThreadLabelAtom() {
         shouldRemoveThread,
         shouldRestoreThread,
         afterStateUpdate
-      }),
-    [performThreadsAction, threadsMap]
+      });
+    },
+    [performThreadsAction, threadsMap, setExitIntent]
   );
 
   const markThreadAsStar = useCallback(

@@ -52,6 +52,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
 
   const [blobUrl, setBlobUrl] = useState<string>('');
   const [blob, setBlob] = useState<Blob | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
@@ -61,6 +62,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
 
     try {
       setIsLoaded(false);
+      setLoadError(false);
 
       let response: Blob | null = null;
       if (source === 'draft') {
@@ -76,7 +78,10 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
         );
       }
 
-      if (!response) return;
+      if (!response) {
+        setLoadError(true);
+        return;
+      }
 
       setBlob(response);
       const url = URL.createObjectURL(response);
@@ -84,7 +89,8 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
       setIsLoaded(true);
     } catch (e) {
       console.error(e);
-      toast.error(t('dialog.attachement_preview.error_downloading'));
+      setLoadError(true);
+      toast.error(t('dialog.attachment_preview.error_downloading'));
     }
   };
 
@@ -93,6 +99,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
       setBlobUrl('');
       setBlob(null);
       setIsLoaded(false);
+      setLoadError(false);
       handlePreview();
     }
   }, [attachment, itemId, source]);
@@ -117,7 +124,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
       document.body.removeChild(a);
     } catch (e) {
       console.error(e);
-      toast.error(t('dialog.attachement_preview.error_downloading'));
+      toast.error(t('dialog.attachment_preview.error_downloading'));
     } finally {
       setIsDownloading(false);
     }
@@ -171,6 +178,18 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
           className="flex h-screen w-fit flex-col items-center justify-center gap-0 rounded-none border-none bg-transparent p-0 shadow-none dark:border"
         >
           <DialogTitle className="hidden"></DialogTitle>
+          {/* Everything below is gated on `blob`, so without these the overlay
+              sat empty while a large file downloaded and forever on failure. */}
+          {!blob && !loadError && <Loader />}
+          {!blob && loadError && (
+            <div className="text-center text-sm">
+              <MonoIcon type={'AlertCircle'} className="mx-auto h-5 w-5 text-destructive" />
+              <div className="mt-2 text-white">{t('dialog.attachment_preview.error_downloading')}</div>
+              <Button onClick={handlePreview} className="mt-4" type="button" variant={'secondary'}>
+                {t('thread_list.try_again')}
+              </Button>
+            </div>
+          )}
           {blob &&
             (isPDF ? (
               <div>
@@ -203,7 +222,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
               renderError()
             ))}
 
-          {(isPDF || isImage) && (
+          {blob && (isPDF || isImage) && (
             <div className="fixed bottom-12 z-50">
               {/* <div className="pb-12 pt-64 w-full bg-gradient-to-t from-black/70 to-transparent"> */}
               <div className="dark mx-auto flex w-fit items-center gap-1 rounded-lg bg-card/75 shadow-md">
@@ -214,6 +233,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
                       variant={'text'}
                       typeVariant={'icon'}
                       disabled={pageNumber <= 1}
+                      tooltip={t('dialog.attachment_preview.previous_page')}
                       onClick={previousPage}
                     >
                       <MonoIcon type={'ChevronLeft'} />
@@ -226,6 +246,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
                       variant={'text'}
                       typeVariant={'icon'}
                       disabled={pageNumber >= numPages}
+                      tooltip={t('dialog.attachment_preview.next_page')}
                       onClick={nextPage}
                     >
                       <MonoIcon type={'ChevronRight'} />
@@ -238,6 +259,7 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
                   className="hover:bg-card/50"
                   variant={'text'}
                   typeVariant={'icon'}
+                  tooltip={t('dialog.attachment_preview.download')}
                   onClick={downloadAttachment}
                 >
                   {isDownloading ? <Loader /> : <MonoIcon type={'Download'} />}

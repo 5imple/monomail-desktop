@@ -115,6 +115,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const Comp = asChild ? Slot : 'button';
 
+    // Icon-only buttons have no text content, so a string tooltip is the only
+    // name they have — expose it to assistive tech unless one was passed.
+    const ariaLabel =
+      props['aria-label'] ??
+      (typeVariant === 'icon' && typeof tooltip === 'string' ? tooltip : undefined);
+
     // Memoize the button element to avoid recreating it on every render
     const buttonElement = React.useMemo(
       () => (
@@ -122,16 +128,17 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           className={cn(buttonVariants({ variant, sizeVariant, typeVariant, className }))}
           ref={ref}
           {...props}
+          aria-label={ariaLabel}
         />
       ),
-      [Comp, className, variant, sizeVariant, typeVariant, ref, props]
+      [Comp, className, variant, sizeVariant, typeVariant, ref, props, ariaLabel]
     );
 
     // Memoize the tooltip content
     const tooltipContent = React.useMemo(
       () =>
         tooltip && (
-          <TooltipContent side={tooltipSide} className="dark max-w-64">
+          <TooltipContent side={tooltipSide} className="max-w-64">
             <div className="text-start">
               <div>{tooltip}</div>
               {shortcut && (

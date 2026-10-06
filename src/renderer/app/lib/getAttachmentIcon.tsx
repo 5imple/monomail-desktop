@@ -1,32 +1,62 @@
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
+import { cn } from '@/renderer/app/lib/utils';
+
+// Senders (Outlook especially) often label Office files and PDFs as
+// application/octet-stream, so fall back to the file extension.
+const MIME_BY_EXTENSION: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  zip: 'application/zip',
+  rar: 'application/x-rar-compressed',
+  '7z': 'application/x-7z-compressed'
+};
+const DOCUMENT_EXTENSIONS = /\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf|txt|csv|md|pages|numbers|key)$/i;
+const DOCUMENT_MIME =
+  /^text\/|word|excel|spreadsheet|presentation|powerpoint|opendocument|rtf|csv/i;
+
+function resolveMimeType(mimeType: string, fileName?: string): string {
+  if (mimeType && mimeType !== 'application/octet-stream') return mimeType;
+  const extension = fileName?.split('.').pop()?.toLowerCase() ?? '';
+  if (MIME_BY_EXTENSION[extension]) return MIME_BY_EXTENSION[extension];
+  if (fileName && DOCUMENT_EXTENSIONS.test(fileName)) return 'text/plain';
+  return mimeType;
+}
 
 // Callers that drop the icon into a styled container (e.g. the Newton
 // attachment chip with its own bg + alignment) pass `className` to override
 // the inline default margin and color. Unset = legacy inline behavior.
-export function getAttachmentIcon(mimeType: string, className?: string) {
+export function getAttachmentIcon(mimeType: string, className?: string, fileName?: string) {
   const cls = className ?? 'w-4 h-4 mr-1 text-muted-foreground';
-  switch (mimeType) {
-    case 'application/pdf':
-      return <MonoIcon type="FileMinus" className={className ?? 'mr-1 h-4 w-4 text-destructive'} />;
-    case 'image/jpeg':
-    case 'image/png':
-    case 'image/gif':
-    case 'image/svg':
-    case 'image/svg+xml':
-      return <MonoIcon type="FileImage" className={cls} />;
-    case 'video/mp4':
-    case 'video/x-matroska':
-    case 'video/webm':
-      return <MonoIcon type="FileVideo" className={cls} />;
-    case 'audio/mpeg':
-    case 'audio/wav':
-      return <MonoIcon type="FileAudio" className={cls} />;
-    case 'application/zip':
-    case 'application/x-rar-compressed':
-      return <MonoIcon type="FileArchive" className={cls} />;
-    default:
-      return <MonoIcon type="FileQuestion" className={cls} />;
+  const mime = resolveMimeType(mimeType, fileName);
+  if (mime === 'application/pdf') {
+    // Keep the red tint even inside styled containers: it's how PDFs are
+    // recognised at a glance.
+    return (
+      <MonoIcon
+        type="picture_as_pdf"
+        className={cn(className ?? 'mr-1 h-4 w-4', 'text-destructive/80')}
+      />
+    );
   }
+  if (mime.startsWith('image/')) return <MonoIcon type="FileImage" className={cls} />;
+  if (mime.startsWith('video/')) return <MonoIcon type="FileVideo" className={cls} />;
+  if (mime.startsWith('audio/')) return <MonoIcon type="FileAudio" className={cls} />;
+  if (/zip|rar|7z|tar|gzip/.test(mime)) return <MonoIcon type="FileArchive" className={cls} />;
+  if (DOCUMENT_MIME.test(mime)) return <MonoIcon type="FileText" className={cls} />;
+  // A plain document rather than the question-mark file, which read as an error.
+  return <MonoIcon type="draft" className={cls} />;
 }
 
 export function getAttachmentTypeName(mimeType: string) {

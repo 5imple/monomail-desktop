@@ -54,7 +54,10 @@ export function useThreadAtom() {
         return;
       }
 
-      const lastSelectedThreadId = selectedThreads[selectedThreads.length - 1] ?? activeThreadId;
+      // Move from the open thread when there is one: the list is hidden
+      // behind the reader, so a leftover checked row (e.g. from a right-click)
+      // must not decide where next/previous is after trashing/archiving.
+      const lastSelectedThreadId = activeThreadId ?? selectedThreads[selectedThreads.length - 1];
       const selectedIndex = validThreadIds.findIndex(
         (threadId) => threadId === lastSelectedThreadId
       );
@@ -104,7 +107,10 @@ export function useThreadAtom() {
         return;
       }
 
-      const lastSelectedThreadId = selectedThreads[selectedThreads.length - 1] ?? activeThreadId;
+      // Move from the open thread when there is one: the list is hidden
+      // behind the reader, so a leftover checked row (e.g. from a right-click)
+      // must not decide where next/previous is after trashing/archiving.
+      const lastSelectedThreadId = activeThreadId ?? selectedThreads[selectedThreads.length - 1];
       const selectedIndex = validThreadIds.findIndex(
         (threadId) => threadId === lastSelectedThreadId
       );

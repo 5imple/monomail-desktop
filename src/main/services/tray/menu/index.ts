@@ -13,6 +13,12 @@ function openCommunity() {
   shell.openExternal(`${homepageDomain}/community`);
 }
 
+// With no homepage domain configured the community item does nothing on
+// click, so leave it (and its separator) out instead of showing a dead entry.
+const communityItems: Electron.MenuItemConstructorOptions[] = homepageDomain
+  ? [{ label: 'Join our Community', click: openCommunity }, { type: 'separator' }]
+  : [];
+
 export const trayAppMenu = [
   {
     label: openAppLabel,
@@ -55,16 +61,9 @@ export const trayAppMenu = [
   //     ipcRenderer.invoke('main:native:open-subscribe-window');
   //   }
   // },
+  ...communityItems,
   {
-    label: 'Join our Community',
-    click: () => {
-      openCommunity();
-      // ipcRenderer.invoke('main:native:open-community-window');
-    }
-  },
-  { type: 'separator' as const }, // Explicitly type 'separator'
-  {
-    label: 'Settings..',
+    label: 'Settings…',
     click: () => {
       const mainWindow = windowManager.getMainAppWindow();
       if (!mainWindow) {
@@ -95,13 +94,7 @@ export const trayDefaultMenu = [
     }
   },
   { type: 'separator' as const }, // Explicitly type 'separator'
-  {
-    label: 'Join our Community',
-    click: () => {
-      openCommunity();
-    }
-  },
-  { type: 'separator' as const }, // Explicitly type 'separator'
+  ...communityItems,
   {
     label: 'Quit Mono Mail completely',
     click: () => {

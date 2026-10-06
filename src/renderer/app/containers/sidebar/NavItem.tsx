@@ -260,6 +260,10 @@ const NavItem = React.memo<NavItemProps>(
                     variant={'ghost'}
                     sizeVariant={'xxs'}
                     typeVariant={'icon'}
+                    aria-label="Save name"
+                    // Keep focus in the input: the blur from pressing this
+                    // button cancelled the edit before its click could save.
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={handleEditConfirm}
                   >
                     <MonoIcon type={'Check'} className="h-4 w-4" />
@@ -268,6 +272,8 @@ const NavItem = React.memo<NavItemProps>(
                     variant={'ghost'}
                     sizeVariant={'xxs'}
                     typeVariant={'icon'}
+                    aria-label="Cancel rename"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={handleEditCancel}
                   >
                     <MonoIcon type={'X'} className="h-4 w-4" />

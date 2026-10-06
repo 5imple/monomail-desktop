@@ -1,4 +1,4 @@
-import { FC, useMemo, useState } from 'react';
+import { FC, useEffect, useMemo, useState } from 'react';
 import { Inbox, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/renderer/app/lib/utils';
@@ -128,8 +128,22 @@ const QueueContainer: FC = () => {
 
   const [activeTab, setActiveTab] = useState<LaterQueueTab>('snoozed');
   const [reschedulingItemId, setReschedulingItemId] = useState<string | null>(null);
-  const now = useMemo(() => new Date(), []);
-  const presets = useMemo(() => buildSchedulePresets(now), [now]);
+  // `now` was frozen at mount: left open for a couple of hours, the relative
+  // times went stale and "In 1 hour" rescheduled into the past. Tick it, and
+  // refresh whenever a reschedule popover opens.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (reschedulingItemId) setNow(new Date());
+  }, [reschedulingItemId]);
+  // No date picker exists in this popover, so "Pick a date…" only closed it.
+  const presets = useMemo(
+    () => buildSchedulePresets(now).filter((preset) => preset.id !== 'custom'),
+    [now]
+  );
 
   const subtitle =
     activeTab === 'snoozed'

@@ -15,7 +15,7 @@ import type {
 } from '@/renderer/app/store/calendar/calendarAtoms';
 import { useCalendar } from '@/renderer/app/store/calendar/useCalendar';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { addMonths, endOfMonth, format, startOfMonth, subMonths } from 'date-fns';
+import { addMonths, endOfMonth, format, isSameDay, startOfMonth, subMonths } from 'date-fns';
 import { parseEventDate } from '@/renderer/app/containers/panel/calendar/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -51,14 +51,15 @@ const AgendaList: React.FC<{
           >
             <div className="line-clamp-1 text-sm font-medium text-foreground">{evt.title}</div>
             <div className="text-xs text-muted-foreground">
-              {format(
-                parseEventDate(evt.allDay ? evt.start.date : evt.start.dateTime) || new Date(),
-                'p'
-              )}{' '}
-              –{' '}
-              {format(
-                parseEventDate(evt.allDay ? evt.end.date : evt.end.dateTime) || new Date(),
-                'p'
+              {/* All-day start/end are both local midnight, which rendered
+                  as "12:00 AM – 12:00 AM". */}
+              {evt.allDay ? (
+                'All day'
+              ) : (
+                <>
+                  {format(parseEventDate(evt.start.dateTime) || new Date(), 'p')} –{' '}
+                  {format(parseEventDate(evt.end.dateTime) || new Date(), 'p')}
+                </>
               )}
             </div>
           </li>
@@ -75,6 +76,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
   const {
     // Core state
     today,
+    setToday,
     selectedDate,
     setSelectedDate,
     currentMonth,
@@ -138,8 +140,10 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
   // MONTH LOADING LOGIC
   // ============================================================================
 
-  const fetchMonth = async (m: Date, uid: string | null) => {
-    if (!uid) return;
+  // Resolves false when the load failed (aborts don't count), so Refresh can
+  // report the failure instead of always saying "refreshed successfully".
+  const fetchMonth = async (m: Date, uid: string | null): Promise<boolean> => {
+    if (!uid) return true;
     const key = getMonthCacheKey(m, uid);
 
     // Simple check - in clean architecture, we'll track loaded months differently
@@ -165,10 +169,18 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
         controller.signal
       );
 
-      // Load events into clean state
-      loadGoogleEvents(data.items, uid);
-    } catch {
-      // noop
+      // Load events into clean state. Only a complete listing (no further
+      // page) may prune events the server no longer returns.
+      loadGoogleEvents(
+        data.items,
+        uid,
+        data.nextPageToken ? undefined : { timeMin: startOfMonth(m), timeMax: endOfMonth(m) }
+      );
+      return true;
+    } catch (error) {
+      if (controller.signal.aborted) return true;
+      console.error('Failed to load calendar month:', error);
+      return false;
     }
   };
 
@@ -246,9 +258,21 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
   // NAVIGATION
   // ============================================================================
 
+  // todayAtom is set once at launch and the panel stays mounted for days, so
+  // roll it over when the date changes; Today must jump to the real today.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      if (!isSameDay(now, today)) setToday(now);
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [today, setToday]);
+
   const goToday = () => {
-    setSelectedDate(today);
-    setCurrentMonth(today);
+    const now = new Date();
+    setToday(now);
+    setSelectedDate(now);
+    setCurrentMonth(now);
   };
 
   const goPrevMonth = () => setCurrentMonth((d) => subMonths(d, 1));
@@ -828,6 +852,24 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     setDragSelection(null);
   };
 
+  // A drag-select only ended on a time slot's own mouseup. Releasing over an
+  // event, the hour gutter or outside the panel left the selection stuck to
+  // the cursor with no button held. End it at the last hovered slot instead.
+  const dragSelectionRef = useRef(dragSelection);
+  dragSelectionRef.current = dragSelection;
+  useEffect(() => {
+    if (!isDragSelecting) return;
+    const handleWindowMouseUp = (e: MouseEvent) => {
+      // Releases over a slot are handled by the slot's own onMouseUp.
+      if ((e.target as HTMLElement | null)?.closest?.('[data-slot-date]')) return;
+      const selection = dragSelectionRef.current;
+      if (selection) onDragSelectionEnd(selection.endDate);
+      else setIsDragSelecting(false);
+    };
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => window.removeEventListener('mouseup', handleWindowMouseUp);
+  }, [isDragSelecting]);
+
   const handlePendingCreateRendered = (el: HTMLElement, start: Date, end: Date) => {
     // Open create popover anchored to the temporary block and clear it after popover closes
     openEventPopover(
@@ -858,7 +900,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     // Create a local moveEvent wrapper that includes accounts
     const moveEventWithAccounts = (eventId: string, newStart: Date, newEnd: Date) => {
       const accountsInfo = accounts.map((acc) => ({ uid: acc.uid, email: acc.email }));
-      updateEventFields(
+      return updateEventFields(
         eventId,
         {
           start: {
@@ -875,10 +917,19 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       );
     };
 
-    moveEventWithAccounts(event.id, newStart, newEnd);
-
     // Check if event has attendees to determine notification behavior
     const eventHasAttendees = hasAttendees(event.id);
+
+    try {
+      await moveEventWithAccounts(event.id, newStart, newEnd);
+    } catch (error) {
+      // The move was rolled back (smartCreateDraftAtom) — say so instead of
+      // claiming success.
+      console.error('Failed to move event:', error);
+      toast.error("Couldn't move the event — it was restored to its original time");
+      return;
+    }
+
     if (eventHasAttendees) {
       // Show draft status message
       toast.success('Event moved to draft - edit to send updates');
@@ -994,13 +1045,17 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
           variant="ghost"
           sizeVariant="sm"
           typeVariant="icon"
+          tooltip="Refresh"
           onClick={async () => {
             if (isRefreshing) return; // Prevent multiple simultaneous refreshes
 
             setIsRefreshing(true);
             try {
               // Refresh current month for all selected accounts
-              await Promise.all(selectedAccountUids.map((uid) => fetchMonth(currentMonth, uid)));
+              const results = await Promise.all(
+                selectedAccountUids.map((uid) => fetchMonth(currentMonth, uid))
+              );
+              if (results.includes(false)) throw new Error('One or more accounts failed to load');
 
               // Add a small delay to ensure state propagation
               await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1033,10 +1088,22 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
             onSelectionChange={setSelectedAccountUids}
             preference={preference}
           /> */}
-          <Button variant="secondary" sizeVariant="sm" typeVariant="icon" onClick={goPrevMonth}>
+          <Button
+            variant="secondary"
+            sizeVariant="sm"
+            typeVariant="icon"
+            tooltip="Previous month"
+            onClick={goPrevMonth}
+          >
             <MonoIcon type="ChevronLeft" />
           </Button>
-          <Button variant="secondary" sizeVariant="sm" typeVariant="icon" onClick={goNextMonth}>
+          <Button
+            variant="secondary"
+            sizeVariant="sm"
+            typeVariant="icon"
+            tooltip="Next month"
+            onClick={goNextMonth}
+          >
             <MonoIcon type="ChevronRight" />
           </Button>
           <Button variant="secondary" sizeVariant="sm" onClick={goToday}>

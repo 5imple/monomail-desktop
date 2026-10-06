@@ -46,13 +46,13 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
   const [listHeight, setListHeight] = useState(300);
   const [loading, setLoading] = useState(false);
   const targetThreadIds = useMemo(
-    () => (selectedThreads.length > 0 ? selectedThreads : activeThreadId ? [activeThreadId] : []),
+    () => (activeThreadId ? [activeThreadId] : selectedThreads),
     [activeThreadId, selectedThreads]
   );
 
   const handleSelect = async (value: string) => {
     bounce();
-    const parsedDate = chrono.parseDate(value);
+    const parsedDate = chrono.parseDate(value, new Date(), { forwardDate: true });
 
     if (!parsedDate) return;
     const reminderAt = dayjs(parsedDate).format();
@@ -178,7 +178,7 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
                 <div className="flex flex-col">
                   <span>{sugg.label}</span>
                   <span className="text-xs text-muted-foreground">
-                    {dayjs(chrono.parseDate(sugg.value)).format('dddd, MMMM D, YYYY @ h:mm A')}
+                    {dayjs(chrono.parseDate(sugg.value, new Date(), { forwardDate: true })).format('dddd, MMMM D, YYYY @ h:mm A')}
                   </span>
                 </div>
               </CommandItem>

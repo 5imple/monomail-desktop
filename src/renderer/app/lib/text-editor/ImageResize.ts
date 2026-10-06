@@ -61,27 +61,33 @@ export const ImageResize = Image.extend({
       let isResizing = false;
       let startX: number, startWidth: number;
 
+      // Remove only the resize handles. The old "remove the last 5 children"
+      // (sized for a since-removed controller element) also removed the <img>,
+      // so an inline image vanished from the editor after being clicked.
+      const removeResizeDots = () => {
+        $container
+          .querySelectorAll('[data-image-resize-dot]')
+          .forEach((dot) => dot.parentNode?.removeChild(dot));
+      };
+
       $container.addEventListener('click', (e) => {
         //remove remaining dots and position controller
         const isMobile = document.documentElement.clientWidth < 768;
         isMobile && (document.querySelector('.ProseMirror-focused') as HTMLElement)?.blur();
 
-        if ($container.childElementCount > 3) {
-          for (let i = 0; i < 5; i++) {
-            $container.removeChild($container.lastChild as Node);
-          }
-        }
+        removeResizeDots();
 
         $container.setAttribute(
           'style',
-          `position: relative; border: 2px solid hsl(var(--accent)); ${style} cursor: pointer;`
+          `position: relative; border: 2px solid hsl(var(--ring)); ${style} cursor: pointer;`
         );
 
         Array.from({ length: 4 }, (_, index) => {
           const $dot = document.createElement('div');
+          $dot.setAttribute('data-image-resize-dot', '');
           $dot.setAttribute(
             'style',
-            `position: absolute; width: ${isMobile ? 16 : 9}px; height: ${isMobile ? 16 : 9}px; border-radius: 50%; ${dotsPosition[index]} background-color: hsl(var(--accent))`
+            `position: absolute; width: ${isMobile ? 16 : 9}px; height: ${isMobile ? 16 : 9}px; border-radius: 50%; ${dotsPosition[index]} background-color: hsl(var(--ring))`
           );
 
           $dot.addEventListener('mousedown', (e) => {
@@ -156,25 +162,23 @@ export const ImageResize = Image.extend({
         });
       });
 
-      document.addEventListener('click', (e: MouseEvent) => {
+      const handleDocumentClick = (e: MouseEvent) => {
         const $target = e.target as HTMLElement;
         const isClickInside = $container.contains($target) || $target.style.cssText === iconStyle;
 
         if (!isClickInside) {
           const containerStyle = $container.getAttribute('style');
-          const newStyle = containerStyle?.replace('border: 2px solid hsl(var(--accent));', '');
+          const newStyle = containerStyle?.replace('border: 2px solid hsl(var(--ring));', '');
           $container.setAttribute('style', newStyle as string);
 
-          if ($container.childElementCount > 3) {
-            for (let i = 0; i < 5; i++) {
-              $container.removeChild($container.lastChild as Node);
-            }
-          }
+          removeResizeDots();
         }
-      });
+      };
+      document.addEventListener('click', handleDocumentClick);
 
       return {
-        dom: $wrapper
+        dom: $wrapper,
+        destroy: () => document.removeEventListener('click', handleDocumentClick)
       };
     };
   }

@@ -32,7 +32,7 @@ const LabelCommandPage: React.FC<LabelCommandPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const { labelsMapByAccount, createLabel } = useLabelAtom();
-  const { selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
   const { addLabelToThread, removeLabelFromThread } = useThreadLabelAtom();
   const { accounts } = useAuth();
 
@@ -41,9 +41,13 @@ const LabelCommandPage: React.FC<LabelCommandPageProps> = ({
   const [loading, setLoading] = useState(false);
 
   // Get selected threads data
+  // Same target as the thread commands: the open thread, else the selection.
+  // Reading only the selection left this page empty ("No labels found") when
+  // opened from the reader, since opening a thread doesn't select it.
   const selectedThreadsData = useMemo(() => {
-    return selectedThreads.map((threadId) => threadsMap[threadId]).filter(Boolean);
-  }, [selectedThreads, threadsMap]);
+    const targetIds = activeThreadId ? [activeThreadId] : selectedThreads;
+    return targetIds.map((threadId) => threadsMap[threadId]).filter(Boolean);
+  }, [activeThreadId, selectedThreads, threadsMap]);
 
   // Get unique account IDs from selected threads
   const selectedAccountIds = useMemo(() => {

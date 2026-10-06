@@ -162,7 +162,7 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
               'flex h-7 items-center bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground',
               showLabel &&
                 'gap-1.5 rounded-md text-[11px] font-medium uppercase tracking-[0.12em]',
-              activeFilters.length > 0 && 'text-accent hover:text-accent',
+              activeFilters.length > 0 && 'text-foreground hover:text-foreground',
               className
             )}
           >

@@ -93,7 +93,9 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     selectedThreads,
     activeThreadId,
     groupThreadsByAccount,
-    removeDraft
+    removeDraft,
+    accounts,
+    threadsMap
   });
 
   const navigationCommands = createNavigationCommands({

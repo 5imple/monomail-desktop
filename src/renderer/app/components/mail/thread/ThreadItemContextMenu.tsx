@@ -18,7 +18,7 @@ import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { CommandType } from '@/renderer/app/types';
-import React, { FC, useMemo, useCallback } from 'react';
+import React, { FC, useMemo, useCallback, useRef } from 'react';
 import { Keys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 
@@ -41,12 +41,30 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
 
   // Memoize target threads calculation
 
-  const handleContextMenuOpen = useCallback(() => {
-    // If the right-clicked thread is not in the selection, select only this thread
-    if (!selectedThreads.some((t) => t === thread.id)) {
-      setSelectedThreads([thread.id]);
-    }
-  }, [selectedThreads, thread.id, setSelectedThreads]);
+  // Right-clicking a row outside the selection selects just that row, so the
+  // menu's commands target it. If the menu is then dismissed without picking
+  // anything, put the previous selection back — otherwise the row stayed lit
+  // as "selected" after a mere right-click.
+  const implicitSelectionRef = useRef<string[] | null>(null);
+  const commandChosenRef = useRef(false);
+  const handleContextMenuOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        commandChosenRef.current = false;
+        implicitSelectionRef.current = null;
+        if (!selectedThreads.some((t) => t === thread.id)) {
+          implicitSelectionRef.current = selectedThreads;
+          setSelectedThreads([thread.id]);
+        }
+        return;
+      }
+      if (implicitSelectionRef.current && !commandChosenRef.current) {
+        setSelectedThreads(implicitSelectionRef.current);
+      }
+      implicitSelectionRef.current = null;
+    },
+    [selectedThreads, thread.id, setSelectedThreads]
+  );
 
   // The targetThreads can now be simplified since selection is updated on open
   const targetThreads = useMemo(() => selectedThreads, [selectedThreads]);
@@ -154,7 +172,9 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
       singleThreadSelected && fromRecipient
         ? {
             icon: 'Search',
-            label: `${t('command.search')} "from:${fromRecipient.name}"`,
+            // The address, not the display name: a nameless sender produced a
+            // bare "from:" and "Jane Doe" became `from:Jane Doe` (two terms).
+            label: `${t('command.search')} "from:${fromRecipient.email}"`,
             command: 'SEARCH'
           }
         : null,
@@ -227,21 +247,24 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         // Handle thread-specific commands
         switch (command) {
           case 'COMPOSE_REPLY_MESSAGE':
-          case 'COMPOSE_FORWARD_MESSAGE':
-            // eslint-disable-next-line no-case-declarations
-            const items = thread.items.filter(
-              (item) =>
-                item.type === 'message' &&
-                !accounts.some((account) => account.email === (item as MonoMessage).from.email)
+          case 'COMPOSE_FORWARD_MESSAGE': {
+            const messages = thread.items.filter(
+              (item) => item.type === 'message'
             ) as MonoMessage[];
-
-            if (items.length > 0) {
-              const item = items[items.length - 1];
-              if (item) {
-                executeCommand(command, { message: item, accountId: thread.accountId });
-              }
+            // Reply prefers the latest message from someone else; Forward (like
+            // the F hotkey) takes the latest message. Both fall back to the last
+            // message so threads of only your own mail (Sent) still work.
+            const fromOthers = messages.filter(
+              (message) => !accounts.some((account) => account.email === message.from.email)
+            );
+            const pool =
+              command === 'COMPOSE_REPLY_MESSAGE' && fromOthers.length > 0 ? fromOthers : messages;
+            const item = pool[pool.length - 1];
+            if (item) {
+              executeCommand(command, { message: item, accountId: thread.accountId });
             }
             break;
+          }
 
           case 'THREAD_MARK_READ':
           case 'THREAD_MARK_UNREAD':
@@ -262,7 +285,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
 
           case 'SEARCH':
             if (thread.from.length > 0) {
-              searchNewQuery(`from:${thread.from[0].name}`, undefined, false);
+              searchNewQuery(`from:${thread.from[0].email}`, undefined, false);
             }
             break;
 
@@ -276,7 +299,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
   );
 
   return (
-    <ContextMenu onOpenChange={(open) => open && handleContextMenuOpen()}>
+    <ContextMenu onOpenChange={handleContextMenuOpenChange}>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="dark w-64">
         {menuItems.map((menuItem, index) => (
@@ -286,9 +309,12 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
             ) : (
               <ContextMenuItem
                 role="menuitem"
-                onClick={() =>
-                  menuItem.command && handleContextMenuCommand(menuItem.command, menuItem.disabled)
-                }
+                onClick={() => {
+                  commandChosenRef.current = true;
+                  if (menuItem.command) {
+                    handleContextMenuCommand(menuItem.command, menuItem.disabled);
+                  }
+                }}
                 tabIndex={0}
                 disabled={menuItem.disabled}
                 className={menuItem.disabled ? 'cursor-not-allowed opacity-50' : ''}

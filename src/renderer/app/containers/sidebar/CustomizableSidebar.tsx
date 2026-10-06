@@ -64,6 +64,7 @@ import { DBGetThreadCountByLabels, ValidLabel } from '@/renderer/app/lib/db/thre
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { ringVariants } from '@/renderer/app/components/ui/constants';
+import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
 // Special drop zone component
 const SpecialDropZone: FC<{ id: string; isActive: boolean }> = ({ id, isActive }) => {
@@ -774,7 +775,9 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
     position: 'above' | 'below';
     isInFolder?: boolean;
   } | null>(null);
-  const [currentMouseY, setCurrentMouseY] = useState<number>(0);
+  // A ref, not state: it's only read inside handleDragOver, and a state
+  // update per document mousemove re-rendered the whole sidebar constantly.
+  const currentMouseYRef = useRef<number>(0);
   const [specialDropZone, setSpecialDropZone] = useState<'top' | 'bottom' | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [labelCounts, setLabelCounts] = useState<Record<string, number>>({});
@@ -822,7 +825,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   // Track mouse position for accurate drop line positioning
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setCurrentMouseY(e.clientY);
+      currentMouseYRef.current = e.clientY;
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -900,7 +903,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
             title: label.name,
             icon: 'Tag',
             iconColor: label.color?.backgroundColor || 'text-muted-foreground',
-            query: `label:${label.name.toLowerCase()}`,
+            query: buildLabelQuery(label.name),
             accountId,
             labelId: label.id,
             position: labels.length
@@ -1138,7 +1141,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
           const itemCenterY = top + height / 2;
 
           // Show above if mouse is in upper half, below if in lower half
-          const position = currentMouseY < itemCenterY ? 'above' : 'below';
+          const position = currentMouseYRef.current < itemCenterY ? 'above' : 'below';
 
           setDropLinePosition({
             itemId: over.id,
@@ -1152,7 +1155,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
         setDropLinePosition(null);
       }
     },
-    [sidebarState, currentMouseY]
+    [sidebarState]
   );
 
   // Handle drag cancel (when ESC is pressed)
@@ -1842,14 +1845,12 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
           counts[item.id] = total;
           break;
         }
-        case 'done': {
-          let total = 0;
-          for (const accountId of activeSpace.accountUids) {
-            const allThreads = await DBGetThreadCountByLabels(accountId, []);
-            const inboxThreads = await DBGetThreadCountByLabels(accountId, ['INBOX', 'UNREAD']);
-            total += Math.max(allThreads - inboxThreads, 0);
-          }
-          counts[item.id] = total;
+        // No unread badge for Done/Sent. Done counted "all cached threads minus
+        // unread inbox" (a 999+ for anyone), and Sent's SENT+UNREAD only counts
+        // unread replies on threads you started — neither is a useful number.
+        case 'done':
+        case 'sent': {
+          counts[item.id] = 0;
           break;
         }
         default: {

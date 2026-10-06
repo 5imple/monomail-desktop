@@ -50,7 +50,7 @@ function getChronoSuggestions(input: string, now: dayjs.Dayjs): Suggestion[] {
 
   try {
     // Parse the input with chrono
-    const results = chrono.parse(input, now.toDate());
+    const results = chrono.parse(input, now.toDate(), { forwardDate: true });
 
     for (const result of results) {
       if (result.start && result.start.date() > now.toDate()) {
@@ -332,7 +332,7 @@ function getDatePatternSuggestions(normalized: string, now: dayjs.Dayjs): Sugges
     const match = normalized.match(pattern);
     if (match) {
       try {
-        const parsed = chrono.parseDate(normalized, now.toDate());
+        const parsed = chrono.parseDate(normalized, now.toDate(), { forwardDate: true });
         if (parsed && dayjs(parsed).isAfter(now)) {
           const date = dayjs(parsed);
           suggestions.push({
@@ -444,7 +444,9 @@ function formatTime(timeStr: string): string {
 }
 
 function formatNaturalDate(date: dayjs.Dayjs, now: dayjs.Dayjs): string {
-  const daysDiff = date.diff(now, 'day');
+  // Compare calendar days, not 24h spans: "tomorrow 9am" typed at 11 PM is
+  // only 10 hours away and was labelled "Today".
+  const daysDiff = date.startOf('day').diff(now.startOf('day'), 'day');
 
   if (daysDiff === 0) return 'Today';
   if (daysDiff === 1) return 'Tomorrow';
@@ -483,7 +485,7 @@ export function sortAndDeduplicateSuggestions(
   // Filter out past dates
   const validSuggestions = uniqueSuggestions.filter((suggestion) => {
     try {
-      const parsed = chrono.parseDate(suggestion.value, now.toDate());
+      const parsed = chrono.parseDate(suggestion.value, now.toDate(), { forwardDate: true });
       return !parsed || dayjs(parsed).isAfter(now);
     } catch {
       return true; // Keep if can't parse

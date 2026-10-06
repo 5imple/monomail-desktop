@@ -5,6 +5,7 @@ import { DBGetContactByEmail } from '@/renderer/app/lib/db/contact';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { FC, useEffect, useState, useRef } from 'react';
+import { getProviderForUid } from '@/main/api/mail/providerRegistry';
 
 interface RecipientAvatarProps {
   className?: string;
@@ -61,6 +62,13 @@ async function fetchStoredContactPhotoUrl(
 async function fetchPeoplePhotoUrl(email: string, accountId: string): Promise<string | null> {
   const cacheKey = getCacheKey(email, accountId);
   if (photoUrlCache.has(cacheKey)) return photoUrlCache.get(cacheKey) || null;
+  // Google People is Gmail-only: for a Microsoft account all three lookups
+  // failed ("No Google account token") — up to 75 doomed IPC calls per inbox
+  // page, competing with the inbox load at startup.
+  if (getProviderForUid(accountId) !== 'google' || accountId.startsWith('microsoft:')) {
+    photoUrlCache.set(cacheKey, false);
+    return null;
+  }
 
   try {
     const encodedEmail = encodeURIComponent(email);

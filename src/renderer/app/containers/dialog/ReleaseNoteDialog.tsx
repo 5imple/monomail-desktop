@@ -138,7 +138,7 @@ const MarkdownComponents: Components = {
   a: ({ href, children, ...props }) => (
     <a
       href={href}
-      className="select-text text-accent hover:underline"
+      className="select-text text-foreground hover:underline"
       target="_blank"
       rel="noopener noreferrer"
       {...props}

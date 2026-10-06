@@ -129,7 +129,7 @@ const EditorCommandExtension = Extension.create({
             if (metadata.active && metadata.range) {
               const decoration = Decoration.inline(metadata.range.from, metadata.range.to, {
                 class:
-                  'bg-accent/10 dark:bg-accent/15 text-accent rounded-md p-1'
+                  'bg-accent/10 dark:bg-accent/15 text-foreground rounded-md p-1'
               });
 
               return {
@@ -156,7 +156,7 @@ const EditorCommandExtension = Extension.create({
 
             const decoration = Decoration.inline(mappedFrom, mappedTo, {
               class:
-                'bg-accent/10 dark:bg-accent/15 text-accent rounded-md p-1'
+                'bg-accent/10 dark:bg-accent/15 text-foreground rounded-md p-1'
             });
 
             return {

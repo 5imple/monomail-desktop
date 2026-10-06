@@ -2,9 +2,9 @@ import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
-import mailApi from '@/main/api/mail/mailApi';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
 import MessageCard from '@/renderer/app/components/card/MessageCard';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import DisplayPanelHeader from '@/renderer/app/containers/header/DisplayPanelHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
@@ -12,6 +12,7 @@ import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
+import { layoutConversation } from '@/renderer/app/lib/messageHistory';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeInlineAtom } from '@/renderer/app/store/compose/useComposeInlineAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
@@ -20,13 +21,18 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { differenceInDays } from 'date-fns';
 import { debounce, isEqual } from 'lodash';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { toast } from 'sonner';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
+import { fetchFullThread, threadNeedsFullBody } from '@/renderer/app/lib/threadBodyPrefetch';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { useAtomValue } from 'jotai';
+import { threadExitIntentAtom } from '@/renderer/app/store/thread/exitIntentAtom';
+import { readerSwipeVariants } from '@/renderer/app/containers/list/threadRowMotion';
 
 interface DisplayPanelProps {
   className?: string;
@@ -42,6 +48,8 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
   const { t } = useTranslation();
 
   const [thread, setThread] = useState<MonoThread | null>(null);
+  const exitIntents = useAtomValue(threadExitIntentAtom);
+  const reduceMotion = useReducedMotion();
 
   const [displayedItems, setDisplayedMessages] = useState<ThreadItemBase[]>([]);
   const { activateScope, deactivateScope } = useHotkeyScope();
@@ -187,24 +195,6 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     return threadsMap[activeThreadId] || null;
   }, [activeThreadId, threadsMap]);
 
-  const payloadHasBodyData = useCallback((payload: MonoMessage['payload']): boolean => {
-    if (payload.body?.data) return true;
-    return payload.parts?.some(payloadHasBodyData) ?? false;
-  }, []);
-
-  const threadNeedsFullBody = useCallback(
-    (targetThread: MonoThread): boolean => {
-      const messages = targetThread.items.filter(
-        (item): item is MonoMessage => item.type === 'message'
-      );
-
-      return (
-        messages.length === 0 || messages.some((message) => !payloadHasBodyData(message.payload))
-      );
-    },
-    [payloadHasBodyData]
-  );
-
   useEffect(() => {
     if (!stableThread) {
       if (readerPhase === 'closing') return;
@@ -229,10 +219,14 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
         fullThreadFetchesRef.current.add(fetchKey);
         let completed = false;
 
-        mailApi
-          .getThread(stableThread.accountId, stableThread.id)
-          .then((response) => {
-            const fullThread = MonoThread.fromPlainObject(response);
+        // Shared with hover prefetch: if the pointer already rested on this row,
+        // this awaits that in-flight request instead of starting over.
+        fetchFullThread(stableThread.accountId, stableThread.id, {
+          cached: stableThread,
+          // Long threads: show the newest message as soon as it arrives.
+          onPartial: (partial) => updateThread(stableThread.accountId, partial)
+        })
+          .then((fullThread) => {
             completed = true;
             updateThread(stableThread.accountId, fullThread);
           })
@@ -388,48 +382,105 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     return { messages, messageDraftMap, unlinkedDrafts };
   }, [displayedItems, inlineDrafts]);
 
+  // How many items were shown when the newest message was last focused.
+  const focusedItemCountRef = useRef(0);
+
+  // Collapse state each card reports (cards toggle themselves on click), so
+  // adjacent collapsed rows can join into one stack. Unreported cards fall
+  // back to their initial state: only the newest message starts expanded.
+  const [collapsedById, setCollapsedById] = useState<Record<string, boolean>>({});
+  const handleCollapsedChange = useCallback((messageId: string, isCollapsed: boolean) => {
+    setCollapsedById((prev) =>
+      prev[messageId] === isCollapsed ? prev : { ...prev, [messageId]: isCollapsed }
+    );
+  }, []);
+  // Long histories fold their middle into an "N earlier messages" row.
+  const [historyUnfolded, setHistoryUnfolded] = useState(false);
+
+  const conversation = useMemo(() => {
+    const lastId = orderedItems.messages[orderedItems.messages.length - 1]?.id;
+    return layoutConversation(
+      orderedItems.messages,
+      (message) => collapsedById[message.id] ?? message.id !== lastId,
+      (message) => message.id,
+      historyUnfolded || isPrinting
+    );
+  }, [orderedItems.messages, collapsedById, historyUnfolded, isPrinting]);
+
+  // Open on the newest message without a visible scroll. It's pinned in place
+  // before the first paint, and again whenever the content resizes (earlier
+  // messages arriving from the progressive fetch, avatars, the reader's
+  // remount on a thread switch) until the user scrolls, clicks or presses a key.
+  const pinnedMessageIdRef = useRef<string | null>(null);
+
+  const applyPin = useCallback(() => {
+    const messageId = pinnedMessageIdRef.current;
+    const viewport = scrollAreaRef.current;
+    if (!messageId || !viewport) return;
+    const el = messageRefs.current[messageId];
+    if (!el || !viewport.contains(el)) return;
+    const top =
+      viewport.scrollTop +
+      el.getBoundingClientRect().top -
+      viewport.getBoundingClientRect().top -
+      18;
+    // When the subject and the history rows above fit comfortably, stay at the
+    // top: the whole conversation, newest email included, is already in view.
+    viewport.scrollTop = top <= viewport.clientHeight * 0.4 ? 0 : top;
+  }, []);
+
   useEffect(() => {
-    // You can decide if you want to *always* reset focus to the last message
-    // or only if there's no existing focus.
+    const release = () => {
+      pinnedMessageIdRef.current = null;
+    };
+    const opts = { capture: true, passive: true } as const;
+    window.addEventListener('wheel', release, opts);
+    window.addEventListener('touchstart', release, opts);
+    window.addEventListener('pointerdown', release, opts);
+    window.addEventListener('keydown', release, opts);
+    return () => {
+      window.removeEventListener('wheel', release, opts);
+      window.removeEventListener('touchstart', release, opts);
+      window.removeEventListener('pointerdown', release, opts);
+      window.removeEventListener('keydown', release, opts);
+    };
+  }, []);
+
+  // The content column of the current reader: re-pin whenever it resizes.
+  const contentResizeObserverRef = useRef<ResizeObserver | null>(null);
+  const contentColumnRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentResizeObserverRef.current?.disconnect();
+      contentResizeObserverRef.current = null;
+      if (!node) return;
+      const observer = new ResizeObserver(() => applyPin());
+      observer.observe(node);
+      contentResizeObserverRef.current = observer;
+    },
+    [applyPin]
+  );
+
+  useLayoutEffect(() => {
     if (displayedItems.length > 0) {
       const last = displayedItems[displayedItems.length - 1];
-      if (last && last.type === 'message' && focusedMessageId !== last.id) {
-        setFocusedMessageId(last.id);
-        focusMessageCard(last.id);
+      if (last && last.type === 'message') {
+        // Also re-pin when earlier messages were inserted above an
+        // already-focused newest message: a folder's cached copy of a
+        // conversation often holds just that message, so we pinned it alone
+        // and then the full fetch pushed it far below the fold.
+        const grewAboveFocused =
+          focusedMessageId === last.id && displayedItems.length > focusedItemCountRef.current;
+        if (focusedMessageId !== last.id || grewAboveFocused) {
+          focusedItemCountRef.current = displayedItems.length;
+          setFocusedMessageId(last.id);
+          if (focusedMessageId !== last.id || pinnedMessageIdRef.current === last.id) {
+            pinnedMessageIdRef.current = last.id;
+            applyPin();
+          }
+        }
       }
     }
   }, [displayedItems, inlineDrafts]);
-
-  // 4) Unified function to handle focusing (with optional inline-draft logic)
-  const focusMessageCard = (messageId: string) => {
-    setFocusedMessageId(messageId);
-    // Next tick: scroll into view if possible
-    setTimeout(() => {
-      // If there's an inline draft for this message, focus that container
-      const draftEl = inlineDraftRefs.current[messageId];
-      if (draftEl && scrollAreaRef.current) {
-        scrollAreaRef.current.scrollTo({
-          top: draftEl.offsetTop - 18,
-          behavior: 'smooth'
-        });
-        // draftEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        // Potentially also focus the input
-        // const inputField = draftEl.querySelector('textarea, input');
-        // if (inputField) (inputField as HTMLTextAreaElement).focus();
-        return;
-      }
-
-      // Otherwise, scroll to the message card
-      const messageEl = messageRefs.current[messageId];
-      if (messageEl && scrollAreaRef.current) {
-        scrollAreaRef.current.scrollTo({
-          top: messageEl.offsetTop - 18,
-          behavior: 'smooth'
-        });
-        // messageEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    }, 300);
-  };
 
   useEffect(() => {
     if (activeThreadId) {
@@ -438,8 +489,18 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     } else {
       deactivateScope('CONVERSATION_DISPLAY');
       setIsMessageListFocused(false);
+      // Forget the focused message on close: reopening the same thread
+      // otherwise matched the stale id, skipped the scroll-to-latest, and
+      // left the reader at the top of the conversation.
+      setFocusedMessageId(null);
+      focusedItemCountRef.current = 0;
+      pinnedMessageIdRef.current = null;
     }
-    if (scrollAreaRef.current) scrollAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
+    setCollapsedById({});
+    setHistoryUnfolded(false);
+    if (scrollAreaRef.current && !pinnedMessageIdRef.current) {
+      scrollAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
+    }
   }, [activeThreadId]);
 
   return (
@@ -461,77 +522,131 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       <div
         className={cn(
           'flex flex-1 origin-center transform-gpu overflow-hidden',
+          // The reading "desk": a sunken, softly tinted well inset from the
+          // app chrome. Message papers (MessageCard) sit on it, so the email
+          // no longer blends into the identical white app canvas.
+          'mx-3 mb-3 rounded-2xl bg-reader-well',
           // Reader enter/exit motion: the content fades + scales from the center
           // (no horizontal translate). 280ms matches MailLayout's close timer so
           // the exit fade completes before the panel unmounts. Header stays put
           // (this wrapper is a sibling of DisplayPanelHeader). motion-reduce off.
-          'transition-[opacity,transform] duration-[280ms] ease-out motion-reduce:transition-none',
+          'duration-[280ms] transition-[opacity,transform] ease-out motion-reduce:transition-none',
           readerPhase === 'open' ? 'scale-100 opacity-100' : 'scale-[0.985] opacity-0'
         )}
       >
-        <ScrollArea
-          viewportRef={scrollAreaRef}
-          className="relative flex-1"
-          scrollbarClassName={'opacity-0'}
-          style={{
-            maskImage:
-              'linear-gradient(to bottom, transparent, black 16px, black calc(100% - 24px), transparent)'
-          }}
-          onFocus={handleMessageListFocus}
-          onBlur={handleMessageListBlur}
-          onKeyDown={handleScrollAreaKeyDown}
-          tabIndex={0} // Make the scroll area focusable
-        >
-          <div className="mx-auto max-w-[920px] px-6 pb-16">
-            {thread && (
-              <h1
-                className="mb-5 mt-8 text-foreground"
-                style={{
-                  fontSize: '24px',
-                  fontWeight: 650,
-                  letterSpacing: '0',
-                  lineHeight: '1.3'
-                }}
-              >
-                {!thread.subject || thread.subject === '' ? '(No subject)' : thread.subject}
-              </h1>
-            )}
-            <div className={cn('flex flex-1 flex-col gap-3')} ref={printRef}>
-              {orderedItems.messages.map((message, index) => {
-                const isLastMessage = index === orderedItems.messages.length - 1;
-                const relatedDraft = orderedItems.messageDraftMap[message.id];
-
-                return (
-                  <MessageCard
-                    ref={(el) => (messageRefs.current[message.id] = el)}
-                    key={message.id}
-                    item={message as MonoMessage}
-                    isLastCard={isLastMessage}
-                    accountId={thread?.accountId}
-                    collapsed={!isLastMessage}
-                    draft={relatedDraft}
-                    className={cn('transition-all duration-300 ease-bouncy-in-out')}
+        {/* Swipe the email away when it's archived / trashed from the reader
+            (mode="wait": one ScrollArea at a time, so its refs stay valid). */}
+        <AnimatePresence mode="wait" initial={false} custom={exitIntents}>
+          <motion.div
+            key={thread?.id ?? 'empty'}
+            variants={readerSwipeVariants(thread?.id ?? '', !!reduceMotion)}
+            initial="enter"
+            animate="present"
+            exit="exit"
+            className="flex min-h-0 min-w-0 flex-1"
+          >
+            <ScrollArea
+              viewportRef={scrollAreaRef}
+              className="relative flex-1"
+              scrollbarClassName={'opacity-0'}
+              style={{
+                maskImage:
+                  'linear-gradient(to bottom, transparent, black 16px, black calc(100% - 24px), transparent)'
+              }}
+              onFocus={handleMessageListFocus}
+              onBlur={handleMessageListBlur}
+              onKeyDown={handleScrollAreaKeyDown}
+              tabIndex={0} // Make the scroll area focusable
+            >
+              <div ref={contentColumnRef} className="mx-auto max-w-[920px] px-6 pb-16">
+                {thread && (
+                  <h1
+                    className="mb-5 mt-8 text-foreground"
                     style={{
-                      zIndex: `${orderedItems.messages.length - index}`
+                      fontSize: '24px',
+                      fontWeight: 650,
+                      letterSpacing: '0',
+                      lineHeight: '1.3'
                     }}
-                    cardClassName={cn('transition-all h-fit')}
-                    isFocused={focusedMessageId === message.id}
-                    onFocusRequest={() => setFocusedMessageId(message.id)}
-                  />
-                );
-              })}
-              {orderedItems.unlinkedDrafts.map((draft) => (
-                <div key={draft.id}>
-                  <DraftCard
-                    item={draft as MonoDraft}
-                    className={cn('transition-all duration-300 ease-bouncy-in-out')}
-                  />
+                  >
+                    {!thread.subject || thread.subject === '' ? '(No subject)' : thread.subject}
+                  </h1>
+                )}
+                <div className={cn('flex flex-1 flex-col')} ref={printRef}>
+                  {conversation.map((entry, index) => {
+                    // Rows continuing a stack sit flush against the one above.
+                    const spacing =
+                      entry.stack === 'middle' || entry.stack === 'last' ? '' : 'mt-3 first:mt-0';
+
+                    if (entry.kind === 'fold') {
+                      return (
+                        <button
+                          key={entry.key}
+                          onClick={() => setHistoryUnfolded(true)}
+                          aria-expanded={false}
+                          className={cn(
+                            'group/fold flex w-full items-center gap-2.5 border border-t-0 border-foreground/[0.06] bg-card px-4 py-2.5 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.025] hover:text-foreground sm:px-5',
+                            'dark:border-white/[0.06] dark:hover:bg-foreground/[0.04]',
+                            spacing
+                          )}
+                        >
+                          {/* The count sits in the avatar column, so the line reads
+                              like the rows around it: "(6) earlier messages". */}
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-foreground/10 bg-background text-[11px] font-medium tabular-nums text-foreground/80 transition-colors group-hover/fold:border-foreground/20">
+                            {entry.hidden.length}
+                          </span>
+                          <span>
+                            {t('message_card.earlier_messages', { count: entry.hidden.length })}
+                          </span>
+                          <MonoIcon
+                            type={'unfold_more'}
+                            className="h-4 w-4 opacity-60 transition-opacity group-hover/fold:opacity-100"
+                          />
+                        </button>
+                      );
+                    }
+
+                    const message = entry.message;
+                    const isLastMessage = index === conversation.length - 1;
+                    const relatedDraft = orderedItems.messageDraftMap[message.id];
+
+                    return (
+                      <MessageCard
+                        ref={(el) => (messageRefs.current[message.id] = el)}
+                        key={message.id}
+                        item={message as MonoMessage}
+                        isLastCard={isLastMessage}
+                        accountId={thread?.accountId}
+                        collapsed={!isLastMessage}
+                        stack={entry.stack}
+                        onCollapsedChange={(isCollapsed) =>
+                          handleCollapsedChange(message.id, isCollapsed)
+                        }
+                        draft={relatedDraft}
+                        className={cn('transition-all duration-300 ease-bouncy-in-out', spacing)}
+                        style={{
+                          zIndex: `${conversation.length - index}`
+                        }}
+                        cardClassName={cn('transition-all h-fit')}
+                        isFocused={focusedMessageId === message.id}
+                        onFocusRequest={() => setFocusedMessageId(message.id)}
+                      />
+                    );
+                  })}
+                  {orderedItems.unlinkedDrafts.map((draft) => (
+                    <div key={draft.id} className="mt-3">
+                      <DraftCard
+                        item={draft as MonoDraft}
+                        className={cn('transition-all duration-300 ease-bouncy-in-out')}
+                      />
+                    </div>
+                  ))}
+                  <div style={{ height: spacerHeight }} />
                 </div>
-              ))}
-              <div style={{ height: spacerHeight }} />
-            </div>
-          </div>
-        </ScrollArea>
+              </div>
+            </ScrollArea>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

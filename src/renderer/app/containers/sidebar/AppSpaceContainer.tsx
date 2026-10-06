@@ -9,6 +9,7 @@ import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNav
 import React, { FC, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
+import { isBackendConfigured } from '@/main/api/apiClient';
 
 interface AppSpaceContainerProps {}
 
@@ -161,14 +162,19 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
               />
             );
           })}
-        <Button
-          onClick={handleAddSpace}
-          variant={'outline'}
-          className={cn('justify-center rounded-lg border-dashed bg-transparent')}
-        >
-          <MonoIcon type={'Plus'} className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-          <div className="mr-2 text-sm text-muted-foreground">{t('sidebar.space')}</div>
-        </Button>
+        {/* Creating a space is a backend call (spaceApi.createSpace has no
+            standalone path) — without one the user filled in the whole form
+            only to get "Failed to create space". */}
+        {isBackendConfigured() && (
+          <Button
+            onClick={handleAddSpace}
+            variant={'outline'}
+            className={cn('justify-center rounded-lg border-dashed bg-transparent')}
+          >
+            <MonoIcon type={'Plus'} className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+            <div className="mr-2 text-sm text-muted-foreground">{t('sidebar.space')}</div>
+          </Button>
+        )}
       </div>
     </div>
   );

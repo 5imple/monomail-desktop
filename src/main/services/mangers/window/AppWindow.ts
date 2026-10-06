@@ -154,17 +154,23 @@ class AppWindow extends BrowserWindow {
       windowHeight = Math.max(savedBounds.height, minHeight);
 
       // Only set position if both x and y are defined and reasonable
-      if (savedBounds.x !== undefined && savedBounds.y !== undefined) {
-        const displayBounds = screen.getPrimaryDisplay().bounds;
-        // Ensure window is at least partially visible on screen
-        if (
-          savedBounds.x >= -windowWidth + 100 &&
-          savedBounds.x < displayBounds.width - 100 &&
-          savedBounds.y >= -windowHeight + 100 &&
-          savedBounds.y < displayBounds.height - 100
-        ) {
-          windowX = savedBounds.x;
-          windowY = savedBounds.y;
+      const { x, y } = savedBounds;
+      if (x !== undefined && y !== undefined) {
+        // Ensure window is at least partially visible on SOME connected
+        // display. Checking only the primary display discarded the position
+        // of a window last left on an external monitor on every launch.
+        const isVisible = screen
+          .getAllDisplays()
+          .some(
+            ({ bounds: d }) =>
+              x >= d.x - windowWidth + 100 &&
+              x < d.x + d.width - 100 &&
+              y >= d.y - windowHeight + 100 &&
+              y < d.y + d.height - 100
+          );
+        if (isVisible) {
+          windowX = x;
+          windowY = y;
         }
       }
     }
@@ -177,6 +183,10 @@ class AppWindow extends BrowserWindow {
       minWidth,
       minHeight,
       show: false,
+      // macOS default is false: the first click on an inactive window only
+      // activates it and never reaches the page, so after switching back from
+      // another app every Archive / Delete (or any button) needed two clicks.
+      acceptFirstMouse: true,
       autoHideMenuBar: true,
       titleBarStyle: 'hiddenInset',
       webPreferences: {

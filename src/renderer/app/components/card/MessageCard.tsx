@@ -30,9 +30,9 @@ import {
   formatRelativeTime
 } from '@/renderer/app/lib/formatDate';
 import { isCalendarAttachment } from '@/renderer/app/lib/icsParser';
+import { cleanHistorySnippet, MessageStackPosition } from '@/renderer/app/lib/messageHistory';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
-import { useExtensionAtom } from '@/renderer/app/store/extension/useExtensionAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useTransition } from '@react-spring/web';
@@ -57,6 +57,10 @@ interface MessageCardProps {
   cardClassName?: string;
   isFocused?: boolean;
   onFocusRequest?: () => void;
+  /** Reports the card's own collapse state (it toggles itself on click). */
+  onCollapsedChange?: (collapsed: boolean) => void;
+  /** Position in a stack of adjacent collapsed rows; joins their edges. */
+  stack?: MessageStackPosition | null;
   handleContactOpen?: (recipient: MonoRecipient) => void;
   style?: React.CSSProperties;
 }
@@ -119,8 +123,9 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       cardClassName,
       isLastCard,
       isFocused,
-      handleContactOpen,
       onFocusRequest,
+      onCollapsedChange,
+      stack,
       accountId,
       draft,
       contactToggle,
@@ -130,12 +135,16 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
   ) => {
     const { t } = useTranslation();
     const { currentTheme } = useTheme(); // Get dark mode state from theme store
-    const { openContactsPanel } = useExtensionAtom();
     const { globalSearchQuery } = useGlobalAtom();
     const { setGlobalDraftWindows } = useComposeWindowAtom();
     const { accounts } = useAuth();
 
     const [isCollapsed, setIsCollapsed] = useState(collapsed);
+    const onCollapsedChangeRef = useRef(onCollapsedChange);
+    onCollapsedChangeRef.current = onCollapsedChange;
+    useEffect(() => {
+      onCollapsedChangeRef.current?.(!!isCollapsed);
+    }, [isCollapsed]);
     const [showQuotedContent, setShowQuotedContent] = useState(false);
     const [showCcDropdown, setShowCcDropdown] = useState(false);
     const [showBccDropdown, setShowBccDropdown] = useState(false);
@@ -195,14 +204,13 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         : null
     );
 
-    const handleOpenContactPanel = (recipient: MonoRecipient) => {
-      // openContactsPanel(recipient);
-      handleContactOpen?.(recipient);
-    };
-
     const handleClickNewEmail = (recipient: MonoRecipient) => {
-      // Use the current user's account email as 'from', not the message sender's email
-      const userEmail = accounts.length > 0 ? accounts[0].email : '';
+      // Send from the account this message belongs to (not just the first
+      // connected account), falling back to the first one.
+      const userEmail =
+        (accountId ? accounts.find((account) => account.uid === accountId)?.email : undefined) ??
+        accounts[0]?.email ??
+        '';
       executeCommand('COMPOSE_NEW_MESSAGE', {
         draft: new MonoDraft({ from: userEmail, to: [recipient.email] })
       });
@@ -416,6 +424,11 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             updateHeight();
           };
           img.onerror = () => markImageUnavailable(img, skeleton);
+          // Must be eager: the image is display:none behind its skeleton, and
+          // Chromium never loads a `loading="lazy"` image that isn't rendered —
+          // onload never fired and the skeleton stayed forever. Laziness is
+          // already handled by the IntersectionObserver that called us.
+          img.loading = 'eager';
           img.src = `data:${inlineImage.mimeType};base64,${inlineAttachment.data}`;
         } catch (error) {
           if (abortController.signal.aborted) {
@@ -528,6 +541,12 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       if (panelContainer) {
         resizeObserver.observe(panelContainer);
       }
+      // Also follow the content itself: the container is pinned to a measured
+      // pixel height, so content that grows after measurement (expanded
+      // recipient details, a calendar card that loads async) was clipped.
+      if (contentRef.current) {
+        resizeObserver.observe(contentRef.current);
+      }
 
       window.addEventListener('resize', handleResize);
 
@@ -547,7 +566,8 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       showTrackingDropdown,
       showTrackerPrevention,
       draft,
-      contactToggle
+      contactToggle,
+      showRecipientDetails
     ]);
 
     useEffect(() => {
@@ -715,6 +735,10 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const handleMouseLeave = () => {};
 
     // Add this function to your MessageCard component
+    const hasUnsubscribeTarget =
+      (currentMessage.listUnsubscribe?.url.length ?? 0) > 0 ||
+      (currentMessage.listUnsubscribe?.mailTo?.length ?? 0) > 0;
+
     const handleUnsubscribe = async (e: React.MouseEvent) => {
       e.stopPropagation();
 
@@ -722,7 +746,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 
       const unsubscribePromise = async (): Promise<{ mode: 'https' | 'mailto' }> => {
         if (!accountId) throw new Error('No account found');
-        if (!currentMessage.listUnsubscribe || !currentMessage.listUnsubscribe.url.length) {
+        if (!hasUnsubscribeTarget) {
           throw new Error('No unsubscribe URL available.');
         }
 
@@ -734,7 +758,10 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             return false;
           }
         });
-        const mailtoUrl = unsubscribeUrls.find((rawUrl) => /^mailto:/i.test(rawUrl));
+        // The header parser files mailto: entries under `mailTo` with the
+        // scheme stripped, so the old lookup in `url` never found one.
+        const mailtoAddress = currentMessage.listUnsubscribe.mailTo?.[0];
+        const mailtoUrl = mailtoAddress ? `mailto:${mailtoAddress}` : undefined;
 
         if (httpsUrl) {
           const response = await electronApi.unsubscribeFetch(httpsUrl);
@@ -805,11 +832,51 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           setTimeout(() => {
             setUnsubscribedLoading(false);
           }, 0);
+        } else {
+          // Nothing to fetch (not a promotion, or collapsed). Leaving the flag
+          // at its initial `true` kept the button invisible yet tabbable for
+          // newsletters in Updates/Primary that carry a List-Unsubscribe header.
+          setUnsubscribedLoading(false);
         }
       };
 
       fetchUnsubscribeInfo();
-    }, [currentMessage.id]);
+      // isCollapsed: a promotion first rendered collapsed must fetch when expanded.
+    }, [currentMessage.id, isCollapsed]);
+
+    const senderName =
+      currentMessage.from && currentMessage.from.name.length > 0
+        ? currentMessage.from.name[0].toUpperCase() + currentMessage.from.name.slice(1)
+        : currentMessage.from.email.split('@')[0];
+    const attachmentCount = Object.values(currentMessage.attachments).length;
+    const messageDate = currentMessage.timestamp ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <time
+            className="shrink-0 cursor-default whitespace-nowrap text-[11px] tabular-nums"
+            dateTime={new Date(currentMessage.timestamp).toISOString()}
+          >
+            {formatMessageHeaderDate(currentMessage.timestamp)}
+          </time>
+        </TooltipTrigger>
+        <TooltipPortal>
+          <TooltipContent side="bottom">
+            {formatFullDateTime(currentMessage.timestamp)}
+          </TooltipContent>
+        </TooltipPortal>
+      </Tooltip>
+    ) : null;
+    // A collapsed card inside a stack of collapsed rows joins its neighbours:
+    // inner corners squared, the shared edge drawn once (by the row above).
+    const stackClasses =
+      isCollapsed && stack
+        ? {
+            single: '',
+            first: 'rounded-b-none',
+            middle: 'rounded-none border-t-0',
+            last: 'rounded-t-none border-t-0'
+          }[stack]
+        : '';
 
     return (
       <div
@@ -821,155 +888,176 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         <Card
           ref={itemRef}
           className={cn(
-            // Newton reader card: minimal shadow + crisp border. The
-            // previous `shadow-lg` made every message a chunky elevated
-            // block — Newton's reader feels like a quiet document with
-            // soft section dividers instead.
-            'duration-50 overflow-hidden border-border/60 shadow-sm transition-all',
+            // A sheet of paper on the reader well: white card, hairline edge
+            // and a soft two-layer shadow that lifts it off the tinted well
+            // (subtler than the old chunky `shadow-lg`). In dark themes the
+            // lighter --card on the darker well does the lifting instead.
+            'duration-50 overflow-hidden border-foreground/[0.06] bg-card transition-all',
+            'shadow-[0_1px_2px_hsl(var(--foreground)/0.04),0_10px_28px_-14px_hsl(var(--foreground)/0.14)]',
+            'dark:border-white/[0.06] dark:shadow-none',
             ringVariants,
             draft && 'mb-2',
-            cardClassName
+            cardClassName,
+            stackClasses
           )}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') setIsCollapsed(!isCollapsed);
+            // Only when the card itself is focused — Enter on a link, button or
+            // attachment chip inside the message must not also collapse it.
+            if (e.key === 'Enter' && e.target === e.currentTarget) setIsCollapsed(!isCollapsed);
           }}
           style={style}
         >
           <CardHeader
-            className={cn('p-4 sm:p-5')}
+            className={cn(
+              isCollapsed
+                ? 'cursor-pointer px-4 py-2.5 transition-colors hover:bg-foreground/[0.025] dark:hover:bg-foreground/[0.04] sm:px-5'
+                : 'p-4 sm:p-5'
+            )}
             onClick={(e) => {
               e.stopPropagation();
               setIsCollapsed(!isCollapsed);
               onFocusRequest?.();
             }}
           >
-            {/* Newton sender row: avatar + sender name (tracking-tight,
+            {isCollapsed ? (
+              // History row: one quiet line per older message — who, the
+              // reply's own words (quoted history and "Sent from my…" cut
+              // off), a paperclip if it carries files, and when. Click to
+              // expand it in place.
+              <div className="flex h-6 items-center gap-2.5 text-[13px]">
+                <RecipientAvatar
+                  recipient={currentMessage.from}
+                  className="h-6 w-6 shrink-0 text-[10px]"
+                />
+                <span
+                  className={cn(
+                    'max-w-[40%] shrink-0 truncate tracking-tight text-foreground',
+                    currentMessage.labelIds.includes('UNREAD') ? 'font-semibold' : 'font-medium'
+                  )}
+                >
+                  {senderName}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                  {cleanHistorySnippet(currentMessage.snippet)}
+                </span>
+                {attachmentCount > 0 && (
+                  <MonoIcon
+                    type={'Paperclip'}
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70"
+                  />
+                )}
+                <span className="text-muted-foreground">{messageDate}</span>
+              </div>
+            ) : (
+              <>
+                {/* Newton sender row: avatar + sender name (tracking-tight,
                 medium weight) + sender email (muted, hidden when
                 collapsed to leave space for snippet). Timestamp on the
                 right in mono tabular-nums. */}
-            <div className="flex items-center gap-3 text-sm">
-              <RecipientAvatar recipient={currentMessage.from} />
-              <div className="flex-1 overflow-hidden">
-                <div className="flex items-center justify-between gap-2 overflow-hidden text-ellipsis">
-                  <div className="flex items-baseline gap-2 whitespace-nowrap">
-                    <span className="text-[14px] font-medium tracking-tight text-foreground">
-                      {currentMessage.from && currentMessage.from.name.length > 0
-                        ? currentMessage.from.name[0].toUpperCase() +
-                          currentMessage.from.name.slice(1)
-                        : currentMessage.from.email.split('@')[0]}
-                    </span>
-                    {!isCollapsed && currentMessage.from?.name?.length > 0 && (
-                      <span className="hidden text-[12px] text-muted-foreground sm:inline">
-                        {currentMessage.from.email}
-                      </span>
-                    )}
-                  </div>
-                  {/* {currentMessage.id} / {currentMessage.threadId} */}
-                  {!isCollapsed &&
-                    currentMessage.listUnsubscribe.url.length > 0 &&
-                    !isUnsubscribed && (
-                      <Button
-                        onClick={handleUnsubscribe}
-                        variant={'default'}
-                        sizeVariant={'xs'}
-                        className={cn(
-                          'no-drag transition-all duration-300',
-                          unsubscribedLoading ? 'pointer-events-none opacity-0' : 'opacity-100'
-                        )}
-                      >
-                        Unsubscribe
-                      </Button>
-                    )}
-                  {!isCollapsed &&
-                    currentMessage.listUnsubscribe.url.length > 0 &&
-                    isUnsubscribed && (
-                      <div
-                        className={cn(
-                          'flex items-center gap-1 overflow-hidden text-ellipsis rounded-md border p-1 px-2 text-xs transition-all duration-300',
-                          unsubscribedLoading ? 'pointer-events-none opacity-0' : 'opacity-100'
-                        )}
-                      >
-                        <MonoIcon type={'AlertCircle'} />
-                        <div className="flex-1 overflow-hidden text-ellipsis">
-                          <span className="whitespace-nowrap">
-                            {' '}
-                            You unsubscribed from {currentMessage.from.email}
+                <div className="flex items-center gap-3 text-sm">
+                  <RecipientAvatar recipient={currentMessage.from} />
+                  <div className="flex-1 overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 overflow-hidden text-ellipsis">
+                      <div className="flex items-baseline gap-2 whitespace-nowrap">
+                        <span className="text-[14px] font-medium tracking-tight text-foreground">
+                          {senderName}
+                        </span>
+                        {!isCollapsed && currentMessage.from?.name?.length > 0 && (
+                          <span className="hidden text-[12px] text-muted-foreground sm:inline">
+                            {currentMessage.from.email}
                           </span>
-                        </div>
+                        )}
                       </div>
-                    )}
-                  <div
-                    className={cn(
-                      'flex-1 overflow-hidden text-ellipsis text-muted-foreground opacity-0 transition-opacity',
-                      isCollapsed && 'opacity-100'
-                    )}
-                  >
-                    <span className="whitespace-nowrap">{currentMessage.snippet}</span>
-                  </div>
-                  {currentMessage.timestamp && (
-                    <div className="ml-auto flex items-center gap-1.5 text-muted-foreground">
-                      {showHeaderMessageActions && (
-                        <div
-                          className="flex max-w-0 shrink-0 items-center gap-0.5 overflow-hidden opacity-0 transition-all duration-150 group-hover:max-w-[88px] group-hover:opacity-100"
-                          onClick={(event) => event.stopPropagation()}
+                      {/* {currentMessage.id} / {currentMessage.threadId} */}
+                      {!isCollapsed && hasUnsubscribeTarget && !isUnsubscribed && (
+                        <Button
+                          onClick={handleUnsubscribe}
+                          variant={'default'}
+                          sizeVariant={'xs'}
+                          className={cn(
+                            'no-drag transition-all duration-300',
+                            unsubscribedLoading ? 'pointer-events-none opacity-0' : 'opacity-100'
+                          )}
                         >
-                          <Button
-                            typeVariant="icon"
-                            sizeVariant="xs"
-                            variant="ghost"
-                            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
-                            tooltipSide="bottom"
-                            tooltip={t('message_card.reply')}
-                            shortcut={isLastCard ? 'R' : undefined}
-                            onClick={handleReplyMessage}
-                          >
-                            <Reply className="h-4 w-4" strokeWidth={1.8} />
-                          </Button>
-                          <Button
-                            typeVariant="icon"
-                            sizeVariant="xs"
-                            variant="ghost"
-                            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
-                            tooltipSide="bottom"
-                            tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
-                            onClick={handleReplyAllMessage}
-                          >
-                            <ReplyAll className="h-4 w-4" strokeWidth={1.8} />
-                          </Button>
-                          <Button
-                            typeVariant="icon"
-                            sizeVariant="xs"
-                            variant="ghost"
-                            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
-                            tooltipSide="bottom"
-                            tooltip={t('message_card.forward')}
-                            shortcut={isLastCard ? 'F' : undefined}
-                            onClick={handleForwardMessage}
-                          >
-                            <Forward className="h-4 w-4" strokeWidth={1.8} />
-                          </Button>
+                          Unsubscribe
+                        </Button>
+                      )}
+                      {!isCollapsed && hasUnsubscribeTarget && isUnsubscribed && (
+                        <div
+                          className={cn(
+                            'flex items-center gap-1 overflow-hidden text-ellipsis rounded-md border p-1 px-2 text-xs transition-all duration-300',
+                            unsubscribedLoading ? 'pointer-events-none opacity-0' : 'opacity-100'
+                          )}
+                        >
+                          <MonoIcon type={'AlertCircle'} />
+                          <div className="flex-1 overflow-hidden text-ellipsis">
+                            <span className="whitespace-nowrap">
+                              {' '}
+                              You unsubscribed from {currentMessage.from.email}
+                            </span>
+                          </div>
                         </div>
                       )}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <time
-                            className="shrink-0 cursor-default whitespace-nowrap text-[11px] tabular-nums"
-                            dateTime={new Date(currentMessage.timestamp).toISOString()}
-                          >
-                            {formatMessageHeaderDate(currentMessage.timestamp)}
-                          </time>
-                        </TooltipTrigger>
-                        <TooltipPortal>
-                          <TooltipContent side="bottom">
-                            {formatFullDateTime(currentMessage.timestamp)}
-                          </TooltipContent>
-                        </TooltipPortal>
-                      </Tooltip>
+                      <div
+                        className={cn(
+                          'flex-1 overflow-hidden text-ellipsis text-muted-foreground opacity-0 transition-opacity',
+                          isCollapsed && 'opacity-100'
+                        )}
+                      >
+                        <span className="whitespace-nowrap">{currentMessage.snippet}</span>
+                      </div>
+                      {currentMessage.timestamp && (
+                        <div className="ml-auto flex items-center gap-1.5 text-muted-foreground">
+                          {showHeaderMessageActions && (
+                            <div
+                              className="flex max-w-0 shrink-0 items-center gap-0.5 overflow-hidden opacity-0 transition-all duration-150 group-hover:max-w-[88px] group-hover:opacity-100"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <Button
+                                typeVariant="icon"
+                                sizeVariant="xs"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                                tooltipSide="bottom"
+                                tooltip={t('message_card.reply')}
+                                shortcut={isLastCard ? 'R' : undefined}
+                                onClick={handleReplyMessage}
+                              >
+                                <Reply className="h-4 w-4" strokeWidth={1.8} />
+                              </Button>
+                              <Button
+                                typeVariant="icon"
+                                sizeVariant="xs"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                                tooltipSide="bottom"
+                                tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
+                                onClick={handleReplyAllMessage}
+                              >
+                                <ReplyAll className="h-4 w-4" strokeWidth={1.8} />
+                              </Button>
+                              <Button
+                                typeVariant="icon"
+                                sizeVariant="xs"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted-low hover:text-foreground"
+                                tooltipSide="bottom"
+                                tooltip={t('message_card.forward')}
+                                shortcut={isLastCard ? 'F' : undefined}
+                                onClick={handleForwardMessage}
+                              >
+                                <Forward className="h-4 w-4" strokeWidth={1.8} />
+                              </Button>
+                            </div>
+                          )}
+                          {messageDate}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </CardHeader>
 
           {/* Use currentMessage instead of item in the content */}
@@ -1009,224 +1097,233 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                 )}
                 {(preview || showRecipientDetails) && (
                   <>
-                <div className="inline-flex items-start gap-1 text-xs">
-                  <span className="mt-0.5 font-medium text-muted-foreground">
-                    {t('message_card.to')}:
-                  </span>{' '}
-                  <div className="flex flex-col">
-                    {currentMessage.to.length === 0 ? (
-                      <span>({t('message_card.no_recipient')})</span>
-                    ) : (
-                      currentMessage.to.map((recipient) => {
-                        return (
-                          <span key={recipient.email} className="mr-1">
-                            {preview ? (
-                              <span className="text-xs">{`${recipient.name} (${recipient.email})`}</span>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <div className="group/email flex items-center gap-1">
-                                  <Button
-                                    onClick={() => handleOpenContactPanel(recipient)}
-                                    className="text-xs"
-                                    variant="link"
-                                    typeVariant={'inline'}
-                                  >
-                                    {`${recipient.name} (${recipient.email})`}
-                                  </Button>
+                    <div className="inline-flex items-start gap-1 text-xs">
+                      <span className="mt-0.5 font-medium text-muted-foreground">
+                        {t('message_card.to')}:
+                      </span>{' '}
+                      <div className="flex flex-col">
+                        {currentMessage.to.length === 0 ? (
+                          <span>({t('message_card.no_recipient')})</span>
+                        ) : (
+                          currentMessage.to.map((recipient) => {
+                            return (
+                              <span key={recipient.email} className="mr-1">
+                                {preview ? (
+                                  <span className="text-xs">{`${recipient.name} (${recipient.email})`}</span>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <div className="group/email flex items-center gap-1">
+                                      <span className="select-text text-xs">
+                                        {`${recipient.name} (${recipient.email})`}
+                                      </span>
 
-                                  <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
-                                    <CopyButton sizeVariant="xxs" textToCopy={recipient.email} />
+                                      <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
+                                        <CopyButton
+                                          sizeVariant="xxs"
+                                          textToCopy={recipient.email}
+                                        />
 
-                                    <Button
-                                      typeVariant={'icon'}
-                                      variant={'ghost'}
-                                      sizeVariant={'xxs'}
-                                      onClick={() => {
-                                        handleClickNewEmail(recipient);
-                                      }}
-                                    >
-                                      <MonoIcon
-                                        className="h-3.5 w-3.5 text-muted-foreground"
-                                        type={'Edit'}
-                                      />
-                                    </Button>
+                                        <Button
+                                          typeVariant={'icon'}
+                                          variant={'ghost'}
+                                          sizeVariant={'xxs'}
+                                          onClick={() => {
+                                            handleClickNewEmail(recipient);
+                                          }}
+                                        >
+                                          <MonoIcon
+                                            className="h-3.5 w-3.5 text-muted-foreground"
+                                            type={'Edit'}
+                                          />
+                                        </Button>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
-                            )}
-                          </span>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-                <div className="inline-flex items-center gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    {t('message_card.reply_to')}:
-                  </span>{' '}
-                  {preview ? (
-                    <span className="text-xs">{`${currentMessage.from.name} (${currentMessage.from.email})`}</span>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <div className="group/email flex items-center gap-1">
-                        <Button
-                          onClick={() => handleOpenContactPanel(currentMessage.from)}
-                          className="select-text text-xs"
-                          variant="link"
-                          typeVariant={'inline'}
-                        >
-                          {currentMessage.from &&
-                            `${currentMessage.from.name} (${currentMessage.from.email})`}
-                        </Button>
-                        <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
-                          <CopyButton sizeVariant="xxs" textToCopy={currentMessage.from.email} />
-                          <Button
-                            typeVariant={'icon'}
-                            variant={'ghost'}
-                            sizeVariant={'xxs'}
-                            onClick={() => {
-                              handleClickNewEmail(currentMessage.from);
-                            }}
-                          >
-                            <MonoIcon className="h-3.5 w-3.5 text-muted-foreground" type={'Edit'} />
-                          </Button>
-                        </div>
+                                )}
+                              </span>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
-
-                {/* CC Recipients - Only show if there are cc recipients */}
-                {currentMessage.cc && currentMessage.cc.length > 0 && (
-                  <div className="text-xs">
-                    <span className="font-medium text-muted-foreground">
-                      {t('message_card.cc')}:
-                    </span>
-                    <Button
-                      className="ml-1 h-auto select-text p-0 text-xs"
-                      variant="link"
-                      typeVariant={'inline'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowCcDropdown(!showCcDropdown);
-                      }}
-                    >
-                      {currentMessage.cc.length} {t('message_card.recipients')}
-                      <MonoIcon
-                        type={showCcDropdown ? 'ChevronUp' : 'ChevronDown'}
-                        className="ml-1 h-3 w-3"
-                      />
-                    </Button>
-                    {showCcDropdown && (
-                      <div className="ml-7 mt-1">
-                        {currentMessage.cc.map((recipient) => (
-                          <div key={recipient.email} className="py-1 text-xs">
-                            {preview ? (
-                              <span>{`${recipient.name} (${recipient.email})`}</span>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <div className="group/email flex items-center gap-1">
-                                  <Button
-                                    onClick={() => handleOpenContactPanel(recipient)}
-                                    className="select-text text-xs"
-                                    variant="link"
-                                    typeVariant={'inline'}
-                                  >
-                                    {`${recipient.name} (${recipient.email})`}
-                                  </Button>
-
-                                  <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
-                                    <CopyButton sizeVariant="xxs" textToCopy={recipient.email} />
-
-                                    <Button
-                                      typeVariant={'icon'}
-                                      variant={'ghost'}
-                                      sizeVariant={'xxs'}
-                                      onClick={() => {
-                                        handleClickNewEmail(recipient);
-                                      }}
-                                    >
-                                      <MonoIcon
-                                        className="h-3.5 w-3.5 text-muted-foreground"
-                                        type={'Edit'}
-                                      />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                    <div className="inline-flex items-center gap-1 text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        {t('message_card.reply_to')}:
+                      </span>{' '}
+                      {preview ? (
+                        <span className="text-xs">{`${currentMessage.from.name} (${currentMessage.from.email})`}</span>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <div className="group/email flex items-center gap-1">
+                            <span className="select-text text-xs">
+                              {currentMessage.from &&
+                                `${currentMessage.from.name} (${currentMessage.from.email})`}
+                            </span>
+                            <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
+                              <CopyButton
+                                sizeVariant="xxs"
+                                textToCopy={currentMessage.from.email}
+                              />
+                              <Button
+                                typeVariant={'icon'}
+                                variant={'ghost'}
+                                sizeVariant={'xxs'}
+                                onClick={() => {
+                                  handleClickNewEmail(currentMessage.from);
+                                }}
+                              >
+                                <MonoIcon
+                                  className="h-3.5 w-3.5 text-muted-foreground"
+                                  type={'Edit'}
+                                />
+                              </Button>
+                            </div>
                           </div>
-                        ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CC Recipients - Only show if there are cc recipients */}
+                    {currentMessage.cc && currentMessage.cc.length > 0 && (
+                      <div className="text-xs">
+                        <span className="font-medium text-muted-foreground">
+                          {t('message_card.cc')}:
+                        </span>
+                        <Button
+                          className="ml-1 h-auto select-text p-0 text-xs"
+                          variant="link"
+                          typeVariant={'inline'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowCcDropdown(!showCcDropdown);
+                          }}
+                        >
+                          {currentMessage.cc.length} {t('message_card.recipients')}
+                          <MonoIcon
+                            type={showCcDropdown ? 'ChevronUp' : 'ChevronDown'}
+                            className="ml-1 h-3 w-3"
+                          />
+                        </Button>
+                        {showCcDropdown && (
+                          <div className="ml-7 mt-1">
+                            {currentMessage.cc.map((recipient) => (
+                              <div key={recipient.email} className="py-1 text-xs">
+                                {preview ? (
+                                  <span>{`${recipient.name} (${recipient.email})`}</span>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <div className="group/email flex items-center gap-1">
+                                      <span className="select-text text-xs">
+                                        {`${recipient.name} (${recipient.email})`}
+                                      </span>
+
+                                      <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
+                                        <CopyButton
+                                          sizeVariant="xxs"
+                                          textToCopy={recipient.email}
+                                        />
+
+                                        <Button
+                                          typeVariant={'icon'}
+                                          variant={'ghost'}
+                                          sizeVariant={'xxs'}
+                                          onClick={() => {
+                                            handleClickNewEmail(recipient);
+                                          }}
+                                        >
+                                          <MonoIcon
+                                            className="h-3.5 w-3.5 text-muted-foreground"
+                                            type={'Edit'}
+                                          />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* BCC Recipients - Only show if there are bcc recipients */}
-                {currentMessage.bcc && currentMessage.bcc.length > 0 && (
-                  <div className="text-xs">
-                    <span className="font-medium text-muted-foreground">
-                      {t('message_card.bcc')}:
-                    </span>
-                    <Button
-                      className="ml-1 h-auto select-text p-0 text-xs"
-                      variant="link"
-                      typeVariant={'inline'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowBccDropdown(!showBccDropdown);
-                      }}
-                    >
-                      {currentMessage.bcc.length} {t('message_card.recipients')}
-                      <MonoIcon
-                        type={showBccDropdown ? 'ChevronUp' : 'ChevronDown'}
-                        className="ml-1 h-3 w-3"
-                      />
-                    </Button>
-                    {showBccDropdown && (
-                      <div className="ml-7 mt-1">
-                        {currentMessage.bcc.map((recipient) => (
-                          <div key={recipient.email} className="py-1 text-xs">
-                            {preview ? (
-                              <span>{`${recipient.name} (${recipient.email})`}</span>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <div className="group/email flex items-center gap-1">
-                                  <Button
-                                    onClick={() => handleOpenContactPanel(recipient)}
-                                    className="select-text text-xs"
-                                    variant="link"
-                                    typeVariant={'inline'}
-                                  >
-                                    {`${recipient.name} (${recipient.email})`}
-                                  </Button>
+                    {/* BCC Recipients - Only show if there are bcc recipients */}
+                    {currentMessage.bcc && currentMessage.bcc.length > 0 && (
+                      <div className="text-xs">
+                        <span className="font-medium text-muted-foreground">
+                          {t('message_card.bcc')}:
+                        </span>
+                        <Button
+                          className="ml-1 h-auto select-text p-0 text-xs"
+                          variant="link"
+                          typeVariant={'inline'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowBccDropdown(!showBccDropdown);
+                          }}
+                        >
+                          {currentMessage.bcc.length} {t('message_card.recipients')}
+                          <MonoIcon
+                            type={showBccDropdown ? 'ChevronUp' : 'ChevronDown'}
+                            className="ml-1 h-3 w-3"
+                          />
+                        </Button>
+                        {showBccDropdown && (
+                          <div className="ml-7 mt-1">
+                            {currentMessage.bcc.map((recipient) => (
+                              <div key={recipient.email} className="py-1 text-xs">
+                                {preview ? (
+                                  <span>{`${recipient.name} (${recipient.email})`}</span>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <div className="group/email flex items-center gap-1">
+                                      <span className="select-text text-xs">
+                                        {`${recipient.name} (${recipient.email})`}
+                                      </span>
 
-                                  <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
-                                    <CopyButton sizeVariant="xxs" textToCopy={recipient.email} />
+                                      <div className="flex items-center opacity-0 transition-opacity group-hover/email:opacity-100">
+                                        <CopyButton
+                                          sizeVariant="xxs"
+                                          textToCopy={recipient.email}
+                                        />
 
-                                    <Button
-                                      typeVariant={'icon'}
-                                      variant={'ghost'}
-                                      sizeVariant={'xxs'}
-                                      onClick={() => {
-                                        handleClickNewEmail(recipient);
-                                      }}
-                                    >
-                                      <MonoIcon
-                                        className="h-3.5 w-3.5 text-muted-foreground"
-                                        type={'Edit'}
-                                      />
-                                    </Button>
+                                        <Button
+                                          typeVariant={'icon'}
+                                          variant={'ghost'}
+                                          sizeVariant={'xxs'}
+                                          onClick={() => {
+                                            handleClickNewEmail(recipient);
+                                          }}
+                                        >
+                                          <MonoIcon
+                                            className="h-3.5 w-3.5 text-muted-foreground"
+                                            type={'Edit'}
+                                          />
+                                        </Button>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                               </div>
-                            )}
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
+                    {!preview && (
+                      <button
+                        type="button"
+                        aria-expanded={true}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowRecipientDetails(false);
+                        }}
+                        className="inline-flex w-fit items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {t('message_card.hide_details', { defaultValue: 'Hide details' })}
+                        <MonoIcon type="ChevronUp" className="h-3 w-3" />
+                      </button>
+                    )}
                   </>
                 )}
 
@@ -1263,7 +1360,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                           </Button>
                         </div>
                       ) : (
-                        // Seen more than once - show text-accent with read count
+                        // Seen more than once - show text-foreground with read count
                         <div className="flex items-center gap-2">
                           <Button
                             className="ml-1 h-auto select-text p-0 text-xs"
@@ -1276,7 +1373,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                           >
                             <MonoIcon
                               type={trackingHistory.length > 1 ? 'CheckCheck' : 'Check'}
-                              className="mr-1 h-3 w-3 text-accent"
+                              className="mr-1 h-3 w-3 text-foreground"
                             />
                             {trackingHistory.length} Read{trackingHistory.length > 1 ? 's' : ''}
                             <MonoIcon
@@ -1388,7 +1485,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                             <div className="flex w-full items-center gap-2">
                               <MonoIcon
                                 type={'Shield'}
-                                className="mb-0.5 h-4 w-4 shrink-0 text-accent"
+                                className="mb-0.5 h-4 w-4 shrink-0 text-foreground"
                               />
                               <span className="line-clamp-1">
                                 {t(
@@ -1420,7 +1517,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                                 <div className="flex items-center gap-2 text-sm text-foreground">
                                   <MonoIcon
                                     type={'Shield'}
-                                    className="mb-0.5 h-4 w-4 shrink-0 text-accent"
+                                    className="mb-0.5 h-4 w-4 shrink-0 text-foreground"
                                   />
                                   <span>Trackers removed</span>
                                 </div>
@@ -1432,7 +1529,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                     )
                   : null}
                 <div className="overflow-hidden px-4 pb-4">
-                  <div className="email-document overflow-x-auto rounded-md border border-black/5 bg-white px-4 py-3 text-[#202124]">
+                  <div className="email-document overflow-x-auto bg-white px-4 py-3 text-[#202124] dark:rounded-md">
                     <div
                       ref={messageContentRef}
                       className={cn(
@@ -1482,7 +1579,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                         showQuotedContent ? 'p-6 pt-0 opacity-100' : 'h-0 opacity-0'
                       )}
                     >
-                      <div className="email-document overflow-x-auto rounded-md border border-black/5 bg-white px-4 py-3 text-[#202124]">
+                      <div className="email-document overflow-x-auto bg-white px-4 py-3 text-[#202124] dark:rounded-md">
                         <div
                           ref={quotedContentRef}
                           className={cn(
@@ -1500,8 +1597,8 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             </div>
           </div>
 
-          {/* Attachments section - always visible even when collapsed */}
-          {Object.values(currentMessage.attachments).length > 0 && (
+          {/* Attachments: a collapsed row shows a paperclip instead. */}
+          {!isCollapsed && attachmentCount > 0 && (
             <CardFooter
               className={cn('flex flex-col items-start gap-3 p-4', isCollapsed ? 'pt-1' : '')}
             >

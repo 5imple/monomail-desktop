@@ -37,7 +37,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const { labelsMapByAccount } = useLabelAtom();
-  const { selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
   const { updateLabelFromThread } = useThreadLabelAtom();
   const { addUndoAction } = useUndoManager();
   const { accounts } = useAuth();
@@ -47,9 +47,13 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
   const [loading, setLoading] = useState(false);
 
   // Get selected threads data
+  // Same target as the thread commands: the open thread, else the selection.
+  // Reading only the selection left this page empty ("No labels found") when
+  // opened from the reader, since opening a thread doesn't select it.
   const selectedThreadsData = useMemo(() => {
-    return selectedThreads.map((threadId) => threadsMap[threadId]).filter(Boolean);
-  }, [selectedThreads, threadsMap]);
+    const targetIds = activeThreadId ? [activeThreadId] : selectedThreads;
+    return targetIds.map((threadId) => threadsMap[threadId]).filter(Boolean);
+  }, [activeThreadId, selectedThreads, threadsMap]);
 
   // Get unique account IDs from selected threads
   const selectedAccountIds = useMemo(() => {
@@ -248,24 +252,19 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
         for (const { accountId, threadCount } of accountsInfo) {
           if (threadCount === 0) continue;
 
-          // Get threads for this account
-          const accountThreads = selectedThreadsData
-            .filter((thread) => thread.accountId === accountId)
-            .map((thread) => thread.id);
-
-          if (accountThreads.length === 0) continue;
-
-          // Get current labels to remove (we'll remove INBOX, DONE, etc. but keep STARRED, UNREAD, etc.)
-          const labelsToRemove: string[] = [];
-          const currentThread = selectedThreadsData.find(
+          // Labels are computed per thread: using the first thread's labels for
+          // the whole account left other threads' labels in place on move and
+          // re-added labels they never had (e.g. INBOX) on undo.
+          const accountThreads = selectedThreadsData.filter(
             (thread) => thread.accountId === accountId
           );
 
-          if (currentThread) {
+          for (const currentThread of accountThreads) {
             // Store original labels for undo
             const originalLabels = [...currentThread.labelIds];
 
-            // Remove organizational labels but keep status labels
+            // Remove organizational labels but keep status labels (STARRED, UNREAD, …)
+            const labelsToRemove: string[] = [];
             const organizationalLabels = ['INBOX', 'SENT', 'DRAFT', 'TRASH', 'SPAM'];
             organizationalLabels.forEach((label) => {
               if (currentThread.labelIds.includes(label)) {
@@ -293,7 +292,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
             // Store state for undo
             originalThreadStates.push({
               accountId,
-              threadIds: accountThreads,
+              threadIds: [currentThread.id],
               originalLabels,
               labelsToAdd: labelToAdd ? [labelToAdd] : [],
               labelsToRemove
@@ -302,7 +301,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
             // Perform the move
             await updateLabelFromThread(
               accountId,
-              accountThreads,
+              [currentThread.id],
               labelToAdd ? [labelToAdd] : [],
               labelsToRemove,
               true,
@@ -376,7 +375,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
         action: {
           label: (
             <span className="inline-flex items-end gap-1">
-              Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'MOD+Z'} />
+              Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
             </span>
           ),
           onClick: () => undoFunction && undoFunction()

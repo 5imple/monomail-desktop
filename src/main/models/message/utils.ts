@@ -92,7 +92,7 @@ export function parsePayloadPart(message: MonoMessage) {
   }
   parsePayload(message.payload);
 
-  const escapedPlainTextBody = escapeHtml(plainTextBody);
+  const escapedPlainTextBody = linkifyPlainText(plainTextBody);
   plainTextBody = `<div class="p-6 min-h-6" style="white-space: pre-wrap;">${escapedPlainTextBody}</div>`;
 
   return {
@@ -151,6 +151,29 @@ function sanitizeEmailHtml(html: string): string {
 function serializeScopedStyle(cssText: string): string {
   const safeCssText = cssText.replace(/<\/style/gi, '<\\/style');
   return `<style>${safeCssText}</style>`;
+}
+
+/**
+ * Escape a plain-text body and turn its http(s) URLs into links. Plain-text
+ * mail (password resets, ticket notifications) otherwise showed every URL as
+ * dead text. Each piece is escaped separately, so the URL can't break out of
+ * the attribute; anchors get the same attributes as setAnchorAttributes.
+ */
+export function linkifyPlainText(text: string): string {
+  const urlPattern = /https?:\/\/[^\s<>"']+/g;
+  let html = '';
+  let last = 0;
+  for (const match of text.matchAll(urlPattern)) {
+    let url = match[0];
+    // Sentence punctuation right after a URL isn't part of it.
+    const trailing = url.match(/[.,;:!?)\]]+$/)?.[0] ?? '';
+    if (trailing) url = url.slice(0, -trailing.length);
+    const start = match.index ?? 0;
+    html += escapeHtml(text.slice(last, start));
+    html += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" data-open-modal="true" class="text-blue-600 underline">${escapeHtml(url)}</a>`;
+    last = start + url.length;
+  }
+  return html + escapeHtml(text.slice(last));
 }
 
 function escapeHtml(value: string): string {
@@ -339,7 +362,7 @@ function setAnchorAttributes(anchor: HTMLAnchorElement) {
   anchor.classList.add('text-blue-600', 'underline');
 }
 
-function extractAndRemoveEmailHistory(body: HTMLElement): {
+export function extractAndRemoveEmailHistory(body: HTMLElement): {
   cleanBody: HTMLElement;
   history: string[];
 } {
@@ -349,12 +372,6 @@ function extractAndRemoveEmailHistory(body: HTMLElement): {
     // 영어 (English)
     /^---------- Forwarded message ---------$/i,
     /^-----Original Message-----$/i,
-    /^From:/i,
-    /^Date:/i,
-    /^Subject:/i,
-    /^To:/i,
-    /^Cc:/i,
-    /^Bcc:/i,
     /^On .* wrote:$/i,
 
     // 스페인어 (Spanish)
@@ -391,9 +408,36 @@ function extractAndRemoveEmailHistory(body: HTMLElement): {
   let currentHistory = '';
   let inHistory = false;
 
+  // A bare "From:/Date:/To:" line is NOT a history marker on its own —
+  // treating it as one hid everything after "Date: Fri Oct 9" in an event
+  // email or "To: All students" in a memo. Only an actual reply header block
+  // (Outlook/Apple Mail style: From: plus another header label, on the same or
+  // the following lines) starts the quoted history.
+  const headerLinePattern = /^(From|Sent|Date|To|Subject|Cc|Bcc)\s*:/i;
+
+  function isReplyHeaderBlock(node: Node): boolean {
+    if (!headerLinePattern.test(node.textContent?.trim() || '')) return false;
+    let text = node.textContent || '';
+    let sibling = node.nextSibling;
+    for (let i = 0; i < 4 && sibling; sibling = sibling.nextSibling) {
+      const siblingText = sibling.textContent || '';
+      if (!siblingText.trim()) continue;
+      text += '\n' + siblingText;
+      i++;
+    }
+    const labels = new Set(
+      Array.from(text.matchAll(/\b(From|Sent|Date|To|Subject)\s*:/gi), (m) => m[1].toLowerCase())
+    );
+    return labels.has('from') && labels.size >= 2;
+  }
+
+  function isHistoryStart(node: Node): boolean {
+    const text = node.textContent?.trim() || '';
+    return historyStartPatterns.some((pattern) => pattern.test(text)) || isReplyHeaderBlock(node);
+  }
+
   function isHistoryElement(element: HTMLElement): boolean {
-    const text = element.textContent?.trim() || '';
-    return historyStartPatterns.some((pattern) => pattern.test(text));
+    return isHistoryStart(element);
   }
 
   function traverseNode(node: Node) {
@@ -419,7 +463,7 @@ function extractAndRemoveEmailHistory(body: HTMLElement): {
       }
     } else if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent?.trim() || '';
-      if (historyStartPatterns.some((pattern) => pattern.test(text))) {
+      if (isHistoryStart(node)) {
         inHistory = true;
         currentHistory += text + '\n';
         nodesToRemove.push(node as ChildNode);
@@ -515,6 +559,17 @@ function upgradeInsecureImageSources(doc: Document) {
 
 function prepareEmailImages(root: HTMLElement) {
   root.querySelectorAll('img').forEach((img) => {
+    // Runs after processInlineImages, which tags every loadable inline image
+    // with data-attachment-id. An image with no source — Outlook keeps the tag
+    // of a quoted message's signature image (data-imagetype="AttachmentByCid",
+    // src="") but not its attachment — or a cid: reference with no matching
+    // inline attachment can never load; drop it rather than render a broken-
+    // image icon next to its alt text ("Image").
+    const src = (img.getAttribute('src') ?? '').trim();
+    if (!img.hasAttribute('data-attachment-id') && (src === '' || /^cid:/i.test(src))) {
+      img.remove();
+      return;
+    }
     img.setAttribute('loading', 'lazy');
     img.setAttribute('decoding', 'async');
     img.setAttribute('referrerpolicy', 'no-referrer');

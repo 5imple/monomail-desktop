@@ -22,6 +22,8 @@ interface AttachmentItemProps {
   children?: React.ReactNode;
   disabled?: boolean;
   tabIndex?: number;
+  /** `chip`: a compact one-line pill for dense surfaces like inbox rows. */
+  variant?: 'card' | 'chip';
 }
 
 const AttachmentItem: FC<AttachmentItemProps> = ({
@@ -33,7 +35,8 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
   size = 'sm',
   children,
   disabled,
-  tabIndex
+  tabIndex,
+  variant = 'card'
 }) => {
   const { openDialog } = useDialogs();
   const [isDownloading, setIsDownloading] = useState(false);
@@ -98,6 +101,43 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
     return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   };
 
+  if (variant === 'chip') {
+    return (
+      <Button
+        variant={'ghost'}
+        sizeVariant={'xs'}
+        onClick={(e) => {
+          // A row click opens the email; the chip opens just the attachment.
+          e.stopPropagation();
+          void (preview ? handlePreview() : downloadAttachment());
+        }}
+        tooltip={`${attachment.fileName} · ${formatFileSize(attachment.size)}`}
+        aria-label={attachment.fileName}
+        className={cn(
+          // Inbox-row chip: one line, sized like the row's metadata text, so
+          // it reads as a detail of the email rather than a separate card.
+          'group h-6 w-fit max-w-[220px] gap-1.5 rounded-md border border-border/60 bg-background/60 px-2 text-[11.5px] font-normal text-muted-foreground shadow-none',
+          'hover:border-border hover:bg-muted/60 hover:text-foreground'
+        )}
+        disabled={isDownloading || disabled}
+        tabIndex={tabIndex}
+      >
+        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden>
+          {isDownloading ? (
+            <Loader />
+          ) : (
+            getAttachmentIcon(attachment.mimeType, 'h-3.5 w-3.5', attachment.fileName)
+          )}
+        </span>
+        <span className="min-w-0 truncate">{attachment.fileName}</span>
+        <span className="shrink-0 tabular-nums text-muted-foreground/70">
+          {formatFileSize(attachment.size)}
+        </span>
+        {children}
+      </Button>
+    );
+  }
+
   return (
     <Button
       variant={'secondary'}
@@ -118,7 +158,11 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
         aria-hidden
       >
-        {isDownloading ? <Loader /> : getAttachmentIcon(attachment.mimeType, 'h-4 w-4')}
+        {isDownloading ? (
+          <Loader />
+        ) : (
+          getAttachmentIcon(attachment.mimeType, 'h-4 w-4', attachment.fileName)
+        )}
       </span>
       <div className="min-w-0 text-left">
         <div className="max-w-64 truncate whitespace-nowrap text-[13px] font-medium tracking-tight text-foreground">

@@ -45,24 +45,51 @@ const updateDraftsAndSync = (
 // ACTION ATOMS - Write-only atoms for state mutations
 // ============================================================================
 
+/**
+ * A complete server listing for one account over [timeMin, timeMax). When
+ * given, local events of that account starting in the window that the server
+ * no longer returns are removed — otherwise events deleted or cancelled
+ * elsewhere stayed on the calendar (and in storage) forever.
+ */
+export interface CalendarLoadWindow {
+  accountUid: string;
+  timeMin: Date;
+  timeMax: Date;
+}
+
 /** Load events from server into store */
-export const loadEventsAtom = atom(null, (get, set, events: CalendarEvent[]) => {
-  const currentEvents = get(eventsAtom);
-  const newEvents = { ...currentEvents };
+export const loadEventsAtom = atom(
+  null,
+  (get, set, events: CalendarEvent[], window?: CalendarLoadWindow) => {
+    const currentEvents = get(eventsAtom);
+    const newEvents = { ...currentEvents };
 
-  events.forEach((event) => {
-    newEvents[event.id] = event;
-    // Set status to synced if not already set
-    set(eventStatusAtom, (prev) => ({
-      ...prev,
-      [event.id]: prev[event.id] || 'synced'
-    }));
-  });
+    if (window) {
+      const returnedIds = new Set(events.map((event) => event.id));
+      const drafts = get(draftsAtom);
+      Object.values(currentEvents).forEach((event) => {
+        if (event.accountUid !== window.accountUid) return;
+        if (returnedIds.has(event.id) || event.id.startsWith('temp-') || drafts[event.id]) return;
+        const start = parseEventDate(event.allDay ? event.start.date : event.start.dateTime);
+        if (!start || start < window.timeMin || start >= window.timeMax) return;
+        delete newEvents[event.id];
+      });
+    }
 
-  set(eventsAtom, newEvents);
-  // Sync to storage
-  set(syncEventsToStorageAtom, newEvents);
-});
+    events.forEach((event) => {
+      newEvents[event.id] = event;
+      // Set status to synced if not already set
+      set(eventStatusAtom, (prev) => ({
+        ...prev,
+        [event.id]: prev[event.id] || 'synced'
+      }));
+    });
+
+    set(eventsAtom, newEvents);
+    // Sync to storage
+    set(syncEventsToStorageAtom, newEvents);
+  }
+);
 
 /** Create a draft for an event */
 export const createDraftAtom = atom(
@@ -450,11 +477,14 @@ export const createEventAtom = atom(
 
       return response.id;
     } catch (error) {
-      // Mark temp event as error
-      set(eventStatusAtom, (prev) => ({
-        ...prev,
-        [tempId]: 'error'
-      }));
+      // Drop the optimistic temp event. Leaving it (status 'error', persisted
+      // to storage) kept a ghost event in the grid forever — one that can't be
+      // edited or deleted (fake id) and duplicates once a retry succeeds. The
+      // caller surfaces the failure.
+      const { [tempId]: _failedTemp, ...withoutTemp } = get(eventsAtom);
+      updateEventsAndSync(get, set, () => withoutTemp);
+      const { [tempId]: _failedStatus, ...remainingStatus } = get(eventStatusAtom);
+      set(eventStatusAtom, remainingStatus);
       throw error;
     }
   }
@@ -633,8 +663,12 @@ export const smartCreateDraftAtom = atom(
       try {
         await set(applyDraftAtom, { eventId, sendNotifications: false, userAccounts });
       } catch (error) {
-        // If auto-apply fails, keep as draft for manual retry
+        // Roll the drag back and let the caller report it. Keeping the draft
+        // drew the event at its new time (persisted across restarts) while the
+        // server still had the old one, under an "updated successfully" toast.
         console.error('Auto-apply failed:', error);
+        set(discardDraftAtom, eventId);
+        throw error;
       }
     }
   }

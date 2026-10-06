@@ -1,4 +1,5 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
+import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { CommandType } from '@/renderer/app/types';
 import {
   MonoCommand,
@@ -21,6 +22,8 @@ interface ComposeCommandDependencies {
   activeThreadId: string | null;
   groupThreadsByAccount: (threadIds: string[]) => Record<string, string[]>;
   removeDraft: (accountId: string, draftId: string) => Promise<void>;
+  accounts: Array<{ email: string }>;
+  threadsMap: Record<string, any>;
 }
 
 export const createComposeCommands = (
@@ -36,8 +39,33 @@ export const createComposeCommands = (
     selectedThreads,
     activeThreadId,
     groupThreadsByAccount,
-    removeDraft
+    removeDraft,
+    accounts,
+    threadsMap
   } = deps;
+
+  const ownEmails = () => new Set(accounts.map((account) => account.email.toLowerCase()));
+
+  // The command palette runs Reply/Forward with no args. Resolve the open
+  // thread's latest message the way the R/F hotkeys do, instead of silently
+  // doing nothing.
+  const resolveMessageArgs = (
+    args: MessageCommandArgs | undefined,
+    preferOthers: boolean
+  ): MessageCommandArgs | undefined => {
+    if (args?.message) return args;
+    const threadId = selectedThreads[0] ?? activeThreadId;
+    const thread = threadId ? threadsMap[threadId] : undefined;
+    if (!thread) return undefined;
+    const messages = (thread.items ?? []).filter(
+      (item: { type: string }) => item.type === 'message'
+    ) as MonoMessage[];
+    const own = ownEmails();
+    const fromOthers = messages.filter((m) => !own.has(m.from.email.toLowerCase()));
+    const pool = preferOthers && fromOthers.length > 0 ? fromOthers : messages;
+    const message = pool[pool.length - 1];
+    return message ? { message, accountId: thread.accountId } : undefined;
+  };
 
   return {
     PIN_CONTACT: {
@@ -84,7 +112,8 @@ export const createComposeCommands = (
       title: t('command.compose_reply_message'),
       hotkeys: ['R'],
       icon: 'Reply',
-      action: (args?: MessageCommandArgs) => {
+      action: (rawArgs?: MessageCommandArgs) => {
+        const args = resolveMessageArgs(rawArgs, true);
         const item = args?.message;
         if (!item) return;
 
@@ -94,13 +123,17 @@ export const createComposeCommands = (
 
         if (!accountEmail) return;
 
+        // Plain Reply answers the sender only — copying Cc/Bcc made it behave
+        // like Reply All (and re-exposed Bcc recipients of your own mail).
+        // Replying to your own message goes to its original recipients.
+        const fromSelf = ownEmails().has(item.from.email.toLowerCase());
+        const to = fromSelf ? item.to.map((recipient) => recipient.email) : [item.from.email];
+
         const draft = new MonoDraft({
           from: accountEmail,
           messageId: item.id,
           threadId: item.threadId,
-          to: [item.from.email],
-          cc: item.cc.map((recipient) => recipient.email),
-          bcc: item.bcc.map((recipient) => recipient.email),
+          to,
           subject: item.subject.toLowerCase().startsWith('re: ')
             ? item.subject
             : `Re: ${item.subject}`
@@ -114,7 +147,8 @@ export const createComposeCommands = (
       title: t('command.compose_forward_message'),
       hotkeys: ['F'],
       icon: 'Forward',
-      action: (args?: MessageCommandArgs) => {
+      action: (rawArgs?: MessageCommandArgs) => {
+        const args = resolveMessageArgs(rawArgs, false);
         const item = args?.message;
         if (!item) return;
 

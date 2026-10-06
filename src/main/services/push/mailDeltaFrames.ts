@@ -14,9 +14,19 @@ export type MailDeltaFrame = PushPayload<MessageAddedPayload | MessageDeletedPay
 
 export type DeltaPollStatus = 'ok' | 'reset' | 'retry' | 'expired' | 'error';
 
-/** Base foreground cadence; the poller backs off from here on failure. */
-export const POLL_INTERVAL_MS = 60_000;
+/**
+ * Base foreground cadence; the poller backs off from here on failure. An
+ * unchanged Inbox delta is one small request, so polling every 10 s keeps new
+ * mail near-instant (it was 60 s: ~30 s average, up to a minute) while staying
+ * far below Graph's per-mailbox limits (~10k requests / 10 min).
+ */
+export const POLL_INTERVAL_MS = 10_000;
+/** Cadence while no app window is focused — still prompt enough for notifications. */
+export const BACKGROUND_POLL_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 5 * 60_000;
+// Failures back off from the old one-minute base (2, 4, then 5 min), so the
+// faster healthy cadence never turns into hammering Graph while it's failing.
+const FAILURE_BACKOFF_BASE_MS = 60_000;
 
 // Well-known Graph folder → normalized Mono labels carried on the synthesized
 // frame. v1 drives only `inbox`, but keep the map general so a frame's labels
@@ -150,5 +160,5 @@ export function nextPollDelay(
   }
   // error / expired: exponential backoff (cap the exponent so it can't overflow).
   const exponent = Math.min(Math.max(consecutiveFailures, 1), 4);
-  return Math.min(POLL_INTERVAL_MS * 2 ** exponent, MAX_BACKOFF_MS);
+  return Math.min(FAILURE_BACKOFF_BASE_MS * 2 ** exponent, MAX_BACKOFF_MS);
 }

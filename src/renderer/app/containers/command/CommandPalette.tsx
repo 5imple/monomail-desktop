@@ -142,6 +142,17 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     }
   };
 
+  // The palette stays mounted between opens, and Esc / outside-click only
+  // flip `open` without running handleOnClose — so the next open showed the
+  // previous reminder/label/move text, ready to be re-submitted with Enter.
+  useEffect(() => {
+    if (open) return;
+    setReminderValue('');
+    setLabelValue('');
+    setMoveValue('');
+    setCommandInput('');
+  }, [open]);
+
   const handleOnClose = () => {
     setSearchQuery('');
     setCommandInput('');
@@ -150,6 +161,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     setSelectedSpaceId(undefined); // Reset selected space
     setPages([]);
     setReminderValue('');
+    setLabelValue('');
     setMoveValue('');
   };
 

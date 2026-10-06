@@ -18,6 +18,15 @@ type ThreadHotkeyTarget = {
   threadIds: string[];
 };
 
+// An expanded compose window covers the whole app (GlobalComposeCard is
+// `absolute inset-0`), so plain-key shortcuts must not reach the hidden list or
+// reader: focus resting on a compose button (e.g. the Cc toggle) turned typing
+// "c"/"e" into a new compose / Done, and Backspace after removing a recipient
+// chip trashed the open thread. Modifier shortcuts (MOD+…) still work.
+const isComposeExpanded = () => !!document.querySelector('[data-compose-expanded="true"]');
+const plainKeyGuard = (hotkey: string) =>
+  /(^|\+)(MOD|CTRL|META|ALT|OPTION)\+/i.test(hotkey) ? {} : { ignoreEventWhen: isComposeExpanded };
+
 export const useRegisterHotkeys = (options = {}) => {
   const executeCommand = useExecuteCommand();
   const commands = useCommands();
@@ -29,8 +38,12 @@ export const useRegisterHotkeys = (options = {}) => {
   const { accounts } = useAuth();
   const { getHighlightedItemId } = useKeyboardNavigationContext();
 
+  // Undo is a plain Z (like E / Backspace). As a single key it is ignored in
+  // form fields / the editor (react-hotkeys-hook defaults) and while a compose
+  // window is open (plainKeyGuard), so typing "z" never undoes anything — and
+  // MOD+Z stays the native text undo inside inputs.
   useHotkeys(
-    'MOD+Z',
+    'Z',
     (e) => {
       e.preventDefault();
       if (hasUndoActions) {
@@ -46,7 +59,7 @@ export const useRegisterHotkeys = (options = {}) => {
         }
       }
     },
-    { preventDefault: true, ...options },
+    { preventDefault: true, ...plainKeyGuard('Z'), ...options },
     [undoLastAction, hasUndoActions, trackEvent, t]
   );
 
@@ -108,6 +121,13 @@ export const useRegisterHotkeys = (options = {}) => {
   };
 
   const getThreadHotkeyTarget = useCallback((): ThreadHotkeyTarget => {
+    // While a thread is open the list is hidden behind the full-screen reader,
+    // so a leftover selection, hover or keyboard highlight there must not
+    // redirect E/U/S/Backspace away from the email being read.
+    if (activeThreadId) {
+      return { source: 'active', threadIds: [activeThreadId] };
+    }
+
     if (selectedThreads.length > 0) {
       return { source: 'selection', threadIds: selectedThreads };
     }
@@ -115,10 +135,6 @@ export const useRegisterHotkeys = (options = {}) => {
     const highlightedThreadId = getHighlightedItemId('thread-list');
     if (highlightedThreadId) {
       return { source: 'highlight', threadIds: [highlightedThreadId] };
-    }
-
-    if (activeThreadId) {
-      return { source: 'active', threadIds: [activeThreadId] };
     }
 
     return { source: 'none', threadIds: [] };
@@ -146,7 +162,7 @@ export const useRegisterHotkeys = (options = {}) => {
         trackEvent('hotkey_command_executed', { command: commandToRun });
         executeCommand(commandToRun as CommandType, getExplicitThreadArgs(target));
       },
-      { preventDefault: true, ...options },
+      { preventDefault: true, ...plainKeyGuard(hotkey), ...options },
       [executeCommand, getExplicitThreadArgs, getThreadHotkeyTarget, threadsMap, trackEvent]
     );
   });
@@ -185,13 +201,15 @@ export const useRegisterHotkeys = (options = {}) => {
                 if (targetThreadIds.length > 0) {
                   const thread = threadsMap[targetThreadIds[0]];
                   if (thread) {
-                    const items = thread.items.filter(
-                      (item) =>
-                        item.type === 'message' &&
-                        !accounts.some(
-                          (account) => account.email === (item as MonoMessage).from.email
-                        )
+                    const messages = thread.items.filter(
+                      (item) => item.type === 'message'
                     ) as MonoMessage[];
+                    const fromOthers = messages.filter(
+                      (message) => !accounts.some((account) => account.email === message.from.email)
+                    );
+                    // Fall back to your own latest message so R works in threads
+                    // you only sent to (the reply then goes to its recipients).
+                    const items = fromOthers.length > 0 ? fromOthers : messages;
 
                     if (items.length > 0) {
                       const item = items[items.length - 1];
@@ -209,7 +227,7 @@ export const useRegisterHotkeys = (options = {}) => {
                   }
                 }
               },
-              { scopes: [command.scope], preventDefault: true, ...options },
+              { scopes: [command.scope], preventDefault: true, ...plainKeyGuard(hotkey), ...options },
               [executeCommand, getThreadHotkeyTarget, threadsMap, trackEvent, accounts]
             );
             break;
@@ -233,7 +251,7 @@ export const useRegisterHotkeys = (options = {}) => {
                   }
                 }
               },
-              { scopes: [command.scope], preventDefault: true, ...options },
+              { scopes: [command.scope], preventDefault: true, ...plainKeyGuard(hotkey), ...options },
               [executeCommand, getThreadHotkeyTarget, threadsMap, trackEvent, accounts]
             );
             break;
@@ -248,6 +266,7 @@ export const useRegisterHotkeys = (options = {}) => {
               {
                 scopes: [command.scope],
                 preventDefault: true,
+                ...plainKeyGuard(hotkey),
                 ...options
               },
               [executeCommand, trackEvent]
@@ -271,6 +290,7 @@ export const useRegisterHotkeys = (options = {}) => {
                 scopes: [command.scope],
                 preventDefault: true,
                 useKey: hotkey === '!' || hotkey === '?',
+                ...plainKeyGuard(hotkey),
                 ...options
               },
               [

@@ -43,34 +43,34 @@ function escapeHtml(s: string): string {
 export function highlightThreadText(text: string, searchQuery: string): string {
   if (!text) return '';
 
-  // Decode Gmail's pre-encoded entities first, then re-escape so the output
-  // is safe for dangerouslySetInnerHTML without double-encoding (e.g. &#39;).
-  const escapedText = escapeHtml(decodeGmailEntities(text));
+  // Decode Gmail's pre-encoded entities first; every piece is re-escaped
+  // below so the output is safe for dangerouslySetInnerHTML without
+  // double-encoding (e.g. &#39;).
+  const plainText = decodeGmailEntities(text);
 
-  if (!searchQuery) return escapedText;
+  const searchTerms = searchQuery
+    ? extractSearchTerms(searchQuery).filter((term) => term.length >= 2)
+    : [];
+  if (searchTerms.length === 0) return escapeHtml(plainText);
 
-  // Extract search terms from the query
-  const searchTerms = extractSearchTerms(searchQuery);
-  let highlightedText = escapedText;
+  // One pass with all terms (longest first) over the PLAIN text, escaping each
+  // piece. Running a regex per term over already-highlighted HTML let a later
+  // term ("class", "text", "amp") match inside an earlier highlight's markup
+  // or split an entity, and rows showed literal `text-black rounded-sm…">`.
+  const pattern = [...searchTerms]
+    .sort((a, b) => b.length - a.length)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const parts = plainText.split(new RegExp(`(${pattern})`, 'gi'));
 
-  for (const term of searchTerms) {
-    if (term.length < 2) continue; // Skip very short terms
-
-    // Escape the search term as HTML too, then as a regex literal — the
-    // highlight spans wrap matches of the *escaped* form because that's
-    // what's in highlightedText now.
-    const escapedHtmlTerm = escapeHtml(term);
-    const escapedRegexTerm = escapedHtmlTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    const regex = new RegExp(`(${escapedRegexTerm})`, 'gi');
-
-    highlightedText = highlightedText.replace(
-      regex,
-      '<span class="bg-amber-300 dark:bg-yellow-80 text-black rounded-sm select-text">$1</span>'
-    );
-  }
-
-  return highlightedText;
+  // split() with a capture group puts the matches at the odd indices.
+  return parts
+    .map((part, index) =>
+      index % 2 === 1
+        ? `<span class="bg-amber-300 dark:bg-yellow-80 text-black rounded-sm select-text">${escapeHtml(part)}</span>`
+        : escapeHtml(part)
+    )
+    .join('');
 }
 
 /**

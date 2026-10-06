@@ -2,6 +2,7 @@ import { gmailApiClient } from '@/main/api/apiClient';
 import { IMonoThread } from '@/main/models/thread/MonoThread';
 import {
   transformThread,
+  RawGmailMessage,
   RawGmailThread,
   RawGmailThreadListResponse
 } from '@/main/api/mail/transforms';
@@ -12,6 +13,14 @@ export interface MailThreadListResponse {
 }
 
 export type MailThreadGetResponse = IMonoThread;
+
+/**
+ * Receives a first, partial thread while getThread is still fetching: every
+ * message's metadata plus the full body of the newest one (the only message
+ * the reader expands). getThread awaits it before fetching the rest, so the
+ * full result always lands after the partial one.
+ */
+export type ThreadPartialCallback = (partial: MailThreadGetResponse) => void | Promise<void>;
 
 // Gmail expects metadataHeaders as repeated query params, not a comma list.
 const METADATA_HEADERS = ['Subject', 'From', 'To', 'Cc', 'Bcc', 'Date', 'List-Unsubscribe'];
@@ -77,16 +86,63 @@ const getThreads = async (
   return { threads, nextPageToken: listResp.nextPageToken };
 };
 
+// Threads at least this long get a newest-message-first partial result.
+const PROGRESSIVE_MIN_MESSAGES = 3;
+
 const getThread = async (
   uid: string,
   id: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onPartial?: ThreadPartialCallback
 ): Promise<MailThreadGetResponse> => {
-  const raw = await gmailApiClient.get<RawGmailThread>(`/threads/${id}?format=full`, {
-    signal,
-    uid
-  });
-  return transformThread(raw, uid);
+  // The complete thread. Started immediately and never delayed by the partial
+  // pass below.
+  let fullSettled = false;
+  const fullThread = gmailApiClient
+    .get<RawGmailThread>(`/threads/${id}?format=full`, { signal, uid })
+    .then((raw) => transformThread(raw, uid))
+    .finally(() => {
+      fullSettled = true;
+    });
+
+  // Partial pass, in parallel. Long threads quote their whole history in every
+  // reply, so format=full can be megabytes: fetch metadata plus only the newest
+  // message in full (the one the reader expands) and hand that over first if
+  // the full fetch is still out. Best-effort — failures are ignored.
+  const partialDelivered = onPartial
+    ? (async () => {
+        try {
+          const light = await gmailApiClient.get<RawGmailThread>(
+            `/threads/${id}?${buildMetadataParams()}`,
+            { signal, uid }
+          );
+          const messages = light.messages ?? [];
+          if (fullSettled || messages.length < PROGRESSIVE_MIN_MESSAGES) return;
+          const newest = messages.reduce((latest, message) =>
+            Number(message.internalDate ?? 0) >= Number(latest.internalDate ?? 0) ? message : latest
+          );
+          const fullNewest = await gmailApiClient.get<RawGmailMessage>(
+            `/messages/${newest.id}?format=full`,
+            { signal, uid }
+          );
+          if (fullSettled) return;
+          await onPartial(
+            transformThread(
+              { ...light, messages: messages.map((m) => (m.id === newest.id ? fullNewest : m)) },
+              uid
+            )
+          );
+        } catch {
+          // Best-effort (see above).
+        }
+      })()
+    : undefined;
+
+  const result = await fullThread;
+  // A partial already being applied must finish first, so the caller's update
+  // with the full thread always lands last.
+  await partialDelivered;
+  return result;
 };
 
 const modifyThread = async (

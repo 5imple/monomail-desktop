@@ -40,6 +40,18 @@ export async function DBSaveMessage(uid: string, message: MonoMessage) {
       }
 
       thread.timestamp = Math.max(thread.timestamp, message.timestamp);
+    } else {
+      // Re-saving a message the thread already has (e.g. it moved back into the
+      // Inbox elsewhere): swap in the fresh copy and recompute the thread's
+      // labels from its messages. Only merging labels for NEW messages left the
+      // thread with its stale ones (no INBOX, still TRASH), so it stayed hidden.
+      thread.items = thread.items.map((item) => (item.id === message.id ? message : item));
+      const messageLabels = thread.items.flatMap((item) =>
+        item.type === 'message' ? ((item as MonoMessage).labelIds ?? []) : []
+      );
+      thread.labelIds = [
+        ...new Set([...messageLabels, ...(existingDrafts.length > 0 ? ['DRAFT'] : [])])
+      ];
     }
 
     // Add any draft IDs that aren't already in the thread items

@@ -120,7 +120,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
       operator: 'has:nouserlabels',
       description: t('command_palette.search.has:nouserlabels.description')
     },
-    { operator: 'is:muted', description: t('command_palette.search.is:mute.descriptiond') }
+    { operator: 'is:muted', description: t('command_palette.search.is:muted.description') }
   ];
 
   // Update search state based on the latest query part.

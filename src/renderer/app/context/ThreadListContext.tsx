@@ -49,11 +49,15 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
     applyFilters();
   }, [activeFilters, rawThreadIds]);
 
-  // Resort threadIds when threadsMap changes
+  // Resort the RAW threadIds when threadsMap changes. Sorting the filtered list
+  // (what useThreadFetchHandler returns) and writing it back as the raw list
+  // dropped every thread the Unread / With-attachments tab was hiding — after
+  // switching back to "All" they were gone until a refresh. The filter effect
+  // above re-derives the visible list from the re-sorted raw ids.
   useEffect(() => {
-    if (threadIds.length > 0 && Object.keys(threadsMap).length > 0) {
+    if (rawThreadIds.length > 0 && Object.keys(threadsMap).length > 0) {
       // Only resort if we have both threadIds and threadsMap data
-      const sortedThreadIds = [...threadIds].sort((idA, idB) => {
+      const sortedThreadIds = [...rawThreadIds].sort((idA, idB) => {
         const threadA = threadsMap[idA];
         const threadB = threadsMap[idB];
 
@@ -67,12 +71,12 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
       });
 
       // Only update if the order actually changed
-      const orderChanged = sortedThreadIds.some((id, index) => id !== threadIds[index]);
+      const orderChanged = sortedThreadIds.some((id, index) => id !== rawThreadIds[index]);
       if (orderChanged) {
         setThreadIds(sortedThreadIds);
       }
     }
-  }, [threadsMap, threadIds]);
+  }, [threadsMap, rawThreadIds]);
 
   const value = useMemo(
     () => ({

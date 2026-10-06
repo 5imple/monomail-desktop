@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { ThreadListDenseItem } from '@/renderer/app/components/mail/thread/ThreadListDenseItem';
@@ -13,8 +13,27 @@ import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
 import { useSyncThread } from '@/renderer/app/context/SyncThreadContext';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
-import { AnimatePresence, motion } from 'motion/react';
+import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
+import { fetchFullThread, threadNeedsFullBody } from '@/renderer/app/lib/threadBodyPrefetch';
+import { isComposeDraftId } from '@/main/utils';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { threadExitIntentAtom } from '@/renderer/app/store/thread/exitIntentAtom';
+import {
+  groupHeaderVariants,
+  laneVariants,
+  rowVariants,
+  swipeVariants
+} from '@/renderer/app/containers/list/threadRowMotion';
 import { useTranslation } from 'react-i18next';
+import { isEqual } from 'lodash';
+import {
+  beginRangeGesture,
+  endRangeGesture,
+  isRangeGestureActive,
+  rangeGestureSelection,
+  setSelectionAnchor
+} from '@/renderer/app/store/thread/threadRangeSelection';
 
 interface ThreadListProps {
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
@@ -53,81 +72,137 @@ function ThreadList({ onScroll }: ThreadListProps) {
     [loadMore, hasMore, loadingStatus]
   );
 
-  // Initialize with the first selected thread if there is one
-  const [anchorThreadId, setAnchorThreadId] = useState<string | null>(() => {
-    return selectedThreads.length > 0 ? selectedThreads[0] : activeThreadId;
-  });
-
-  useEffect(() => {
-    if (selectedThreads.length === 1) {
-      setAnchorThreadId(selectedThreads[0]);
-    } else if (selectedThreads.length === 0) {
-      setAnchorThreadId(activeThreadId);
-    }
-  }, [activeThreadId, selectedThreads]);
-
-  // Update anchor when selection changes through keyboard navigation
+  // ⌘-click toggles a row, Shift+click selects a range (see
+  // threadRangeSelection), a plain click opens the conversation.
   const handleItemClick = useCallback(
     (e: React.MouseEvent, threadId: string) => {
-      const isCtrlPressed = e.ctrlKey || e.metaKey;
-      const isShiftPressed = e.shiftKey;
+      if (e.ctrlKey || e.metaKey) {
+        setSelectionAnchor(threadId);
+        setSelectedThreads((prev) =>
+          prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
+        );
+        return;
+      }
 
-      setSelectedThreads((prevSelected) => {
-        // Handle Ctrl+Click: Toggle selection of the clicked thread
-        if (isCtrlPressed) {
-          // If adding a new thread
-          if (!prevSelected.includes(threadId)) {
-            setAnchorThreadId(threadId);
-            return [...prevSelected, threadId];
-          }
-          // If removing a thread
-          else {
-            const newSelection = prevSelected.filter((id) => id !== threadId);
-            // If we're removing the anchor and there are other selected threads
-            if (threadId === anchorThreadId && newSelection.length > 0) {
-              setAnchorThreadId(newSelection[0]);
-            }
-            // If we're removing the last thread
-            else if (newSelection.length === 0) {
-              setAnchorThreadId(null);
-            }
-            return newSelection;
-          }
-        }
+      if (e.shiftKey) {
+        // With nothing selected, the range runs from the conversation that was
+        // open last (if it's in the list) to the clicked row.
+        beginRangeGesture(
+          selectedThreads,
+          threadIds,
+          activeThreadId && threadIds.includes(activeThreadId) ? activeThreadId : threadId
+        );
+        const next = rangeGestureSelection(threadIds, threadId);
+        if (next) setSelectedThreads(next);
+        return;
+      }
 
-        // Handle Shift+Click: Select range between anchor and clicked thread
-        if (isShiftPressed) {
-          // Only proceed with shift selection if we have a valid anchor
-          if (anchorThreadId) {
-            const anchorIndex = threadIds.indexOf(anchorThreadId);
-            const targetIndex = threadIds.indexOf(threadId);
-
-            if (anchorIndex !== -1 && targetIndex !== -1) {
-              const [start, end] =
-                anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
-
-              return threadIds.slice(start, end + 1);
-            }
-
-            // If anchor not found in current threadIds, anchor might have been affected by sorting
-            // Fall back to single selection and set new anchor
-            setAnchorThreadId(threadId);
-            return [threadId];
-          } else {
-            // No anchor set yet - treat this as a regular click to establish anchor
-            setAnchorThreadId(threadId);
-            return [threadId];
-          }
-        }
-
-        // Regular row click opens the conversation. Selection checkboxes own batch selection.
-        setActiveThreadId(threadId);
-        setAnchorThreadId(threadId);
-        return prevSelected;
-      });
+      setSelectionAnchor(threadId);
+      setActiveThreadId(threadId);
     },
-    [anchorThreadId, setActiveThreadId, setSelectedThreads, setAnchorThreadId, threadIds]
+    [activeThreadId, selectedThreads, setActiveThreadId, setSelectedThreads, threadIds]
   );
+
+  // Shift + moving the cursor across rows sweeps a range selection, with or
+  // without a mouse button held. It begins only once the cursor crosses into
+  // another row, so a Shift-wiggle on one row (e.g. reaching for a Shift
+  // shortcut) never selects anything.
+  const lastHoveredRowRef = useRef<string | null>(null);
+  const sweepStartRowRef = useRef<string | null>(null);
+  const handleSweepMove = useCallback(
+    (e: React.MouseEvent) => {
+      const row =
+        (e.target as HTMLElement | null)?.closest?.('[data-thread]')?.getAttribute('data-thread') ??
+        null;
+      const previousRow = lastHoveredRowRef.current;
+      lastHoveredRowRef.current = row;
+      if (!row || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!isRangeGestureActive()) {
+        sweepStartRowRef.current ??= previousRow ?? row;
+        if (row === sweepStartRowRef.current) return;
+        beginRangeGesture(selectedThreads, threadIds, sweepStartRowRef.current);
+      }
+      const next = rangeGestureSelection(threadIds, row);
+      if (next && !isEqual(next, selectedThreads)) setSelectedThreads(next);
+    },
+    [selectedThreads, setSelectedThreads, threadIds]
+  );
+
+  // Releasing Shift (or leaving the window) ends the gesture.
+  useEffect(() => {
+    const end = () => {
+      sweepStartRowRef.current = null;
+      endRangeGesture();
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') end();
+    };
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', end);
+    return () => {
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', end);
+    };
+  }, []);
+
+  // Shift+mousedown would otherwise extend the browser's text selection
+  // across the rows — a blue wash that looks like (but isn't) a selection.
+  const handleListMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.shiftKey && (e.target as HTMLElement | null)?.closest?.('[data-thread]')) {
+      e.preventDefault();
+    }
+  }, []);
+
+  // Hover prefetch: the list holds metadata only, so a first open waited on a
+  // full-body fetch before showing any text (~0.5–1.7 s on real threads). Start
+  // that fetch once the pointer rests on a row; the reader then awaits the same
+  // in-flight request (fetchFullThread de-dups) or finds the body cached.
+  const { updateThread } = useThreadOperationAtom();
+  const threadsMapRef = useRef(threadsMap);
+  threadsMapRef.current = threadsMap;
+  const hoverPrefetchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const prefetchedThreadIdsRef = useRef(new Set<string>());
+
+  const handleRowHover = useCallback(
+    (e: React.MouseEvent) => {
+      const threadId = (e.target as HTMLElement)
+        .closest?.('[data-thread]')
+        ?.getAttribute('data-thread');
+      clearTimeout(hoverPrefetchTimerRef.current);
+      if (!threadId || prefetchedThreadIdsRef.current.has(threadId)) return;
+      hoverPrefetchTimerRef.current = setTimeout(() => {
+        const thread = threadsMapRef.current[threadId];
+        if (!thread?.accountId || isComposeDraftId(thread.id) || !threadNeedsFullBody(thread))
+          return;
+        prefetchedThreadIdsRef.current.add(threadId);
+        fetchFullThread(thread.accountId, thread.id, {
+          cached: thread,
+          onPartial: (partial) => updateThread(thread.accountId, partial)
+        })
+          .then((fullThread) => updateThread(thread.accountId, fullThread))
+          .catch(() => prefetchedThreadIdsRef.current.delete(threadId));
+      }, 120);
+    },
+    [updateThread]
+  );
+
+  useEffect(() => () => clearTimeout(hoverPrefetchTimerRef.current), []);
+
+  // Archive / trash exit motion (see threadRowMotion). Intents are recorded by
+  // the label operations; once rows finish leaving, drop the entries for rows
+  // no longer listed so a later, unrelated removal just fades.
+  const exitIntents = useAtomValue(threadExitIntentAtom);
+  const setExitIntents = useSetAtom(threadExitIntentAtom);
+  const reduceMotion = useReducedMotion();
+  const listedThreadIdsRef = useRef<Set<string>>(new Set());
+  const pruneExitIntents = useCallback(() => {
+    setExitIntents((prev) => {
+      const kept = Object.fromEntries(
+        Object.entries(prev).filter(([id]) => listedThreadIdsRef.current.has(id))
+      );
+      return Object.keys(kept).length === Object.keys(prev).length ? prev : kept;
+    });
+  }, [setExitIntents]);
 
   const deduplicatedThreadIds = useMemo(() => {
     const uniqueIds = new Set<string>();
@@ -176,6 +251,7 @@ function ThreadList({ onScroll }: ThreadListProps) {
 
     return buckets.filter((b) => b.ids.length > 0);
   }, [deduplicatedThreadIds, threadsMap]);
+  listedThreadIdsRef.current = new Set(deduplicatedThreadIds);
 
   // Last valid thread ID for the infinite-scroll observer
   const lastValidThreadId = useMemo(() => {
@@ -195,9 +271,22 @@ function ThreadList({ onScroll }: ThreadListProps) {
       aggregatedSyncState.isSyncing);
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden">
+    <div
+      className="relative min-h-0 flex-1 overflow-hidden"
+      onMouseOver={handleRowHover}
+      onMouseMove={handleSweepMove}
+      onMouseDown={handleListMouseDown}
+    >
       {/* <ThreadListToolbar className="absolute left-2 top-2 z-50" /> */}
-      <ScrollArea onScroll={onScroll} className="h-full" id="thread-list">
+      <ScrollArea
+        onScroll={onScroll}
+        className="h-full"
+        id="thread-list"
+        // Root for the rows' IntersectionObserver pre-render margin. Without it
+        // the observer fell back to the window and rows only rendered once
+        // already on screen (blank rows popping in while scrolling).
+        viewportId="thread-list-scroll-root"
+      >
         <AnimatePresence mode="wait" initial={false}>
           {isInitialLoading ? (
             <motion.div
@@ -215,45 +304,98 @@ function ThreadList({ onScroll }: ThreadListProps) {
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="flex h-full w-full flex-col pt-2"
             >
-              {groupedThreads.map((group, groupIndex) => (
-            <div key={group.label}>
-              <div className="flex items-center justify-between px-[10%] pb-1 pt-3">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                  {group.label}
-                </span>
-                {groupIndex === 0 && <FilterOptionDropdownMenu showLabel />}
-              </div>
-              <AnimatePresence initial={false} mode="popLayout">
-                {group.ids.map((threadId) => (
+              {/* Headers and rows share one AnimatePresence so a row can swipe
+                  away even when it was the last one in its date group. */}
+              <AnimatePresence
+                initial={false}
+                custom={exitIntents}
+                onExitComplete={pruneExitIntents}
+              >
+                {groupedThreads.flatMap((group, groupIndex) => [
                   <motion.div
-                    key={threadId}
-                    ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
-                    // No `layout` here: when an email is open the list panel collapses
-                    // to 0 width, and `layout` tweened each row's box from 0 -> full
-                    // width on close — a left-to-right "sweep" of the inbox on every
-                    // reader close. The exit slide-out below is unaffected.
+                    key={`group-${group.label}`}
+                    variants={groupHeaderVariants}
                     initial={false}
-                    animate={{ opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' }}
-                    exit={{
-                      opacity: 0,
-                      x: 56,
-                      scale: 0.985,
-                      filter: 'blur(2px)',
-                      transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] }
-                    }}
+                    animate="present"
+                    exit="exit"
+                    className="overflow-hidden"
                   >
-                    <MemoizedThreadItem
-                      threadId={threadId}
-                      onClick={handleItemClick}
-                      density={preference.appearance.density}
-                      index={threadIndexMap.get(threadId) ?? 0}
-                    />
-                  </motion.div>
-                ))}
+                    <div className="flex items-center justify-between px-[10%] pb-1 pt-3">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                        {group.label}
+                      </span>
+                      {groupIndex === 0 && <FilterOptionDropdownMenu showLabel />}
+                    </div>
+                  </motion.div>,
+                  ...group.ids.map((threadId) => (
+                    <motion.div
+                      key={threadId}
+                      ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
+                      // No `layout` here: when an email is open the list panel
+                      // collapses to 0 width, and `layout` tweened each row's box
+                      // from 0 -> full width on close — a left-to-right "sweep" of
+                      // the inbox on every reader close. The exit motion
+                      // (threadRowMotion) animates height instead.
+                      variants={rowVariants(threadId, !!reduceMotion)}
+                      initial={false}
+                      animate="present"
+                      exit="exit"
+                      className="relative overflow-hidden"
+                    >
+                      {/* Lanes revealed behind the row as it swipes away. */}
+                      <motion.div
+                        variants={laneVariants(threadId, 'archive', !!reduceMotion)}
+                        aria-hidden
+                        className="pointer-events-none absolute inset-y-0 left-[10%] right-[10%] flex items-center gap-2 rounded-md bg-chart-1/15 pl-5 text-chart-1"
+                      >
+                        <MonoIcon type="CheckCircle" className="h-[18px] w-[18px]" />
+                        <span className="text-[12px] font-medium">
+                          {t('thread_list.toolbar.done')}
+                        </span>
+                      </motion.div>
+                      <motion.div
+                        variants={laneVariants(threadId, 'trash', !!reduceMotion)}
+                        aria-hidden
+                        className="pointer-events-none absolute inset-y-0 left-[10%] right-[10%] flex items-center justify-end gap-2 rounded-md bg-destructive/10 pr-5 text-destructive"
+                      >
+                        <span className="text-[12px] font-medium">
+                          {t('thread_list.toolbar.trash')}
+                        </span>
+                        <MonoIcon type="Trash" className="h-[18px] w-[18px]" />
+                      </motion.div>
+                      <motion.div variants={swipeVariants(threadId, !!reduceMotion)}>
+                        <MemoizedThreadItem
+                          threadId={threadId}
+                          onClick={handleItemClick}
+                          density={preference.appearance.density}
+                          index={threadIndexMap.get(threadId) ?? 0}
+                        />
+                      </motion.div>
+                    </motion.div>
+                  ))
+                ])}
               </AnimatePresence>
-            </div>
-          ))}
+          {/* A filter (e.g. Unread) can match nothing on the loaded page while
+              more pages exist. Infinite scroll can't trigger with no rows, so
+              offer an explicit Load more instead of "All caught up" + a
+              spinner that never resolves. */}
           {groupedThreads.length === 0 &&
+            hasMore &&
+            loadingStatus === 'DONE' &&
+            !aggregatedSyncState.isSyncing && (
+              <div className="flex flex-col items-center justify-center py-24 text-center duration-200 animate-in fade-in">
+                <p className="text-sm font-medium text-muted-foreground">
+                  {t('thread_list.no_loaded_matches', {
+                    defaultValue: 'No matching emails in what’s loaded so far'
+                  })}
+                </p>
+                <Button variant={'secondary'} className="mt-4" onClick={() => loadMore()}>
+                  {t('extension.contact.load_more')}
+                </Button>
+              </div>
+            )}
+          {groupedThreads.length === 0 &&
+            !hasMore &&
             loadingStatus === 'DONE' &&
             !aggregatedSyncState.isSyncing && (
               <div className="flex flex-col items-center justify-center py-24 text-center duration-200 animate-in fade-in zoom-in-95">
@@ -283,7 +425,7 @@ function ThreadList({ onScroll }: ThreadListProps) {
               </Button>
             </div>
           )}
-          {((hasMore && loadingStatus !== 'ERROR') ||
+          {((hasMore && loadingStatus !== 'ERROR' && groupedThreads.length > 0) ||
             loadingStatus === 'LOADING' ||
             aggregatedSyncState.isSyncing) && (
             <div className="my-4 py-8 text-center text-sm text-muted-foreground">

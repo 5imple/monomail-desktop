@@ -60,7 +60,7 @@ export const VariableExtension = Extension.create({
                         button.type = 'button';
                         button.textContent = `{${variableName}}`;
                         button.className =
-                          'variable-button rounded bg-accent/10 dark:bg-accent/15 text-accent text-sm px hover:bg-accent/15 focus:outline-none focus-visible:ring-2';
+                          'variable-button rounded bg-accent/10 dark:bg-accent/15 text-foreground text-sm px hover:bg-accent/15 focus:outline-none focus-visible:ring-2';
 
                         // Store position data as attributes
                         button.setAttribute('data-variable', variableName);
@@ -146,7 +146,7 @@ export const VariablePreviewPlugin = () => {
             const span = document.createElement('span');
             span.textContent = value || '';
             span.className =
-              'variable-preview bg-accent/10 dark:bg-accent/15 text-accent px-1 py-0.5 rounded inline-block';
+              'variable-preview bg-accent/10 dark:bg-accent/15 text-foreground px-1 py-0.5 rounded inline-block';
             return span;
           }),
           // 2. An inline decoration to hide the original text

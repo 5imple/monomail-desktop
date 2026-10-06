@@ -272,10 +272,52 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
       [onChange, selected]
     );
 
+    // Turn free text ("a@x.com, Bob <b@y.com>") into creatable chips. Used on
+    // blur, on "," / ";" and on paste: typed addresses were otherwise left
+    // sitting in the input, visibly there but silently not in the draft, and
+    // a pasted list failed validation as one value. Returns the text that
+    // couldn't be committed so it stays in the input for the user to fix.
+    const commitCreatableText = React.useCallback(
+      (text: string): string => {
+        if (!creatable) return text;
+        const tokens = text
+          .split(/[,;\n]+/)
+          .map((token) => token.trim())
+          .filter(Boolean);
+        const next = [...selected];
+        const rejected: string[] = [];
+        for (const token of tokens) {
+          const value = (token.match(/<([^>]+)>/)?.[1] ?? token).trim();
+          if (validateCreatable && !validateCreatable(value)) {
+            rejected.push(token);
+          } else if (next.some((s) => s.value === value)) {
+            continue;
+          } else if (next.length >= maxSelected) {
+            onMaxSelected?.(next.length);
+            rejected.push(token);
+          } else {
+            next.push({ value, label: value });
+          }
+        }
+        if (next.length !== selected.length) {
+          setSelected(next);
+          onChange?.(next);
+        }
+        return rejected.join(', ');
+      },
+      [creatable, selected, validateCreatable, maxSelected, onMaxSelected, onChange]
+    );
+
     const handleKeyDown = React.useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
         const input = inputRef.current;
         if (input) {
+          if ((e.key === ',' || e.key === ';') && creatable && input.value.trim()) {
+            e.preventDefault();
+            setInputValue(commitCreatableText(input.value));
+            return;
+          }
+
           // Prevent selection on Enter if the input is empty or doesn't meet the minLetters requirement
           if (e.key === 'Enter' && input.value.trim().length <= (minLetters || 0)) {
             e.preventDefault();
@@ -298,7 +340,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
           }
         }
       },
-      [handleUnselect, selected, minLetters]
+      [handleUnselect, selected, minLetters, creatable, commitCreatableText]
     );
 
     useEffect(() => {
@@ -564,7 +606,17 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
                 if (!onScrollbar) {
                   setOpen(false);
                 }
+                if (creatable && inputValue.trim()) {
+                  setInputValue(commitCreatableText(inputValue));
+                }
                 inputProps?.onBlur?.(event);
+              }}
+              onPaste={(event) => {
+                const pasted = event.clipboardData.getData('text');
+                if (creatable && /[,;\n<]/.test(pasted)) {
+                  event.preventDefault();
+                  setInputValue(commitCreatableText(`${inputValue}${pasted}`));
+                }
               }}
               onFocus={(event) => {
                 setOpen(true);

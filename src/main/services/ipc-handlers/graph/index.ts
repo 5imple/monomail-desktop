@@ -66,33 +66,68 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 const GRAPH_MAX_CONCURRENCY_PER_UID = 3;
 const GRAPH_REQUEST_MAX_RETRIES = 3;
 
-const graphInflightByUid = new Map<string, number>();
-const graphWaitersByUid = new Map<string, Array<() => void>>();
+// Two lanes share those slots. Calendar month reads (/me/calendarView, fired in
+// bursts at startup) are "background": they may hold at most 2 slots, and a
+// waiting mail request is always served before a waiting background one. With
+// one FIFO, the startup inbox fetch queued behind the calendar burst and took
+// ~5 s instead of ~0.2 s.
+type GraphLane = 'foreground' | 'background';
+const GRAPH_MAX_BACKGROUND_PER_UID = 2;
+const BACKGROUND_PATH = /\/me\/calendarView\b/i;
 
-function acquireGraphSlot(uid: string): Promise<void> {
-  const inflight = graphInflightByUid.get(uid) ?? 0;
-  if (inflight < GRAPH_MAX_CONCURRENCY_PER_UID) {
-    graphInflightByUid.set(uid, inflight + 1);
-    return Promise.resolve();
-  }
-  return new Promise<void>((resolve) => {
-    const waiters = graphWaitersByUid.get(uid) ?? [];
-    waiters.push(resolve);
-    graphWaitersByUid.set(uid, waiters);
-  });
+export function graphLaneFor(path: string | undefined): GraphLane {
+  return path && BACKGROUND_PATH.test(path) ? 'background' : 'foreground';
 }
 
-function releaseGraphSlot(uid: string): void {
-  const waiters = graphWaitersByUid.get(uid);
-  if (waiters && waiters.length > 0) {
-    const next = waiters.shift();
-    if (waiters.length === 0) graphWaitersByUid.delete(uid);
-    next?.(); // hand the in-flight slot straight to the next waiter (count unchanged)
-    return;
+interface GraphSlotState {
+  total: number;
+  background: number;
+  waiting: Record<GraphLane, Array<() => void>>;
+}
+const graphSlotsByUid = new Map<string, GraphSlotState>();
+
+function slotState(uid: string): GraphSlotState {
+  let state = graphSlotsByUid.get(uid);
+  if (!state) {
+    state = { total: 0, background: 0, waiting: { foreground: [], background: [] } };
+    graphSlotsByUid.set(uid, state);
   }
-  const inflight = graphInflightByUid.get(uid) ?? 1;
-  if (inflight <= 1) graphInflightByUid.delete(uid);
-  else graphInflightByUid.set(uid, inflight - 1);
+  return state;
+}
+
+function canStart(state: GraphSlotState, lane: GraphLane): boolean {
+  if (state.total >= GRAPH_MAX_CONCURRENCY_PER_UID) return false;
+  return lane === 'foreground' || state.background < GRAPH_MAX_BACKGROUND_PER_UID;
+}
+
+function occupy(state: GraphSlotState, lane: GraphLane): void {
+  state.total += 1;
+  if (lane === 'background') state.background += 1;
+}
+
+function acquireGraphSlot(uid: string, lane: GraphLane): Promise<void> {
+  const state = slotState(uid);
+  if (canStart(state, lane)) {
+    occupy(state, lane);
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => state.waiting[lane].push(resolve));
+}
+
+function releaseGraphSlot(uid: string, lane: GraphLane): void {
+  const state = slotState(uid);
+  state.total = Math.max(0, state.total - 1);
+  if (lane === 'background') state.background = Math.max(0, state.background - 1);
+  // Mail first, then background, each only while it may start.
+  for (const next of ['foreground', 'background'] as const) {
+    while (state.waiting[next].length > 0 && canStart(state, next)) {
+      occupy(state, next);
+      state.waiting[next].shift()?.();
+    }
+  }
+  if (state.total === 0 && !state.waiting.foreground.length && !state.waiting.background.length) {
+    graphSlotsByUid.delete(uid);
+  }
 }
 
 async function readResponseBody(
@@ -213,7 +248,8 @@ export function registerGraphHandlers() {
 
       const requestBody = typeof args?.body === 'string' ? args.body : undefined;
 
-      await acquireGraphSlot(uid);
+      const lane = graphLaneFor(args?.path);
+      await acquireGraphSlot(uid, lane);
       try {
         let response = await net.fetch(url, { method, headers, body: requestBody });
 
@@ -254,7 +290,7 @@ export function registerGraphHandlers() {
 
         return { ok: true, status: response.status, data } satisfies GraphResult;
       } finally {
-        releaseGraphSlot(uid);
+        releaseGraphSlot(uid, lane);
       }
     } catch (error) {
       log.error(
