@@ -351,6 +351,11 @@ export function useDraftAtom() {
             // Add the draft back if sending failed
             cancelSend(uid, draftId);
 
+            // Say why when we know and it's actionable; network and unknown
+            // failures keep the generic text.
+            if (err?.name === 'MessageTooLargeError') {
+              return t('toast.error.message_too_large_microsoft');
+            }
             return t('toast.error.send_mail');
           }
         }

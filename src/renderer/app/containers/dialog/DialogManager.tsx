@@ -36,6 +36,7 @@ const DialogManager = () => {
         onOpenChange={() => {
           closeDialog('saveDraft');
         }}
+        isNewDraft={dialogState.saveDraft.isNewDraft}
         onSave={dialogState.saveDraft.onSave}
         onDiscard={dialogState.saveDraft.onDiscard}
       />

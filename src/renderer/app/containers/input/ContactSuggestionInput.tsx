@@ -7,9 +7,10 @@ import MultipleSelector, {
 } from '@/renderer/app/components/ui/multi-selector';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { Contact } from '@/renderer/app/lib/db/contact';
-import { ellipsisEmailString, ellipsisString } from '@/renderer/app/lib/minimizeEmail';
+import { matchesAllWords, recipientLabel } from '@/renderer/app/lib/recipientLabel';
 import { cn } from '@/renderer/app/lib/utils';
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ContactSuggestionInputProps extends MultipleSelectorProps {
   className?: string;
@@ -28,6 +29,7 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
   value,
   ...props
 }) => {
+  const { t } = useTranslation();
   const [options, setOptions] = useState<Option[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<Option[]>(defaultValue ?? []);
   const [activeContacts, setActiveContacts] = useState<Option[]>([]);
@@ -111,7 +113,7 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
             />
           ),
           value: `${contact.emailAddress}`,
-          label: `${ellipsisString(contact.displayName)} (${ellipsisEmailString(contact.emailAddress)})`
+          label: recipientLabel(contact.displayName, contact.emailAddress)
         })
       );
 
@@ -213,9 +215,10 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
             'data-[disabled]:bg-muted-foreground data-[disabled]:text-muted',
             'px-3 py-1',
             option.icon && 'pl-1',
+            // Ring only: a thicker border grew the chip and nudged its neighbours.
             activeValue &&
               activeValue.find((active) => active.value === option.value) &&
-              'border-2 border-primary/80 ring-2 ring-primary/20'
+              'ring-2 ring-selection/40'
           )}
           data-fixed={option.fixed}
           data-disabled={disabled}
@@ -226,7 +229,8 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
           </div>
           {!option.fixed && (
             <button
-              className="ml-1 rounded-full outline-none ring-offset-background"
+              className="ml-1 rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={t('compose_card.remove_recipient', { name: option.label })}
               onClick={() => {
                 handleUnSelect(option);
               }}
@@ -249,7 +253,10 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
       onChange={setSelectedContacts}
       options={options}
       onSearchSync={handleSearchSync}
-      // hideOnEmpty
+      // Suggestions appear as you type. Listing every contact on focus
+      // covered Subject and the body the moment compose opened, and a
+      // click aimed at Subject picked whichever contact was under it.
+      hideOnEmpty
       creatable
       // minLetters={1}
       hideClearAllButton
@@ -259,8 +266,11 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
       CustomBadge={CustomBadge}
       placeholder="user@example.com"
       validateCreatable={validateCreatable}
-      validationMessage="Please enter a valid email"
+      validationMessage={t('compose_card.invalid_email')}
       {...props}
+      // Every typed word must match ("jennifer hutton" finds "Jennifer C.
+      // Hutton"); merged so the caller's onKeyDown etc. survive.
+      commandProps={{ filter: matchesAllWords, ...props.commandProps }}
     />
   );
 };

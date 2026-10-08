@@ -88,7 +88,13 @@ const ContactProfileDropdownMenu = React.forwardRef<
   };
 
   const handleSearchContact = () => {
-    if (contact) searchNewQuery(`from:${contact.emailAddress}`, undefined, false);
+    if (!contact) return;
+    const search = () => searchNewQuery(`from:${contact.emailAddress}`, undefined, false);
+    // From a chip inside an open compose the results would load hidden behind
+    // it: close compose first (its usual save prompt included).
+    const composeExpanded = !!document.querySelector('[data-compose-expanded="true"]');
+    if (composeExpanded && handleCloseButton) void handleCloseButton(search);
+    else search();
   };
   const handlePinContact = () => {
     if (contact) executeCommand('PIN_CONTACT');
@@ -115,7 +121,7 @@ const ContactProfileDropdownMenu = React.forwardRef<
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent className="dark max-w-64 overflow-hidden p-1.5">
+      <DropdownMenuContent className="max-w-64 overflow-hidden p-1.5">
         <div className="flex items-center gap-3 overflow-hidden px-2">
           {/* <RecipientAvatar recipient={{ email: contact.emailAddress, name: contact.displayName }} /> */}
           <div className="overflow-hidden">

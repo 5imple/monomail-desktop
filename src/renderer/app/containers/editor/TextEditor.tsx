@@ -64,7 +64,8 @@ const TextEditor = React.forwardRef(
       onUploadAttachment?: (file: File) => Promise<void>;
       onSelectTemplate?: (template: IMonoTemplate) => void;
       draftId?: string;
-      autofocus?: boolean;
+      /** true = start of the doc; 'end' puts the caret after existing text. */
+      autofocus?: boolean | 'start' | 'end';
     },
     ref
   ) => {
@@ -110,9 +111,8 @@ const TextEditor = React.forwardRef(
       if (!editor) return;
 
       // Add custom CSS for link styling and resizable image behavior.
-      // Inline resize-handle colours use the Newton accent via the CSS
-      // variable so they stay in lockstep with the rest of the palette
-      // (no more hardcoded Tailwind blue 500).
+      // The selected-image outline and resize handle use the selection
+      // colour: --accent is a near-white neutral, invisible on the page.
       const customStyleElement = document.createElement('style');
       customStyleElement.textContent = `
         /* Ensure link bubble menu has higher z-index than link overlay */
@@ -128,7 +128,7 @@ const TextEditor = React.forwardRef(
 
         .resizable-image:hover,
         .resizable-image.ProseMirror-selectednode {
-          outline: 2px solid hsl(var(--accent));
+          outline: 2px solid hsl(var(--selection));
           outline-offset: 2px;
         }
 
@@ -151,7 +151,7 @@ const TextEditor = React.forwardRef(
           right: -6px;
           width: 12px;
           height: 12px;
-          background: hsl(var(--accent));
+          background: hsl(var(--selection));
           border: 2px solid hsl(var(--background));
           border-radius: 50%;
           cursor: nw-resize;

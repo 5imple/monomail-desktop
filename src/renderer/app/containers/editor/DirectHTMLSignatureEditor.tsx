@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import DOMPurify from 'dompurify';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/renderer/app/lib/utils';
 
 // Define the ref interface
@@ -24,6 +25,7 @@ interface DirectHTMLEditorProps {
  */
 const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEditorProps>(
   ({ className, value, onChange, placeholder }, ref) => {
+    const { t } = useTranslation();
     const editorRef = useRef<HTMLDivElement>(null);
     const [initialized, setInitialized] = useState(false);
     const [isEmpty, setIsEmpty] = useState(!value);
@@ -32,12 +34,21 @@ const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEdit
     useEffect(() => {
       const style = document.createElement('style');
       style.textContent = `
-        /* Ensure empty editor shows placeholder */
-        .mono-signature:empty:before {
+        /* Placeholder for an empty editor. After typing and deleting,
+           Chrome leaves a <br> behind, so :empty alone never matched again —
+           the component's empty-signature class covers that. Positioned so it
+           doesn't push the caret down. */
+        .mono-signature {
+          position: relative;
+        }
+        .mono-signature:empty:before,
+        .mono-signature.empty-signature:before {
           content: attr(data-placeholder);
           color: hsl(var(--muted-foreground));
           pointer-events: none;
-          display: block;
+          position: absolute;
+          inset-inline: 0.75rem;
+          top: 0.75rem;
         }
         
         /* Ensure images display properly */
@@ -47,9 +58,9 @@ const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEdit
           display: inline-block;
         }
         
-        /* Style links with accent color and underline */
+        /* Links: --accent is a near-white neutral (invisible on the page). */
         .mono-signature a {
-          color: hsl(var(--accent));
+          color: hsl(var(--primary));
           text-decoration: underline;
         }
 
@@ -446,11 +457,14 @@ const DirectHTMLSignatureEditor = forwardRef<DirectHTMLEditorRef, DirectHTMLEdit
           ref={editorRef}
           className={cn(
             'mono-signature',
-            'min-h-[200px] p-3 text-sm outline-none',
+            'min-h-[200px] p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
             'rounded-md border-0',
             isEmpty ? 'empty-signature' : '',
             className
           )}
+          role="textbox"
+          aria-multiline="true"
+          aria-label={t('text_editor.signature_label')}
           contentEditable={true}
           onInput={handleInput}
           onPaste={handlePaste}

@@ -12,9 +12,11 @@ import {
 } from '@/renderer/app/components/ui/scroll-area';
 import { convertPlainTextToHtml } from '@/renderer/app/containers/editor/TextEditor';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { useDiscardDraftWithUndo } from '@/renderer/app/hooks/useDiscardDraftWithUndo';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { cn } from '@/renderer/app/lib/utils';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
+import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { FC, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,7 +36,9 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
   const [showQuotedContent, setShowQuotedContent] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { draftsMapByAccount, removeDraft, sendDraftQueue } = useDraftAtom();
+  const { draftsMapByAccount, sendDraftQueue } = useDraftAtom();
+  const discardDraftWithUndo = useDiscardDraftWithUndo();
+  const { contactArray } = useContactAtom();
   const [draftMessage, setDraftMessage] = useState<IMonoDraft>(item.toPlainObject());
   const { signatures } = useSignatureAtom();
   const [showCcDropdown, setShowCcDropdown] = useState(false);
@@ -129,9 +133,18 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
     };
   }, [item, draftsMapByAccount, accountId]);
 
+  // Same "Draft discarded · Undo" as the compose trash.
   const handleDiscardDraft = async () => {
-    if (accountId) await removeDraft(accountId, draftMessage.id);
+    if (accountId) {
+      await discardDraftWithUndo(accountId, MonoDraft.fromPlainObject(draftMessage), {
+        reopen: false
+      });
+    }
   };
+
+  // A contact's name when we know it, else the address — never both.
+  const recipientName = (email: string) =>
+    contactArray.find((contact) => contact.emailAddress === email)?.displayName?.trim() || email;
 
   return (
     <>
@@ -145,7 +158,7 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
           )}
         >
           <CardHeader
-            className="px-4 py-2"
+            className="cursor-pointer px-4 py-2"
             onClick={(e) => {
               e.stopPropagation();
               setIsCollapsed(!isCollapsed);
@@ -155,7 +168,7 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
             <div className="flex items-center gap-4 text-sm">
               <div className="w-full min-w-0">
                 <p className="mb-0.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  Draft
+                  {t('thread_list.draft', { defaultValue: 'Draft' })}
                   {justSaved && (
                     <span
                       aria-hidden
@@ -165,13 +178,15 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   <div className="line-clamp-1 text-[14px] font-medium tracking-tight text-foreground">
-                    {draftMessage.subject.length > 0 ? draftMessage.subject : '(No subject)'}
+                    {draftMessage.subject.length > 0
+                      ? draftMessage.subject
+                      : t('compose_card.no_subject')}
                   </div>
                   {draftMessage.timestamp && (
                     <div className="-mr-2 ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                       {!preview &&
                         (sendDraftQueue.includes(item.id) ? (
-                          <div className="text-md h-8 p-2">Sending...</div>
+                          <div className="h-8 p-2 text-xs">{t('draft_card.sending')}</div>
                         ) : (
                           <>
                             <Button
@@ -186,7 +201,7 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
                               sizeVariant={'sm'}
                               disabled={!draftMessage}
                             >
-                              Edit draft
+                              {t('draft_card.edit')}
                             </Button>
                             <Button
                               tooltip={t('tooltip.discard_draft')}
@@ -211,20 +226,23 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
           </CardHeader>
 
           {/* Use draftMessage instead of item in the content */}
-          <div ref={containerRef} className="transition-height duration-300 ease-bouncy-in-out">
+          <div
+            ref={containerRef}
+            className="overflow-hidden transition-[height] duration-300 ease-bouncy-in-out"
+          >
             <div ref={contentRef}>
-              <div className="ml-12 grid gap-1 px-4 pb-4">
+              <div className="grid gap-1 px-4 pb-3">
                 <div className="line-clamp-1 text-xs">
-                  <span className="font-medium text-muted-foreground">To:</span>{' '}
+                  <span className="font-medium text-muted-foreground">{t('draft_card.to')}</span>{' '}
                   {draftMessage.to.length === 0 ? (
-                    <span>(No recipient)</span>
+                    <span>{t('draft_card.no_recipient')}</span>
                   ) : (
-                    draftMessage.to.map((recipient, index) => {
+                    draftMessage.to.map((recipient) => {
                       return (
                         <span key={recipient} className="mr-1">
                           <ContactProfileDropdown value={recipient}>
                             <Button className="text-xs" variant="link" typeVariant={'inline'}>
-                              {`${recipient} (${recipient})`}
+                              {recipientName(recipient)}
                             </Button>
                           </ContactProfileDropdown>
                         </span>
@@ -314,29 +332,33 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
                   </div>
                 )}
               </div>
-              <CardContent className="px-6 pb-4">
-                {/* Use draftMessage.body */}
-                <ScrollArea>
-                  <ScrollAreaViewport>
+              <CardContent className="px-4 pb-4">
+                {/* Body and signature on the reader's email paper, so pasted
+                    HTML with its own dark text reads in dark themes too. */}
+                <div className="email-document rounded-md bg-white px-4 py-3 text-[#202124]">
+                  {/* Use draftMessage.body */}
+                  <ScrollArea>
+                    <ScrollAreaViewport>
+                      <div
+                        className="reset-selection relative block cursor-auto select-text whitespace-pre-wrap break-words"
+                        dangerouslySetInnerHTML={{
+                          __html: convertPlainTextToHtml(draftMessage.body)
+                        }}
+                      ></div>
+                      <ScrollBar orientation={'horizontal'} />
+                    </ScrollAreaViewport>
+                  </ScrollArea>
+                  {signatures.find((signature) => signature.id === draftMessage.signatureId) && (
                     <div
-                      className="reset-selection relative block cursor-auto select-text overflow-hidden whitespace-pre"
+                      className="reset-selection mt-2"
                       dangerouslySetInnerHTML={{
-                        __html: convertPlainTextToHtml(draftMessage.body)
+                        __html:
+                          signatures.find((signature) => signature.id === draftMessage.signatureId)
+                            ?.content ?? ''
                       }}
                     ></div>
-                    <ScrollBar orientation={'horizontal'} />
-                  </ScrollAreaViewport>
-                </ScrollArea>
-                {signatures.find((signature) => signature.id === draftMessage.signatureId) && (
-                  <div
-                    className="reset-selection mt-2"
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        signatures.find((signature) => signature.id === draftMessage.signatureId)
-                          ?.content ?? ''
-                    }}
-                  ></div>
-                )}
+                  )}
+                </div>
               </CardContent>
 
               {Object.values(draftMessage.attachments).length > 0 && (
@@ -347,8 +369,9 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
                       className="mr-2 inline-block h-4 w-4 text-muted-foreground"
                     />
                     <span>
-                      {Object.values(draftMessage.attachments).length} attachment
-                      {Object.values(draftMessage.attachments).length > 1 ? 's' : ''}
+                      {t('draft_card.attachments', {
+                        count: Object.values(draftMessage.attachments).length
+                      })}
                     </span>
                   </div>
                   <div className="grid auto-cols-max grid-flow-row gap-3 text-center">

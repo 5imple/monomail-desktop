@@ -1,9 +1,8 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { CardFooter } from '@/renderer/app/components/ui/card';
 import Loader from '@/renderer/app/components/ui/loader';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
@@ -21,21 +20,32 @@ import { isBackendConfigured } from '@/main/api/apiClient';
 interface ComposeCardFooterProps {
   className?: string;
   draft: MonoDraft;
+  /** Autosave state ("Saving" / "Save failed"), shown where it can't push anything. */
+  draftStatus?: React.ReactNode;
   handleSendMessage: () => Promise<void>;
   handleFileChange: (fileList: FileList | null) => Promise<void>;
-  draftSaveStatus: 'INITIALIZED' | 'LOADING' | 'SAVED' | 'ERROR';
-  sendDisabled: boolean;
+  /** Why Send can't go right now; null when it can. */
+  sendBlockedReason: string | null;
+  /** Feedback for a click on a blocked Send / Send later. */
+  onSendBlocked: () => void;
+  /** Send later scheduled the draft: the queue owns it now. */
+  onScheduled: () => void;
   onDiscard: () => void;
   trackingEnabled: boolean;
   onToggleTracking: () => void;
 }
 
+const ICON_BUTTON_CLASS = 'text-muted-foreground hover:text-foreground';
+
 const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   className,
   draft,
+  draftStatus,
   handleSendMessage,
   handleFileChange,
-  sendDisabled,
+  sendBlockedReason,
+  onSendBlocked,
+  onScheduled,
   onDiscard,
   trackingEnabled,
   onToggleTracking
@@ -54,9 +64,15 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
     return currentAccount?.isExpired ?? false;
   }, [currentAccount]);
 
+  const blocked = !!sendBlockedReason;
+
+  // A blocked Send stays hoverable and focusable (aria-disabled, not
+  // disabled) so its tooltip can say why; a click explains instead of
+  // doing nothing.
   const handleSubmit = async () => {
-    if (isCurrentAccountExpired) {
-      toast.error(t('toast.error.account_expired'));
+    if (isSending) return;
+    if (blocked) {
+      onSendBlocked();
       return;
     }
     setIsSending(true);
@@ -91,42 +107,22 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
     }
   };
 
-  const getAccountReconnectTooltip = useCallback(() => {
-    return t('tooltips.account_status.authentication_expired');
-  }, [t]);
-
-  const getSendDisabledReason = useCallback(() => {
-    if (isCurrentAccountExpired) return getAccountReconnectTooltip();
-    if (draft.to.length === 0) return t('compose_card.footer.send_disabled.no_recipients');
-    if (!draft.from) return t('compose_card.footer.send_disabled.no_sender');
-    if (sendDisabled) return t('compose_card.footer.send_disabled.saving_draft');
-    return t('compose_card.footer.send_now');
-  }, [
-    isCurrentAccountExpired,
-    draft.to.length,
-    draft.from,
-    sendDisabled,
-    getAccountReconnectTooltip,
-    t
-  ]);
-
   return (
     <div className={cn('no-drag', className)}>
-      <CardFooter className="mx-9 flex h-[61px] items-center border-t border-foreground/15 px-0 py-0 dark:border-foreground/25">
+      <CardFooter className="mx-9 flex h-[61px] items-center border-t border-border px-0 py-0">
         {/* Left: primary text actions */}
         <div className="flex items-center gap-5">
           <Button
             variant="text"
             className={cn(
               'px-0 text-[13px] font-semibold text-foreground hover:text-foreground/80',
-              (sendDisabled || isSending || isCurrentAccountExpired) && 'text-muted-foreground'
+              (blocked || isSending) &&
+                'cursor-not-allowed text-muted-foreground hover:text-muted-foreground'
             )}
-            disabled={sendDisabled || isSending || isCurrentAccountExpired}
+            aria-disabled={blocked || isSending}
             onClick={handleSubmit}
-            tooltip={getSendDisabledReason()}
-            shortcut={
-              !isCurrentAccountExpired && !sendDisabled && !isSending ? 'MOD+ENTER' : undefined
-            }
+            tooltip={sendBlockedReason ?? t('compose_card.footer.send_now')}
+            shortcut={!blocked && !isSending ? 'MOD+ENTER' : undefined}
           >
             {isSending && <Loader className="mr-1.5 h-3.5 w-3.5" />}
             {t('compose_card.footer.send_now')}
@@ -137,34 +133,32 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
           {isBackendConfigured() && (
             <SendLaterButton
               draft={draft}
-              disabled={
-                sendDisabled || isSending || isCurrentAccountExpired || draft.to.length === 0
-              }
+              blockedReason={isSending ? t('compose_card.footer.sending') : sendBlockedReason}
+              onBlocked={onSendBlocked}
+              onScheduled={onScheduled}
             />
           )}
         </div>
 
         {/* Right: secondary icon actions */}
         <div className="ml-auto flex items-center gap-0.5">
+          {draftStatus && <div className="mr-2">{draftStatus}</div>}
+
           {/* Attachment */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                sizeVariant="sm"
-                typeVariant="icon"
-                className={cn(
-                  'text-muted-foreground',
-                  isCurrentAccountExpired && 'cursor-not-allowed text-muted-foreground/50'
-                )}
-                onClick={handleFileInputClick}
-                disabled={isCurrentAccountExpired}
-              >
-                <MonoIcon type="Paperclip" className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t('compose_card.footer.add_attachment')}</TooltipContent>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            sizeVariant="sm"
+            typeVariant="icon"
+            className={cn(
+              ICON_BUTTON_CLASS,
+              isCurrentAccountExpired && 'cursor-not-allowed text-muted-foreground/50'
+            )}
+            aria-disabled={isCurrentAccountExpired}
+            onClick={handleFileInputClick}
+            tooltip={t('compose_card.footer.add_attachment')}
+          >
+            <MonoIcon type="Paperclip" className="h-4 w-4" />
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -178,45 +172,38 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
               Tracking needs the optional backend, so without one the toggle
               would promise open notifications that can never arrive. */}
           {isBackendConfigured() && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  sizeVariant="sm"
-                  typeVariant="icon"
-                  aria-pressed={trackingEnabled}
-                  className={cn(
-                    // text-accent is the near-white neutral token — invisible here.
-                    trackingEnabled ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                  onClick={onToggleTracking}
-                >
-                  <MonoIcon type={trackingEnabled ? 'Eye' : 'EyeSlash'} className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {trackingEnabled
-                  ? "Read tracking on — you'll be notified when this email is opened"
-                  : 'Read tracking off — turn on to see when this email is opened'}
-              </TooltipContent>
-            </Tooltip>
+            <Button
+              variant="ghost"
+              sizeVariant="sm"
+              typeVariant="icon"
+              aria-pressed={trackingEnabled}
+              className={cn(
+                // text-accent is the near-white neutral token — invisible here.
+                trackingEnabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              )}
+              onClick={onToggleTracking}
+              tooltip={
+                trackingEnabled
+                  ? t('compose_card.footer.tracking_on')
+                  : t('compose_card.footer.tracking_off')
+              }
+            >
+              <MonoIcon type={trackingEnabled ? 'Eye' : 'EyeSlash'} className="h-4 w-4" />
+            </Button>
           )}
 
-          {/* Discard */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                sizeVariant="sm"
-                typeVariant="icon"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={onDiscard}
-              >
-                <MonoIcon type="Trash" className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t('tooltip.discard')}</TooltipContent>
-          </Tooltip>
+          {/* Discard — set apart from the attach / tracking icons. */}
+          <div aria-hidden className="mx-1.5 h-4 w-px bg-border" />
+          <Button
+            variant="ghost"
+            sizeVariant="sm"
+            typeVariant="icon"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={onDiscard}
+            tooltip={t('tooltip.discard_draft')}
+          >
+            <MonoIcon type="Trash" className="h-4 w-4" />
+          </Button>
         </div>
       </CardFooter>
     </div>
@@ -225,7 +212,18 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 
 export default ComposeCardFooter;
 
-function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: boolean }) {
+function SendLaterButton({
+  draft,
+  blockedReason,
+  onBlocked,
+  onScheduled
+}: {
+  draft: MonoDraft;
+  blockedReason: string | null;
+  onBlocked: () => void;
+  onScheduled: () => void;
+}) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [customMode, setCustomMode] = useState(false);
   const { scheduleDraft, primaryAccountId } = useQueueAtom();
@@ -233,6 +231,7 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
   const { removeDraft } = useDraftAtom();
   const { getUidFromEmail } = useAuth();
   const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
+  const blocked = !!blockedReason;
 
   const handlePickPreset = useCallback(
     async (preset: { id: string; label: string; scheduledFor: string | null }) => {
@@ -240,7 +239,7 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
       const fromUid = getUidFromEmail(draft.from);
       const accountId = fromUid || primaryAccountId;
       if (!accountId) {
-        toast.error('Could not determine sending account');
+        toast.error(t('toast.compose.no_sending_account'));
         return;
       }
       const bodyPlain = (draft.body || '')
@@ -261,9 +260,12 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
       });
       setOpen(false);
       if (!res.ok) {
-        toast.error(`Couldn't schedule send: ${res.error}`);
+        toast.error(t('toast.compose.schedule_failed', { error: res.error }));
         return;
       }
+      // Close compose first: left open, a pending autosave or "Save" on close
+      // wrote the scheduled draft back to Drafts (a second, manual send).
+      onScheduled();
       // The schedule is now owned by the queue (backend or local scheduler), so
       // remove the local draft (DB + attachment bytes + thread) — otherwise it
       // lingers in Drafts and could be opened and sent again manually
@@ -273,20 +275,42 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
       if (fromUid) {
         await removeDraft(fromUid, draft.id, false);
       } else {
-        toast(
-          'Scheduled — but the original draft could not be removed automatically. Delete it from Drafts to avoid a double send.'
-        );
+        toast(t('toast.compose.scheduled_draft_not_removed'));
       }
-      setActiveLayout('LATER');
-      toast.success(`Scheduled for ${new Date(preset.scheduledFor).toLocaleString()}`);
+      // Stay where you were (the reader you replied from); Later is one click.
+      toast.success(
+        t('toast.compose.scheduled', {
+          time: new Date(preset.scheduledFor).toLocaleString()
+        }),
+        {
+          action: {
+            label: t('toast.compose.view_scheduled'),
+            onClick: () => setActiveLayout('LATER')
+          }
+        }
+      );
     },
-    [draft, scheduleDraft, setActiveLayout, getUidFromEmail, primaryAccountId, removeDraft]
+    [
+      draft,
+      scheduleDraft,
+      setActiveLayout,
+      getUidFromEmail,
+      primaryAccountId,
+      removeDraft,
+      onScheduled,
+      t
+    ]
   );
 
   return (
     <Popover
       open={open}
       onOpenChange={(o) => {
+        // Blocked: explain instead of opening a picker that can't schedule.
+        if (o && blocked) {
+          onBlocked();
+          return;
+        }
         setOpen(o);
         if (!o) setCustomMode(false);
       }}
@@ -295,11 +319,14 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         <Button
           variant="text"
           sizeVariant="sm"
-          disabled={disabled}
-          tooltip="Send later"
-          className="text-muted-foreground hover:text-foreground"
+          aria-disabled={blocked}
+          tooltip={blockedReason ?? undefined}
+          className={cn(
+            'text-muted-foreground hover:text-foreground',
+            blocked && 'cursor-not-allowed hover:text-muted-foreground'
+          )}
         >
-          Send later
+          {t('compose_card.footer.send_later')}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -310,8 +337,8 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
       >
         {customMode ? (
           <CustomDateTimePicker
-            heading="Send Later"
-            confirmLabel="Schedule"
+            heading={t('compose_card.footer.send_later')}
+            confirmLabel={t('compose_card.footer.schedule')}
             onBack={() => setCustomMode(false)}
             onConfirm={(iso) => {
               setCustomMode(false);
@@ -321,7 +348,7 @@ function SendLaterButton({ draft, disabled }: { draft: MonoDraft; disabled: bool
         ) : (
           <ReschedulePopover
             presets={presets}
-            heading="Send Later"
+            heading={t('compose_card.footer.send_later')}
             onPickPreset={handlePickPreset}
             onPickCustom={() => setCustomMode(true)}
           />

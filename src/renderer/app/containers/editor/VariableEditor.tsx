@@ -6,6 +6,7 @@ import { ReactRenderer } from '@tiptap/react';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import tippy from 'tippy.js';
 
 // Variable regex pattern - matches {variable_name}
@@ -59,8 +60,10 @@ export const VariableExtension = Extension.create({
                         const button = document.createElement('button');
                         button.type = 'button';
                         button.textContent = `{${variableName}}`;
+                        // --accent is a near-white neutral (an invisible chip);
+                        // muted + a hairline ring reads in every theme.
                         button.className =
-                          'variable-button rounded bg-accent/10 dark:bg-accent/15 text-foreground text-sm px hover:bg-accent/15 focus:outline-none focus-visible:ring-2';
+                          'variable-button rounded bg-muted px-1 text-sm text-foreground ring-1 ring-border hover:bg-muted-low focus:outline-none focus-visible:ring-2';
 
                         // Store position data as attributes
                         button.setAttribute('data-variable', variableName);
@@ -146,7 +149,7 @@ export const VariablePreviewPlugin = () => {
             const span = document.createElement('span');
             span.textContent = value || '';
             span.className =
-              'variable-preview bg-accent/10 dark:bg-accent/15 text-foreground px-1 py-0.5 rounded inline-block';
+              'variable-preview inline-block rounded bg-muted px-1 py-0.5 text-foreground ring-1 ring-border';
             return span;
           }),
           // 2. An inline decoration to hide the original text
@@ -173,6 +176,7 @@ const VariablePopoverContent: React.FC<VariablePopoverContentProps> = ({
   currentVariable,
   applyChange
 }) => {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -201,7 +205,7 @@ const VariablePopoverContent: React.FC<VariablePopoverContentProps> = ({
           onChange={(e) => setVariableValue(e.target.value)}
           onKeyDown={handleKeyDown}
           className="min-w-[200px] text-sm"
-          placeholder={`Replace ${currentVariable}...`}
+          placeholder={t('text_editor.variable.replace', { name: currentVariable })}
           autoFocus
         />
         <div className="flex space-x-1">
@@ -211,6 +215,7 @@ const VariablePopoverContent: React.FC<VariablePopoverContentProps> = ({
             typeVariant={'icon'}
             variant={'secondary'}
             onClick={applyChange}
+            aria-label={t('text_editor.variable.apply')}
           >
             <MonoIcon type="Check" />
           </Button>
@@ -297,13 +302,33 @@ export const VariableEditorPopover: React.FC<VariableEditorPopoverProps> = ({ ed
       // Function to apply the variable change
       const applyChange = (value: string) => {
         if (!currentVariablePos) return;
+        // An empty value would be an empty text node, which ProseMirror
+        // throws on (Enter bypassed the disabled Apply button).
+        if (!value.trim()) return;
+
+        // Fill every {variable} with the same name at once — a template
+        // using {first_name} twice needed two separate edits. Applied from
+        // the end so earlier positions stay valid.
+        const token = `{${variable}}`;
+        const ranges: Array<{ from: number; to: number }> = [];
+        editor.state.doc.descendants((node, pos) => {
+          if (!node.isText || !node.text) return;
+          let index = node.text.indexOf(token);
+          while (index !== -1) {
+            ranges.push({ from: pos + index, to: pos + index + token.length });
+            index = node.text.indexOf(token, index + token.length);
+          }
+        });
+        if (ranges.length === 0) {
+          ranges.push({ from: currentVariablePos.start, to: currentVariablePos.end });
+        }
 
         const { tr } = editor.state;
-        tr.replaceWith(
-          currentVariablePos.start,
-          currentVariablePos.end,
-          editor.state.schema.text(value)
-        );
+        ranges
+          .sort((a, b) => b.from - a.from)
+          .forEach(({ from, to }) => {
+            tr.insertText(value, from, to);
+          });
         editor.view.dispatch(tr);
 
         // Clean up
@@ -345,33 +370,6 @@ export const VariableEditorPopover: React.FC<VariableEditorPopoverProps> = ({ ed
         editor
       });
 
-      // Create the Tippy instance
-      popup = tippy('body', {
-        getReferenceClientRect: () => button.getBoundingClientRect(),
-        appendTo: () => document.body,
-        content: component.element,
-        showOnCreate: true,
-        interactive: true,
-        trigger: 'manual',
-        placement: 'bottom-start',
-        theme: 'mono',
-        onHide: (instance) => {
-          // Remove dark class from tippy box
-          // instance.popper.classList.remove('dark');
-          clearPreview();
-        },
-        onShow: (instance) => {
-          // Add dark class to tippy box
-          instance.popper.classList.add('dark');
-        },
-        onDestroy: () => {
-          if (component) {
-            component.destroy();
-            component = null;
-          }
-        }
-      });
-
       // Set up the keyboard event handling
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
@@ -383,17 +381,33 @@ export const VariableEditorPopover: React.FC<VariableEditorPopoverProps> = ({ ed
         return false;
       };
 
+      // Create the Tippy instance. The 'mono' theme follows the app theme
+      // (it used to force a dark popover onto the light compose).
+      popup = tippy('body', {
+        getReferenceClientRect: () => button.getBoundingClientRect(),
+        appendTo: () => document.body,
+        content: component.element,
+        showOnCreate: true,
+        interactive: true,
+        trigger: 'manual',
+        placement: 'bottom-start',
+        theme: 'mono',
+        onHide: () => {
+          clearPreview();
+          // Every click adds a listener; drop it as soon as this one hides.
+          document.removeEventListener('keydown', handleKeyDown);
+        },
+        onDestroy: () => {
+          document.removeEventListener('keydown', handleKeyDown);
+          if (component) {
+            component.destroy();
+            component = null;
+          }
+        }
+      });
+
       // Attach the event handler
       document.addEventListener('keydown', handleKeyDown);
-
-      // Clean up the event handler when the popup is destroyed
-      popup[0].popper._tippy.props.onDestroy = () => {
-        document.removeEventListener('keydown', handleKeyDown);
-        if (component) {
-          component.destroy();
-          component = null;
-        }
-      };
     };
 
     // Listen for our custom variable-click event on the editor DOM

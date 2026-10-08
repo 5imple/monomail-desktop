@@ -1,13 +1,14 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Option } from '@/renderer/app/components/ui/multi-selector';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import ContactSuggestionInput from '@/renderer/app/containers/input/ContactSuggestionInput';
-import { ellipsisEmailString } from '@/renderer/app/lib/minimizeEmail';
+import { Contact } from '@/renderer/app/lib/db/contact';
+import { recipientLabel } from '@/renderer/app/lib/recipientLabel';
 import { cn } from '@/renderer/app/lib/utils';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
-import { FC, KeyboardEventHandler, useState } from 'react';
+import { FC, KeyboardEventHandler } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface ComposeCardHeaderProps {
@@ -19,8 +20,32 @@ interface ComposeCardHeaderProps {
   onMaximize: () => void;
   isMinimized: boolean;
   isMaximized: boolean;
-  draftStatus: React.ReactNode;
+  ccVisible: boolean;
+  bccVisible: boolean;
+  onToggleCc: () => void;
+  onToggleBcc: () => void;
 }
+
+// A chip for an address: the contact's avatar and name when we know them.
+const toRecipientOption = (address: string, contacts: Contact[]): Option => {
+  const contact = contacts.find((c) => c.emailAddress === address);
+  if (!contact) return { label: address, value: address };
+  return {
+    icon: (
+      <RecipientAvatar
+        className="h-full w-full shrink-0"
+        key={contact.emailAddress}
+        recipient={{ email: contact.emailAddress, name: contact.displayName }}
+      />
+    ),
+    value: contact.emailAddress,
+    label: recipientLabel(contact.displayName, contact.emailAddress)
+  };
+};
+
+// One width for To / Cc / Bcc so the three fields start at the same x.
+const FIELD_LABEL_CLASS = 'mr-2 mt-[9px] w-8 shrink-0 text-[14px] font-semibold text-foreground';
+const WINDOW_BUTTON_CLASS = 'text-muted-foreground hover:text-foreground';
 
 const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   composeDraft,
@@ -31,57 +56,95 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   onMaximize,
   isMinimized,
   isMaximized,
-  draftStatus
+  ccVisible,
+  bccVisible,
+  onToggleCc,
+  onToggleBcc
 }) => {
   const { t } = useTranslation();
   const { contactArray } = useContactAtom();
-  const [showCc, setShowCc] = useState(false);
-  const [showBcc, setShowBcc] = useState(false);
 
   if (isMinimized) {
+    const subject =
+      composeDraft.subject.length > 0 ? composeDraft.subject : t('compose_card.no_subject');
     return (
       <div
-        className="flex h-12 cursor-pointer items-center gap-2 px-4"
+        role="button"
+        tabIndex={0}
+        aria-label={t('compose_card.restore_named', { subject })}
+        className="flex h-12 cursor-pointer items-center gap-2 rounded-xl px-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onMinimize}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          // The reader binds Enter to Reply All; this Enter is ours.
+          e.preventDefault();
+          e.stopPropagation();
+          onMinimize();
+        }}
       >
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {composeDraft.subject.length > 0 ? composeDraft.subject : '(No subject)'}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{subject}</span>
         <Button
           variant="ghost"
           sizeVariant="sm"
           typeVariant="icon"
           className="text-muted-foreground"
+          tooltip={t('compose_card.restore')}
+          shortcut="MOD+SHIFT+M"
           onClick={(e) => {
             e.stopPropagation();
             onMinimize();
           }}
         >
-          <MonoIcon type="ChevronUp" className="h-3.5 w-3.5" />
+          <MonoIcon type="ChevronUp" className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
           sizeVariant="sm"
           typeVariant="icon"
           className="text-muted-foreground"
+          tooltip={t('tooltip.close')}
           onClick={(e) => {
             e.stopPropagation();
             onClose();
           }}
         >
-          <MonoIcon type="X" className="h-3.5 w-3.5" />
+          <MonoIcon type="X" className="h-4 w-4" />
         </Button>
       </div>
     );
   }
 
+  const recipientToggle = (
+    row: 'cc' | 'bcc',
+    visible: boolean,
+    hasRecipients: boolean,
+    onToggle: () => void
+  ) => (
+    <Button
+      tabIndex={-1}
+      onClick={onToggle}
+      aria-pressed={visible}
+      tooltip={
+        visible && !hasRecipients ? t(`compose_card.hide_${row}`) : t(`compose_card.add_${row}`)
+      }
+      shortcut={row === 'cc' ? 'MOD+SHIFT+C' : 'MOD+SHIFT+B'}
+      className={cn(
+        'font-sans text-[13px] font-medium tracking-normal transition-colors',
+        visible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+      )}
+      variant="text"
+      sizeVariant="sm"
+    >
+      {row === 'cc' ? t('text_editor.placeholder.cc') : t('text_editor.placeholder.bcc')}
+    </Button>
+  );
+
   return (
     <>
       {/* To row */}
       <div className="no-drag flex items-start px-9 pt-3" data-compose-to>
-        <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
-          To
-        </span>
+        <span className={FIELD_LABEL_CLASS}>{t('compose_card.to')}</span>
         <div className="min-w-0 flex-1">
           <ContactSuggestionInput
             contacts={contactArray}
@@ -90,60 +153,17 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             hideClearAllButton={true}
             placeholder=""
             commandProps={{ onKeyDown }}
-            value={
-              composeDraft.to &&
-              composeDraft.to.map<Option>((toAddr) => {
-                const contact = contactArray.find((c) => c.emailAddress === toAddr);
-                if (contact) {
-                  return {
-                    icon: (
-                      <RecipientAvatar
-                        className="h-full w-full shrink-0"
-                        key={contact.emailAddress}
-                        recipient={{ email: contact.emailAddress, name: contact.displayName }}
-                      />
-                    ),
-                    value: contact.emailAddress,
-                    label: `${contact.displayName} (${ellipsisEmailString(contact.emailAddress)})`
-                  };
-                }
-                return { label: toAddr, value: toAddr };
-              })
-            }
+            value={composeDraft.to.map((address) => toRecipientOption(address, contactArray))}
             onChange={(options) =>
               handleInputChange('to', options.map((o) => o.value).filter(Boolean))
             }
             onSelectionChange={() => {}}
-            emptyIndicator={<span>No result</span>}
+            emptyIndicator={<span>{t('compose_card.no_contact_match')}</span>}
           />
         </div>
         <div className="ml-1 flex shrink-0 items-center gap-0.5 pt-1">
-          <Button
-            tabIndex={-1}
-            onClick={() => setShowCc(!showCc)}
-            className={cn(
-              'font-sans text-[13px] font-medium tracking-normal transition-colors',
-              showCc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-            variant="text"
-            sizeVariant="sm"
-          >
-            Cc
-          </Button>
-          <Button
-            tabIndex={-1}
-            onClick={() => setShowBcc(!showBcc)}
-            className={cn(
-              'font-sans text-[13px] font-medium tracking-normal transition-colors',
-              showBcc ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-            variant="text"
-            sizeVariant="sm"
-          >
-            Bcc
-          </Button>
-
-          {draftStatus && <div className="px-1">{draftStatus}</div>}
+          {recipientToggle('cc', ccVisible, composeDraft.cc.length > 0, onToggleCc)}
+          {recipientToggle('bcc', bccVisible, composeDraft.bcc.length > 0, onToggleBcc)}
 
           <Button
             tabIndex={-1}
@@ -153,20 +173,20 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             variant="ghost"
             sizeVariant="sm"
             typeVariant="icon"
-            className="text-muted-foreground hover:text-foreground"
+            className={WINDOW_BUTTON_CLASS}
           >
-            <MonoIcon type="ChevronDown" className="h-3.5 w-3.5" />
+            <MonoIcon type="ChevronDown" className="h-4 w-4" />
           </Button>
           <Button
             tabIndex={-1}
             onClick={onMaximize}
-            tooltip={isMaximized ? 'Restore' : 'Expand'}
+            tooltip={isMaximized ? t('compose_card.restore_size') : t('compose_card.expand')}
             variant="ghost"
             sizeVariant="sm"
             typeVariant="icon"
-            className="text-muted-foreground hover:text-foreground"
+            className={WINDOW_BUTTON_CLASS}
           >
-            <MonoIcon type={isMaximized ? 'Minimize' : 'Maximize'} className="h-3.5 w-3.5" />
+            <MonoIcon type={isMaximized ? 'Minimize' : 'Maximize'} className="h-4 w-4" />
           </Button>
           <Button
             tabIndex={-1}
@@ -175,61 +195,38 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             variant="ghost"
             sizeVariant="sm"
             typeVariant="icon"
-            className="text-muted-foreground hover:text-foreground"
+            className={WINDOW_BUTTON_CLASS}
           >
-            <MonoIcon type="X" className="h-3.5 w-3.5" />
+            <MonoIcon type="X" className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
       {/* Cc row */}
-      {(composeDraft.cc.length > 0 || showCc) ? (
-        <div className="no-drag flex items-start px-9 pt-1">
-          <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
-            Cc
-          </span>
+      {ccVisible ? (
+        <div className="no-drag flex items-start px-9 pt-1" data-compose-cc>
+          <span className={FIELD_LABEL_CLASS}>{t('text_editor.placeholder.cc')}</span>
           <ContactSuggestionInput
             contacts={contactArray}
             className="min-h-0 flex-1 items-start border-none px-0 py-0.5"
             inputProps={{ className: 'p-2' }}
             hideClearAllButton={true}
             placeholder=""
-            value={
-              composeDraft.cc &&
-              composeDraft.cc.map<Option>((ccAddr) => {
-                const contact = contactArray.find((c) => c.emailAddress === ccAddr);
-                if (contact) {
-                  return {
-                    icon: (
-                      <RecipientAvatar
-                        className="h-full w-full shrink-0"
-                        key={contact.emailAddress}
-                        recipient={{ email: contact.emailAddress, name: contact.displayName }}
-                      />
-                    ),
-                    value: contact.emailAddress,
-                    label: `${contact.displayName} (${ellipsisEmailString(contact.emailAddress)})`
-                  };
-                }
-                return { label: ccAddr, value: ccAddr };
-              })
-            }
+            value={composeDraft.cc.map((address) => toRecipientOption(address, contactArray))}
             onChange={(options) =>
               handleInputChange('cc', options.map((o) => o.value).filter(Boolean))
             }
             commandProps={{ onKeyDown }}
             onSelectionChange={() => {}}
-            emptyIndicator={<span>No result</span>}
+            emptyIndicator={<span>{t('compose_card.no_contact_match')}</span>}
           />
         </div>
       ) : null}
 
       {/* Bcc row */}
-      {(composeDraft.bcc.length > 0 || showBcc) ? (
-        <div className="no-drag flex items-start px-9 pt-1">
-          <span className="mr-3 mt-[9px] shrink-0 text-[14px] font-semibold text-foreground">
-            Bcc
-          </span>
+      {bccVisible ? (
+        <div className="no-drag flex items-start px-9 pt-1" data-compose-bcc>
+          <span className={FIELD_LABEL_CLASS}>{t('text_editor.placeholder.bcc')}</span>
           <ContactSuggestionInput
             contacts={contactArray}
             className="min-h-0 flex-1 items-start border-none px-0 py-0.5"
@@ -237,31 +234,14 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             hideClearAllButton={true}
             placeholder=""
             commandProps={{ onKeyDown }}
-            defaultValue={
-              composeDraft.bcc &&
-              composeDraft.bcc.map<Option>((bccAddr) => {
-                const contact = contactArray.find((c) => c.emailAddress === bccAddr);
-                if (contact) {
-                  return {
-                    icon: (
-                      <RecipientAvatar
-                        className="h-full w-full shrink-0"
-                        key={contact.emailAddress}
-                        recipient={{ email: contact.emailAddress, name: contact.displayName }}
-                      />
-                    ),
-                    value: contact.emailAddress,
-                    label: `${contact.displayName} (${ellipsisEmailString(contact.emailAddress)})`
-                  };
-                }
-                return { label: bccAddr, value: bccAddr };
-              })
-            }
+            // value (not defaultValue) like To / Cc, so Bcc chips follow the
+            // draft — they never picked up names once contacts loaded.
+            value={composeDraft.bcc.map((address) => toRecipientOption(address, contactArray))}
             onChange={(options) =>
               handleInputChange('bcc', options.map((o) => o.value).filter(Boolean))
             }
             onSelectionChange={() => {}}
-            emptyIndicator={<span>No result</span>}
+            emptyIndicator={<span>{t('compose_card.no_contact_match')}</span>}
           />
         </div>
       ) : null}

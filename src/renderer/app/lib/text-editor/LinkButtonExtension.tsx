@@ -539,15 +539,9 @@ export const LinkButtonPopover: React.FC<LinkButtonPopoverProps> = ({ editor }) 
               component.destroy();
               component = null;
             }
-          },
-          onHidden: (instance) => {
-            // Remove dark class from tippy box
-            // instance.popper.classList.remove('dark');
-          },
-          onShow: (instance) => {
-            // Add dark class to tippy box
-            instance.popper.classList.add('dark');
           }
+          // No forced `dark` class: the 'mono' tippy theme follows the app
+          // theme, like the formatting menu.
         });
 
         // Confirm the Tippy instance was created properly

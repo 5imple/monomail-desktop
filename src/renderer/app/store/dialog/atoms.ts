@@ -20,6 +20,8 @@ export interface DialogState {
   };
   saveDraft: {
     open: boolean;
+    /** A compose that was never saved before it opened: "Don't save" deletes it. */
+    isNewDraft?: boolean;
     onDiscard?: () => void;
     onSave?: () => void;
   };

@@ -1037,10 +1037,14 @@
       "cancel": "Cancel"
     },
     "draft_save": {
-      "title": "Save this message as a draft?",
-      "description": "This message has not been sent and contains unsaved changes. You can save it as a draft to work on later.",
-      "save_changes": "Save change",
-      "dont_save": "Don't Save",
+      "title": "Keep your changes?",
+      "description": "Keep your edits to this draft, or put it back the way it was.",
+      "save_changes": "Keep changes",
+      "dont_save": "Discard changes",
+      "new_title": "Keep this draft?",
+      "new_description": "Keep it in Drafts to finish later, or delete it.",
+      "keep_draft": "Keep draft",
+      "delete_draft": "Delete draft",
       "cancel": "Cancel"
     },
     "link_share": {
@@ -1255,7 +1259,8 @@
     "contact": "Contact",
     "calendar": "Calendar",
     "help_support": "Help & Support",
-    "open_preferences": "Open Preferences"
+    "open_preferences": "Open Preferences",
+    "back": "Back"
   },
   "compose_card": {
     "ai": {
@@ -1279,8 +1284,55 @@
       "send_disabled": {
         "no_recipients": "Add recipients to send",
         "no_sender": "Select a sender account",
-        "saving_draft": "Saving draft..."
-      }
+        "saving_draft": "Saving draft...",
+        "attaching": "Wait for attachments to finish",
+        "attachment_failed": "Remove or retry the file that couldn’t be attached",
+        "too_large_microsoft": "Attachments are over the {{limit}} limit for Microsoft 365 accounts",
+        "loading_original": "Loading the message you’re forwarding…"
+      },
+      "sending": "Sending…",
+      "send_later": "Send later",
+      "schedule": "Schedule",
+      "tracking_on": "Read tracking on — you’ll be notified when this email is opened",
+      "tracking_off": "Read tracking off — turn on to see when this email is opened"
+    },
+    "title": {
+      "new": "New message",
+      "reply": "Reply",
+      "forward": "Forward"
+    },
+    "to": "To",
+    "add_cc": "Add Cc",
+    "hide_cc": "Hide Cc",
+    "add_bcc": "Add Bcc",
+    "hide_bcc": "Hide Bcc",
+    "no_subject": "(No subject)",
+    "restore": "Restore",
+    "restore_named": "Restore draft: {{subject}}",
+    "restore_size": "Restore size",
+    "expand": "Expand",
+    "no_contact_match": "No matching contacts",
+    "invalid_email": "Please enter a valid email",
+    "remove_recipient": "Remove {{name}}",
+    "drop_file": "Drop file here",
+    "original_message": "Original message",
+    "replying_to": "Replying to {{name}}",
+    "forwarding": "Forwarding {{name}}",
+    "forward_attachments_not_included": "Attachments from the original aren’t included",
+    "original_failed": "Couldn’t load the original message, so it won’t be included.",
+    "status": {
+      "saving": "Saving",
+      "save_failed": "Save failed"
+    },
+    "attachments": {
+      "title": "Attachments",
+      "count_one": "{{count}} file",
+      "count_other": "{{count}} files",
+      "preview": "Preview {{name}}",
+      "attaching": "Attaching",
+      "failed": "Couldn’t attach file",
+      "retry": "Retry",
+      "remove": "Remove attachment"
     }
   },
   "contact_card": {
@@ -1306,6 +1358,28 @@
       "write_something": "",
       "list": "List",
       "blockquoate": "Empty quote"
+    },
+    "signature_label": "Signature",
+    "variable": {
+      "replace": "Replace {{name}}…",
+      "apply": "Apply"
+    },
+    "toolbar": {
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "text_color": "Text color",
+      "highlight": "Highlight",
+      "default_color": "Default color",
+      "no_highlight": "No highlight",
+      "set_text_color": "Set text color {{color}}",
+      "set_highlight": "Set highlight {{color}}",
+      "bullet_list": "Bulleted list",
+      "numbered_list": "Numbered list",
+      "align_left": "Align left",
+      "align_center": "Align center",
+      "align_right": "Align right",
+      "justify": "Justify"
     }
   },
   "extension": {
@@ -1452,7 +1526,16 @@
       "cancel": "Cancel",
       "sending_delay": "Mail will be sent in {{delay}}s",
       "error": "Failed to send the message",
-      "canceled": "Send canceled"
+      "canceled": "Send canceled",
+      "discarded": "Draft discarded",
+      "undo_discard_failed": "Couldn’t restore the draft.",
+      "draft_saved": "Draft saved",
+      "open_draft": "Open",
+      "no_sending_account": "Couldn’t tell which account to send from",
+      "schedule_failed": "Couldn’t schedule send: {{error}}",
+      "scheduled_draft_not_removed": "Scheduled — but the original draft couldn’t be removed. Delete it from Drafts so it isn’t sent twice.",
+      "scheduled": "Scheduled for {{time}}",
+      "view_scheduled": "View"
     },
     "thread": {
       "mark_read": "Marking conversation as read...",
@@ -1564,7 +1647,13 @@
       "sync_failed": "Sync failed for account {{account}}. Try again later.",
       "no_label_found": "No labels found",
       "selected_label_not_exist": "Selected label does not exist",
-      "filter_save": "Failed to save AI filter"
+      "filter_save": "Failed to save AI filter",
+      "attach_failed": "Couldn’t attach {{name}}",
+      "file_too_large_named": "{{name}} is over the {{limit}} limit",
+      "attachment_over_microsoft_limit": "{{name}} wasn’t attached — Microsoft 365 accounts can send up to {{limit}} of attachments per email",
+      "message_too_large_microsoft": "This email is too large to send from a Microsoft 365 account. Remove some attachments or images and try again.",
+      "clipboard_read": "Couldn’t read the clipboard. Use regular paste instead.",
+      "plain_paste_unsupported": "Plain-text paste isn’t available here. Use regular paste instead."
     },
     "snooze": {
       "success": "Snoozed until {{time}}",
@@ -1753,7 +1842,9 @@
       "title": "App update ready!",
       "description": "Refresh the app to get the latest features and improvements.",
       "button": "Refresh app"
-    }
+    },
+    "updating": "Updating…",
+    "later": "Later"
   },
   "common": {
     "dismiss": "Dismiss",
@@ -1786,5 +1877,20 @@
       "remove": "Remove signature",
       "manage": "Manage signatures"
     }
+  },
+  "draft_card": {
+    "sending": "Sending…",
+    "edit": "Edit draft",
+    "to": "To:",
+    "no_recipient": "(No recipient)",
+    "attachments_one": "{{count}} attachment",
+    "attachments_other": "{{count}} attachments"
+  },
+  "calendar_event": {
+    "new_attendee": "New attendee",
+    "removed": "Removed",
+    "re_add_attendee": "Re-add attendee",
+    "remove_attendee": "Remove attendee",
+    "max_attendees": "You can add up to {{count}} attendees"
   }
 }

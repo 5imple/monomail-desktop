@@ -102,6 +102,9 @@ export interface MultipleSelectorProps {
   ) => React.ReactNode;
 }
 
+// Marks the typed-text ("create") item for the filter, which ranks it.
+const CREATABLE_KEYWORD = '__creatable__';
+
 export interface MultipleSelectorRef {
   selectedValue: Option[];
   input: HTMLInputElement;
@@ -440,6 +443,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
         <>
           <CommandItem
             value={inputValue}
+            keywords={[CREATABLE_KEYWORD]}
             className={cn('cursor-pointer rounded-sm')}
             onMouseDown={(e) => {
               e.preventDefault();
@@ -506,18 +510,28 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
 
     /** Avoid Creatable Selector freezing or lagging when paste a long string. */
     const commandFilter = React.useCallback(() => {
-      if (commandProps?.filter) {
-        return commandProps.filter;
-      }
-
-      if (creatable) {
-        return (value: string, search: string) => {
-          return value.toLowerCase().includes(search.toLowerCase()) ? 1 : -1;
-        };
-      }
+      const filter =
+        commandProps?.filter ??
+        (creatable
+          ? (value: string, search: string) =>
+              value.toLowerCase().includes(search.toLowerCase()) ? 1 : -1
+          : undefined);
       // Using default filter in `cmdk`. We don't have to provide it.
-      return undefined;
-    }, [creatable, commandProps?.filter]);
+      if (!creatable || !filter) return filter;
+
+      // The typed-text item ranks by what it is: a complete valid entry
+      // ("jen@x.com") outranks matching options — it means that address, not
+      // "jen@x.com.au" — while partial text ("jen") ranks below them, so
+      // Enter picks the matching contact instead of failing validation.
+      return (value: string, search: string, keywords?: string[]) => {
+        if (keywords?.includes(CREATABLE_KEYWORD)) {
+          return !validateCreatable || validateCreatable(value) ? 2 : 0.5;
+        }
+        return filter(value, search, keywords);
+      };
+    }, [creatable, commandProps?.filter, validateCreatable]);
+
+    const creatableItem = CreatableItem();
 
     return (
       <Command
@@ -620,7 +634,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
               }}
               onFocus={(event) => {
                 setOpen(true);
-                triggerSearchOnFocus && onSearch?.(debouncedSearchTerm);
+                if (triggerSearchOnFocus) onSearch?.(debouncedSearchTerm);
                 inputProps?.onFocus?.(event);
               }}
               placeholder={hidePlaceholderWhenSelected && selected.length !== 0 ? '' : placeholder}
@@ -658,7 +672,9 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
           {open && (
             <CommandList
               className={cn(
-                'dark absolute top-1 z-10 w-full overflow-hidden rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md outline-none animate-in',
+                // Follows the theme (a forced `dark` made a black slab on the
+                // light compose card).
+                'absolute top-1 z-10 w-full overflow-hidden rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md outline-none animate-in',
 
                 inputValue.length < (minLetters || 0) ? 'hidden' : '',
                 hideOnEmpty && inputValue.length === 0 ? 'hidden' : ''
@@ -678,10 +694,14 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
               ) : (
                 <>
                   {EmptyItem()}
-                  {CreatableItem()}
                   {!selectFirstItem && <CommandItem value="-" className="hidden" />}
                   {Object.entries(selectables).map(([key, dropdowns]) => (
-                    <CommandGroup key={key} heading={key} className="h-full overflow-auto">
+                    <CommandGroup
+                      key={key}
+                      value={`options:${key}`}
+                      heading={key}
+                      className="h-full overflow-auto"
+                    >
                       <>
                         {dropdowns.map((option, index) => {
                           return (
@@ -711,13 +731,16 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
                               {option.icon && (
                                 <span className="mr-2 h-6 w-6 shrink-0">{option.icon}</span>
                               )}
-                              {option.label}
+                              <span className="truncate">{option.label}</span>
                             </CommandItem>
                           );
                         })}
                       </>
                     </CommandGroup>
                   ))}
+                  {/* In a group of its own so cmdk orders it by score among
+                      the option groups (ungrouped items always came first). */}
+                  {creatableItem && <CommandGroup value="creatable">{creatableItem}</CommandGroup>}
                 </>
               )}
             </CommandList>

@@ -681,9 +681,12 @@ const MAX_ENCODED_MIME = 4 * 1024 * 1024;
 const sendMessage: MailProviderAdapter['sendMessage'] = async (uid, raw, threadId, signal) => {
   const mimeBase64 = base64UrlToBase64(raw);
   if (mimeBase64.length > MAX_ENCODED_MIME) {
-    throw new Error(
+    const error = new Error(
       'This message is too large to send from a Microsoft account in this version — attachments over ~3 MB are not yet supported.'
     );
+    // Recognised by the send toast, which shows a specific message for it.
+    error.name = 'MessageTooLargeError';
+    throw error;
   }
 
   // MIME mode: POST the base64 MIME as text/plain. Reply threading rides on the

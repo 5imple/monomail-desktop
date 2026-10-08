@@ -14,6 +14,10 @@ interface UpdateNotificationCardProps {}
 
 type UpdateType = 'electron' | 'pwa' | null;
 
+// No progress or error comes back over IPC, so the busy state is
+// time-boxed: the button can never stay stuck disabled.
+const ELECTRON_UPDATE_BUSY_MS = 15000;
+
 const UpdateNotificationCard: FC<UpdateNotificationCardProps> = ({}) => {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
@@ -23,9 +27,10 @@ const UpdateNotificationCard: FC<UpdateNotificationCardProps> = ({}) => {
 
   useEffect(() => {
     // Handle Electron updates (only in Electron environment)
+    let unsubscribe: (() => void) | undefined;
     if (window.electronBridge) {
       electronApi.checkForUpdate();
-      electronApi.on('renderer:update:available', () => {
+      unsubscribe = electronApi.on('renderer:update:available', () => {
         setUpdateType('electron');
         setIsVisible(true);
       });
@@ -41,12 +46,21 @@ const UpdateNotificationCard: FC<UpdateNotificationCardProps> = ({}) => {
     window.addEventListener(PWA_UPDATE_EVENT, handlePWAUpdate as EventListener);
 
     return () => {
+      unsubscribe?.();
       window.removeEventListener(PWA_UPDATE_EVENT, handlePWAUpdate as EventListener);
     };
   }, []);
 
+  useEffect(() => {
+    if (!isUpdating || updateType !== 'electron') return;
+    const timer = setTimeout(() => setIsUpdating(false), ELECTRON_UPDATE_BUSY_MS);
+    return () => clearTimeout(timer);
+  }, [isUpdating, updateType]);
+
   const handleUpdate = async () => {
     if (updateType === 'electron') {
+      // Feedback while the updater takes over (it opens its own window).
+      setIsUpdating(true);
       electronApi.downloadAndInstallUpdate();
     } else if (updateType === 'pwa' && pwaUpdateFunction) {
       // Use the proper PWA update handler with comprehensive error handling
@@ -93,7 +107,7 @@ const UpdateNotificationCard: FC<UpdateNotificationCardProps> = ({}) => {
               <h4 className="mb-1 text-sm font-medium">{content.title}</h4>
               <p className="text-sm text-muted-foreground">{content.description}</p>
             </div>
-            <div>
+            <div className="flex flex-col gap-1">
               <Button
                 disabled={isUpdating}
                 sizeVariant="xs"
@@ -101,7 +115,17 @@ const UpdateNotificationCard: FC<UpdateNotificationCardProps> = ({}) => {
                 onClick={handleUpdate}
               >
                 {isUpdating && <Loader className="mr-2" />}
-                {content.buttonText}
+                {isUpdating ? t('update_notification.updating') : content.buttonText}
+              </Button>
+              {/* Dismiss for this session; it comes back on the next launch. */}
+              <Button
+                variant="ghost"
+                sizeVariant="xs"
+                className="w-full text-muted-foreground"
+                disabled={isUpdating}
+                onClick={() => setIsVisible(false)}
+              >
+                {t('update_notification.later')}
               </Button>
             </div>
           </div>

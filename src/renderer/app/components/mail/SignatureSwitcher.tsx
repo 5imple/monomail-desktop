@@ -130,7 +130,7 @@ const SignatureSwitcher = ({
           </Tooltip>
         </div>
         {/* Signature selection modal */}
-        <PopoverContent align={'start'} alignOffset={0} className="no-drag dark ml-2 p-0">
+        <PopoverContent align={'start'} alignOffset={0} className="no-drag ml-2 p-0">
           <div className="p-2 pb-0">
             <Label className="">
               {t('compose.signature.title', { defaultValue: 'Signatures' })}

@@ -1,13 +1,16 @@
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import MultipleSelector, {
   MultipleSelectorProps,
   Option
 } from '@/renderer/app/components/ui/multi-selector';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { Contact } from '@/renderer/app/lib/db/contact';
-import { ellipsisEmailString, ellipsisString } from '@/renderer/app/lib/minimizeEmail';
+import { matchesAllWords, recipientLabel } from '@/renderer/app/lib/recipientLabel';
 import { cn } from '@/renderer/app/lib/utils';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 // Legacy AttendeeDraftChange removed - using simpler approach
 type AttendeeDraftChange = {
   type: 'added' | 'removed';
@@ -17,6 +20,33 @@ type AttendeeDraftChange = {
 };
 
 type Organizer = { name?: string; email: string };
+
+// Response icons, named — "Clock = awaiting reply" had to be guessed.
+const RESPONSE_STATUS: Record<string, { icon: MonoIconType; className: string; labelKey: string }> =
+  {
+    accepted: {
+      icon: 'CheckCircle',
+      className: 'text-primary',
+      labelKey: 'calendar_card.accepted'
+    },
+    declined: {
+      icon: 'XCircle',
+      className: 'text-destructive',
+      labelKey: 'calendar_card.declined'
+    },
+    tentative: {
+      icon: 'AlertCircle',
+      className: 'text-muted-foreground',
+      labelKey: 'calendar_card.maybe'
+    },
+    needsAction: {
+      icon: 'Clock',
+      className: 'text-muted-foreground',
+      labelKey: 'calendar_card.no_response'
+    }
+  };
+
+const MAX_ATTENDEES = 10;
 
 interface ParticipantListInputProps
   extends Omit<MultipleSelectorProps, 'CustomBadge' | 'placeholder'> {
@@ -45,6 +75,7 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
   onReAddAttendee,
   ...props
 }) => {
+  const { t } = useTranslation();
   const [options, setOptions] = useState<Option[]>([]);
 
   useEffect(() => {
@@ -88,7 +119,7 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
             />
           ),
           value: `${contact.emailAddress}`,
-          label: `${ellipsisString(contact.displayName)} (${ellipsisEmailString(contact.emailAddress)})`
+          label: recipientLabel(contact.displayName, contact.emailAddress)
         })
       );
 
@@ -134,35 +165,53 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
       const isRemoved = showDraftChanges && removedEmails.has(email.toLowerCase());
 
       const renderStatusIcon = () => {
-        if (!status) return null;
-        const iconClass = isRemoved ? 'h-4 w-4 opacity-50' : 'h-4 w-4';
-        if (status === 'accepted')
-          return <MonoIcon type="CheckCircle" className={`${iconClass} text-primary`} />;
-        if (status === 'declined')
-          return <MonoIcon type="XCircle" className={`${iconClass} text-destructive`} />;
-        if (status === 'tentative')
-          return <MonoIcon type="AlertCircle" className={`${iconClass} text-muted-foreground`} />;
-        if (status === 'needsAction')
-          return <MonoIcon type="Clock" className={`${iconClass} text-muted-foreground`} />;
-        return null;
+        const response = status ? RESPONSE_STATUS[status] : undefined;
+        if (!response) return null;
+        const label = t(response.labelKey);
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex shrink-0" role="img" aria-label={label}>
+                <MonoIcon type={response.icon} className={cn('h-4 w-4', response.className)} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+          </Tooltip>
+        );
       };
 
+      // The name like the organizer row, with the address muted below it.
+      const hasName = !!matched?.displayName && matched.displayName !== email;
+
       return (
-        <div
-          key={email}
-          className={`flex items-center gap-4 py-1 ${isRemoved ? 'opacity-60' : ''}`}
-        >
-          <div className={`h-6 w-6 overflow-hidden rounded-full ${isRemoved ? 'opacity-50' : ''}`}>
+        <div key={email} className={cn('flex items-center gap-4 py-1', isRemoved && 'opacity-60')}>
+          <div className="h-6 w-6 shrink-0 overflow-hidden rounded-full">
             <RecipientAvatar className="h-full w-full" recipient={{ email, name: displayName }} />
           </div>
-          <div className="flex-1">
-            <div className={`text-sm ${isRemoved ? 'text-muted-foreground line-through' : ''}`}>
-              {ellipsisEmailString(email)}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div
+              className={cn('truncate text-sm', isRemoved && 'text-muted-foreground line-through')}
+            >
+              {hasName ? matched?.displayName : email}
             </div>
+            {hasName && <div className="truncate text-xs text-muted-foreground">{email}</div>}
           </div>
           {!isNew && renderStatusIcon()}
-          {isNew && !isRemoved && <div className="h-2 w-2 rounded-full bg-accent" />}
-          {isRemoved && <div className="text-xs text-muted-foreground">Removed</div>}
+          {isNew && !isRemoved && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full bg-selection"
+                  role="img"
+                  aria-label={t('calendar_event.new_attendee')}
+                />
+              </TooltipTrigger>
+              <TooltipContent>{t('calendar_event.new_attendee')}</TooltipContent>
+            </Tooltip>
+          )}
+          {isRemoved && (
+            <div className="text-xs text-muted-foreground">{t('calendar_event.removed')}</div>
+          )}
           <button
             className="ml-2 rounded p-1 text-muted-foreground hover:text-foreground"
             onClick={() => {
@@ -174,7 +223,7 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
                   // Fallback: re-add through onChange
                   const attendeeOption: Option = {
                     value: email,
-                    label: `${displayName} (${ellipsisEmailString(email)})`,
+                    label: recipientLabel(matched?.displayName, email),
                     icon: (
                       <RecipientAvatar
                         className="h-full w-full shrink-0"
@@ -194,7 +243,9 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
                 onChange?.(value.filter((v) => v.value !== email));
               }
             }}
-            aria-label={isRemoved ? 'Re-add attendee' : 'Remove attendee'}
+            aria-label={
+              isRemoved ? t('calendar_event.re_add_attendee') : t('calendar_event.remove_attendee')
+            }
           >
             <MonoIcon type={isRemoved ? 'Plus' : 'X'} className="h-3 w-3" />
           </button>
@@ -210,7 +261,8 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
     value,
     attendeeChanges,
     showDraftChanges,
-    onRemoveAttendee
+    onRemoveAttendee,
+    t
   ]);
 
   const HiddenBadge = () => null;
@@ -262,13 +314,18 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
         }}
         options={options}
         onSearchSync={handleSearchSync}
-        maxSelected={10}
+        maxSelected={MAX_ATTENDEES}
+        // Silent at the cap before: an 11th pick just did nothing.
+        onMaxSelected={(limit) =>
+          toast(t('calendar_event.max_attendees', { count: limit }), { id: 'attendee-limit' })
+        }
         creatable
         hideClearAllButton
         CustomBadge={HiddenBadge}
         placeholder={placeholder}
         validateCreatable={(v) => validateEmail(v)}
-        validationMessage="Please enter a valid email"
+        validationMessage={t('compose_card.invalid_email')}
+        commandProps={{ filter: matchesAllWords, ...props.commandProps }}
         triggerSearchOnFocus
       />
     </div>

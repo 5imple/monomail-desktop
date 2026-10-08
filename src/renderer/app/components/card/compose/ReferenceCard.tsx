@@ -1,17 +1,17 @@
-import { apiClient } from '@/main/api/apiClient';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Card, CardContent, CardHeader } from '@/renderer/app/components/ui/card';
 import {
   ScrollArea,
   ScrollAreaViewport,
   ScrollBar
 } from '@/renderer/app/components/ui/scroll-area';
-import { formatMessageDate, getForwardedMessageBody } from '@/renderer/app/lib/formatBody';
+import { formatMessageCardDate } from '@/renderer/app/lib/formatDate';
+import { getForwardedMessageBody } from '@/renderer/app/lib/formatBody';
 import { cn } from '@/renderer/app/lib/utils';
-import { FC, useEffect, useMemo, useRef, useState } from 'react';
+import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface ReferenceCardProps {
@@ -20,42 +20,40 @@ interface ReferenceCardProps {
   accountId: string;
 }
 
+// Collapsed content stays mounted (for the height animation), so it's made
+// inert: its links leave the Tab order. React 18 has no typed `inert` prop.
+const inertWhen = (condition: boolean) =>
+  (condition ? { inert: '' } : {}) as React.HTMLAttributes<HTMLDivElement>;
+
 const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [contentHeight, setContentHeight] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const referenceBody = useMemo(() => {
     return type === 'forward' ? getForwardedMessageBody(item) : item.getParsedBody();
   }, [item, type]);
-  const formattedDate = useMemo(() => formatMessageDate(item), [item]);
+  // Local time, like the reader's message cards (formatMessageDate keeps the
+  // sender's zone, right for the forwarded "Date:" line but not for the UI).
+  const formattedDate = useMemo(() => formatMessageCardDate(item.timestamp), [item]);
 
   const toggleExpand = () => {
     setIsExpanded((prev) => !prev);
   };
 
-  useEffect(() => {
-    if (contentRef.current) {
-      if (isExpanded) {
-        setContentHeight(contentRef.current.scrollHeight);
-      } else {
-        setContentHeight(0);
-      }
-    }
-  }, [isExpanded]);
-
-  const updateHeight = () => {
-    if (contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight);
-    }
-  };
-
-  const subject = item.subject.length > 0 ? item.subject : '(No subject)';
-  const sender = item.from?.name?.trim() || item.from?.email || 'Original message';
-  const summary = type === 'reply' ? `Replying to ${sender}` : `Forwarding ${sender}`;
+  const subject = item.subject.length > 0 ? item.subject : t('compose_card.no_subject');
+  const sender = item.from?.name?.trim() || item.from?.email || t('compose_card.original_message');
+  const summary =
+    type === 'reply'
+      ? t('compose_card.replying_to', { name: sender })
+      : t('compose_card.forwarding', { name: sender });
   const expandedLabel = isExpanded
     ? t('message_card.hide_original')
     : t('message_card.show_original');
+  // Forwarding sends the original's text, not its files — say so rather
+  // than let them go missing silently.
+  const originalHasFiles =
+    type === 'forward' &&
+    (Object.keys(item.attachments ?? {}).length > 0 || item.hasAttachments === true);
 
   useEffect(() => {
     if (!contentRef.current) return;
@@ -77,7 +75,6 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
           skeleton.className = `bg-muted-low animate-pulse rounded-md`;
           skeleton.setAttribute('style', `width: ${imgWidth}px; height: ${imgHeight}px;`);
           img.parentNode?.insertBefore(skeleton, img); // Insert skeleton before image
-          updateHeight();
 
           if (cid) {
             try {
@@ -121,7 +118,6 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
           type="button"
           aria-expanded={isExpanded}
           onClick={toggleExpand}
-          title={expandedLabel}
           className={cn(
             'flex w-full items-center gap-3 rounded-[inherit] px-4 py-3 text-left',
             'transition-colors hover:bg-muted/40',
@@ -135,6 +131,12 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
             <div className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">
               {subject} · {formattedDate}
             </div>
+            {originalHasFiles && (
+              <div className="mt-1 flex items-center gap-1 text-[12px] text-muted-foreground">
+                <MonoIcon type="Paperclip" className="h-3 w-3" />
+                <span>{t('compose_card.forward_attachments_not_included')}</span>
+              </div>
+            )}
           </div>
           <span className="flex h-7 shrink-0 items-center gap-1.5 rounded px-2 text-xs text-muted-foreground">
             <MonoIcon type={isExpanded ? 'ChevronUp' : 'ChevronDown'} className="h-3.5 w-3.5" />
@@ -143,20 +145,30 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
         </button>
       </CardHeader>
       <CardContent className="p-0">
+        {/* Grid-row collapse: follows the content's real height, so images
+            that load later and width changes (Expand) aren't clipped the way
+            a height measured once was. */}
         <div
-          className="overflow-hidden transition-all duration-300"
-          style={{ height: `${contentHeight}px` }}
+          className={cn(
+            'grid transition-[grid-template-rows] duration-300',
+            isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+          )}
+          {...inertWhen(!isExpanded)}
         >
-          <div ref={contentRef} className="px-4 py-3">
-            <ScrollArea>
-              <ScrollAreaViewport>
-                <div
-                  className="select-text"
-                  dangerouslySetInnerHTML={{ __html: referenceBody }}
-                ></div>
-                <ScrollBar orientation={'horizontal'} />
-              </ScrollAreaViewport>
-            </ScrollArea>
+          <div className="min-h-0 overflow-hidden">
+            <div ref={contentRef} className="px-4 py-3">
+              <ScrollArea>
+                <ScrollAreaViewport>
+                  {/* The reader's email paper: message HTML always on white,
+                      so its own dark text stays readable in dark themes. */}
+                  <div
+                    className="email-document select-text rounded-md bg-white px-4 py-3 text-[#202124]"
+                    dangerouslySetInnerHTML={{ __html: referenceBody }}
+                  ></div>
+                  <ScrollBar orientation={'horizontal'} />
+                </ScrollAreaViewport>
+              </ScrollArea>
+            </div>
           </div>
         </div>
       </CardContent>

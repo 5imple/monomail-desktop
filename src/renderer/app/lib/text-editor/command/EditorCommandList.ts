@@ -89,15 +89,12 @@ const EditorCommandList = () => {
         maxWidth: '400px',
         duration: 150,
         animation: 'shift-toward-subtle',
-        onShow: (instance) => {
-          // Add dark class to tippy box
-          instance.popper.classList.add('dark');
+        // No forced `dark` class: the 'mono' tippy theme follows the app theme.
+        onShow: () => {
           // Set decoration active when tippy shows
           setDecorationState(currentEditor, true, currentRange);
         },
-        onHide: (instance) => {
-          // Remove dark class from tippy box
-          // instance.popper.classList.remove('dark');
+        onHide: () => {
           // Set decoration inactive when tippy hides
           setDecorationState(currentEditor, false);
         }
