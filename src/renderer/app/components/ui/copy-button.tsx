@@ -6,9 +6,16 @@ interface CopyButtonProps {
   textToCopy: string;
   sizeVariant?: 'default' | 'sm' | 'xs' | 'xxs' | 'lg' | 'xl';
   className?: string;
+  // Optional: callers without one render exactly as before.
+  tooltip?: string;
 }
 
-export const CopyButton = ({ textToCopy, sizeVariant = 'xs', className }: CopyButtonProps) => {
+export const CopyButton = ({
+  textToCopy,
+  sizeVariant = 'xs',
+  className,
+  tooltip
+}: CopyButtonProps) => {
   const [copySuccess, setCopySuccess] = useState(false);
 
   const handleCopy = () => {
@@ -30,6 +37,7 @@ export const CopyButton = ({ textToCopy, sizeVariant = 'xs', className }: CopyBu
       sizeVariant={sizeVariant}
       onClick={handleCopy}
       className={className}
+      tooltip={tooltip}
     >
       <MonoIcon
         className="h-3.5 w-3.5 text-muted-foreground"

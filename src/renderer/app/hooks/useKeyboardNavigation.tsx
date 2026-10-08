@@ -1330,10 +1330,12 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     { scopes: ['GLOBAL'] }
   );
 
-  // Space selects/deselects the focused thread.
+  // Space selects/deselects the focused thread. With the reader open the list
+  // is hidden behind it and Space scrolls the email (DisplayPanel) instead.
   useHotkeys(
     'space',
     (e) => {
+      if (activeThreadId && focusPosition.area === 'thread-list') return;
       e.preventDefault();
       toggleSelectFocusedThread();
     },

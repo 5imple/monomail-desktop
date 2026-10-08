@@ -10,6 +10,33 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { MonoAttachment } from '@/main/models/types';
 import calendarApi from '@/main/api/calendar/calendarApi'; // Import the new calendar API
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/app/components/ui/tabs';
+import { useTranslation } from 'react-i18next';
+
+// Attendees shown before "+N more"; a 100-person invite pushed the email off-screen.
+const ATTENDEE_PREVIEW = 5;
+
+const rsvpIcon = (status?: string) => {
+  switch (status?.toUpperCase()) {
+    case 'ACCEPTED':
+      return 'CheckCircle' as const;
+    case 'DECLINED':
+      return 'XCircle' as const;
+    default:
+      return 'HelpCircle' as const;
+  }
+};
+const rsvpColor = (status?: string) => {
+  switch (status?.toUpperCase()) {
+    case 'ACCEPTED':
+      return 'text-green-600 dark:text-green-400';
+    case 'DECLINED':
+      return 'text-destructive';
+    case 'TENTATIVE':
+      return 'text-amber-600 dark:text-amber-400';
+    default:
+      return '';
+  }
+};
 
 /**
  * Extract ICS content from various response formats
@@ -181,6 +208,20 @@ export const CalendarEventCard: React.FC<CalendarEventProps> = ({
     'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'NEEDS-ACTION' | string | null
   >(null);
   const [rsvpLoading, setRsvpLoading] = useState(false);
+  const [showAllAttendees, setShowAllAttendees] = useState(false);
+  const { t } = useTranslation();
+  const rsvpLabel = (status?: string) => {
+    switch (status?.toUpperCase()) {
+      case 'ACCEPTED':
+        return t('calendar_card.accepted', { defaultValue: 'Accepted' });
+      case 'DECLINED':
+        return t('calendar_card.declined', { defaultValue: 'Declined' });
+      case 'TENTATIVE':
+        return t('calendar_card.maybe', { defaultValue: 'Maybe' });
+      default:
+        return t('calendar_card.no_response', { defaultValue: 'No response' });
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -294,14 +335,14 @@ export const CalendarEventCard: React.FC<CalendarEventProps> = ({
   }
 
   return (
-    <Card className="my-2 overflow-hidden shadow-sm">
+    <Card className="overflow-hidden shadow-sm">
       <CardContent className="p-4">
         {/* Event Icon and Title */}
         <div className="mb-3 flex items-center gap-3">
           <div className="rounded-md">
             <MonoIcon type="GoogleCalendar" className="h-6 w-6" />
           </div>
-          <div className="text-md font-medium">{event.summary || 'Calendar Event'}</div>
+          <div className="text-[15px] font-semibold">{event.summary || 'Calendar Event'}</div>
         </div>
 
         <div className="flex flex-col gap-2">
@@ -317,7 +358,7 @@ export const CalendarEventCard: React.FC<CalendarEventProps> = ({
           {event.location && (
             <div className="">
               <div className="mb-1 text-sm text-muted-foreground">Location:</div>
-              <div className="cursor-pointer text-sm">{event.location}</div>
+              <div className="text-sm">{event.location}</div>
             </div>
           )}
 
@@ -334,71 +375,57 @@ export const CalendarEventCard: React.FC<CalendarEventProps> = ({
                 </div>
               )}
 
-              {event.attendees &&
-                event.attendees.map((attendee, idx) => {
-                  // Skip the organizer as we've already shown them
-                  if (event.organizer && attendee.email === event.organizer.email) {
-                    return null;
-                  }
-
-                  // Check if this is the current user
-                  const isCurrentUser =
-                    currentUserEmail &&
-                    attendee.email.toLowerCase() === currentUserEmail.toLowerCase();
-
-                  return (
-                    <div key={idx} className="flex items-center gap-1">
-                      {isCurrentUser ? (
-                        <>
-                          <span className="text-sm">{attendee.name || attendee.email}</span>
-                          <MonoIcon
-                            type={
-                              currentResponse === 'ACCEPTED'
-                                ? 'CheckCircle'
-                                : currentResponse === 'DECLINED'
-                                  ? 'XCircle'
-                                  : currentResponse === 'TENTATIVE'
-                                    ? 'HelpCircle'
-                                    : 'HelpCircle'
-                            }
-                            className={cn(
-                              'h-4 w-4',
-                              currentResponse === 'ACCEPTED' && 'text-green-600',
-                              currentResponse === 'DECLINED' && 'text-red-600',
-                              currentResponse === 'TENTATIVE' && 'text-amber-600'
-                            )}
-                          />
-                        </>
-                      ) : (
-                        <>
+              {(() => {
+                // The organizer is listed above.
+                const attendees = (event.attendees ?? []).filter(
+                  (attendee) => !(event.organizer && attendee.email === event.organizer.email)
+                );
+                const visible = showAllAttendees ? attendees : attendees.slice(0, ATTENDEE_PREVIEW);
+                return (
+                  <>
+                    {visible.map((attendee, idx) => {
+                      const isCurrentUser =
+                        currentUserEmail &&
+                        attendee.email.toLowerCase() === currentUserEmail.toLowerCase();
+                      // Your own row reflects the RSVP you pick below.
+                      const status = isCurrentUser ? currentResponse : attendee.status;
+                      return (
+                        <div key={idx} className="flex items-center gap-1">
                           <span className="text-sm text-foreground">
                             {attendee.name || attendee.email}
                           </span>
-
-                          {attendee.status && (
+                          {(isCurrentUser || attendee.status) && (
                             <MonoIcon
-                              type={
-                                attendee.status.toUpperCase() === 'ACCEPTED'
-                                  ? 'CheckCircle'
-                                  : attendee.status.toUpperCase() === 'DECLINED'
-                                    ? 'XCircle'
-                                    : attendee.status.toUpperCase() === 'TENTATIVE'
-                                      ? 'HelpCircle'
-                                      : 'HelpCircle'
-                              }
-                              className={cn(
-                                'h-4 w-4',
-                                attendee.status.toUpperCase() === 'ACCEPTED' && 'text-green-600',
-                                attendee.status.toUpperCase() === 'DECLINED' && 'text-red-600',
-                                attendee.status.toUpperCase() === 'TENTATIVE' && 'text-amber-600'
-                              )}
+                              type={rsvpIcon(status as string)}
+                              label={rsvpLabel(status as string)}
+                              title={rsvpLabel(status as string)}
+                              className={cn('h-4 w-4', rsvpColor(status as string))}
                             />
                           )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                        </div>
+                      );
+                    })}
+                    {attendees.length > ATTENDEE_PREVIEW && (
+                      <Button
+                        variant="link"
+                        typeVariant="inline"
+                        className="mt-1 h-auto p-0 text-xs text-muted-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowAllAttendees((prev) => !prev);
+                        }}
+                      >
+                        {showAllAttendees
+                          ? t('calendar_card.show_fewer', { defaultValue: 'Show fewer' })
+                          : t('calendar_card.more_attendees', {
+                              defaultValue: '+{{count}} more',
+                              count: attendees.length - ATTENDEE_PREVIEW
+                            })}
+                      </Button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useHotkeys } from 'react-hotkeys-hook';
+import { focusedElementOwnsKey } from '@/renderer/app/lib/hotkeyGuards';
 import { useCallback, useMemo } from 'react';
 import { useCommands } from '@/renderer/app/lib/commands/useCommands';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
@@ -25,27 +26,9 @@ type ThreadHotkeyTarget = {
 // chip trashed the open thread. Modifier shortcuts (MOD+…) still work.
 const isComposeExpanded = () => !!document.querySelector('[data-compose-expanded="true"]');
 
-// Enter means Reply All in the reader — unless Enter already has a job: a
-// focused control (button, link, field, menu item…), the keyboard-highlighted
-// item (activated by useKeyboardNavigation instead), or an open dialog/menu.
-// Focus left on the hidden list row that opened the reader doesn't count.
-const INTERACTIVE_FOCUS =
-  'button, a[href], input, textarea, select, summary, [contenteditable="true"], [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], [role="checkbox"], [role="switch"], [role="combobox"], .keyboard-focused';
-const enterHasOtherJob = () => {
-  if (
-    document.querySelector(
-      '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"]'
-    )
-  ) {
-    return true;
-  }
-  if (document.body.dataset.navMode === 'keyboard' && document.querySelector('.keyboard-focused')) {
-    return true;
-  }
-  const el = document.activeElement as HTMLElement | null;
-  if (!el || el === document.body || el.closest('[data-thread]')) return false;
-  return el.isContentEditable || !!el.closest(INTERACTIVE_FOCUS);
-};
+// Enter means Reply All in the reader — unless Enter already has a job (see
+// focusedElementOwnsKey).
+const enterHasOtherJob = focusedElementOwnsKey;
 const plainKeyGuard = (hotkey: string) =>
   /(^|\+)(MOD|CTRL|META|ALT|OPTION)\+/i.test(hotkey) ? {} : { ignoreEventWhen: isComposeExpanded };
 

@@ -26,6 +26,25 @@ export const formatMessageHeaderDate = (
   return formatInTimeZone(date, timeZone, 'eee, MMM d');
 };
 
+/**
+ * Message header date in the reader: "Fri, Oct 2" — plus the time for today's
+ * mail ("3:01 PM", like the inbox list) and the year for older years, so a
+ * thread's messages don't all read the same.
+ */
+export const formatMessageCardDate = (
+  timestamp: number,
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone
+): string => {
+  const date = toZonedTime(new Date(timestamp), timeZone);
+  const now = toZonedTime(new Date(), timeZone);
+
+  if (isToday(date)) return formatInTimeZone(date, timeZone, 'h:mm a');
+  if (date.getFullYear() !== now.getFullYear()) {
+    return formatInTimeZone(date, timeZone, 'eee, MMM d, yyyy');
+  }
+  return formatInTimeZone(date, timeZone, 'eee, MMM d');
+};
+
 export const formatFullDateTime = (
   timestamp: number,
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone

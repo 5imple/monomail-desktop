@@ -1,3 +1,5 @@
+import { stripExternalBanner } from '@/renderer/app/components/mail/thread/threadRowModel';
+
 /**
  * Helpers for the reader's conversation history: older messages collapse to
  * single-line rows that join into one stack, and long runs of them fold into
@@ -92,7 +94,9 @@ const HISTORY_MARKERS = [
  * preview when nothing would remain (e.g. a forward with no added text).
  */
 export function cleanHistorySnippet(snippet: string | null | undefined): string {
-  const text = (snippet ?? '').replace(/\s+/g, ' ').trim();
+  // Leading security banners (org "External Email" notice, Microsoft's
+  // first-contact tip) say nothing about the reply itself.
+  const text = stripExternalBanner((snippet ?? '').replace(/\s+/g, ' ')).trim();
   if (!text) return '';
   let end = text.length;
   for (const marker of HISTORY_MARKERS) {

@@ -26,12 +26,29 @@ const DOCUMENT_EXTENSIONS = /\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf|txt|csv|md|pag
 const DOCUMENT_MIME =
   /^text\/|word|excel|spreadsheet|presentation|powerpoint|opendocument|rtf|csv/i;
 
-function resolveMimeType(mimeType: string, fileName?: string): string {
+export function resolveMimeType(mimeType: string, fileName?: string): string {
   if (mimeType && mimeType !== 'application/octet-stream') return mimeType;
   const extension = fileName?.split('.').pop()?.toLowerCase() ?? '';
   if (MIME_BY_EXTENSION[extension]) return MIME_BY_EXTENSION[extension];
   if (fileName && DOCUMENT_EXTENSIONS.test(fileName)) return 'text/plain';
   return mimeType;
+}
+
+// What the preview dialog can actually show: PDFs and images Chromium renders
+// in <img>. HEIC/TIFF resolve to image/* but can't be displayed, and Office /
+// text files would only reach a "not supported" screen — those download.
+const PREVIEWABLE_MIMES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/svg+xml'
+]);
+
+export function isPreviewableAttachment(mimeType: string, fileName?: string): boolean {
+  return PREVIEWABLE_MIMES.has(resolveMimeType(mimeType, fileName).toLowerCase());
 }
 
 // Callers that drop the icon into a styled container (e.g. the Newton

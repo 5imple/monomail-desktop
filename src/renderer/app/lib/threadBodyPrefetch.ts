@@ -16,7 +16,7 @@ import { MonoThread } from '@/main/models/thread/MonoThread';
 
 const inflight = new Map<string, Promise<MonoThread>>();
 
-const payloadHasBodyData = (payload: MonoMessage['payload']): boolean => {
+export const payloadHasBodyData = (payload: MonoMessage['payload']): boolean => {
   if (payload?.body?.data) return true;
   return payload?.parts?.some(payloadHasBodyData) ?? false;
 };

@@ -5,6 +5,7 @@ import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
 import MessageCard from '@/renderer/app/components/card/MessageCard';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
+import { Button } from '@/renderer/app/components/ui/button';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import DisplayPanelHeader from '@/renderer/app/containers/header/DisplayPanelHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
@@ -12,7 +13,9 @@ import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
+import { focusedElementOwnsKey } from '@/renderer/app/lib/hotkeyGuards';
 import { layoutConversation } from '@/renderer/app/lib/messageHistory';
+import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeInlineAtom } from '@/renderer/app/store/compose/useComposeInlineAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
@@ -64,6 +67,14 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
   const promiseResolveRef = useRef<(() => void) | null>(null);
   const fullThreadFetchesRef = useRef<Set<string>>(new Set());
   const fullThreadFetchCompletedRef = useRef<Set<string>>(new Set());
+  // Full-body fetch for the open thread: drives the body skeleton and a
+  // "Couldn't load" notice with retry (a failure used to leave a blank sheet).
+  const [bodyFetch, setBodyFetch] = useState<{
+    threadId: string;
+    fetchKey: string;
+    state: 'loading' | 'error';
+  } | null>(null);
+  const [bodyFetchAttempt, setBodyFetchAttempt] = useState(0);
   const [spacerHeight, setSpacerHeight] = useState(0);
   const { removeDraft, sendDraftQueue } = useDraftAtom();
   const executeCommand = useExecuteCommand();
@@ -72,7 +83,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
 
   // Focus tracking
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
-  const [isMessageListFocused, setIsMessageListFocused] = useState(false);
+  const [, setIsMessageListFocused] = useState(false);
 
   // Refs for message cards & inline drafts
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -119,7 +130,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       smoothScrollBy(-SCROLL_JUMP_SIZE);
     },
     {
-      enabled: isMessageListFocused && !!activeThreadId,
+      enabled: !!activeThreadId,
       preventDefault: true,
       scopes: ['CONVERSATION_DISPLAY']
     }
@@ -132,11 +143,35 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       smoothScrollBy(SCROLL_JUMP_SIZE);
     },
     {
-      enabled: isMessageListFocused && !!activeThreadId,
+      enabled: !!activeThreadId,
       preventDefault: true,
       scopes: ['CONVERSATION_DISPLAY']
     }
   );
+
+  // Space / Shift+Space / Page Down / Page Up page through the open email, as
+  // in a browser. They step aside when the key already has a job (a focused
+  // button, field or menu — Space presses buttons) or compose is open.
+  const pageScroll = useCallback(
+    (direction: 1 | -1) => (e: KeyboardEvent) => {
+      if (focusedElementOwnsKey() || document.querySelector('[data-compose-expanded="true"]')) {
+        return;
+      }
+      const viewport = scrollAreaRef.current;
+      if (!viewport) return;
+      e.preventDefault();
+      viewport.scrollBy({ top: direction * viewport.clientHeight * 0.85, behavior: 'smooth' });
+    },
+    []
+  );
+  useHotkeys('space, pagedown', pageScroll(1), {
+    enabled: !!activeThreadId,
+    scopes: ['CONVERSATION_DISPLAY']
+  });
+  useHotkeys('shift+space, pageup', pageScroll(-1), {
+    enabled: !!activeThreadId,
+    scopes: ['CONVERSATION_DISPLAY']
+  });
 
   // Focus management for message list
   const handleMessageListFocus = useCallback(() => {
@@ -218,6 +253,8 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       ) {
         fullThreadFetchesRef.current.add(fetchKey);
         let completed = false;
+        const fetchThreadId = stableThread.id;
+        setBodyFetch({ threadId: fetchThreadId, fetchKey, state: 'loading' });
 
         // Shared with hover prefetch: if the pointer already rested on this row,
         // this awaits that in-flight request instead of starting over.
@@ -229,9 +266,15 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
           .then((fullThread) => {
             completed = true;
             updateThread(stableThread.accountId, fullThread);
+            setBodyFetch((prev) => (prev?.fetchKey === fetchKey ? null : prev));
           })
           .catch((error) => {
             console.error('Failed to fetch full thread body:', error);
+            setBodyFetch((prev) =>
+              prev?.fetchKey === fetchKey
+                ? { threadId: fetchThreadId, fetchKey, state: 'error' }
+                : prev
+            );
           })
           .finally(() => {
             fullThreadFetchesRef.current.delete(fetchKey);
@@ -251,7 +294,19 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     if (isNewThread || isUnreadThread) {
       readMessages(stableThread);
     }
-  }, [stableThread, readerPhase]);
+  }, [stableThread, readerPhase, bodyFetchAttempt]);
+
+  const retryBodyFetch = useCallback(() => {
+    setBodyFetch((prev) => {
+      if (prev) {
+        fullThreadFetchesRef.current.delete(prev.fetchKey);
+        fullThreadFetchCompletedRef.current.delete(prev.fetchKey);
+      }
+      return null;
+    });
+    // Re-runs the fetch effect.
+    setBodyFetchAttempt((attempt) => attempt + 1);
+  }, []);
 
   useEffect(() => {
     if (isPrinting && promiseResolveRef.current) {
@@ -498,6 +553,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     }
     setCollapsedById({});
     setHistoryUnfolded(false);
+    setBodyFetch(null);
     if (scrollAreaRef.current && !pinnedMessageIdRef.current) {
       scrollAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
     }
@@ -548,7 +604,10 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
             <ScrollArea
               viewportRef={scrollAreaRef}
               className="relative flex-1"
-              scrollbarClassName={'opacity-0'}
+              // The thumb shows while scrolling (macOS-style) so a long email
+              // hints how much is left; always-hidden gave no sense of length.
+              type="scroll"
+              scrollbarClassName={'transition-opacity data-[state=hidden]:opacity-0'}
               style={{
                 maskImage:
                   'linear-gradient(to bottom, transparent, black 16px, black calc(100% - 24px), transparent)'
@@ -561,7 +620,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
               <div ref={contentColumnRef} className="mx-auto max-w-[920px] px-6 pb-16">
                 {thread && (
                   <h1
-                    className="mb-5 mt-8 text-foreground"
+                    className="mb-5 mt-8 select-text text-foreground"
                     style={{
                       fontSize: '24px',
                       fontWeight: 650,
@@ -571,6 +630,20 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
                   >
                     {!thread.subject || thread.subject === '' ? '(No subject)' : thread.subject}
                   </h1>
+                )}
+                {thread && bodyFetch?.threadId === thread.id && bodyFetch.state === 'error' && (
+                  <div
+                    role="alert"
+                    className="-mt-2 mb-4 flex items-center gap-2 text-sm text-muted-foreground"
+                  >
+                    <MonoIcon type="AlertCircle" className="h-4 w-4 text-destructive" />
+                    {t('display_panel.load_error', {
+                      defaultValue: 'Couldn’t load this conversation.'
+                    })}
+                    <Button variant="ghost" sizeVariant="sm" onClick={retryBodyFetch}>
+                      {t('thread_list.try_again')}
+                    </Button>
+                  </div>
                 )}
                 <div className={cn('flex flex-1 flex-col')} ref={printRef}>
                   {conversation.map((entry, index) => {
@@ -585,8 +658,9 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
                           onClick={() => setHistoryUnfolded(true)}
                           aria-expanded={false}
                           className={cn(
-                            'group/fold flex w-full items-center gap-2.5 border border-t-0 border-foreground/[0.06] bg-card px-4 py-2.5 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.025] hover:text-foreground sm:px-5',
-                            'dark:border-white/[0.06] dark:hover:bg-foreground/[0.04]',
+                            'group/fold flex w-full items-center gap-2.5 border border-t-0 border-foreground/[0.06] bg-card px-4 py-2.5 text-left text-[13px] text-muted-foreground transition-colors pointer-hover:bg-foreground/[0.025] pointer-hover:text-foreground sm:px-5',
+                            'dark:border-white/[0.06] dark:pointer-hover:bg-foreground/[0.04]',
+                            ringVariants,
                             spacing
                           )}
                         >
@@ -630,6 +704,9 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
                         cardClassName={cn('transition-all h-fit')}
                         isFocused={focusedMessageId === message.id}
                         onFocusRequest={() => setFocusedMessageId(message.id)}
+                        bodyLoading={
+                          bodyFetch?.threadId === thread?.id && bodyFetch?.state === 'loading'
+                        }
                       />
                     );
                   })}

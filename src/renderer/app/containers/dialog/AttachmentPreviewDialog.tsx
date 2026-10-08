@@ -6,6 +6,7 @@ import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogOverlay,
   DialogPortal,
@@ -14,6 +15,7 @@ import {
 } from '@/renderer/app/components/ui/dialog';
 import Loader from '@/renderer/app/components/ui/loader';
 import { Separator } from '@/renderer/app/components/ui/separator';
+import { isPreviewableAttachment, resolveMimeType } from '@/renderer/app/lib/getAttachmentIcon';
 import { cn } from '@/renderer/app/lib/utils';
 import React, { FC, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -136,7 +138,9 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
   }
 
   function changePage(offset) {
-    setPageNumber((prevPageNumber) => prevPageNumber + offset);
+    setPageNumber((prevPageNumber) =>
+      Math.min(Math.max(prevPageNumber + offset, 1), Math.max(numPages, 1))
+    );
   }
 
   function previousPage() {
@@ -149,14 +153,18 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
 
   if (!attachment) return null;
 
-  const isImage = attachment.mimeType.includes('image');
-  const isPDF = attachment.mimeType.includes('pdf');
+  // Outlook often labels PDFs/images application/octet-stream: go by the
+  // resolved type (extension fallback), like the attachment icons do.
+  const resolvedMime = resolveMimeType(attachment.mimeType, attachment.fileName).toLowerCase();
+  const previewable = isPreviewableAttachment(attachment.mimeType, attachment.fileName);
+  const isPDF = previewable && resolvedMime === 'application/pdf';
+  const isImage = previewable && resolvedMime.startsWith('image/');
 
   const renderError = () => {
     return (
       <div className="text-center text-sm">
         <MonoIcon type={'AlertCircle'} className="mx-auto h-5 w-5 text-destructive" />
-        <div className="mt-2 text-white">{t('dialog.attachment_preview.not_supported')}</div>
+        <div className="mt-2 text-foreground">{t('dialog.attachment_preview.not_supported')}</div>
 
         <Button onClick={downloadAttachment} className="mt-4" type="button" variant={'secondary'}>
           {isDownloading ? <Loader /> : <MonoIcon type={'Download'} className="mr-2 h-4 w-4" />}
@@ -173,18 +181,26 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
         <DialogOverlay className="dark bg-popover/70"></DialogOverlay>
 
         <DialogContent
-          aria-description=""
           closeButton={false}
-          className="flex h-screen w-fit flex-col items-center justify-center gap-0 rounded-none border-none bg-transparent p-0 shadow-none dark:border"
+          className="dark flex h-screen w-fit max-w-none flex-col items-center justify-center gap-0 rounded-none border-none bg-transparent p-0 text-foreground shadow-none"
+          onKeyDown={(e) => {
+            // ← / → turn PDF pages (and must not also move the list cursor).
+            if (!isPDF || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            changePage(e.key === 'ArrowLeft' ? -1 : 1);
+          }}
         >
-          <DialogTitle className="hidden"></DialogTitle>
+          <DialogTitle className="sr-only">{attachment.fileName}</DialogTitle>
           {/* Everything below is gated on `blob`, so without these the overlay
               sat empty while a large file downloaded and forever on failure. */}
           {!blob && !loadError && <Loader />}
           {!blob && loadError && (
             <div className="text-center text-sm">
               <MonoIcon type={'AlertCircle'} className="mx-auto h-5 w-5 text-destructive" />
-              <div className="mt-2 text-white">{t('dialog.attachment_preview.error_downloading')}</div>
+              <div className="mt-2 text-foreground">
+                {t('dialog.attachment_preview.error_downloading')}
+              </div>
               <Button onClick={handlePreview} className="mt-4" type="button" variant={'secondary'}>
                 {t('thread_list.try_again')}
               </Button>
@@ -202,12 +218,13 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
                 >
                   <Document
                     file={blob}
-                    loading={<></>}
+                    loading={<Loader />}
                     error={renderError}
                     noData={<></>}
                     onLoadSuccess={onDocumentLoadSuccess}
                   >
-                    <Page pageNumber={pageNumber} scale={1} />
+                    {/* Fit the page to the window, leaving room for the toolbar. */}
+                    <Page pageNumber={pageNumber} height={Math.max(window.innerHeight - 160, 240)} />
                   </Document>
                 </div>
               </div>
@@ -215,7 +232,11 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
               <div>
                 {!isLoaded && <Loader />}
                 {isLoaded && (
-                  <img src={blobUrl} alt={attachment.fileName} className="max-h-full max-w-full" />
+                  <img
+                    src={blobUrl}
+                    alt={attachment.fileName}
+                    className="max-h-[calc(100vh-9rem)] max-w-[92vw] object-contain"
+                  />
                 )}
               </div>
             ) : (
@@ -225,7 +246,14 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
           {blob && (isPDF || isImage) && (
             <div className="fixed bottom-12 z-50">
               {/* <div className="pb-12 pt-64 w-full bg-gradient-to-t from-black/70 to-transparent"> */}
-              <div className="dark mx-auto flex w-fit items-center gap-1 rounded-lg bg-card/75 shadow-md">
+              <div className="dark mx-auto flex w-fit items-center gap-1 rounded-lg bg-card/75 pl-3 shadow-md">
+                <span
+                  className="max-w-[40vw] truncate text-sm text-foreground"
+                  title={attachment.fileName}
+                >
+                  {attachment.fileName}
+                </span>
+                <Separator orientation={'vertical'} className="mx-1 h-4 bg-muted-foreground" />
                 {isPDF && (
                   <>
                     <Button
@@ -264,6 +292,16 @@ const AttachmentPreviewDialog: FC<AttachmentPreviewDialogProps> = ({
                 >
                   {isDownloading ? <Loader /> : <MonoIcon type={'Download'} />}
                 </Button>
+                <DialogClose asChild>
+                  <Button
+                    className="hover:bg-card/50"
+                    variant={'text'}
+                    typeVariant={'icon'}
+                    tooltip={t('tooltip.close')}
+                  >
+                    <MonoIcon type={'X'} />
+                  </Button>
+                </DialogClose>
               </div>
             </div>
             // </div>

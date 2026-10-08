@@ -84,7 +84,13 @@
       "share_thread": "Share thread",
       "share_link": "Share link",
       "send_to_slack": "Send to Slack",
-      "no_subject": "(No subject)"
+      "no_subject": "(No subject)",
+      "label_removed": "Removed label {{name}}",
+      "mark_unread": "Mark as unread",
+      "print": "Print",
+      "more": "More",
+      "move_to_inbox": "Move to Inbox",
+      "in_trash": "In Trash"
     },
     "list": {
       "all_mail": "All mail",
@@ -1220,7 +1226,22 @@
     "share_link": "Share link",
     "send_to_slack": "Send to Slack",
     "privacy_protection_one": "Removed {{count}} tracking image to protect your privacy",
-    "privacy_protection_other": "Removed {{count}} tracking images to protect your privacy"
+    "privacy_protection_other": "Removed {{count}} tracking images to protect your privacy",
+    "image_unavailable": "Image unavailable",
+    "unsubscribe": "Unsubscribe",
+    "unsubscribe_confirm": "Stop emails from this list?",
+    "unsubscribing": "Unsubscribing…",
+    "unsubscribe_mailto_opened": "Opened the unsubscribe email",
+    "unsubscribe_done": "Unsubscribed",
+    "unsubscribe_failed": "Couldn’t unsubscribe: {{error}}",
+    "unsubscribed_from": "Unsubscribed from {{email}}",
+    "from": "From",
+    "show_fewer": "Show fewer",
+    "recipients_one": "{{count}} recipient",
+    "recipients_other": "{{count}} recipients",
+    "trackers_removed": "Trackers removed",
+    "tracker_removed_from": "Tracker removed from",
+    "loading_body": "Loading message…"
   },
   "tooltip": {
     "discard_draft": "Discard draft",
@@ -1701,7 +1722,8 @@
     "subscription_needed_june_10_title": "We are closing beta period now."
   },
   "display_panel": {
-    "history_limited": "Your history is limited to {{day}} days"
+    "history_limited": "Your history is limited to {{day}} days",
+    "load_error": "Couldn’t load this conversation."
   },
   "status": {
     "gmail_degraded": "Gmail service is experiencing issues",
@@ -1734,7 +1756,8 @@
     }
   },
   "common": {
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "cancel": "Cancel"
   },
   "error_boundary": {
     "title": "Something went wrong",
@@ -1744,5 +1767,24 @@
     "copied": "Copied",
     "open_logs": "Open Logs",
     "support": "If this keeps happening, contact the Technology Services Center (TSC) at {{email}} or 410-778-7777."
+  },
+  "calendar_card": {
+    "accepted": "Accepted",
+    "declined": "Declined",
+    "maybe": "Maybe",
+    "no_response": "No response",
+    "show_fewer": "Show fewer",
+    "more_attendees": "+{{count}} more"
+  },
+  "compose": {
+    "signature": {
+      "switch": "Switch signature",
+      "none": "No signature",
+      "title": "Signatures",
+      "untitled": "(Untitled)",
+      "empty": "No custom signatures found",
+      "remove": "Remove signature",
+      "manage": "Manage signatures"
+    }
   }
 }

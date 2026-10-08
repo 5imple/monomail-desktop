@@ -46,8 +46,18 @@ export function rowAvatarRecipient(thread: MonoThread, accounts: AccountLike[]):
 // Only the list preview drops it — the reader still shows the full message.
 // Also matches a preview cut off before the closing "**".
 const EXTERNAL_BANNER = /^\s*\*\*\s*External Email\b[^*]*(?:\*\*)?\s*/i;
+// Microsoft 365's first-contact safety tip, which Outlook puts at the top of
+// the body (and so the preview): "You don't often get email from x@y.
+// Learn why this is important" / "Some people who received this message …".
+const FIRST_CONTACT_TIP =
+  /^\s*(?:Some people who received this message don['’]t|You don['’]t) often get email from \S+?\.?\s+(?:Learn why this is important\.?\s*(?:<[^>]*>)?\s*)?/i;
 
 export function stripExternalBanner(snippet: string | null | undefined): string {
   if (!snippet) return '';
-  return snippet.replace(EXTERNAL_BANNER, '').trim();
+  let text = snippet;
+  // Either can come first; strip a couple of rounds.
+  for (let i = 0; i < 2; i++) {
+    text = text.replace(EXTERNAL_BANNER, '').replace(FIRST_CONTACT_TIP, '');
+  }
+  return text.trim();
 }

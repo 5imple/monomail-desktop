@@ -24,12 +24,14 @@ interface ContactProfileDropdownMenuProps {
   value: string;
   children?: React.ReactNode;
   onOpenChange?: (value: boolean) => void;
+  /** Account to send "New email" from; falls back to the first account. */
+  fromEmail?: string;
 }
 
 const ContactProfileDropdownMenu = React.forwardRef<
   HTMLDivElement,
   ContactProfileDropdownMenuProps
->(({ value, children, onOpenChange }, ref) => {
+>(({ value, children, onOpenChange, fromEmail }, ref) => {
   const { t } = useTranslation();
   const [contact, setContact] = useState<Contact | null>(null);
   const [nameCopied, setNameCopied] = useState(false);
@@ -93,18 +95,19 @@ const ContactProfileDropdownMenu = React.forwardRef<
   };
 
   const handleNewEmail = async () => {
-    if (contact && accounts[0])
+    const from = fromEmail ?? accounts[0]?.email;
+    if (contact && from)
       if (globalDraftWindows.length > 0) {
         if (handleCloseButton) {
           await handleCloseButton(() => {
             executeCommand('COMPOSE_NEW_MESSAGE', {
-              draft: new MonoDraft({ from: accounts[0].email, to: [contact.emailAddress] })
+              draft: new MonoDraft({ from, to: [contact.emailAddress] })
             });
           });
         }
       } else {
         executeCommand('COMPOSE_NEW_MESSAGE', {
-          draft: new MonoDraft({ from: accounts[0].email, to: [contact.emailAddress] })
+          draft: new MonoDraft({ from, to: [contact.emailAddress] })
         });
       }
   };
@@ -117,21 +120,25 @@ const ContactProfileDropdownMenu = React.forwardRef<
           {/* <RecipientAvatar recipient={{ email: contact.emailAddress, name: contact.displayName }} /> */}
           <div className="overflow-hidden">
             <div className="group -mb-2 flex items-center text-sm">
-              {contact.displayName ?? 'No name'}
+              {contact.displayName || contact.emailAddress}
 
-              <Button
-                className="text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => handleCopyToClipboard(`${contact.displayName}`, 'name')}
-                variant="text"
-                sizeVariant={'xs'}
-                typeVariant="icon"
-              >
-                {nameCopied ? (
-                  <MonoIcon type={'CheckCircle'} className="h-3 w-3 text-green-500" />
-                ) : (
-                  <MonoIcon type={'Copy'} className="h-3 w-3" />
-                )}
-              </Button>
+              {/* Nothing to copy beyond the address when there's no name. */}
+              {contact.displayName && (
+                <Button
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => handleCopyToClipboard(`${contact.displayName}`, 'name')}
+                  variant="text"
+                  sizeVariant={'xs'}
+                  typeVariant="icon"
+                  tooltip={t('contact_card.copy')}
+                >
+                  {nameCopied ? (
+                    <MonoIcon type={'CheckCircle'} className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <MonoIcon type={'Copy'} className="h-3 w-3" />
+                  )}
+                </Button>
+              )}
             </div>
             <div className="group flex items-center text-sm text-muted-foreground">
               <div className="overflow-hidden text-ellipsis">
@@ -143,6 +150,7 @@ const ContactProfileDropdownMenu = React.forwardRef<
                 variant="text"
                 sizeVariant={'xs'}
                 typeVariant="icon"
+                tooltip={t('contact_card.copy')}
               >
                 {emailCopied ? (
                   <MonoIcon type={'CheckCircle'} className="h-3 w-3 text-green-500" />

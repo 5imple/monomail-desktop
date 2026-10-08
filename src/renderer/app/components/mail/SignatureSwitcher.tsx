@@ -1,21 +1,16 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
-import { Button } from '@/renderer/app/components/ui/button';
 import { Label } from '@/renderer/app/components/ui/label';
-import {
-  Popover,
-  PopoverClose,
-  PopoverContent,
-  PopoverTrigger
-} from '@/renderer/app/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import electronApi from '@/renderer/app/lib/electronApi';
+import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { cn } from '@/renderer/app/lib/utils';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
 import { NodeViewWrapper } from '@tiptap/react';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const SignatureSwitcher = ({
@@ -34,15 +29,14 @@ const SignatureSwitcher = ({
   const [shouldShowSignature, setShouldShowSignature] = useState<boolean>(false);
 
   useEffect(() => {
-    // Determine if the message is a reply, forward, or new message
-    // More reliable detection based on draft properties and subject
-    const isReply =
-      draft.subject?.toLowerCase().startsWith('re: ') || draft.messageId.length > 0 || false; // Reply has messageId, threadId, and recipients
-
-    const isForward =
-      draft.subject?.toLowerCase().startsWith('fwd: ') || draft.messageId.length > 0 || false; // Forward has messageId, threadId, but no recipients initially
-
-    const isNewMessage = !isReply && !isForward && !draft.messageId;
+    // Reply, forward or new message. Replies and forwards both carry a
+    // messageId, so treating messageId as either made every reply also count
+    // as a forward (and vice versa) — the two preferences were OR'd. Forwards
+    // are told apart by subject ("Fwd:", Outlook's "FW:").
+    const subject = draft.subject ?? '';
+    const isForward = /^fwd?:/i.test(subject);
+    const isReply = !isForward && ((draft.messageId?.length ?? 0) > 0 || /^re:/i.test(subject));
+    const isNewMessage = !isReply && !isForward;
 
     // Check user's signature inclusion preferences
     const shouldIncludeSignature =
@@ -74,6 +68,15 @@ const SignatureSwitcher = ({
     }
   }, [draft.from, signatures, draft.messageId, draft.threadId, preference.signature]);
 
+  // The trigger lives inside the editor's NodeView, so it stays a div/span;
+  // Enter / Space open the picker without typing into the editor.
+  const openFromKeyboard = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(true);
+  };
+
   const handleSignatureChange = (signatureId: string | null) => {
     if (signatureId) {
       const signature = getSignatureById(signatureId);
@@ -100,96 +103,112 @@ const SignatureSwitcher = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <PopoverTrigger asChild>
-                {/* <Button
-              className="-ml-4 mt-1 cursor-pointer text-sm opacity-0 hover:opacity-100 group-hover:opacity-100"
-              variant="ghost"
-              typeVariant={'inline'}
-            >
-              <MonoIcon type={'ChevronDown'} />
-            </Button> */}
                 {signatureValue ? (
                   <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={t('compose.signature.switch', { defaultValue: 'Switch signature' })}
+                    onKeyDown={openFromKeyboard}
                     className="mono-signature -m-1 rounded-lg p-1 transition-colors duration-300 hover:bg-muted"
                     dangerouslySetInnerHTML={{ __html: signatureValue }}
                   ></div>
                 ) : (
-                  <span className="-m-1 rounded-lg p-1 text-muted-foreground transition-colors duration-300 hover:bg-muted">
-                    No signature
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={openFromKeyboard}
+                    className="-m-1 rounded-lg p-1 text-muted-foreground transition-colors duration-300 hover:bg-muted"
+                  >
+                    {t('compose.signature.none', { defaultValue: 'No signature' })}
                   </span>
                 )}
               </PopoverTrigger>
             </TooltipTrigger>
-            <TooltipContent>Switch signature</TooltipContent>
+            <TooltipContent>
+              {t('compose.signature.switch', { defaultValue: 'Switch signature' })}
+            </TooltipContent>
           </Tooltip>
         </div>
         {/* Signature selection modal */}
         <PopoverContent align={'start'} alignOffset={0} className="no-drag dark ml-2 p-0">
           <div className="p-2 pb-0">
-            <Label className="">Signatures</Label>
+            <Label className="">
+              {t('compose.signature.title', { defaultValue: 'Signatures' })}
+            </Label>
           </div>
           <div className="flex-1 p-1.5">
-            <ul className="space-y-1.5">
+            <div role="menu" className="space-y-1.5">
               {/* Existing signatures */}
               {signatures.length > 0 ? (
-                signatures.map((signature) => (
-                  <li
-                    key={signature.id}
-                    className={cn(
-                      'flex items-center rounded-md p-2 text-sm transition-colors hover:bg-muted-low',
-                      draft.signatureId === signature.id && 'bg-muted-low'
-                    )}
-                    onClick={() => {
-                      setOpen(false);
-                      setTimeout(() => {
-                        if (draft.signatureId === signature.id) {
-                          handleSignatureChange(null);
-                        } else {
-                          handleSignatureChange(signature.id);
-                        }
-                      }, 150);
-                    }}
-                  >
-                    {draft.signatureId === signature.id ? (
-                      <MonoIcon type={'Check'} className="mr-2" />
-                    ) : (
-                      <MonoIcon type={signature.icon as MonoIconType} className="mr-2" />
-                    )}
-                    {signature.name || '(Untitled)'}
-                  </li>
-                ))
+                signatures.map((signature) => {
+                  const selected = draft.signatureId === signature.id;
+                  return (
+                    <button
+                      key={signature.id}
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      className={cn(
+                        'flex w-full items-center rounded-md p-2 text-left text-sm transition-colors hover:bg-muted-low',
+                        ringVariants,
+                        selected && 'bg-muted font-medium'
+                      )}
+                      onClick={() => {
+                        setOpen(false);
+                        // Picking the current one just closes; "Remove signature"
+                        // below is the way to drop it. The short delay lets the
+                        // popover exit before TipTap re-renders the node.
+                        if (selected) return;
+                        setTimeout(() => handleSignatureChange(signature.id), 150);
+                      }}
+                    >
+                      {selected ? (
+                        <MonoIcon type={'Check'} className="mr-2" />
+                      ) : (
+                        <MonoIcon type={signature.icon as MonoIconType} className="mr-2" />
+                      )}
+                      {signature.name ||
+                        t('compose.signature.untitled', { defaultValue: '(Untitled)' })}
+                    </button>
+                  );
+                })
               ) : (
-                <li className="p-2">
-                  <div className="text-start text-sm text-foreground">
-                    No custom signatures found
-                  </div>
-                </li>
+                <div className="p-2 text-start text-sm text-foreground">
+                  {t('compose.signature.empty', { defaultValue: 'No custom signatures found' })}
+                </div>
               )}
-            </ul>
+            </div>
           </div>
           <Separator />
           {/* Signature management link */}
           <div className="flex-1 p-1.5">
-            <ul className="space-y-0">
+            <div className="space-y-0">
               <button
-                className="flex w-full items-center rounded-md p-2 text-sm text-muted-foreground transition-colors hover:bg-muted-low"
+                className={cn(
+                  'flex w-full items-center rounded-md p-2 text-sm text-muted-foreground transition-colors hover:bg-muted-low',
+                  ringVariants
+                )}
                 onClick={() => {
                   setOpen(false);
                   handleSignatureChange(null);
                 }}
               >
                 <MonoIcon type={'Trash'} className="mr-2" />
-                Remove signature
+                {t('compose.signature.remove', { defaultValue: 'Remove signature' })}
               </button>
               <button
                 onClick={() => {
+                  setOpen(false);
                   electronApi.triggerCommand('OPEN_PREFERENCES_SIGNATURE');
                 }}
-                className="flex w-full items-center rounded-md p-2 text-sm text-muted-foreground transition-colors hover:bg-muted-low"
+                className={cn(
+                  'flex w-full items-center rounded-md p-2 text-sm text-muted-foreground transition-colors hover:bg-muted-low',
+                  ringVariants
+                )}
               >
                 <MonoIcon type={'Cog'} className="mr-2" />
-                Manage signatures
+                {t('compose.signature.manage', { defaultValue: 'Manage signatures' })}
               </button>
-            </ul>
+            </div>
           </div>
         </PopoverContent>
       </Popover>

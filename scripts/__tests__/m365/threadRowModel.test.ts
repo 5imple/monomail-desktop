@@ -54,3 +54,25 @@ test('threadHasFileAttachments honours Graph hasAttachments on list items', () =
     true
   );
 });
+
+test('stripExternalBanner drops Microsoft first-contact safety tips', () => {
+  assert.equal(
+    stripExternalBanner(
+      "You don't often get email from amerfieldmarketing@mkt.databricks.com. Learn why this is important Join us Tuesday"
+    ),
+    'Join us Tuesday'
+  );
+  assert.equal(
+    stripExternalBanner(
+      "Some people who received this message don't often get email from natalie.tjaden@jpmorgan.com. Learn why this is important Hello all"
+    ),
+    'Hello all'
+  );
+  assert.equal(
+    stripExternalBanner(
+      "**External Email-Use caution with attachments and links from unknown senders ** You don't often get email from a@b.co. Learn why this is important Hi"
+    ),
+    'Hi'
+  );
+  assert.equal(stripExternalBanner('You don’t say!'), 'You don’t say!');
+});

@@ -1,9 +1,9 @@
-import { apiClient } from '@/main/api/apiClient';
-import draftApi from '@/main/api/draft/draftApi';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoAttachment } from '@/main/models/types';
+import { ringVariants } from '@/renderer/app/components/ui/constants';
 import Loader from '@/renderer/app/components/ui/loader';
-import { getAttachmentIcon } from '@/renderer/app/lib/getAttachmentIcon';
+import { DBGetAttachmentBlob } from '@/renderer/app/lib/db/draftAttachment';
+import { getAttachmentIcon, isPreviewableAttachment } from '@/renderer/app/lib/getAttachmentIcon';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { FC, useState } from 'react';
@@ -66,7 +66,9 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
           attachment.fileName
         );
       } else if (source === 'draft') {
-        response = await draftApi.getAttachmentDownload(accountId, attachment.attachmentId);
+        // Standalone: draft attachment bytes are held locally (as in AttachmentItem).
+        const record = await DBGetAttachmentBlob(accountId, attachment.attachmentId);
+        response = record?.blob ?? null;
       }
 
       if (!response) return;
@@ -104,14 +106,26 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
     return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   };
 
+  // Only PDFs and browser-renderable images open the preview; the rest download.
+  const openAttachment = () => {
+    if (disabled || isDownloading) return;
+    void (preview && isPreviewableAttachment(attachment.mimeType, attachment.fileName)
+      ? handlePreview()
+      : downloadAttachment());
+  };
+
   return (
-    <div
-      onClick={preview ? handlePreview : downloadAttachment}
+    <button
+      onClick={openAttachment}
+      disabled={disabled || isDownloading}
+      aria-label={attachment.fileName}
+      title={`${attachment.fileName} · ${formatFileSize(attachment.size)}`}
       className={cn(
         // Newton attachment chip: dedicated icon tile + two-line meta (file
         // name above, mono size below). Hover lifts the border only — accent
         // is intentionally neutral here so the chip stays calm in a list.
-        'group flex w-full cursor-pointer items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/40',
+        'group flex w-full cursor-pointer items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-default disabled:opacity-60',
+        ringVariants,
         className
       )}
       tabIndex={tabIndex}
@@ -123,7 +137,7 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
         {isDownloading ? (
           <Loader />
         ) : (
-          getAttachmentIcon(attachment.mimeType, 'h-4 w-4')
+          getAttachmentIcon(attachment.mimeType, 'h-4 w-4', attachment.fileName)
         )}
       </span>
       <div className="min-w-0 flex-1">
@@ -135,7 +149,7 @@ const AttachmentGridItem: FC<AttachmentGridItemProps> = ({
         </div>
       </div>
       {children}
-    </div>
+    </button>
   );
 };
 

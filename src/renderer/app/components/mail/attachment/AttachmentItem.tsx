@@ -4,7 +4,7 @@ import { MonoAttachment } from '@/main/models/types';
 import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { getAttachmentIcon } from '@/renderer/app/lib/getAttachmentIcon';
+import { getAttachmentIcon, isPreviewableAttachment } from '@/renderer/app/lib/getAttachmentIcon';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useTranslation } from 'react-i18next';
@@ -94,6 +94,13 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
     }
   };
 
+  // Only PDFs and browser-renderable images open the preview; Office files,
+  // HEIC, zips… went to a "Not supported" screen with a second download button.
+  const openAttachment = () =>
+    preview && isPreviewableAttachment(attachment.mimeType, attachment.fileName)
+      ? handlePreview()
+      : downloadAttachment();
+
   const formatFileSize = (size: number) => {
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
@@ -109,7 +116,7 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
         onClick={(e) => {
           // A row click opens the email; the chip opens just the attachment.
           e.stopPropagation();
-          void (preview ? handlePreview() : downloadAttachment());
+          void openAttachment();
         }}
         tooltip={`${attachment.fileName} · ${formatFileSize(attachment.size)}`}
         aria-label={attachment.fileName}
@@ -142,14 +149,17 @@ const AttachmentItem: FC<AttachmentItemProps> = ({
     <Button
       variant={'secondary'}
       sizeVariant={size}
-      onClick={preview ? handlePreview : downloadAttachment}
+      onClick={() => void openAttachment()}
+      tooltip={`${attachment.fileName} · ${formatFileSize(attachment.size)}`}
+      aria-label={attachment.fileName}
       className={cn(
         // Newton attachment chip (button variant for inline-flow use):
         // icon tile on the left, file name + mono size stacked on the right.
         // h-auto overrides the Button sizeVariant's fixed height (e.g. sm=h-8),
         // which otherwise clamps the chip shorter than its h-9 icon tile + two
         // text lines and makes the content spill outside the rounded border.
-        'group flex h-auto w-fit items-center gap-3 rounded-md border border-border/60 bg-card px-3 py-2 text-left shadow-sm transition-colors hover:border-border hover:bg-muted/40'
+        // bg-none: the secondary variant's gradient showed through bg-card.
+        'group flex h-auto w-fit items-center gap-3 rounded-md border border-border/60 bg-card bg-none px-3 py-2 text-left shadow-sm transition-colors hover:border-border hover:bg-muted/40'
       )}
       disabled={isDownloading || disabled}
       tabIndex={tabIndex}
