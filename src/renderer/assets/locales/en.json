@@ -1135,7 +1135,16 @@
       "agreement": "By signing in above, you acknowledge that you have read and understood, and agree to the",
       "legal": "Legal Terms",
       "and": "and",
-      "privacy": "Privacy Policy"
+      "privacy": "Privacy Policy",
+      "waiting": "Finish signing in in your browser…",
+      "signing_in": "Signing you in…",
+      "error_in_progress": "A sign-in window is already open in your browser.",
+      "error_admin_consent": "Your Washington College account needs IT approval for Mono Mail. Contact the Technology Services Center at support@washcoll.edu or 410-778-7777.",
+      "error_cancelled": "Sign-in cancelled.",
+      "error_timed_out": "Sign-in timed out. Try again.",
+      "error_generic": "Sign-in failed: {{error}}",
+      "update_updating": "Updating…",
+      "update_later": "Later"
     }
   },
   "thread_list": {

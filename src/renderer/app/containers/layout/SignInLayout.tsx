@@ -6,6 +6,7 @@ import MonoLogo from '@/renderer/app/components/common/MonoLogo';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -15,14 +16,53 @@ import {
 } from '@/renderer/app/components/ui/alert-dialog';
 import Loader from '@/renderer/app/components/ui/loader';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
+import { cn } from '@/renderer/app/lib/utils';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { FC, useCallback, useEffect, useState } from 'react';
+import type { TFunction } from 'i18next';
+import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 
 interface SignInLayoutProps {}
+
+type SignInProvider = 'google' | 'microsoft';
+type SignInResult = { ok: true } | { ok: false; error: string };
+
+// Tenant/workspace policy blocks: Entra admin consent / user assignment, Google admin policy.
+const ADMIN_CONSENT_ERROR =
+  /AADSTS(?:65001|90094|90095|900941|50105)\b|admin(?:istrator)?[\s_-]*(?:consent|approval|permission)|admin_policy_enforced/i;
+
+// Turns raw OAuth / main-process errors into plain copy. Unmapped errors keep
+// the raw message so diagnostics aren't lost.
+const showSignInError = (t: TFunction, error: string) => {
+  if (/already in progress/i.test(error)) {
+    toast.error(
+      t('layout.sign_in.error_in_progress', {
+        defaultValue: 'A sign-in window is already open in your browser.'
+      })
+    );
+  } else if (ADMIN_CONSENT_ERROR.test(error)) {
+    toast.error(
+      t('layout.sign_in.error_admin_consent', {
+        defaultValue:
+          'Your Washington College account needs IT approval for Mono Mail. Contact the Technology Services Center at support@washcoll.edu or 410-778-7777.'
+      }),
+      { duration: 10000 }
+    );
+  } else if (/access_denied|cancel|AADSTS65004/i.test(error)) {
+    toast(t('layout.sign_in.error_cancelled', { defaultValue: 'Sign-in cancelled.' }));
+  } else if (/timed out/i.test(error)) {
+    toast.error(
+      t('layout.sign_in.error_timed_out', { defaultValue: 'Sign-in timed out. Try again.' })
+    );
+  } else {
+    toast.error(
+      t('layout.sign_in.error_generic', { defaultValue: 'Sign-in failed: {{error}}', error })
+    );
+  }
+};
 
 const SignInLayout: FC<SignInLayoutProps> = () => {
   const { t } = useTranslation();
@@ -31,6 +71,54 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
   const { spaces } = useSpaceAtom();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [pending, setPending] = useState<Record<SignInProvider, boolean>>({
+    google: false,
+    microsoft: false
+  });
+  const [signedIn, setSignedIn] = useState(false);
+  const inFlight = useRef(new Set<SignInProvider>());
+  const releaseTimers = useRef(new Set<number>());
+
+  useEffect(() => {
+    const timers = releaseTimers.current;
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, []);
+
+  const runSignIn = useCallback(
+    async (provider: SignInProvider, start: () => Promise<SignInResult>) => {
+      if (inFlight.current.has(provider)) return;
+      inFlight.current.add(provider);
+      // A new browser flow supersedes an earlier success that didn't stick.
+      setSignedIn(false);
+      setPending((prev) => ({ ...prev, [provider]: true }));
+      let ok = false;
+      try {
+        const result = await start();
+        ok = result.ok;
+        if (result.ok) setSignedIn(true);
+        else showSignInError(t, result.error);
+      } catch (e) {
+        showSignInError(t, (e as Error)?.message ?? String(e));
+      } finally {
+        const release = () => {
+          inFlight.current.delete(provider);
+          setPending((prev) => ({ ...prev, [provider]: false }));
+        };
+        if (ok) {
+          // The invoke reply lands before AuthContext flips isLoading, so hold the
+          // spinner briefly instead of flashing the buttons back on.
+          const id = window.setTimeout(() => {
+            releaseTimers.current.delete(id);
+            release();
+          }, 1500);
+          releaseTimers.current.add(id);
+        } else {
+          release();
+        }
+      }
+    },
+    [t]
+  );
 
   const handleSignIn = useCallback(async () => {
     // Direct Google OAuth (PKCE) in the system browser.
@@ -38,11 +126,8 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
       toast.error('Sign-in unavailable: set MONO_ENV_GOOGLE_CLIENT_ID and rebuild.');
       return;
     }
-    const result = await electronApi.initiateSignIn();
-    if (!result.ok) {
-      toast.error(`Sign-in failed: ${result.error}`);
-    }
-  }, []);
+    await runSignIn('google', () => electronApi.initiateSignIn());
+  }, [runSignIn]);
 
   const handleMicrosoftSignIn = useCallback(async () => {
     // Direct Microsoft OAuth (PKCE) in the system browser — work/school accounts.
@@ -50,11 +135,8 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
       toast.error('Sign-in unavailable: set MONO_ENV_MICROSOFT_CLIENT_ID and rebuild.');
       return;
     }
-    const result = await electronApi.initiateMicrosoftSignIn();
-    if (!result.ok) {
-      toast.error(`Sign-in failed: ${result.error}`);
-    }
-  }, []);
+    await runSignIn('microsoft', () => electronApi.initiateMicrosoftSignIn());
+  }, [runSignIn]);
 
   useEffect(() => {
     electronApi.checkForUpdate();
@@ -104,9 +186,11 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
     );
   }
 
-  if (loading || isLoading) return null;
+  const authBusy = loading || isLoading;
+  const anyPending = pending.google || pending.microsoft;
+  const signingIn = anyPending || signedIn;
 
-  if (isLoggedIn && member) {
+  if (!authBusy && isLoggedIn && member) {
     if (spaces.length === 0) {
       return <Navigate to={'/onboarding'} />;
     }
@@ -117,17 +201,16 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
 
   return (
     <div className="no-drag h-screen">
-      <AlertDialog open={updateAvailable} onOpenChange={setUpdateAvailable}>
+      <AlertDialog open={updateAvailable && !authBusy} onOpenChange={setUpdateAvailable}>
         <AlertDialogOverlay />
         <AlertDialogContent className="sm:max-w-sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Update Available</AlertDialogTitle>
+            <AlertDialogTitle>{t('update_notification.electron.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Update this app to the newest version. For your protection and security reasons, we
-              recommend this update.
+              {t('update_notification.electron.description')}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="mt-4 flex sm:justify-between">
+          <AlertDialogFooter className="mt-4 flex-col gap-2 sm:flex-col sm:space-x-0">
             <Button
               className="w-full"
               sizeVariant={'lg'}
@@ -137,12 +220,15 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
               {isUpdating ? (
                 <>
                   <Loader className="mr-2" />
-                  Updating...
+                  {t('layout.sign_in.update_updating', { defaultValue: 'Updating…' })}
                 </>
               ) : (
-                'Update now'
+                t('update_notification.electron.button')
               )}
             </Button>
+            <AlertDialogCancel className="mt-0 h-11 w-full" disabled={isUpdating}>
+              {t('layout.sign_in.update_later', { defaultValue: 'Later' })}
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -157,30 +243,78 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
               automatically via tailwindcss-animate. */}
           <div className="flex flex-col items-center gap-8 duration-500 animate-in fade-in-0 slide-in-from-bottom-2">
             <MonoLogo className="h-24" />
-            <div className="flex flex-col items-center gap-3">
-              {googleConfigured && (
-                <Button variant={'secondary'} disabled={isLoading} onClick={handleSignIn}>
-                  {isLoading ? (
-                    <Loader className="mr-2" />
-                  ) : (
-                    <MonoIcon type={'Google'} className="mr-2" />
+            {/* While auth loads, the buttons stay laid out but invisible so the
+                logo doesn't move when they appear. */}
+            <div className="relative flex flex-col items-center gap-3">
+              <div
+                className={cn(
+                  'flex w-64 flex-col gap-3',
+                  authBusy ? 'invisible' : 'duration-300 animate-in fade-in-0'
+                )}
+              >
+                {microsoftConfigured && (
+                  <Button
+                    variant={'secondary'}
+                    className="w-full"
+                    disabled={pending.microsoft}
+                    onClick={handleMicrosoftSignIn}
+                  >
+                    {pending.microsoft ? (
+                      <Loader className="mr-2" />
+                    ) : (
+                      <MonoIcon type={'Outlook'} className="mr-2" />
+                    )}
+                    {t('layout.sign_in.sign_in_with_microsoft')}
+                  </Button>
+                )}
+                {googleConfigured && (
+                  <Button
+                    variant={'secondary'}
+                    className="w-full"
+                    disabled={pending.google}
+                    onClick={handleSignIn}
+                  >
+                    {pending.google ? (
+                      <Loader className="mr-2" />
+                    ) : (
+                      <MonoIcon type={'Google'} className="mr-2" />
+                    )}
+                    {t('layout.sign_in.sign_in_with_google')}
+                  </Button>
+                )}
+              </div>
+              <p
+                aria-live="polite"
+                className={cn('h-4 text-xs text-muted-foreground', authBusy && 'invisible')}
+              >
+                {anyPending
+                  ? signedIn
+                    ? t('layout.sign_in.signing_in', { defaultValue: 'Signing you in…' })
+                    : t('layout.sign_in.waiting', {
+                        defaultValue: 'Finish signing in in your browser…'
+                      })
+                  : null}
+              </p>
+              {authBusy && (
+                <div
+                  role="status"
+                  className={cn(
+                    'absolute inset-0 flex flex-col items-center justify-center gap-3 duration-300 animate-in fade-in-0',
+                    // Delay the spinner at app start / after sign-out so a fast load doesn't flash it.
+                    !signingIn && 'delay-200 fill-mode-backwards'
                   )}
-                  {t('layout.sign_in.sign_in_with_google')}
-                </Button>
-              )}
-              {microsoftConfigured && (
-                <Button variant={'secondary'} disabled={isLoading} onClick={handleMicrosoftSignIn}>
-                  {isLoading ? (
-                    <Loader className="mr-2" />
-                  ) : (
-                    <MonoIcon type={'Outlook'} className="mr-2" />
+                >
+                  <Loader />
+                  {signingIn && (
+                    <p className="text-sm text-muted-foreground">
+                      {t('layout.sign_in.signing_in', { defaultValue: 'Signing you in…' })}
+                    </p>
                   )}
-                  {t('layout.sign_in.sign_in_with_microsoft')}
-                </Button>
+                </div>
               )}
             </div>
           </div>
-          <div>
+          <div className={cn(authBusy && 'invisible')}>
             <div className="mt-4 text-xs text-muted-foreground">
               {t('layout.sign_in.agreement')} {t('layout.sign_in.legal')} {t('layout.sign_in.and')}{' '}
               {t('layout.sign_in.privacy')}.
