@@ -31,9 +31,9 @@
     "nav": {
       "important": "Important",
       "inbox": "Inbox",
-      "star": "Star",
+      "star": "Starred",
       "sent": "Sent",
-      "draft": "Draft",
+      "draft": "Drafts",
       "done": "Done",
       "trash": "Trash",
       "spam": "Spam",
@@ -53,7 +53,9 @@
     "create_folder": "Create Folder",
     "new_folder": "New Folder",
     "delete_item": "Delete",
-    "create_folder_prompt": "Enter folder name:"
+    "create_folder_prompt": "Enter folder name:",
+    "save_name": "Save name",
+    "cancel_rename": "Cancel rename"
   },
   "account_switcher": {
     "switch_account": "Switch Account",

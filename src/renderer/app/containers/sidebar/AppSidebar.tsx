@@ -1,14 +1,11 @@
 import UpdateNotificationCard from '@/renderer/app/components/card/UpdateNotificationCard';
-import MonoIcon from '@/renderer/app/components/icons/SidebarIcon';
-import { Button } from '@/renderer/app/components/ui/button';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
+import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import React, { useCallback } from 'react';
 import AppSpaceContainer from '@/renderer/app/containers/sidebar/AppSpaceContainer';
 import CustomizableSidebar from '@/renderer/app/containers/sidebar/CustomizableSidebar';
 import NavItem from '@/renderer/app/containers/sidebar/NavItem';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
-import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
-import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
@@ -21,13 +18,11 @@ interface AppSidebarProps {
 }
 
 const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
-  const { isWindowFocused } = useWindowFocus();
   const { openDialog } = useDialogs();
   const { t } = useTranslation();
   const { activateScope, deactivateScope } = useHotkeyScope();
-  const { sidebarLoading } = useSidebarAtom();
+  const { sidebarLoading, sidebarCollapsed } = useSidebarAtom();
 
-  const executeCommand = useExecuteCommand();
   const sidebarRef = useRef<HTMLDivElement | null>(null);
 
   const [isAtTop, setIsAtTop] = useState(true);
@@ -66,7 +61,9 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
       ref={sidebarRef}
       className={cn(
         'flex h-full max-h-full w-full flex-col pt-1.5',
-        !sidebarLoading && 'transition-all duration-200',
+        // Only the open/close fade and slide; animating every property also
+        // animated text colour across a theme switch.
+        !sidebarLoading && 'transition-[opacity,transform] duration-200',
         open ? 'opacity-100' : '-translate-x-3 opacity-0'
       )}
       onClick={() => {
@@ -76,48 +73,35 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
         deactivateScope('SIDEBAR');
       }}
     >
-      {/* HEADER */}
+      {/* Under the titlebar: h-8 puts Search level with the list's filter
+          tabs. A window-drag area only while docked — in the floating peek
+          card a drag strip moved the window and could close the peek. */}
       {isElectron && (
-        <div
-          className={cn(
-            'drag flex h-10 w-full flex-shrink-0 items-center justify-start px-2',
-            open ? 'flex-row justify-start' : 'flex-col justify-center'
-          )}
-        ></div>
+        <div className={cn('h-8 w-full flex-shrink-0', !sidebarCollapsed && 'drag')}></div>
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden pt-1">
         <div className={cn('block shrink-0 grow-0', !isAtTop && 'border-b shadow-sm')}>
           <div className="p-2 pt-0">
             <ul className={cn('grid list-none grid-cols-[repeat(var(--columns),1fr)] gap-1')}>
+              {/* Compose lives in the titlebar (always visible, teaches C); a
+                  second compose button here differed in glyph, size and
+                  tooltip. MOD+F is the global SEARCH command — binding it here
+                  too ran two handlers per press. */}
               <NavItem
                 // id="search-nav"
                 title={t('sidebar.search')}
                 icon={'Search'}
                 onClick={handleSearchClick}
-                className="py-1 pr-2"
+                className="group py-1 pr-2"
                 append={
-                  <Button
-                    id="compose-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      executeCommand('COMPOSE_NEW_MESSAGE');
-                    }}
-                    className="hover:bg-muted-low"
-                    tooltip={t('sidebar.compose')}
-                    shortcut={'C'}
-                    variant={'ghost'}
-                    sizeVariant={'sm'}
-                    tooltipSide="bottom"
-                    typeVariant={'icon'}
+                  <span
+                    aria-hidden
+                    className="flex pr-1 opacity-0 transition-opacity group-pointer-hover:opacity-100"
                   >
-                    <MonoIcon
-                      type={'Edit'}
-                      className={cn('h-5 w-5', isWindowFocused ? '' : 'text-muted-foreground')}
-                    />
-                  </Button>
+                    <ShortcutKeyboard variant="flat" shortcut="MOD+F" />
+                  </span>
                 }
-                hotkey={'MOD+F'}
               />
             </ul>
           </div>

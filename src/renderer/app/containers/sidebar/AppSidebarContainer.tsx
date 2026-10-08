@@ -114,15 +114,19 @@ const AppSidebarContainer: FC<AppSidebarContainerProps> = ({ className }) => {
       {sidebarCollapsed && (
         <div
           className={cn(
-            'group absolute left-0 top-0 z-30 h-full bg-transparent',
+            // Under the peek card (z-20), above the main panel: at z-30 it sat
+            // on top of the card's left 60px, eating clicks on row icons.
+            'group absolute left-0 top-0 z-10 h-full bg-transparent',
             // Wider trigger zone when already hovered to prevent accidental hiding
             sidebarHovered ? 'w-16' : 'w-8'
           )}
+          data-sidebar-peek-zone
           onMouseEnter={handleHoverStart}
           onMouseLeave={handleHoverEnd}
         >
-          {/* Visual hint line that appears on hover */}
-          <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-accent opacity-0 transition-opacity duration-200 group-hover:opacity-70" />
+          {/* Visual hint line that appears on hover (--accent is near-white,
+              invisible on the light canvas) */}
+          <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-muted-foreground/40 opacity-0 transition-opacity duration-200 group-hover:opacity-70" />
         </div>
       )}
 

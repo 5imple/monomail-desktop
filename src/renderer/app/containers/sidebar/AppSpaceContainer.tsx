@@ -24,7 +24,7 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
   const BASIC_SPACE_LIMIT = 2;
 
   // Ref for the container area
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Refs for individual space cards and add button
   const spaceRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -49,12 +49,20 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
     openDialog('commandPalette', { pages: ['SPACE'] });
   };
 
-  // Register the area container
-  useEffect(() => {
-    if (containerRef.current) {
-      registerAreaRef('space-nav', containerRef.current);
-    }
-  }, []);
+  // Register the area container. A callback ref: the strip can be hidden at
+  // first and appear later (a second space in-session).
+  const setContainerRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      containerRef.current = element;
+      if (element) registerAreaRef('space-nav', element);
+    },
+    [registerAreaRef]
+  );
+
+  // Spaces only persist with a backend that actually loads them. In the
+  // standalone build loadSpaces always yields the one synthetic local space,
+  // so a space created here was gone on the next launch.
+  const canCreateSpace = isBackendConfigured() && !spaces.some((s) => s.id === 'local-space');
 
   // Register space cards when spaces change
   useEffect(() => {
@@ -128,10 +136,14 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
     useHotkeys(key, handler, { enabled, preventDefault: true }, [handler]);
   });
 
+  // One space and no way to add another: the strip was a no-op "Inbox" card
+  // right above the Inbox row. (After every hook, so hook order holds.)
+  if (spaces.length <= 1 && !canCreateSpace) return null;
+
   return (
     <div className="space-y-2">
       <div
-        ref={containerRef}
+        ref={setContainerRef}
         className="mx-2 grid grid-cols-2 gap-2"
         data-navigation-area="space-nav"
       >
@@ -154,7 +166,7 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
                 spaceId={space.id}
                 tooltip={
                   <div>
-                    <div className="mb-0.5">{t('sidebar.change_space')}</div>
+                    <div className="mb-0.5">{space.name}</div>
                     <ShortcutKeyboard variant="flat" shortcut={`MOD+${index + 1}`} />
                   </div>
                 }
@@ -165,14 +177,14 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
         {/* Creating a space is a backend call (spaceApi.createSpace has no
             standalone path) — without one the user filled in the whole form
             only to get "Failed to create space". */}
-        {isBackendConfigured() && (
+        {canCreateSpace && (
           <Button
             onClick={handleAddSpace}
             variant={'outline'}
             className={cn('justify-center rounded-lg border-dashed bg-transparent')}
           >
             <MonoIcon type={'Plus'} className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-            <div className="mr-2 text-sm text-muted-foreground">{t('sidebar.space')}</div>
+            <div className="text-sm text-muted-foreground">{t('sidebar.space')}</div>
           </Button>
         )}
       </div>

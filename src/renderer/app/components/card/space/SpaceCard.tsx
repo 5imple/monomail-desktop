@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useFocusScope } from '@/renderer/app/hooks/useFocusScope';
 import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
+import { isBackendConfigured } from '@/main/api/apiClient';
 
 interface SpaceCardProps {
   active?: boolean;
@@ -134,7 +135,12 @@ const SpaceCard = forwardRef<HTMLButtonElement, SpaceCardProps>(
               variant={'ghost'}
               className={cn(
                 'w-full justify-start rounded-lg p-2',
-                active && !disabled && 'bg-muted-low/60 hover:bg-muted-low',
+                // Same fills as the sidebar rows: selected reads stronger than
+                // hover in every theme (the ghost hover is neutralised first).
+                'hover:bg-transparent pointer-hover:bg-foreground/[0.045] dark:pointer-hover:bg-foreground/[0.07]',
+                active &&
+                  !disabled &&
+                  'bg-foreground/[0.07] pointer-hover:bg-foreground/[0.07] dark:bg-foreground/[0.12] dark:pointer-hover:bg-foreground/[0.12]',
                 isWindowFocused ? 'text-foreground' : 'text-muted-foreground',
                 // active && !disabled && 'border bg-card shadow-sm',
                 disabled && 'cursor-not-allowed opacity-50'
@@ -168,10 +174,13 @@ const SpaceCard = forwardRef<HTMLButtonElement, SpaceCardProps>(
                 ) : (
                   <div
                     className={cn(
-                      'ml-1 mr-1 flex h-6 w-6 items-center justify-center rounded-md bg-accent text-white shadow-sm'
+                      'ml-1 mr-1 flex h-6 w-6 items-center justify-center rounded-md shadow-sm',
+                      // White only on a user-picked colour; with none the tile
+                      // was white-on-near-white (--accent) in light theme.
+                      color ? 'text-white' : 'bg-primary text-primary-foreground'
                     )}
                     style={{
-                      backgroundColor: color ? `${color}` : ''
+                      backgroundColor: color || undefined
                     }}
                   >
                     <MonoIcon type={(icon || 'Home') as MonoIconType} size={16} fill />
@@ -183,7 +192,10 @@ const SpaceCard = forwardRef<HTMLButtonElement, SpaceCardProps>(
               </div>
             </Button>
           </ContextMenuTrigger>
-          {!disabled && (
+          {/* The synthetic local space isn't on the server, so editing it
+              always failed; spaces need the backend at all. No menu = no
+              dead end. */}
+          {!disabled && isBackendConfigured() && spaceId !== 'local-space' && (
             <ContextMenuContent className="dark">
               <ContextMenuItem onClick={handleRightClick}>
                 <MonoIcon type="Edit" className="mr-2 h-4 w-4" />

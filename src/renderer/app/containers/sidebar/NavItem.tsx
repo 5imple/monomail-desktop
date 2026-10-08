@@ -8,17 +8,24 @@ import { cn } from '@/renderer/app/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Keys, useHotkeys } from 'react-hotkeys-hook';
+import { useTranslation } from 'react-i18next';
+
+// Fills use the foreground-alpha scale of the thread rows, so selected always
+// reads stronger than hover in every theme (dark's --muted hover was lighter
+// than the selected fill). Only background/shadow animate: animating the text
+// colour left the selected label dark-on-dark for a while after a theme flip.
+const NAV_ROW_HOVER = 'pointer-hover:bg-foreground/[0.045] dark:pointer-hover:bg-foreground/[0.07]';
 
 const navItemVariants = cva(
   cn(
-    'h-9 w-full transition-all flex items-center rounded-lg',
+    'h-9 w-full transition-[background-color,box-shadow] flex items-center rounded-lg',
     'relative mx-auto justify-start px-3'
   ),
   {
     variants: {
       variant: {
-        default: 'hover:bg-muted',
-        ghost: 'hover:bg-muted'
+        default: '',
+        ghost: ''
       },
       active: {
         true: '',
@@ -37,17 +44,17 @@ const navItemVariants = cva(
       {
         variant: 'default',
         active: false,
-        className: 'text-muted-foreground'
+        className: cn('text-muted-foreground', NAV_ROW_HOVER)
       },
       {
         variant: 'ghost',
         active: true,
-        className: 'bg-muted-low/60 hover:bg-muted-low'
+        className: 'bg-foreground/[0.07] text-foreground dark:bg-foreground/[0.12]'
       },
       {
         variant: 'ghost',
         active: false,
-        className: 'text-muted-foreground'
+        className: cn('text-muted-foreground', NAV_ROW_HOVER)
       }
     ],
     defaultVariants: {
@@ -94,6 +101,7 @@ const NavItem = React.memo<NavItemProps>(
     isEditing = false,
     ...props
   }) => {
+    const { t } = useTranslation();
     const { isWindowFocused } = useWindowFocus();
     const { registerItem, unregisterItem } = useKeyboardNavigationContext();
 
@@ -105,6 +113,14 @@ const NavItem = React.memo<NavItemProps>(
 
     // Flag to prevent immediate blur when entering edit mode
     const [allowBlur, setAllowBlur] = useState(false);
+
+    // One decision per rename: Enter / Escape / Save / Cancel settle it, so the
+    // blur that follows (the input unmounting) can't commit an Escape or call
+    // onEdit a second time.
+    const settledRef = useRef(false);
+    useEffect(() => {
+      if (isEditing) settledRef.current = false;
+    }, [isEditing]);
 
     // Register/unregister the item when id changes or component mounts/unmounts
     useEffect(() => {
@@ -152,6 +168,8 @@ const NavItem = React.memo<NavItemProps>(
     }
 
     const handleEditConfirm = useCallback(() => {
+      if (settledRef.current) return;
+      settledRef.current = true;
       if (tempTitle.length === 0) {
         // If empty, cancel edit
         onCancelEdit?.();
@@ -167,16 +185,20 @@ const NavItem = React.memo<NavItemProps>(
     }, [tempTitle, title, onEdit, onCancelEdit]);
 
     const handleEditCancel = useCallback(() => {
+      if (settledRef.current) return;
+      settledRef.current = true;
       setTempTitle(title); // Reset to original title
       onCancelEdit?.();
     }, [title, onCancelEdit]);
 
     const handleBlur = useCallback(() => {
-      // Only cancel on blur if we allow it (prevents immediate cancellation when entering edit mode)
+      // Clicking elsewhere keeps what was typed (it used to throw it away);
+      // Escape is the way to cancel. allowBlur skips the blur right after
+      // edit mode opens.
       if (allowBlur) {
-        handleEditCancel();
+        handleEditConfirm();
       }
-    }, [allowBlur, handleEditCancel]);
+    }, [allowBlur, handleEditConfirm]);
 
     const handleKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -247,7 +269,11 @@ const NavItem = React.memo<NavItemProps>(
             <Input
               autoFocus
               value={tempTitle}
-              onChange={(e) => setTempTitle(e.target.value)}
+              onChange={(e) => {
+                // Typing again after a rename that didn't take reopens the decision.
+                settledRef.current = false;
+                setTempTitle(e.target.value);
+              }}
               onKeyDown={handleKeyDown}
               onBlur={handleBlur}
               sizeVariant={'sm'}
@@ -260,7 +286,7 @@ const NavItem = React.memo<NavItemProps>(
                     variant={'ghost'}
                     sizeVariant={'xxs'}
                     typeVariant={'icon'}
-                    aria-label="Save name"
+                    aria-label={t('sidebar.save_name')}
                     // Keep focus in the input: the blur from pressing this
                     // button cancelled the edit before its click could save.
                     onMouseDown={(e) => e.preventDefault()}
@@ -272,7 +298,7 @@ const NavItem = React.memo<NavItemProps>(
                     variant={'ghost'}
                     sizeVariant={'xxs'}
                     typeVariant={'icon'}
-                    aria-label="Cancel rename"
+                    aria-label={t('sidebar.cancel_rename')}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={handleEditCancel}
                   >
@@ -282,7 +308,13 @@ const NavItem = React.memo<NavItemProps>(
               }
             />
           ) : (
-            <span onDoubleClick={handleDoubleClick} className={cn('whitespace-nowrap text-sm')}>
+            // title: the sidebar is a fixed 220px, so long addresses and
+            // folder names are cut off — hover shows the whole label.
+            <span
+              onDoubleClick={handleDoubleClick}
+              className={cn('whitespace-nowrap text-sm')}
+              title={title}
+            >
               {title}
             </span>
           )}
