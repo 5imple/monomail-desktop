@@ -41,6 +41,9 @@ export interface IMonoMessage extends ThreadItemBase {
   payload: MonoMessagePaylod;
   bodyPlain?: string;
   bodyHtml?: string;
+  // Provider-reported "has file attachments" for list items whose attachment
+  // metadata wasn't fetched yet (Microsoft Graph); undefined when unknown.
+  hasAttachments?: boolean;
 }
 
 export class MonoMessage implements ThreadItemBase {
@@ -66,6 +69,7 @@ export class MonoMessage implements ThreadItemBase {
   payload: MonoMessagePaylod;
   bodyPlain?: string;
   bodyHtml?: string;
+  hasAttachments?: boolean;
 
   // emailHistory: string[];
 
@@ -96,6 +100,7 @@ export class MonoMessage implements ThreadItemBase {
     this.payload = data.payload;
     this.bodyPlain = data.bodyPlain;
     this.bodyHtml = data.bodyHtml;
+    if (data.hasAttachments !== undefined) this.hasAttachments = data.hasAttachments;
   }
 
   /**
@@ -123,7 +128,8 @@ export class MonoMessage implements ThreadItemBase {
       listUnsubscribe: this.listUnsubscribe,
       payload: this.payload,
       bodyPlain: this.bodyPlain,
-      bodyHtml: this.bodyHtml
+      bodyHtml: this.bodyHtml,
+      ...(this.hasAttachments !== undefined ? { hasAttachments: this.hasAttachments } : {})
     };
   }
 

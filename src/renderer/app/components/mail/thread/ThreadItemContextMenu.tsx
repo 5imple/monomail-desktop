@@ -42,15 +42,14 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
   // Memoize target threads calculation
 
   // Right-clicking a row outside the selection selects just that row, so the
-  // menu's commands target it. If the menu is then dismissed without picking
-  // anything, put the previous selection back — otherwise the row stayed lit
-  // as "selected" after a mere right-click.
+  // menu's commands target it. When the menu closes the previous selection
+  // comes back either way: every command below gets its targets passed
+  // explicitly when picked, and a selection left behind made E / U / ⌫ hit
+  // that row instead of the open or highlighted one.
   const implicitSelectionRef = useRef<string[] | null>(null);
-  const commandChosenRef = useRef(false);
   const handleContextMenuOpenChange = useCallback(
     (open: boolean) => {
       if (open) {
-        commandChosenRef.current = false;
         implicitSelectionRef.current = null;
         if (!selectedThreads.some((t) => t === thread.id)) {
           implicitSelectionRef.current = selectedThreads;
@@ -58,7 +57,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         }
         return;
       }
-      if (implicitSelectionRef.current && !commandChosenRef.current) {
+      if (implicitSelectionRef.current) {
         setSelectedThreads(implicitSelectionRef.current);
       }
       implicitSelectionRef.current = null;
@@ -66,13 +65,34 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
     [selectedThreads, thread.id, setSelectedThreads]
   );
 
+  // Pin / search target the latest person in the thread who isn't you — on a
+  // thread you started, the first sender is you.
+  const contactRecipient = useMemo(() => {
+    const own = new Set(accounts.map((account) => account.email.trim().toLowerCase()));
+    const fromOthers = (
+      thread.items.filter((item) => item.type === 'message') as MonoMessage[]
+    ).filter((message) => message.from?.email && !own.has(message.from.email.toLowerCase()));
+    const latest = fromOthers[fromOthers.length - 1]?.from;
+    if (latest) return latest as MonoRecipient;
+    const first = thread.from[0] as MonoRecipient | undefined;
+    return first && !own.has(first.email?.toLowerCase()) ? first : null;
+  }, [thread, accounts]);
+
   // The targetThreads can now be simplified since selection is updated on open
   const targetThreads = useMemo(() => selectedThreads, [selectedThreads]);
   // Memoize menu items to prevent recreation on each render
   const menuItems = useMemo(() => {
-    const isInSelectedThreads = selectedThreads.some((t) => t === thread.id);
     const singleThreadSelected = selectedThreads.length === 1;
-    const fromRecipient = thread.from.length > 0 ? (thread.from[0] as MonoRecipient) : null;
+    const fromRecipient = contactRecipient;
+    // Done / Move to Inbox don't apply to Trash, or to threads you only sent
+    // (Sent): moving those "to Inbox" put your own mail there.
+    const own = new Set(accounts.map((account) => account.email.trim().toLowerCase()));
+    const messages = thread.items.filter((item) => item.type === 'message') as MonoMessage[];
+    const sentOnly =
+      !thread.labelIds.includes('INBOX') &&
+      messages.length > 0 &&
+      messages.every((message) => own.has(message.from?.email?.toLowerCase()));
+    const offerDone = !thread.labelIds.includes('TRASH') && !sentOnly;
 
     // If it's a draft, show draft-related actions
     if (isDraft) {
@@ -82,13 +102,13 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         {
           icon: 'Trash',
           label: t('command.discard_draft'),
-          shortcut: '#',
           command: 'DISCARD_DRAFT',
           disabled: isSending
         }
       ].filter(Boolean) as {
         icon?: MonoIconType;
         label: string;
+        title?: string;
         shortcut?: Keys;
         command?: CommandType;
         disabled?: boolean;
@@ -96,26 +116,28 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
     }
 
     // Original thread-related actions
+    // R / F only work in the reader, so their hints aren't shown here.
     return [
-      thread.labelIds.includes('INBOX')
-        ? {
-            icon: 'CheckCircle',
-            label: t('command.thread_done'),
-            shortcut: 'E',
-            command: 'THREAD_DONE'
-          }
-        : {
-            icon: 'Inbox',
-            label: t('command.thread_undone'),
-            shortcut: 'E',
-            command: 'THREAD_UNDONE'
-          },
+      !offerDone
+        ? null
+        : thread.labelIds.includes('INBOX')
+          ? {
+              icon: 'CheckCircle',
+              label: t('command.thread_done'),
+              shortcut: 'E',
+              command: 'THREAD_DONE'
+            }
+          : {
+              icon: 'Inbox',
+              label: t('command.thread_move_to_inbox', { defaultValue: 'Move to Inbox' }),
+              shortcut: 'E',
+              command: 'THREAD_UNDONE'
+            },
 
       singleThreadSelected
         ? {
             icon: 'Reply',
             label: t('command.compose_reply_message'),
-            shortcut: 'R',
             command: 'COMPOSE_REPLY_MESSAGE'
           }
         : null,
@@ -123,7 +145,6 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         ? {
             icon: 'Forward',
             label: t('command.compose_forward_message'),
-            shortcut: 'F',
             command: 'COMPOSE_FORWARD_MESSAGE'
           }
         : null,
@@ -163,8 +184,12 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
       singleThreadSelected && fromRecipient
         ? {
             icon: 'Pin',
-            label: `${t('command.pin_contact')} "${fromRecipient.name}"`,
-            shortcut: '⌘+T',
+            label: t('command.pin_named', {
+              defaultValue: 'Pin {{name}}',
+              name: fromRecipient.name || fromRecipient.email
+            }),
+            title: fromRecipient.email,
+            shortcut: 'MOD+E',
             command: 'PIN_CONTACT'
           }
         : null,
@@ -172,9 +197,11 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
       singleThreadSelected && fromRecipient
         ? {
             icon: 'Search',
-            // The address, not the display name: a nameless sender produced a
-            // bare "from:" and "Jane Doe" became `from:Jane Doe` (two terms).
-            label: `${t('command.search')} "from:${fromRecipient.email}"`,
+            label: t('command.search_from', {
+              defaultValue: 'Emails from {{name}}',
+              name: fromRecipient.name || fromRecipient.email
+            }),
+            title: fromRecipient.email,
             command: 'SEARCH'
           }
         : null,
@@ -190,17 +217,18 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         : {
             icon: 'Trash',
             label: t('command.thread_trash'),
-            shortcut: '#',
+            shortcut: 'Backspace',
             command: 'THREAD_TRASH'
           }
     ].filter(Boolean) as {
       icon?: MonoIconType;
       label: string;
+      title?: string;
       shortcut?: Keys;
       command?: CommandType;
       disabled?: boolean;
     }[];
-  }, [selectedThreads, thread, t, isDraft, sendDraftQueue]);
+  }, [selectedThreads, thread, t, isDraft, sendDraftQueue, contactRecipient, accounts]);
 
   // Memoize the command handler to prevent recreation on each render
   const handleContextMenuCommand = useCallback(
@@ -278,14 +306,16 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
             break;
 
           case 'PIN_CONTACT':
-            if (thread.from.length > 0) {
-              executeCommand('PIN_CONTACT', { pinContact: thread.from[0].email });
+            if (contactRecipient) {
+              executeCommand('PIN_CONTACT', { pinContact: contactRecipient.email });
             }
             break;
 
           case 'SEARCH':
-            if (thread.from.length > 0) {
-              searchNewQuery(`from:${thread.from[0].email}`, undefined, false);
+            // The address, not the display name: a nameless sender produced a
+            // bare "from:" and "Jane Doe" became `from:Jane Doe` (two terms).
+            if (contactRecipient) {
+              searchNewQuery(`from:${contactRecipient.email}`, undefined, false);
             }
             break;
 
@@ -295,13 +325,24 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         }
       }
     },
-    [thread, executeCommand, targetThreads, searchNewQuery, isDraft, accountId, removeDraft]
+    [
+      thread,
+      executeCommand,
+      targetThreads,
+      searchNewQuery,
+      isDraft,
+      accountId,
+      removeDraft,
+      contactRecipient
+    ]
   );
 
   return (
     <ContextMenu onOpenChange={handleContextMenuOpenChange}>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="dark w-64">
+      {/* Portaled, but React events still bubble to the row: without this a
+          menu click also opened the email. */}
+      <ContextMenuContent className="dark w-64" onClick={(e) => e.stopPropagation()}>
         {menuItems.map((menuItem, index) => (
           <div key={`${menuItem.label}-${index}`}>
             {menuItem.label === 'Separator' ? (
@@ -310,19 +351,19 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
               <ContextMenuItem
                 role="menuitem"
                 onClick={() => {
-                  commandChosenRef.current = true;
                   if (menuItem.command) {
                     handleContextMenuCommand(menuItem.command, menuItem.disabled);
                   }
                 }}
                 tabIndex={0}
                 disabled={menuItem.disabled}
+                title={menuItem.title}
                 className={menuItem.disabled ? 'cursor-not-allowed opacity-50' : ''}
               >
                 {menuItem.icon && (
                   <MonoIcon className="mr-2 text-muted-foreground" type={menuItem.icon} />
                 )}
-                <span className="line-clamp-1">{menuItem.label}</span>
+                <span className="min-w-0 flex-1 truncate">{menuItem.label}</span>
                 {menuItem.shortcut && (
                   <ContextMenuShortcut>
                     <ShortcutKeyboard variant={'flat'} shortcut={menuItem.shortcut} />

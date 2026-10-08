@@ -10,14 +10,13 @@ import {
 } from '@/renderer/app/components/ui/dropdown-menu';
 import { cn } from '@/renderer/app/lib/utils';
 import { FilterType } from '@/renderer/app/types';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import FilterOption from './FilterOption';
 import LabelFilterOption from './LabelFilterOption';
 import { Button } from '@/renderer/app/components/ui/button';
+import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadFilter } from '@/renderer/app/store/thread/useThreadFilter';
-import { useThreadList } from '@/renderer/app/context/ThreadListContext';
-import { ListFilter } from 'lucide-react';
 
 interface FilterOptionConfig {
   type: string;
@@ -35,14 +34,13 @@ interface FilterOptionConfig {
 
 interface FilterOptionDropdownMenuProps {
   className?: string;
-  showLabel?: boolean;
 }
 
 const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
-  ({ className, showLabel = false }) => {
+  ({ className }) => {
     const { t } = useTranslation();
     const { activeFilters, setActiveFilters } = useThreadFilter();
-    const { resetThreadsArray, fetchThreadsHandler } = useThreadList();
+    const { setSelectedThreads } = useThreadAtom();
 
     // The threadIds → filteredThreadIds sync used to live here, but this
     // component is only mounted when the list is non-empty, which deadlocked an
@@ -61,9 +59,9 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
             operator: 'is',
             value: 'unread',
             translationKey: 'filter.unread',
-            icon: 'EnvelopeOpen'
+            icon: 'Envelope'
           },
-          { operator: 'is', value: 'read', translationKey: 'filter.read', icon: 'Envelope' }
+          { operator: 'is', value: 'read', translationKey: 'filter.read', icon: 'EnvelopeOpen' }
         ]
       },
       {
@@ -85,11 +83,11 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
       // },
       {
         type: 'calendar',
-        icon: 'Calendar',
+        icon: 'GoogleCalendar',
         translationKey: 'filter.calendar',
         filterType: 'calendar',
         subOptions: [
-          { operator: 'has', translationKey: 'filter.has_calendar', icon: 'Calendar' },
+          { operator: 'has', translationKey: 'filter.has_calendar', icon: 'GoogleCalendar' },
           { operator: 'does_not_have', translationKey: 'filter.no_calendar' }
         ]
       },
@@ -122,34 +120,10 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
       }
     ];
 
-    // Function to check if a filter category has any active filters
-    const isFilterCategoryActive = (filterType: string): boolean => {
-      return activeFilters.some((f) => {
-        const option = allFilterOptions.find((opt) => opt.type === filterType);
-        return f.type === (option?.filterType || '');
-      });
-    };
-
-    // Get active filter categories
-    const activeFilterCategories = useMemo(() => {
-      return allFilterOptions.filter((option) => isFilterCategoryActive(option.type));
-    }, [activeFilters]);
-
-    // Get inactive filter categories
-    const inactiveFilterCategories = useMemo(() => {
-      return allFilterOptions.filter((option) => !isFilterCategoryActive(option.type));
-    }, [activeFilters]);
-
-    // Labels are user-defined, so they're rendered separately from the static
-    // allFilterOptions list rather than being shoehorned into its shape.
-    const isLabelFilterActive = useMemo(() => {
-      return activeFilters.some((f) => f.type === 'label');
-    }, [activeFilters]);
-
+    // Filtering is client-side: clearing is instant, no reset + refetch.
     const handleClearAll = () => {
-      resetThreadsArray();
       setActiveFilters([]);
-      fetchThreadsHandler();
+      setSelectedThreads([]);
     };
 
     return (
@@ -158,19 +132,15 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
           <Button
             variant="ghost"
             sizeVariant="sm"
+            tooltip={t('filter.filters', { defaultValue: 'Filters' })}
+            aria-label={t('filter.filters', { defaultValue: 'Filters' })}
             className={cn(
               'flex h-7 items-center bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground',
-              showLabel &&
-                'gap-1.5 rounded-md text-[11px] font-medium uppercase tracking-[0.12em]',
               activeFilters.length > 0 && 'text-foreground hover:text-foreground',
               className
             )}
           >
-            <ListFilter
-              className={cn('shrink-0', showLabel ? 'h-[15px] w-[15px]' : 'h-4 w-4')}
-              strokeWidth={1.8}
-              aria-hidden="true"
-            />
+            <MonoIcon type="Filter" size={16} />
             {activeFilters.length > 0 && (
               <Badge className="ml-1 h-4 bg-accent px-1 text-xs text-accent-foreground hover:bg-accent">
                 {activeFilters.length}
@@ -183,43 +153,19 @@ const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
             align="end"
             className="no-drag dark mr-2 min-w-56 origin-top-right duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1"
           >
-            {/* Section for active filters */}
-            {(activeFilterCategories.length > 0 || isLabelFilterActive) && (
-              <>
-                {activeFilterCategories.map((option) => (
-                  <FilterOption
-                    key={option.type}
-                    type={option.type}
-                    icon={option.icon}
-                    translationKey={option.translationKey}
-                    filterType={option.filterType}
-                    subOptions={option.subOptions}
-                  />
-                ))}
-                {isLabelFilterActive && <LabelFilterOption />}
-
-                {(inactiveFilterCategories.length > 0 || !isLabelFilterActive) && (
-                  <DropdownMenuSeparator className="my-1" />
-                )}
-              </>
-            )}
-
-            {/* Section for inactive filters */}
-            {(inactiveFilterCategories.length > 0 || !isLabelFilterActive) && (
-              <>
-                {inactiveFilterCategories.map((option) => (
-                  <FilterOption
-                    key={option.type}
-                    type={option.type}
-                    icon={option.icon}
-                    translationKey={option.translationKey}
-                    filterType={option.filterType}
-                    subOptions={option.subOptions}
-                  />
-                ))}
-                {!isLabelFilterActive && <LabelFilterOption />}
-              </>
-            )}
+            {/* One fixed order: active categories are marked by their count
+                badge instead of jumping to the top while the menu is open. */}
+            {allFilterOptions.map((option) => (
+              <FilterOption
+                key={option.type}
+                type={option.type}
+                icon={option.icon}
+                translationKey={option.translationKey}
+                filterType={option.filterType}
+                subOptions={option.subOptions}
+              />
+            ))}
+            <LabelFilterOption />
 
             {/* Clear all filters button */}
             {activeFilters.length > 0 && (

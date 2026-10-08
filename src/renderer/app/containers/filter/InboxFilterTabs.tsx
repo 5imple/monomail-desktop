@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import FilterOptionDropdownMenu from '@/renderer/app/containers/filter/FilterOptionDropdownMenu';
+import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadFilter } from '@/renderer/app/store/thread/useThreadFilter';
 import { cn } from '@/renderer/app/lib/utils';
 
@@ -11,7 +14,7 @@ import { cn } from '@/renderer/app/lib/utils';
  *
  * Three quick filters (All / Unread / With attachments) cover the most
  * common triage gestures with a single click. The full FilterOptionDropdownMenu
- * still exists in the header toolbar for advanced filtering (date ranges,
+ * sits at the end of the same row for advanced filtering (date ranges,
  * calendar invitations, specific labels, etc.); the tabs are an opinionated
  * shortcut layer on top.
  *
@@ -21,6 +24,18 @@ import { cn } from '@/renderer/app/lib/utils';
 const InboxFilterTabs = React.memo(() => {
   const { t } = useTranslation();
   const { activeFilters, setActiveFilters } = useThreadFilter();
+  const { setSelectedThreads } = useThreadAtom();
+  const { globalSearchQuery } = useGlobalAtom();
+
+  // A quick filter belongs to the view it was picked in: switching to another
+  // view (Inbox → Sent, a search…) starts unfiltered. Only a real query change
+  // resets — not the first mount or a refresh of the same view.
+  const previousQueryRef = useRef(globalSearchQuery);
+  useEffect(() => {
+    if (previousQueryRef.current === globalSearchQuery) return;
+    previousQueryRef.current = globalSearchQuery;
+    if (activeFilters.length > 0) setActiveFilters([]);
+  }, [globalSearchQuery]);
 
   // Mode resolution — the tab that should appear "active" is derived
   // entirely from the activeFilters atom so external mutations (from the
@@ -51,6 +66,10 @@ const InboxFilterTabs = React.memo(() => {
   ];
 
   const onPick = (id: 'all' | 'unread' | 'attachments') => {
+    if (id === mode) return;
+    // Rows hidden by the new filter must not stay selected (bulk actions
+    // would hit mail you can't see).
+    setSelectedThreads([]);
     if (id === 'all') {
       setActiveFilters([]);
     } else if (id === 'unread') {
@@ -68,6 +87,7 @@ const InboxFilterTabs = React.memo(() => {
           <button
             key={tab.id}
             type="button"
+            aria-pressed={active}
             onClick={() => onPick(tab.id)}
             className={cn(
               'relative px-2 py-2.5 font-medium tracking-tight transition-colors',
@@ -75,9 +95,20 @@ const InboxFilterTabs = React.memo(() => {
             )}
           >
             <span className="px-1.5">{tab.label}</span>
+            {active && (
+              <span
+                aria-hidden
+                className="absolute inset-x-3.5 bottom-1 h-0.5 rounded-full bg-foreground"
+              />
+            )}
           </button>
         );
       })}
+      {/* Advanced filters live at the end of the row, so they stay put while
+          the list scrolls and remain reachable when nothing matches. */}
+      <div className="ml-auto flex items-center pr-3">
+        <FilterOptionDropdownMenu />
+      </div>
     </nav>
   );
 });

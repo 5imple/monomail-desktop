@@ -2,6 +2,7 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { isCalendarAttachment } from '@/renderer/app/lib/icsParser';
+import { threadHasFileAttachments } from '@/renderer/app/lib/threadAttachments';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useAtom } from 'jotai';
 import { useCallback, useMemo } from 'react';
@@ -88,9 +89,9 @@ export function useThreadFilter() {
 
             case 'attachment':
               if (filter.operator === 'has') {
-                return Object.keys(thread.attachments).length > 0;
+                return threadHasFileAttachments(thread);
               } else if (filter.operator === 'does_not_have') {
-                return Object.keys(thread.attachments).length === 0;
+                return !threadHasFileAttachments(thread);
               }
               break;
 

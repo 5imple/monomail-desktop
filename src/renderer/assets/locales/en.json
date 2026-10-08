@@ -160,7 +160,10 @@
     "toggle_theme_system": "Switch to System Theme",
     "toggle_density_compact": "Switch to Compact Density",
     "toggle_density_cozy": "Switch to Cozy Density",
-    "discard_draft": "Discard draft"
+    "discard_draft": "Discard draft",
+    "thread_move_to_inbox": "Move to Inbox",
+    "pin_named": "Pin {{name}}",
+    "search_from": "Emails from {{name}}"
   },
   "settings": {
     "title": "Preferences",
@@ -1181,7 +1184,22 @@
       "label": "Label",
       "share": "Share",
       "clear_selection": "Clear selection"
-    }
+    },
+    "draft": "Draft",
+    "to_prefix": "To:",
+    "me": "Me",
+    "empty_filtered_recent": "No matching emails in your recent mail",
+    "show_all_mail": "Show all mail",
+    "keep_looking": "Keep looking",
+    "searching_filtered": "Looking for matching emails…",
+    "empty_filtered": "No emails match this filter",
+    "clear_filter": "Clear filter",
+    "all_caught_up": "All caught up",
+    "empty_view": "No emails in this view.",
+    "load_more_error": "Couldn’t load more",
+    "load_error_title": "Couldn’t load your emails",
+    "load_error_body": "Check your connection and try again.",
+    "loading": "Loading emails…"
   },
   "message_card": {
     "earlier_messages_one": "earlier message",
@@ -1365,7 +1383,10 @@
     "is": "Is",
     "is_not": "Is not",
     "has": "Has",
-    "does_not_have": "Does not have"
+    "does_not_have": "Does not have",
+    "filters": "Filters",
+    "all": "All",
+    "with_attachments": "With attachments"
   },
   "toast": {
     "clipboard_copy": "Copied to clipboard",
@@ -1523,7 +1544,13 @@
       "no_label_found": "No labels found",
       "selected_label_not_exist": "Selected label does not exist",
       "filter_save": "Failed to save AI filter"
-    }
+    },
+    "snooze": {
+      "success": "Snoozed until {{time}}",
+      "error": "Couldn't snooze this email.",
+      "undo_error": "Couldn't undo the snooze."
+    },
+    "undo": "Undo"
   },
   "offline": {
     "working_offline": "Working offline",

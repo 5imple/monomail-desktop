@@ -295,6 +295,9 @@ export function transformGraphMessage(
     inlineImages,
     attachments,
     inlineImageSize,
+    // Graph's flag excludes inline images, so it means "has file attachments".
+    // List items don't expand attachments, so this is all the row knows.
+    ...(message.hasAttachments === true ? { hasAttachments: true } : {}),
     payload: buildSyntheticPayload(message.body),
     bodyHtml: isHtml ? content : undefined,
     bodyPlain: isHtml ? undefined : content

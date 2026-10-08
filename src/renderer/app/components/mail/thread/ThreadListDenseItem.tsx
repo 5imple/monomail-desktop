@@ -1,60 +1,25 @@
-import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
-import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
+import {
+  rowAvatarRecipient,
+  stripExternalBanner,
+  ThreadRowMeta,
+  ThreadSenderNames
+} from '@/renderer/app/components/mail/thread/ThreadRowParts';
 import { useThreadReadMotion } from '@/renderer/app/components/mail/thread/useThreadReadMotion';
-import { Badge } from '@/renderer/app/components/ui/badge';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
-import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
-import { formatListDate } from '@/renderer/app/lib/formatDate';
 import { highlightThreadText } from '@/renderer/app/lib/highlightThreadText';
 import { cn } from '@/renderer/app/lib/utils';
 import { setSelectionAnchor } from '@/renderer/app/store/thread/threadRangeSelection';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
-import { useDraggable } from '@dnd-kit/core';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
-
-interface DraggableSenderProps {
-  sender: string;
-  threadId: string;
-  index: number;
-  email: string;
-}
-
-const DraggableSender = React.memo<DraggableSenderProps>(({ sender, threadId, index, email }) => {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `thread-contact-${threadId}-${sender}-${index}`,
-    attributes: {
-      tabIndex: -1
-    },
-    data: {
-      from: {
-        name: sender,
-        email: email
-      }
-    }
-  });
-
-  const style = {
-    opacity: isDragging ? 0.5 : 1,
-    cursor: 'grab'
-  };
-
-  return (
-    <span ref={setNodeRef} {...attributes} {...listeners} style={style}>
-      {sender}
-    </span>
-  );
-});
-
-DraggableSender.displayName = 'DraggableSender';
 
 interface ThreadListDenseItemProps {
   threadId: string;
@@ -72,7 +37,7 @@ export const ThreadListDenseItem = React.memo(
       // gates content rendering (isRendering) for long-list virtualization.
       const [opacity, setOpacity] = useState(100);
       const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
-      const { getAccountByUid, accounts, preference } = useAuth();
+      const { accounts } = useAuth();
       const memoizedSearchQuery = useCallback(searchNewQuery, [searchNewQuery]);
 
       const { labelsMapByAccount } = useLabelAtom();
@@ -83,24 +48,17 @@ export const ThreadListDenseItem = React.memo(
       const itemRef = useRef<HTMLDivElement | null>(null);
       const hasBeenVisibleRef = useRef(false);
       const lastThreadRef = useRef<MonoThread | null>(null);
-      const executeCommand = useExecuteCommand();
 
       // Use direct access to thread instead of memoizing to ensure we always have latest data
       const liveThread = threadsMap[threadId] ?? null;
       if (liveThread) lastThreadRef.current = liveThread;
       const currentThread = liveThread ?? lastThreadRef.current;
 
-      const senderAvatarRecipient = useMemo(() => {
-        if (!currentThread) return { email: '', name: '' };
-
-        const latestSender = [...currentThread.items]
-          .reverse()
-          .find(
-            (item): item is MonoMessage => item.type === 'message' && !!(item as MonoMessage).from
-          )?.from;
-
-        return latestSender ?? currentThread.from?.[0] ?? { email: '', name: '' };
-      }, [currentThread]);
+      const senderAvatarRecipient = useMemo(
+        () =>
+          currentThread ? rowAvatarRecipient(currentThread, accounts) : { email: '', name: '' },
+        [currentThread, accounts]
+      );
 
       const senderAccountImageSrc = useMemo(() => {
         const senderEmail = senderAvatarRecipient.email.trim().toLowerCase();
@@ -112,11 +70,6 @@ export const ThreadListDenseItem = React.memo(
         );
       }, [accounts, senderAvatarRecipient.email]);
 
-      const currentAccount = useMemo(
-        () => (currentThread ? getAccountByUid(currentThread.accountId) : null),
-        [currentThread, getAccountByUid]
-      );
-
       const highlightedContent = useMemo(() => {
         if (!currentThread || !globalSearchQuery) {
           return {
@@ -125,6 +78,7 @@ export const ThreadListDenseItem = React.memo(
           };
         }
 
+        const snippet = stripExternalBanner(currentThread.snippet);
         return {
           subject: highlightThreadText(
             !currentThread.subject || currentThread.subject === ''
@@ -132,19 +86,16 @@ export const ThreadListDenseItem = React.memo(
               : currentThread.subject,
             globalSearchQuery
           ),
-          snippet: currentThread.snippet
-            ? highlightThreadText(currentThread.snippet, globalSearchQuery)
-            : null
+          snippet: snippet ? highlightThreadText(snippet, globalSearchQuery) : null
         };
       }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery]);
 
       const { registerItem, unregisterItem } = useKeyboardNavigationContext();
 
-      // Get labels for the current thread's account with proper dependencies
-      const accountLabels = useMemo(() => {
-        if (!currentThread) return {};
-        return labelsMapByAccount[currentThread.accountId] || {};
-      }, [currentThread, labelsMapByAccount, threadsMap]); // Added threadsMap dependency
+      const accountLabels = useMemo(
+        () => (currentThread ? labelsMapByAccount[currentThread.accountId] || {} : {}),
+        [currentThread?.accountId, labelsMapByAccount]
+      );
 
       // Combine refs to handle both forwarded ref and internal ref
       const setRefs = useCallback(
@@ -161,12 +112,16 @@ export const ThreadListDenseItem = React.memo(
         [forwardedRef]
       );
 
+      // Re-created only when the row itself appears/changes id — keyed on the
+      // whole thread it re-registered (and moved to the end of the keyboard
+      // list) on every update of that thread.
+      const hasThread = !!currentThread;
       useEffect(() => {
         const observer = new IntersectionObserver(
           (entries) => {
             entries.forEach((entry) => {
               if (entry.isIntersecting) {
-                if (currentThread) {
+                if (lastThreadRef.current) {
                   setIsRendering(true);
                 }
               } else {
@@ -199,7 +154,7 @@ export const ThreadListDenseItem = React.memo(
           observer.disconnect();
           unregisterItem('thread-list', threadId);
         };
-      }, [currentThread]);
+      }, [threadId, hasThread]);
 
       useEffect(() => {
         // Never drop opacity back to 0 when a row leaves the viewport: isRendering
@@ -228,64 +183,10 @@ export const ThreadListDenseItem = React.memo(
         [onClick, currentThread]
       );
 
-      // Function to get unique label IDs with specific dependency on labelIds
-      const uniqueLabelIds = useMemo(() => {
-        if (!currentThread) return [];
-        return [
-          ...new Set(currentThread.labelIds.filter((label) => label && label.includes('Label_')))
-        ];
-      }, [currentThread?.labelIds]); // Specific dependency on labelIds for reactivity
-
       const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
       const isChecked = selectedThreads.includes(threadId);
       const isActive = activeThreadId === threadId;
       const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null, isActive);
-
-      // Same sender renderer used by the other two row variants.
-      const renderSenderNames = () => {
-        const uniqueItems = new Set();
-        const displayItems: React.ReactNode[] = [];
-        [...currentThread.items].reverse().forEach((item, index) => {
-          if (item.type === 'draft') {
-            const key = 'draft';
-            if (!uniqueItems.has(key)) {
-              uniqueItems.add(key);
-              displayItems.push(
-                <span key={`draft-${index}`} className="font-medium text-destructive">
-                  Draft
-                </span>
-              );
-            }
-          } else if (item.type === 'message' && (item as MonoMessage).from) {
-            const message = item as MonoMessage;
-            const displayName = accounts.some((a) => a.email === message.from.email)
-              ? 'Me'
-              : message.from.name || message.from.email;
-            if (!uniqueItems.has(displayName)) {
-              uniqueItems.add(displayName);
-              if (displayName !== 'Me') {
-                displayItems.push(
-                  <DraggableSender
-                    key={`message-${index}`}
-                    sender={displayName}
-                    email={message.from.email}
-                    threadId={currentThread.id}
-                    index={index}
-                  />
-                );
-              } else {
-                displayItems.push(<span key={`message-${index}`}>{displayName}</span>);
-              }
-            }
-          }
-        });
-        return displayItems.map((item, i) => (
-          <React.Fragment key={`fragment-${i}`}>
-            {item}
-            {i < displayItems.length - 1 && ', '}
-          </React.Fragment>
-        ));
-      };
 
       // Done/Trash deletes the thread from threadsMap while its id can still be
       // in the rendered id list for a frame. The JSX below dereferences
@@ -321,7 +222,7 @@ export const ThreadListDenseItem = React.memo(
           {!currentThread || !isRendering ? (
             <div
               className="transition-[height] duration-200 ease-bouncy-in-out"
-              style={{ height: placeholderHeightRef.current ?? 45 }}
+              style={{ height: placeholderHeightRef.current ?? 33 }}
             />
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
@@ -333,13 +234,15 @@ export const ThreadListDenseItem = React.memo(
                   />
                 )}
                 {/* Unread is indicated by the bold font only — no left accent bar. */}
-                <div ref={setRefs} className={cn('text-left text-sm transition-colors')}>
-                  {/* Newton dense row: single line, narrower sender column
-                    (w-36) compared to compact (w-44), tighter vertical
-                    padding (py-2). No avatar in this variant. */}
-                  <div
-                    className={cn('flex items-center gap-3 border-b border-border/40 px-3 py-1.5')}
-                  >
+                {/* The divider sits on the wrapper so a line of attachment chips
+                    stays inside its own row instead of under the next one. */}
+                <div
+                  ref={setRefs}
+                  className={cn('border-b border-border/40 text-left text-sm transition-colors')}
+                >
+                  {/* Compact row: one line, 24px avatar, py-1 — about 37px tall
+                      (comfortable is ~49px), so more mail fits per screen. */}
+                  <div className={cn('flex items-center gap-3 px-3 py-1')}>
                     {/* Unread dot + hover checkbox share the same slot: an unread
                         row shows the blue dot here at rest; on hover the checkbox
                         takes over (hover behavior unchanged). */}
@@ -408,14 +311,14 @@ export const ThreadListDenseItem = React.memo(
 
                     {/* Avatar */}
                     <RecipientAvatar
-                      className="h-8 w-8 shrink-0"
+                      className="h-6 w-6 shrink-0"
                       recipient={senderAvatarRecipient}
                       accountId={currentThread.accountId}
                       preferredImageSrc={senderAccountImageSrc}
                     />
 
-                    {/* Sender column */}
-                    <div className="flex w-32 shrink-0 items-center gap-2 overflow-hidden">
+                    {/* Sender column — fixed per breakpoint so subjects share one start x */}
+                    <div className="flex w-32 shrink-0 items-center gap-2 overflow-hidden lg:w-40 xl:w-48">
                       <div className="min-w-0 flex-1 overflow-hidden">
                         <span
                           className={cn(
@@ -425,7 +328,7 @@ export const ThreadListDenseItem = React.memo(
                               : 'font-medium text-muted-foreground'
                           )}
                         >
-                          {renderSenderNames()}
+                          <ThreadSenderNames thread={currentThread} accounts={accounts} />
                         </span>
                       </div>
                       {currentThread.items.length > 1 && (
@@ -439,7 +342,8 @@ export const ThreadListDenseItem = React.memo(
                     <div className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
                       <span
                         className={cn(
-                          'max-w-[45%] shrink-0 truncate text-[13px] tracking-tight',
+                          'shrink-0 truncate text-[13px] tracking-tight',
+                          highlightedContent.snippet ? 'max-w-[60%]' : 'max-w-full',
                           isUnread
                             ? 'font-medium text-foreground'
                             : 'font-normal text-foreground/80'
@@ -453,7 +357,10 @@ export const ThreadListDenseItem = React.memo(
                       />
                       {highlightedContent.snippet && (
                         <>
-                          <span aria-hidden className="shrink-0 text-muted-foreground/40">
+                          <span
+                            aria-hidden
+                            className="hidden shrink-0 text-muted-foreground/40 sm:inline"
+                          >
                             –
                           </span>
                           <span
@@ -464,91 +371,20 @@ export const ThreadListDenseItem = React.memo(
                       )}
                     </div>
 
-                    {/* Right metadata cluster — reserves min-w so the hover action bar fits without overlapping snippet text */}
-                    <div className="relative flex min-w-[110px] shrink-0 items-center justify-end gap-2">
-                      {uniqueLabelIds.length > 0 && (
-                        <div className="flex items-center gap-1.5">
-                          {uniqueLabelIds.map((labelId, index) => {
-                            const label = accountLabels[labelId];
-                            return label && label.name.length > 0 ? (
-                              <Badge
-                                key={`${labelId}-${index}`}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  memoizedSearchQuery(buildLabelQuery(label.name));
-                                }}
-                                className="rounded-sm"
-                                style={{
-                                  color: label.color.textColor,
-                                  backgroundColor: label.color.backgroundColor
-                                }}
-                                sizeVariant={'xs'}
-                              >
-                                <div className="no-drag flex-1 overflow-hidden text-ellipsis">
-                                  <span className="whitespace-nowrap">
-                                    {label.name.replace('Mono/', '')}
-                                  </span>
-                                </div>
-                              </Badge>
-                            ) : null;
-                          })}
-                        </div>
-                      )}
-
-                      {Object.keys(currentThread.attachments).length > 0 && (
-                        <MonoIcon type={'Paperclip'} className="h-3 w-3 text-muted-foreground/60" />
-                      )}
-
-                      <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-muted-foreground/70 transition-opacity duration-150 group-pointer-hover:opacity-0">
-                        {formatListDate(currentThread.timestamp)}
-                      </span>
-
-                      {/* Hover action bar */}
-                      <div className="absolute right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-pointer-hover:opacity-100">
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          aria-label="Done"
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            executeCommand('THREAD_DONE', { threadIds: [currentThread.id] });
-                          }}
-                        >
-                          <MonoIcon type="Check" size={18} weight={300} grade={0} />
-                        </button>
-                        <LabelButton
-                          thread={currentThread}
-                          buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                        />
-                        <SnoozeButton
-                          thread={currentThread}
-                          buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                        />
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          aria-label="Delete"
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            executeCommand('THREAD_TRASH', { threadIds: [currentThread.id] });
-                          }}
-                        >
-                          <MonoIcon type="Trash" size={18} weight={300} grade={0} />
-                        </button>
-                      </div>
-                    </div>
+                    <ThreadRowMeta
+                      thread={currentThread}
+                      accountLabels={accountLabels}
+                      onLabelClick={(name) => memoizedSearchQuery(buildLabelQuery(name))}
+                    />
                   </div>
 
                   {/* Attachment chips — tucked under the subject column. One line,
                       sized like the row's metadata, so they read as a detail of
                       the email rather than a card stacked under it. */}
                   {Object.keys(currentThread.attachments).length > 0 && (
-                    <div className="-mt-1 flex items-center gap-1.5 overflow-hidden pb-2 pl-[calc(2rem+0.75rem+8rem+1.5rem)] pr-6 sm:pl-[calc(2rem+1rem+8rem+2rem)]">
+                    // Starts under the subject: px-3 + 28px checkbox slot + avatar +
+                    // sender column, with the row's 12px gaps (sender widens at lg/xl).
+                    <div className="-mt-0.5 flex items-center gap-1.5 overflow-hidden pb-1.5 pl-[14.25rem] pr-6 lg:pl-[16.25rem] xl:pl-[18.25rem]">
                       {Object.keys(currentThread.attachments)
                         .slice(0, 2)
                         .map((id) => (

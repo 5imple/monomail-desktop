@@ -6,13 +6,14 @@ import { ThreadListCozyItem } from '@/renderer/app/components/mail/thread/Thread
 import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
-import FilterOptionDropdownMenu from '@/renderer/app/containers/filter/FilterOptionDropdownMenu';
 import ThreadListSkeleton from '@/renderer/app/containers/list/ThreadListSkeleton';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
 import { useSyncThread } from '@/renderer/app/context/SyncThreadContext';
+import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { useThreadFilter } from '@/renderer/app/store/thread/useThreadFilter';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import { fetchFullThread, threadNeedsFullBody } from '@/renderer/app/lib/threadBodyPrefetch';
 import { isComposeDraftId } from '@/main/utils';
@@ -39,6 +40,10 @@ interface ThreadListProps {
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
 }
 
+// With a filter active and nothing matching yet, the list fetches this many
+// more pages on its own before asking whether to keep looking.
+const FILTERED_AUTO_LOAD_PAGES = 5;
+
 function ThreadList({ onScroll }: ThreadListProps) {
   const { t } = useTranslation();
   const { loadMore, hasMore, fetchThreadsHandler, loadingStatus, threadIds } = useThreadList();
@@ -46,8 +51,16 @@ function ThreadList({ onScroll }: ThreadListProps) {
   const { aggregatedSyncState } = useSyncThread();
   const { preference } = useAuth();
 
-  const { activeThreadId, setActiveThreadId, setSelectedThreads, selectedThreads, threadsMap } =
-    useThreadAtom();
+  const {
+    activeThreadId,
+    setActiveThreadId,
+    setSelectedThreads,
+    selectedThreads,
+    threadsMap,
+    threadIds: loadedThreadIds
+  } = useThreadAtom();
+  const { activeFilters, setActiveFilters } = useThreadFilter();
+  const { globalSearchQuery } = useGlobalAtom();
   const { activateScope, deactivateScope } = useHotkeyScope();
 
   useEffect(() => {
@@ -58,19 +71,14 @@ function ThreadList({ onScroll }: ThreadListProps) {
     }
   }, [activeThreadId, selectedThreads]);
 
-  const observer = useRef<IntersectionObserver | null>(null);
-  const lastThreadElementRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (observer.current) observer.current.disconnect();
-      observer.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && hasMore && loadingStatus !== 'LOADING') {
-          loadMore();
-        }
-      });
-      if (node) observer.current.observe(node);
-    },
-    [loadMore, hasMore, loadingStatus]
-  );
+  // Pages fetched automatically while a filter matches nothing; reset when
+  // the filter or the view changes.
+  const filteredAutoLoadsRef = useRef(0);
+  const [filteredAutoLoadsDone, setFilteredAutoLoadsDone] = React.useState(false);
+  useEffect(() => {
+    filteredAutoLoadsRef.current = 0;
+    setFilteredAutoLoadsDone(false);
+  }, [activeFilters, globalSearchQuery]);
 
   // ⌘-click toggles a row, Shift+click selects a range (see
   // threadRangeSelection), a plain click opens the conversation.
@@ -253,14 +261,6 @@ function ThreadList({ onScroll }: ThreadListProps) {
   }, [deduplicatedThreadIds, threadsMap]);
   listedThreadIdsRef.current = new Set(deduplicatedThreadIds);
 
-  // Last valid thread ID for the infinite-scroll observer
-  const lastValidThreadId = useMemo(() => {
-    for (let i = deduplicatedThreadIds.length - 1; i >= 0; i--) {
-      if (threadsMap[deduplicatedThreadIds[i]]) return deduplicatedThreadIds[i];
-    }
-    return null;
-  }, [deduplicatedThreadIds, threadsMap]);
-
   // First-load skeleton: only when there's nothing cached to show yet and a
   // fetch/sync is in flight. With cached threads we render content immediately.
   const isInitialLoading =
@@ -269,6 +269,41 @@ function ThreadList({ onScroll }: ThreadListProps) {
     (loadingStatus === 'LOADING' ||
       loadingStatus === 'INIT' ||
       aggregatedSyncState.isSyncing);
+
+  const filtersActive = activeFilters.length > 0;
+  const nothingShown = groupedThreads.length === 0;
+
+  // Infinite scroll: a sentinel after the rows, watched against the list's own
+  // scroll viewport with a bottom margin, so the next page starts loading
+  // before the end is on screen. Rebuilt whenever loading settles, so a still-
+  // visible sentinel (short or empty list) fires again.
+  const observer = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (observer.current) observer.current.disconnect();
+      if (!node) return;
+      observer.current = new IntersectionObserver(
+        (entries) => {
+          if (!entries[0].isIntersecting || !hasMore || loadingStatus !== 'DONE') return;
+          // With a filter matching nothing, only a few pages load on their own.
+          if (filtersActive && nothingShown) {
+            if (filteredAutoLoadsRef.current >= FILTERED_AUTO_LOAD_PAGES) {
+              setFilteredAutoLoadsDone(true);
+              return;
+            }
+            filteredAutoLoadsRef.current += 1;
+          }
+          loadMore();
+        },
+        {
+          root: document.getElementById('thread-list-scroll-root'),
+          rootMargin: '0px 0px 800px 0px'
+        }
+      );
+      observer.current.observe(node);
+    },
+    [loadMore, hasMore, loadingStatus, filtersActive, nothingShown]
+  );
 
   return (
     <div
@@ -311,7 +346,7 @@ function ThreadList({ onScroll }: ThreadListProps) {
                 custom={exitIntents}
                 onExitComplete={pruneExitIntents}
               >
-                {groupedThreads.flatMap((group, groupIndex) => [
+                {groupedThreads.flatMap((group) => [
                   <motion.div
                     key={`group-${group.label}`}
                     variants={groupHeaderVariants}
@@ -321,16 +356,14 @@ function ThreadList({ onScroll }: ThreadListProps) {
                     className="overflow-hidden"
                   >
                     <div className="flex items-center justify-between px-[10%] pb-1 pt-3">
-                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                         {group.label}
                       </span>
-                      {groupIndex === 0 && <FilterOptionDropdownMenu showLabel />}
                     </div>
                   </motion.div>,
                   ...group.ids.map((threadId) => (
                     <motion.div
                       key={threadId}
-                      ref={threadId === lastValidThreadId ? lastThreadElementRef : null}
                       // No `layout` here: when an email is open the list panel
                       // collapses to 0 width, and `layout` tweened each row's box
                       // from 0 -> full width on close — a left-to-right "sweep" of
@@ -363,7 +396,12 @@ function ThreadList({ onScroll }: ThreadListProps) {
                         </span>
                         <MonoIcon type="Trash" className="h-[18px] w-[18px]" />
                       </motion.div>
-                      <motion.div variants={swipeVariants(threadId, !!reduceMotion)}>
+                      {/* Opaque base: hover / keyboard / selection tints are
+                          translucent, so the lane showed through the moving row. */}
+                      <motion.div
+                        variants={swipeVariants(threadId, !!reduceMotion)}
+                        className="relative bg-background"
+                      >
                         <MemoizedThreadItem
                           threadId={threadId}
                           onClick={handleItemClick}
@@ -375,35 +413,72 @@ function ThreadList({ onScroll }: ThreadListProps) {
                   ))
                 ])}
               </AnimatePresence>
-          {/* A filter (e.g. Unread) can match nothing on the loaded page while
-              more pages exist. Infinite scroll can't trigger with no rows, so
-              offer an explicit Load more instead of "All caught up" + a
-              spinner that never resolves. */}
-          {groupedThreads.length === 0 &&
+          <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" />
+
+          {/* A filter (e.g. Unread) can match nothing on the loaded pages while
+              more exist: look through a few more pages automatically, then
+              ask instead of spinning forever or blaming "what's loaded". */}
+          {nothingShown &&
+            filtersActive &&
             hasMore &&
+            loadingStatus !== 'ERROR' &&
+            (filteredAutoLoadsDone &&
             loadingStatus === 'DONE' &&
-            !aggregatedSyncState.isSyncing && (
+            !aggregatedSyncState.isSyncing ? (
               <div className="flex flex-col items-center justify-center py-24 text-center duration-200 animate-in fade-in">
                 <p className="text-sm font-medium text-muted-foreground">
-                  {t('thread_list.no_loaded_matches', {
-                    defaultValue: 'No matching emails in what’s loaded so far'
+                  {t('thread_list.empty_filtered_recent', {
+                    defaultValue: 'No matching emails in your recent mail'
                   })}
                 </p>
-                <Button variant={'secondary'} className="mt-4" onClick={() => loadMore()}>
-                  {t('extension.contact.load_more')}
-                </Button>
+                <div className="mt-4 flex gap-2">
+                  <Button variant={'secondary'} onClick={() => setActiveFilters([])}>
+                    {t('thread_list.show_all_mail', { defaultValue: 'Show all mail' })}
+                  </Button>
+                  <Button variant={'ghost'} onClick={() => loadMore()}>
+                    {t('thread_list.keep_looking', { defaultValue: 'Keep looking' })}
+                  </Button>
+                </div>
               </div>
-            )}
-          {groupedThreads.length === 0 &&
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 text-center text-sm text-muted-foreground">
+                <Loader className="mx-auto mb-4" />
+                {t('thread_list.searching_filtered', {
+                  defaultValue: 'Looking for matching emails…'
+                })}
+              </div>
+            ))}
+          {nothingShown &&
             !hasMore &&
             loadingStatus === 'DONE' &&
             !aggregatedSyncState.isSyncing && (
               <div className="flex flex-col items-center justify-center py-24 text-center duration-200 animate-in fade-in zoom-in-95">
                 <MonoIcon type="CheckCircle" className="mb-3 h-8 w-8 text-muted-foreground/40" />
-                <p className="text-sm font-medium text-muted-foreground">All caught up</p>
-                <p className="mt-1 text-xs text-muted-foreground/60">
-                  No emails match the current view
-                </p>
+                {filtersActive ? (
+                  <>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {t('thread_list.empty_filtered', {
+                        defaultValue: 'No emails match this filter'
+                      })}
+                    </p>
+                    <Button
+                      variant={'secondary'}
+                      className="mt-4"
+                      onClick={() => setActiveFilters([])}
+                    >
+                      {t('thread_list.clear_filter', { defaultValue: 'Clear filter' })}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {t('thread_list.all_caught_up', { defaultValue: 'All caught up' })}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t('thread_list.empty_view', { defaultValue: 'No emails in this view.' })}
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -417,17 +492,42 @@ function ThreadList({ onScroll }: ThreadListProps) {
               </div>
             )}
 
-          {loadingStatus === 'ERROR' && (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              <MonoIcon type={'AlertCircle'} className="mx-auto mb-4 h-4 w-4 text-destructive" />
-              <Button variant={'secondary'} onClick={() => fetchThreadsHandler(true)}>
-                {t('thread_list.try_again')}
-              </Button>
-            </div>
-          )}
+          {loadingStatus === 'ERROR' &&
+            (loadedThreadIds.length > 0 ? (
+              // Rows already on screen: a compact line under them.
+              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                <MonoIcon type={'AlertCircle'} className="h-4 w-4 text-destructive" />
+                {t('thread_list.load_more_error', { defaultValue: 'Couldn’t load more' })}
+                <Button variant={'ghost'} sizeVariant={'sm'} onClick={() => fetchThreadsHandler(true)}>
+                  {t('thread_list.try_again')}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-16 text-center text-sm text-muted-foreground">
+                <MonoIcon type={'AlertCircle'} className="mb-3 h-5 w-5 text-destructive" />
+                <p className="font-medium text-foreground">
+                  {t('thread_list.load_error_title', {
+                    defaultValue: 'Couldn’t load your emails'
+                  })}
+                </p>
+                <p className="mt-1">
+                  {t('thread_list.load_error_body', {
+                    defaultValue: 'Check your connection and try again.'
+                  })}
+                </p>
+                {/* Nothing loaded yet: retry the first page, not a "load more". */}
+                <Button
+                  variant={'secondary'}
+                  className="mt-4"
+                  onClick={() => fetchThreadsHandler(false)}
+                >
+                  {t('thread_list.try_again')}
+                </Button>
+              </div>
+            ))}
           {((hasMore && loadingStatus !== 'ERROR' && groupedThreads.length > 0) ||
-            loadingStatus === 'LOADING' ||
-            aggregatedSyncState.isSyncing) && (
+            ((loadingStatus === 'LOADING' || aggregatedSyncState.isSyncing) &&
+              !(nothingShown && filtersActive && hasMore))) && (
             <div className="my-4 py-8 text-center text-sm text-muted-foreground">
               <Loader className="mx-auto mb-7" />
               {/* Loading */}

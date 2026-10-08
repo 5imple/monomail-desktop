@@ -1,16 +1,16 @@
-import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
-import { Badge } from '@/renderer/app/components/ui/badge';
-import { Button } from '@/renderer/app/components/ui/button';
-import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
+import {
+  rowAvatarRecipient,
+  stripExternalBanner,
+  ThreadRowMeta,
+  ThreadSenderNames
+} from '@/renderer/app/components/mail/thread/ThreadRowParts';
 import { useThreadReadMotion } from '@/renderer/app/components/mail/thread/useThreadReadMotion';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
-import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
-import { formatListDate } from '@/renderer/app/lib/formatDate';
 import { highlightThreadText } from '@/renderer/app/lib/highlightThreadText';
 import { cn } from '@/renderer/app/lib/utils';
 import { setSelectionAnchor } from '@/renderer/app/store/thread/threadRangeSelection';
@@ -21,42 +21,8 @@ import { useDraggable } from '@dnd-kit/core';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
-interface DraggableSenderProps {
-  sender: string;
-  threadId: string;
-  index: number;
-  email: string;
-}
-
-const DraggableSender = React.memo<DraggableSenderProps>(({ sender, threadId, index, email }) => {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `thread-contact-${threadId}-${sender}-${index}`,
-    attributes: {
-      tabIndex: -1
-    },
-    data: {
-      from: {
-        name: sender,
-        email: email
-      }
-    }
-  });
-
-  const style = {
-    opacity: isDragging ? 0.5 : 1,
-    cursor: 'grab'
-  };
-
-  return (
-    <span ref={setNodeRef} {...attributes} {...listeners} style={style}>
-      {sender}
-    </span>
-  );
-});
-
-DraggableSender.displayName = 'DraggableSender';
-
-// SnoozeButton / LabelButton live in ./ThreadRowActions (shared with the dense row).
+// Sender names, the right-hand metadata and the hover actions live in
+// ./ThreadRowParts (shared with the dense row).
 
 interface ThreadListCozyItemProps {
   threadId: string;
@@ -69,9 +35,8 @@ export const ThreadListCozyItem = React.memo(
     ({ threadId, onClick }, ref) => {
       const { activeThreadId, selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
       const { labelsMapByAccount } = useLabelAtom();
-      const executeCommand = useExecuteCommand();
       const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
-      const { getAccountByUid, accounts, preference } = useAuth();
+      const { accounts } = useAuth();
 
       const [isRendering, setIsRendering] = useState(false);
       // Start fully visible so the first screenful paints at once. This used to
@@ -90,17 +55,11 @@ export const ThreadListCozyItem = React.memo(
       if (liveThread) lastThreadRef.current = liveThread;
       const currentThread = liveThread ?? lastThreadRef.current;
 
-      const senderAvatarRecipient = useMemo(() => {
-        if (!currentThread) return { email: '', name: '' };
-
-        const latestSender = [...currentThread.items]
-          .reverse()
-          .find(
-            (item): item is MonoMessage => item.type === 'message' && !!(item as MonoMessage).from
-          )?.from;
-
-        return latestSender ?? currentThread.from?.[0] ?? { email: '', name: '' };
-      }, [currentThread]);
+      const senderAvatarRecipient = useMemo(
+        () =>
+          currentThread ? rowAvatarRecipient(currentThread, accounts) : { email: '', name: '' },
+        [currentThread, accounts]
+      );
 
       const senderAccountImageSrc = useMemo(() => {
         const senderEmail = senderAvatarRecipient.email.trim().toLowerCase();
@@ -112,16 +71,10 @@ export const ThreadListCozyItem = React.memo(
         );
       }, [accounts, senderAvatarRecipient.email]);
 
-      const currentAccount = useMemo(
-        () => (currentThread ? getAccountByUid(currentThread.accountId) : null),
-        [currentThread, getAccountByUid]
+      const accountLabels = useMemo(
+        () => (currentThread ? labelsMapByAccount[currentThread.accountId] || {} : {}),
+        [currentThread?.accountId, labelsMapByAccount]
       );
-
-      // Re-fetch labels for this account whenever threadsMap or labelsMapByAccount changes
-      const accountLabels = useMemo(() => {
-        if (!currentThread) return {};
-        return labelsMapByAccount[currentThread.accountId] || {};
-      }, [currentThread, labelsMapByAccount, threadsMap]); // Added threadsMap dependency
 
       const highlightedContent = useMemo(() => {
         if (!currentThread || !globalSearchQuery) {
@@ -131,6 +84,7 @@ export const ThreadListCozyItem = React.memo(
           };
         }
 
+        const snippet = stripExternalBanner(currentThread.snippet);
         return {
           subject: highlightThreadText(
             !currentThread.subject || currentThread.subject === ''
@@ -138,14 +92,16 @@ export const ThreadListCozyItem = React.memo(
               : currentThread.subject,
             globalSearchQuery
           ),
-          snippet: currentThread.snippet
-            ? highlightThreadText(currentThread.snippet, globalSearchQuery)
-            : null
+          snippet: snippet ? highlightThreadText(snippet, globalSearchQuery) : null
         };
       }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery]);
 
       const { registerItem, unregisterItem } = useKeyboardNavigationContext();
 
+      // Re-created only when the row itself appears/changes id — keyed on the
+      // whole threadsMap, every update to any thread rebuilt every row's
+      // observer and keyboard registration.
+      const hasThread = !!currentThread;
       useEffect(() => {
         const observer = new IntersectionObserver(
           (entries) => {
@@ -176,7 +132,7 @@ export const ThreadListCozyItem = React.memo(
           observer.disconnect();
           unregisterItem('thread-list', threadId);
         };
-      }, [threadId, threadsMap]);
+      }, [threadId, hasThread]);
 
       useEffect(() => {
         // Never drop opacity back to 0 when a row leaves the viewport: isRendering
@@ -219,68 +175,10 @@ export const ThreadListCozyItem = React.memo(
         [onClick, currentThread]
       );
 
-      // Recalculate uniqueLabelIds whenever the thread's labelIds change
-      const uniqueLabelIds = useMemo(() => {
-        if (!currentThread) return [];
-        return [
-          ...new Set(currentThread.labelIds.filter((label) => label && label.includes('Label_')))
-        ];
-      }, [currentThread?.labelIds]); // Specifically depend on labelIds
-
-      // Debugging removed to clean up console
-
       const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
       const isChecked = selectedThreads.includes(threadId);
       const isActive = activeThreadId === threadId;
       const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null, isActive);
-
-      // Newton senders renderer (inlined — identical to ThreadListItem's
-      // version). DraggableSender handles dnd-kit drag handles for "Me"
-      // exclusion and draft labelling.
-      const renderSenderNames = () => {
-        const uniqueItems = new Set();
-        const displayItems: React.ReactNode[] = [];
-        [...currentThread.items].reverse().forEach((item, index) => {
-          if (item.type === 'draft') {
-            const key = 'draft';
-            if (!uniqueItems.has(key)) {
-              uniqueItems.add(key);
-              displayItems.push(
-                <span key={`draft-${index}`} className="font-medium text-destructive">
-                  Draft
-                </span>
-              );
-            }
-          } else if (item.type === 'message' && (item as MonoMessage).from) {
-            const message = item as MonoMessage;
-            const displayName = accounts.some((a) => a.email === message.from.email)
-              ? 'Me'
-              : message.from.name || message.from.email;
-            if (!uniqueItems.has(displayName)) {
-              uniqueItems.add(displayName);
-              if (displayName !== 'Me') {
-                displayItems.push(
-                  <DraggableSender
-                    key={`message-${index}`}
-                    sender={displayName}
-                    email={message.from.email}
-                    threadId={currentThread.id}
-                    index={index}
-                  />
-                );
-              } else {
-                displayItems.push(<span key={`message-${index}`}>{displayName}</span>);
-              }
-            }
-          }
-        });
-        return displayItems.map((item, i) => (
-          <React.Fragment key={`fragment-${i}`}>
-            {item}
-            {i < displayItems.length - 1 && ', '}
-          </React.Fragment>
-        ));
-      };
 
       // Done/Trash deletes the thread from threadsMap while its id can still be
       // in the rendered id list for a frame. The JSX below dereferences
@@ -417,7 +315,7 @@ export const ThreadListCozyItem = React.memo(
                           : 'font-medium text-muted-foreground'
                       )}
                     >
-                      {renderSenderNames()}
+                      <ThreadSenderNames thread={currentThread} accounts={accounts} />
                     </span>
                     {currentThread.items.length > 1 && (
                       <span className="shrink-0 text-[11px] text-muted-foreground/70">
@@ -458,82 +356,14 @@ export const ThreadListCozyItem = React.memo(
                     )}
                   </div>
 
-                  {/* Right cluster — reserves min-w so the hover action bar fits without overlapping snippet text */}
-                  <div className="relative flex min-w-[140px] shrink-0 items-center justify-end gap-2">
-                    {uniqueLabelIds.length > 0 && (
-                      <div className="flex items-center gap-1">
-                        {uniqueLabelIds.slice(0, 2).map((labelId, index) => {
-                          const label = accountLabels[labelId];
-                          return label && label.name.length > 0 ? (
-                            <Badge
-                              key={`${labelId}-${index}`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                searchNewQuery(buildLabelQuery(label.name), undefined, false);
-                              }}
-                              className="rounded-sm"
-                              style={{
-                                color: label.color.textColor,
-                                backgroundColor: label.color.backgroundColor
-                              }}
-                              sizeVariant="xs"
-                            >
-                              <span className="whitespace-nowrap">
-                                {label.name.replace('Mono/', '')}
-                              </span>
-                            </Badge>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-
-                    {Object.keys(currentThread.attachments).length > 0 && (
-                      <MonoIcon type="Paperclip" className="h-3 w-3 text-muted-foreground/60" />
-                    )}
-
-                    <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-muted-foreground/70 transition-opacity duration-150 group-pointer-hover:opacity-0">
-                      {formatListDate(currentThread.timestamp)}
-                    </span>
-
-                    {/* Hover action bar */}
-                    <div className="absolute right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-pointer-hover:opacity-100">
-                      <button
-                        type="button"
-                        tabIndex={-1}
-                        aria-label="Done"
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          executeCommand('THREAD_DONE', { threadIds: [currentThread.id] });
-                        }}
-                      >
-                        <MonoIcon type="Check" size={18} weight={300} grade={0} />
-                      </button>
-                      <LabelButton
-                        thread={currentThread}
-                        buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                      />
-                      <SnoozeButton
-                        thread={currentThread}
-                        buttonClassName="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                      />
-                      <button
-                        type="button"
-                        tabIndex={-1}
-                        aria-label="Delete"
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          executeCommand('THREAD_TRASH', { threadIds: [currentThread.id] });
-                        }}
-                      >
-                        <MonoIcon type="Trash" size={18} weight={300} grade={0} />
-                      </button>
-                    </div>
-                  </div>
+                  <ThreadRowMeta
+                    thread={currentThread}
+                    accountLabels={accountLabels}
+                    labelCap={2}
+                    onLabelClick={(name) =>
+                      searchNewQuery(buildLabelQuery(name), undefined, false)
+                    }
+                  />
                 </div>
               </div>
             </ThreadItemContextMenu>

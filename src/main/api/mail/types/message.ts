@@ -32,6 +32,10 @@ export interface MailMessage {
   inlineImages: Record<string, MonoAttachment>;
   attachments: Record<string, MonoAttachment>;
   payload: MailMessagePayload;
+  // Provider says the message carries file attachments even when their
+  // metadata wasn't fetched (Graph list items: hasAttachments without
+  // $expand=attachments). Undefined when unknown (e.g. Gmail).
+  hasAttachments?: boolean;
 }
 
 export interface MailMessageSendResponse {

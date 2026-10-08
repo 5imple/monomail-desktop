@@ -19,6 +19,8 @@ const LabelFilterOption: FC = () => {
   const { t } = useTranslation();
   const { activeFilters, setActiveFilters } = useThreadFilter();
   const { getUniqueCustomLabelNames, getAllLabels } = useLabelAtom();
+  // Rows the new filter hides must not stay selected.
+  const { setSelectedThreads } = useThreadAtom();
 
   // Get all unique custom label names (excluding default Gmail labels)
   const uniqueLabelNames = useMemo(() => {
@@ -79,6 +81,7 @@ const LabelFilterOption: FC = () => {
       // Add filter if it doesn't exist
       setActiveFilters([...activeFilters, filterToToggle]);
     }
+    setSelectedThreads([]);
   };
 
   // Check if a specific label filter is active
@@ -92,7 +95,12 @@ const LabelFilterOption: FC = () => {
   // Clear all label filters
   const clearLabelFilters = () => {
     setActiveFilters(activeFilters.filter((filter) => filter.type !== 'label'));
+    setSelectedThreads([]);
   };
+
+  // No labels to filter by (e.g. Microsoft 365) — the submenu would be empty.
+  // An active label filter keeps it so the filter can still be cleared.
+  if (uniqueLabelNames.length === 0 && !isFilterCategoryActive) return null;
 
   return (
     <DropdownMenuSub>

@@ -1,15 +1,19 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { Button } from '@/renderer/app/components/ui/button';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
+import { useAuth } from '@/renderer/app/context/AuthContext';
+import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/renderer/app/lib/utils';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import { toast } from 'sonner';
 
 const ThreadSelectionToast = () => {
-  const { selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
+  const { selectedThreads, setSelectedThreads, threadsMap, activeThreadId } = useThreadAtom();
+  const { accounts } = useAuth();
+  const { labelsMapByAccount } = useLabelAtom();
   const executeCommand = useExecuteCommand();
   const { t } = useTranslation();
 
@@ -27,12 +31,42 @@ const ThreadSelectionToast = () => {
     [selectedThreadObjects]
   );
 
-  // Aggregated status checks
-  const allInInbox = useMemo(
+  // Done applies to the selected threads that are in the Inbox; only when
+  // none are does the button offer Move to Inbox — for archived mail, not
+  // for Trash or threads you only sent (that put your own mail in the Inbox).
+  const inboxThreadIds = useMemo(
     () =>
-      selectedThreadObjects.length > 0 &&
-      selectedThreadObjects.every((thread) => thread.labelIds.includes('INBOX')),
-    [selectedThreadObjects, threadsMap]
+      selectedThreadObjects
+        .filter((thread) => thread.labelIds.includes('INBOX'))
+        .map((thread) => thread.id),
+    [selectedThreadObjects]
+  );
+  const movableToInboxIds = useMemo(() => {
+    const own = new Set(accounts.map((account) => account.email.trim().toLowerCase()));
+    return selectedThreadObjects
+      .filter((thread) => {
+        if (thread.labelIds.includes('INBOX') || thread.labelIds.includes('TRASH')) return false;
+        const messages = thread.items.filter((item) => item.type === 'message') as MonoMessage[];
+        const sentOnly =
+          messages.length > 0 &&
+          messages.every((message) => own.has(message.from?.email?.toLowerCase()));
+        return !sentOnly;
+      })
+      .map((thread) => thread.id);
+  }, [selectedThreadObjects, accounts]);
+  const anyInInbox = inboxThreadIds.length > 0;
+  const showDoneButton = anyInInbox || movableToInboxIds.length > 0;
+
+  // The Label page has nothing to offer when none of the accounts has labels
+  // (Microsoft 365 labels aren't loaded).
+  const hasUserLabels = useMemo(
+    () =>
+      selectedThreadObjects.some((thread) =>
+        Object.keys(labelsMapByAccount[thread.accountId] ?? {}).some((id) =>
+          id.startsWith('Label_')
+        )
+      ),
+    [selectedThreadObjects, labelsMapByAccount]
   );
 
   const allStarred = useMemo(
@@ -62,15 +96,19 @@ const ThreadSelectionToast = () => {
     setSelectedThreads([]);
   };
 
+  // Read and Star keep the selection — the button's icon flipping is the
+  // feedback, and you may want to act on the same rows again.
   const handleStarToggle = () => {
     const command = allStarred ? 'THREAD_UNSTAR' : 'THREAD_STAR';
     executeCommand(command, { threadIds: selectedThreads });
-    handleClearSelection();
   };
 
   const handleDoneToggle = () => {
-    const command = allInInbox ? 'THREAD_DONE' : 'THREAD_UNDONE';
-    executeCommand(command, { threadIds: selectedThreads });
+    if (anyInInbox) {
+      executeCommand('THREAD_DONE', { threadIds: inboxThreadIds });
+    } else {
+      executeCommand('THREAD_UNDONE', { threadIds: movableToInboxIds });
+    }
     handleClearSelection();
   };
 
@@ -88,26 +126,23 @@ const ThreadSelectionToast = () => {
     // If any thread is unread then mark them as read; otherwise mark them as unread.
     const command = anyUnread ? 'THREAD_MARK_READ' : 'THREAD_MARK_UNREAD';
     executeCommand(command, { threadIds: selectedThreads });
-    handleClearSelection();
   };
 
-  // Determine tooltip texts based on status
-  const starTooltip = allStarred ? t('thread_list.toolbar.unstar') : t('thread_list.toolbar.star');
-  const doneTooltip = allInInbox
-    ? t('thread_list.toolbar.done')
-    : t('thread_list.toolbar.undone', 'Undone'); // TODO
+  // Action wording ("Mark as read"), not state wording ("Read").
+  const starTooltip = allStarred ? t('command.thread_unstar') : t('command.thread_star');
+  const doneTooltip = anyInInbox
+    ? t('command.thread_done')
+    : t('command.thread_move_to_inbox', { defaultValue: 'Move to Inbox' });
 
-  const trashTooltip = allTrashed
-    ? t('thread_list.toolbar.untrash')
-    : t('thread_list.toolbar.trash');
+  const trashTooltip = allTrashed ? t('command.thread_untrash') : t('command.thread_trash');
 
-  const readTooltip = anyUnread ? t('thread_list.toolbar.read') : t('thread_list.toolbar.unread');
+  const readTooltip = anyUnread ? t('command.thread_mark_read') : t('command.thread_mark_unread');
 
-  const labelTooltip = t('thread_list.toolbar.label');
+  const labelTooltip = t('command.label');
 
   // Determine icon colors based on status
-  const starIconColor = allStarred ? 'text-yellow-500' : 'text-muted-foreground';
-  const doneIconColor = allInInbox ? 'text-muted-foreground' : 'text-green-500';
+  const starIconColor = allStarred ? 'text-secondary-accent' : 'text-muted-foreground';
+  const doneIconColor = 'text-muted-foreground';
   const labelIconColor = 'text-muted-foreground';
   const trashIconColor = allTrashed ? 'text-destructive' : 'text-muted-foreground';
   // For read/unread: if any are unread, highlight in accent (mark as read); otherwise, show an open envelope.
@@ -130,6 +165,7 @@ const ThreadSelectionToast = () => {
                   sizeVariant="sm"
                   shortcut={'U'}
                   tooltip={readTooltip}
+                  aria-label={readTooltip}
                   localTooltip
                   onClick={handleReadToggle}
                 >
@@ -140,38 +176,46 @@ const ThreadSelectionToast = () => {
                   sizeVariant="sm"
                   shortcut={'S'}
                   tooltip={starTooltip}
+                  aria-label={starTooltip}
                   localTooltip
                   onClick={handleStarToggle}
                 >
                   <MonoIcon type="Star" className={starIconColor} />
                 </Button>
-                <Button
-                  variant="ghost"
-                  sizeVariant="sm"
-                  shortcut={'E'}
-                  tooltip={doneTooltip}
-                  localTooltip
-                  onClick={handleDoneToggle}
-                >
-                  <MonoIcon type="CheckCircle" className={doneIconColor} />
-                </Button>
+                {showDoneButton && (
+                  <Button
+                    variant="ghost"
+                    sizeVariant="sm"
+                    shortcut={'E'}
+                    tooltip={doneTooltip}
+                    aria-label={doneTooltip}
+                    localTooltip
+                    onClick={handleDoneToggle}
+                  >
+                    <MonoIcon type={anyInInbox ? 'CheckCircle' : 'Inbox'} className={doneIconColor} />
+                  </Button>
+                )}
+
+                {/* No L hint: the Label hotkey only works while reading. */}
+                {hasUserLabels && (
+                  <Button
+                    variant="ghost"
+                    sizeVariant="sm"
+                    tooltip={labelTooltip}
+                    aria-label={labelTooltip}
+                    localTooltip
+                    onClick={handleLabelToggle}
+                  >
+                    <MonoIcon type="Label" className={labelIconColor} />
+                  </Button>
+                )}
 
                 <Button
                   variant="ghost"
                   sizeVariant="sm"
-                  shortcut={'L'}
-                  tooltip={labelTooltip}
-                  localTooltip
-                  onClick={handleLabelToggle}
-                >
-                  <MonoIcon type="Label" className={labelIconColor} />
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  sizeVariant="sm"
-                  shortcut={'#'}
+                  shortcut={'Backspace'}
                   tooltip={trashTooltip}
+                  aria-label={trashTooltip}
                   localTooltip
                   onClick={handleTrashToggle}
                 >
@@ -198,9 +242,10 @@ const ThreadSelectionToast = () => {
     );
   };
 
-  // Track selection and show/dismiss toast as needed
+  // Track selection and show/dismiss toast as needed. Hidden while a thread is
+  // open: the bar floated over the reader acting on rows you can't see.
   useEffect(() => {
-    if (selectedThreads.length >= 2) {
+    if (selectedThreads.length >= 2 && !activeThreadId) {
       // Show toast with actions when 2 or more threads are selected
       toast(
         <div className="w-80 flex-1 duration-200 animate-in fade-in slide-in-from-bottom-4">
@@ -209,14 +254,27 @@ const ThreadSelectionToast = () => {
         {
           id: 'thread-selection-toast',
           duration: Infinity, // Keep it visible until dismissed
-          position: 'bottom-center'
+          position: 'bottom-center',
+          // Swiping it away left the rows selected with no bar to act on them.
+          dismissible: false
         }
       );
     } else {
       // Dismiss toast when fewer than 2 threads are selected
       toast.dismiss('thread-selection-toast');
     }
-  }, [selectedThreads, allInInbox, allStarred, allTrashed, anyUnread, threadsMap, allDrafts]);
+  }, [
+    selectedThreads,
+    activeThreadId,
+    anyInInbox,
+    showDoneButton,
+    hasUserLabels,
+    allStarred,
+    allTrashed,
+    anyUnread,
+    threadsMap,
+    allDrafts
+  ]);
 
   // This component doesn't render anything directly - it just manages the toast
   return null;

@@ -37,6 +37,8 @@ const FilterOption: FC<FilterOptionProps> = ({
 }) => {
   const { t } = useTranslation();
   const { activeFilters, setActiveFilters } = useThreadFilter();
+  // Rows the new filter hides must not stay selected.
+  const { setSelectedThreads } = useThreadAtom();
 
   // Check if this filter category has any active filters
   const isFilterCategoryActive = useMemo(() => {
@@ -64,6 +66,7 @@ const FilterOption: FC<FilterOptionProps> = ({
       // Add filter if it doesn't exist
       setActiveFilters([...activeFilters, filter]);
     }
+    setSelectedThreads([]);
   };
 
   // Check if a specific filter is active
@@ -78,7 +81,9 @@ const FilterOption: FC<FilterOptionProps> = ({
 
   // Clear all filters in this category
   const clearCategoryFilters = () => {
+    if (!isFilterCategoryActive) return;
     setActiveFilters(activeFilters.filter((filter) => filter.type !== filterType));
+    setSelectedThreads([]);
   };
 
   return (
