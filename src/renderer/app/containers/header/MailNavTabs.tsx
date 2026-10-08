@@ -1,6 +1,12 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Clock3, Inbox, Send, Star, type LucideIcon } from 'lucide-react';
+import { TooltipPortal } from '@radix-ui/react-tooltip';
+import { useTranslation } from 'react-i18next';
+import { ringVariants } from '@/renderer/app/components/ui/constants';
+import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { cn } from '@/renderer/app/lib/utils';
+import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -9,7 +15,8 @@ type MailNavItemBase = {
   id: 'inbox' | 'snooze' | 'starred' | 'sent';
   label: string;
   Icon: LucideIcon;
-  // Must match the go-to hotkey in navigationCommands; omit when none exists.
+  // Must match the go-to hotkey in navigationCommands (ShortcutKeyboard splits
+  // on '+'); omit when none exists. Inbox has none: G+I goes to is:important.
   shortcut?: string;
 };
 
@@ -32,8 +39,8 @@ const NAV_ITEMS: MailNavItem[] = [
     query: 'category:primary'
   },
   { id: 'snooze', label: 'Later', Icon: Clock3, layout: 'LATER' as const },
-  { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G S' },
-  { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G T' }
+  { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G+S' },
+  { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G+T' }
 ];
 
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -49,9 +56,11 @@ const queryMatchesInbox = (normalizedQuery: string) => {
 };
 
 const MailNavTabs = React.memo(() => {
+  const { t } = useTranslation();
   const { activeLayout, globalSearchQuery, searchNewQuery, setActiveLayout } = useGlobalAtom();
-  const { threadsMap } = useThreadAtom();
+  const { threadsMap, setActiveThreadId, setSelectedThreads } = useThreadAtom();
   const { activeSpace, setActiveAccountsInSpace } = useSpaceAtom();
+  const { sidebarCollapsed } = useSidebarAtom();
   const [loadingTabId, setLoadingTabId] = useState<string | null>(null);
 
   const inboxUnreadCount = useMemo(
@@ -88,55 +97,91 @@ const MailNavTabs = React.memo(() => {
       // this, a single-account filter picked in the sidebar silently stayed on.
       if (activeSpace) setActiveAccountsInSpace(activeSpace.accountUids);
       if (item.layout) {
+        // Later replaces the list and reader, so drop the open thread and the
+        // selection like searchNewQuery does — otherwise E / S / Backspace
+        // would act on mail that's no longer on screen.
+        setActiveThreadId(null);
+        setSelectedThreads([]);
         setActiveLayout(item.layout);
       } else {
         searchNewQuery(item.query, undefined, false);
       }
     },
-    [setActiveLayout, searchNewQuery, activeSpace, setActiveAccountsInSpace]
+    [
+      setActiveLayout,
+      searchNewQuery,
+      activeSpace,
+      setActiveAccountsInSpace,
+      setActiveThreadId,
+      setSelectedThreads
+    ]
   );
 
   return (
-    <div className="flex items-center gap-[5px]">
+    <nav
+      aria-label={t('layout.titlebar.mail_views', { defaultValue: 'Mail views' })}
+      className="flex items-center gap-[5px]"
+    >
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeId;
         const isLoading = item.id === loadingTabId && !isActive;
         return (
-          <button
-            key={item.id}
-            type="button"
-            title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
-            onClick={() => handleTabClick(item)}
-            className={cn(
-              'no-drag relative flex h-[29px] min-w-[86px] items-center justify-center gap-[6px] rounded-[7px] px-[9px] text-[13px] transition-colors',
-              isActive
-                ? 'bg-foreground/[0.10] font-normal text-foreground'
-                : 'font-light text-muted-foreground/60 hover:text-muted-foreground/90'
-            )}
-          >
-            <item.Icon
-              className="h-[15px] w-[15px] shrink-0"
-              strokeWidth={1.8}
-              aria-hidden="true"
-            />
-            <span>{item.label}</span>
-            {item.id === 'inbox' && inboxUnreadCount > 0 && (
-              <span
+          <Tooltip key={item.id}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => handleTabClick(item)}
                 className={cn(
-                  'min-w-[1ch] text-[12px] tabular-nums',
-                  isActive ? 'text-foreground' : 'text-muted-foreground'
+                  'no-drag relative flex h-[29px] min-w-[86px] items-center justify-center gap-[6px] rounded-[7px] px-[9px] text-[13px] transition-colors',
+                  ringVariants,
+                  // With the sidebar expanded its toggle sits where the tabs
+                  // start in a narrow window, so they shrink to icons there.
+                  !sidebarCollapsed && 'max-[860px]:min-w-0',
+                  isActive
+                    ? // The expanded compose covers the view, so no tab is "current".
+                      'bg-foreground/[0.10] font-normal text-foreground [body:has([data-compose-expanded=true])_&]:bg-transparent'
+                    : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
                 )}
               >
-                {inboxUnreadCount}
-              </span>
-            )}
-            {isLoading && (
-              <span className="absolute bottom-0.5 left-[11px] right-[11px] h-[2px] animate-pulse rounded-full bg-accent" />
-            )}
-          </button>
+                <item.Icon
+                  className="h-[15px] w-[15px] shrink-0"
+                  strokeWidth={1.8}
+                  aria-hidden="true"
+                />
+                <span className={cn(!sidebarCollapsed && 'max-[860px]:sr-only')}>{item.label}</span>
+                {item.id === 'inbox' && inboxUnreadCount > 0 && (
+                  <span
+                    className={cn(
+                      // Two-digit slot so the centred group doesn't shift as the count changes.
+                      'min-w-[2ch] text-left text-[12px] tabular-nums',
+                      isActive ? 'text-foreground' : 'text-muted-foreground/80'
+                    )}
+                  >
+                    {inboxUnreadCount}
+                  </span>
+                )}
+                {isLoading && (
+                  <span className="absolute bottom-0.5 left-[11px] right-[11px] h-[2px] animate-pulse rounded-full bg-foreground/30" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipPortal>
+              <TooltipContent side="bottom">
+                <div className="text-start">
+                  <div>{item.label}</div>
+                  {item.shortcut && (
+                    <div className="mt-0.5">
+                      <ShortcutKeyboard variant="flat" shortcut={item.shortcut} />
+                    </div>
+                  )}
+                </div>
+              </TooltipContent>
+            </TooltipPortal>
+          </Tooltip>
         );
       })}
-    </div>
+    </nav>
   );
 });
 

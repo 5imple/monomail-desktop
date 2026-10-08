@@ -66,7 +66,8 @@
       "add": "Add",
       "remove": "Remove",
       "remove_from_pin": "Remove from pin",
-      "new_email": "New email"
+      "new_email": "New email",
+      "drop_hint": "Drop to pin"
     },
     "display": {
       "close_panel": "Close Panel",
@@ -1069,7 +1070,11 @@
         "performance": "Performance",
         "documentation": "Documentation"
       },
-      "placeholder": "How can Mono improve for you{{name}}? If you are reporting a bug, how did it happen?"
+      "placeholder": "How can Mono improve for you{{name}}? If you are reporting a bug, how did it happen?",
+      "too_many_files": "{{name}} (max {{max}} files)",
+      "email_mode_note": "Your feedback opens as an email to {{email}} — add screenshots there before sending.",
+      "remove_file": "Remove {{name}}",
+      "email_button": "Email feedback"
     },
     "plan": {
       "title": "Choose Your Plan",
@@ -1145,6 +1150,17 @@
       "error_generic": "Sign-in failed: {{error}}",
       "update_updating": "Updating…",
       "update_later": "Later"
+    },
+    "titlebar": {
+      "mail_views": "Mail views",
+      "compose": "Compose",
+      "accounts": "Accounts",
+      "accounts_attention": "Reconnect {{emails}} — open Accounts",
+      "accounts_open_hint": "Click to open Accounts"
+    },
+    "startup": {
+      "slow_title": "Taking longer than usual…",
+      "slow_description": "Mono Mail is still getting ready. Reload if it doesn’t open in a moment."
     }
   },
   "thread_list": {
@@ -1517,7 +1533,14 @@
     "sync_success": "{{successCount}} operations synced successfully",
     "sync_failed": "{{count}} operations failed to sync",
     "upgrade_for_offline": "Upgrade to Plus or Pro for Offline Access",
-    "pro_features_description": "Plus and Pro users can work offline and sync changes when reconnected."
+    "pro_features_description": "Plus and Pro users can work offline and sync changes when reconnected.",
+    "syncing": "Syncing…",
+    "offline_mode": "Offline mode",
+    "offline": "Offline",
+    "pending": "{{count}} pending",
+    "online": "Online",
+    "description_offline": "You're offline. Changes you make are saved and sent when the connection is back.",
+    "description_pending": "Changes made while offline are being sent."
   },
   "plan_selection": {
     "title": "Choose Your Plan",
@@ -1682,5 +1705,17 @@
       "description": "Refresh the app to get the latest features and improvements.",
       "button": "Refresh app"
     }
+  },
+  "common": {
+    "dismiss": "Dismiss"
+  },
+  "error_boundary": {
+    "title": "Something went wrong",
+    "description": "Mono Mail hit an unexpected problem. Reloading usually fixes it.",
+    "reload": "Reload",
+    "copy_details": "Copy details",
+    "copied": "Copied",
+    "open_logs": "Open Logs",
+    "support": "If this keeps happening, contact the Technology Services Center (TSC) at {{email}} or 410-778-7777."
   }
 }

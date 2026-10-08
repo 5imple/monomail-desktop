@@ -30,11 +30,13 @@ const ListPanel: FC<ListPanelProps> = ({}) => {
   };
   return (
     <ThreadListProvider>
-      <div className="no-drag flex h-screen flex-col bg-white dark:bg-background">
+      {/* h-full, not h-screen: the panel sits below the 52px titlebar, so
+          h-screen pushed the list's bottom (and its fade) off the window. */}
+      <div className="no-drag flex h-full min-h-0 flex-col bg-white dark:bg-background">
         <ListPanelHeader isScrolled={isScrolled} ref={threadListHeaderRef} />
         <div className="relative">
           {currentAlerts.length > 0 && (
-            <div ref={alertRef} className="border-b p-2">
+            <div ref={alertRef} className="flex flex-col gap-2 px-[10%] pt-2">
               {currentAlerts.map((alert) => (
                 <div key={alert.id} className="rounded-lg border p-3 shadow-sm">
                   <div className="flex items-start gap-2">

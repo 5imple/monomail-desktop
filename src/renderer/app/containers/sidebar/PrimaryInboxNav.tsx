@@ -29,7 +29,7 @@ const PrimaryInboxNav: FC<PrimaryInboxNavProps> = () => {
   const { activeSpace, setActiveAccountsInSpace } = useSpaceAtom();
   const { searchNewQuery, globalSearchQuery, activeLayout, setActiveLayout } = useGlobalAtom();
   const { getDraftsForAccount } = useDraftAtom();
-  const { threadsMap } = useThreadAtom();
+  const { threadsMap, setActiveThreadId, setSelectedThreads } = useThreadAtom();
   const [isImportantOpen, setIsImportantOpen] = useState(true);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [labelCounts, setLabelCounts] = useState<Record<string, number>>({});
@@ -290,7 +290,13 @@ const PrimaryInboxNav: FC<PrimaryInboxNavProps> = () => {
         icon={'Clock' as MonoIconType}
         iconColor="text-primary"
         active={activeLayout === 'LATER'}
-        onClick={() => setActiveLayout('LATER')}
+        onClick={() => {
+          // Later replaces the list and reader: drop the open thread and the
+          // selection so hotkeys don't act on mail that's no longer shown.
+          setActiveThreadId(null);
+          setSelectedThreads([]);
+          setActiveLayout('LATER');
+        }}
       />
       <Collapsible id="important-list" open={isImportantOpen} onOpenChange={setIsImportantOpen}>
         <div className="group flex h-10 items-center justify-between text-muted-foreground hover:bg-background/30">

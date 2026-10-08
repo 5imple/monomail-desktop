@@ -1,9 +1,11 @@
 import MonoIcon from '@/renderer/app/components/icons/icons';
-import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useOffline } from '@/renderer/app/context/OfflineContext';
 import { cn } from '@/renderer/app/lib/utils';
+import { TooltipPortal } from '@radix-ui/react-tooltip';
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 interface OfflineIndicatorProps {
@@ -20,6 +22,7 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({ className })
     isSyncing,
     hasProAccess
   } = useOffline();
+  const { t } = useTranslation();
 
   useEffect(() => {
     // Only auto-sync for Pro users
@@ -54,39 +57,58 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({ className })
     return null;
   }
 
-  return (
-    <div
-      className={cn(
-        'flex h-7 items-center gap-1 rounded-md border px-2 py-1 text-xs shadow-sm',
-        queuedActionsCount > 0 && 'pr-1',
-        className
-      )}
-    >
-      {isSyncing ? (
-        <Loader className="h-4 w-4" />
-      ) : isOfflineMode ? (
-        <MonoIcon type="Offline" className="h-4 w-4" />
-      ) : (
-        <MonoIcon type="Cloud" className="h-4 w-4" />
-      )}
-      <div className="flex items-center gap-2 overflow-hidden text-ellipsis">
-        {isSyncing ? (
-          <span className="whitespace-nowrap">Syncing...</span>
-        ) : isOfflineMode ? (
-          <span className="whitespace-nowrap">{hasProAccess ? 'Offline mode' : 'Offline'}</span>
-        ) : (
-          <span className="whitespace-nowrap">Online</span>
-        )}
+  const pendingCount = hasProAccess ? queuedActionsCount : 0;
+  const label = isSyncing
+    ? t('offline.syncing', { defaultValue: 'Syncing…' })
+    : isOfflineMode
+      ? hasProAccess
+        ? t('offline.offline_mode', { defaultValue: 'Offline mode' })
+        : t('offline.offline', { defaultValue: 'Offline' })
+      : pendingCount > 0
+        ? t('offline.pending', { defaultValue: '{{count}} pending', count: pendingCount })
+        : t('offline.online', { defaultValue: 'Online' });
+  const description = isOfflineMode
+    ? t('offline.description_offline', {
+        defaultValue:
+          "You're offline. Changes you make are saved and sent when the connection is back."
+      })
+    : t('offline.description_pending', {
+        defaultValue: 'Changes made while offline are being sent.'
+      });
 
-        {hasProAccess && queuedActionsCount > 0 && (
-          <>
-            <span className="flex h-5 min-w-5 items-center justify-center whitespace-nowrap rounded border bg-muted p-0.5 text-xs shadow-sm">
-              {queuedActionsCount}
-            </span>
-          </>
-        )}
-      </div>
-    </div>
+  // Titlebar chip: same height/radius as the nav tabs, so it reads as status
+  // rather than a control. Full explanation lives in the tooltip.
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label={`${label}. ${description}`}
+          className={cn(
+            'flex h-[29px] cursor-default items-center gap-1.5 rounded-[7px] bg-foreground/[0.06] px-2 text-[12px] text-muted-foreground',
+            className
+          )}
+        >
+          {isSyncing ? (
+            <Loader className="h-3.5 w-3.5" />
+          ) : isOfflineMode ? (
+            <MonoIcon type="Offline" className="h-3.5 w-3.5" />
+          ) : (
+            <MonoIcon type="Cloud" className="h-3.5 w-3.5" />
+          )}
+          <span className="whitespace-nowrap tabular-nums">{label}</span>
+          {isOfflineMode && pendingCount > 0 && (
+            <span className="tabular-nums text-muted-foreground/80">{pendingCount}</span>
+          )}
+        </div>
+      </TooltipTrigger>
+      <TooltipPortal>
+        <TooltipContent side="bottom" className="max-w-64">
+          {description}
+        </TooltipContent>
+      </TooltipPortal>
+    </Tooltip>
   );
 };
 

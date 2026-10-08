@@ -1,25 +1,20 @@
+import { isBackendConfigured } from '@/main/api/apiClient';
 import draftApi from '@/main/api/draft/draftApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Alert, AlertDescription } from '@/renderer/app/components/ui/alert';
-import { Button } from '@/renderer/app/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
-import OfflineIndicator from '@/renderer/app/components/OfflineIndicator';
 import InboxFilterTabs from '@/renderer/app/containers/filter/InboxFilterTabs';
 import PinHeader from '@/renderer/app/containers/header/PinHeader';
 import ThreadSelectionToast from '@/renderer/app/containers/list/ThreadSelectionToast';
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
-import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useThreadList } from '@/renderer/app/context/ThreadListContext';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
-import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 
-import React, { useMemo, useCallback } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 
@@ -31,63 +26,12 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
   ({ isScrolled }, ref) => {
     const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
     const { globalSearchQuery } = useGlobalAtom();
-    const { accounts } = useAuth();
     const { t } = useTranslation();
 
     const { fetchAndSetTrackingHistories } = useTrackingAtom();
     // Use our context hook to get fetchThreadsHandler and isLoading
     const { fetchThreadsHandler, resetThreadsArray } = useThreadList();
     const { updateDraft } = useDraftAtom();
-    const { openDialog } = useDialogs();
-    const { labelsMapByAccount } = useLabelAtom();
-
-    // Account error detection logic
-    const accountsWithErrors = useMemo(() => {
-      return accounts.filter((account) => {
-        // Label loading and the Gmail-scope check are Gmail-specific — gate them
-        // on provider so Microsoft accounts (Graph scopes, no Gmail labels yet)
-        // aren't falsely flagged "missing Gmail permissions" / "too many
-        // requests". Microsoft accounts are still flagged when genuinely expired.
-        const isGoogle = account.provider === 'google';
-        const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
-        const hasLabelError = isGoogle && hasLabelsLoaded && !labelsMapByAccount[account.uid];
-
-        return (
-          hasLabelError ||
-          account.isExpired ||
-          (isGoogle && !account.scopes.some((scope) => scope.includes('https://mail.google.com')))
-        );
-      });
-    }, [accounts, labelsMapByAccount]);
-
-    // Get account status tooltip
-    const getAccountStatusTooltip = useCallback(() => {
-      if (accountsWithErrors.length === 0) return '';
-
-      const errorMessagesSet = new Set<string>();
-      const hasLabelsLoaded = Object.keys(labelsMapByAccount).length > 0;
-
-      accountsWithErrors.forEach((account) => {
-        const isGoogle = account.provider === 'google';
-        if (account.isExpired) {
-          errorMessagesSet.add(t('tooltips.account_status.authentication_expired'));
-        } else if (isGoogle && hasLabelsLoaded && !labelsMapByAccount[account.uid]) {
-          errorMessagesSet.add(t('tooltips.account_status.too_many_requests'));
-        } else if (isGoogle && !account.scopes.some((scope) => scope.includes('https://mail.google.com'))) {
-          errorMessagesSet.add(t('tooltips.account_status.missing_gmail_permissions'));
-        } else {
-          errorMessagesSet.add(t('tooltips.account_status.requires_reconnecting'));
-        }
-      });
-
-      return Array.from(errorMessagesSet).join('\n');
-    }, [accountsWithErrors, labelsMapByAccount, t]);
-
-    // Handle account reconnection
-    const handleAccountReconnectClick = useCallback(() => {
-      openDialog('preference', { defaultPage: 'integration' });
-    }, [openDialog]);
-
     const handleRefresh = async () => {
       resetThreadsArray();
       fetchThreadsHandler(); // Force refresh
@@ -131,36 +75,24 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
             )}
           >
             {!isElectron && sidebarCollapsed && <SidebarCollapseButton className="mr-2" />}
-
-            {accountsWithErrors.length > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    sizeVariant="sm"
-                    className="mb-1 h-6 w-6 p-0 hover:bg-destructive/10"
-                    onClick={handleAccountReconnectClick}
-                  >
-                    <MonoIcon type="AlertCircle" className="h-4 w-4 text-destructive" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-xs whitespace-pre-wrap">
-                  {getAccountStatusTooltip()}
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-
-          <div className="no-drag mb-1 ml-auto flex items-center gap-1.5">
-            <OfflineIndicator />
+            {/* Account-error and offline status live in the titlebar, where they
+                stay visible while reading or in Later. */}
           </div>
         </div>
-        <div id="pin-header" className={cn('no-drag flex items-center px-6')}>
-          <PinHeader />
-        </div>
+        {/* Pins are stored with the backend; without one they can't be saved. */}
+        {isBackendConfigured() && (
+          <div id="pin-header" className={cn('no-drag flex items-center px-[10%]')}>
+            <PinHeader />
+          </div>
+        )}
         <InboxFilterTabs />
         {globalSearchQuery === 'in:trash' && (
-          <div className={cn('no-drag p-2 transition-all', isScrolled && 'border-b shadow-sm')}>
+          <div
+            className={cn(
+              'no-drag px-[10%] pb-2 pt-2 transition-all',
+              isScrolled && 'border-b shadow-sm'
+            )}
+          >
             <Alert className="">
               {<MonoIcon type={'AlertCircle'} className="h-4 w-4" />}
               <AlertDescription>{t('header.list.trash_alert')}</AlertDescription>

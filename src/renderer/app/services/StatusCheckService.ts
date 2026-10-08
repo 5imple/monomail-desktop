@@ -199,10 +199,17 @@ export const useStatusCheck = () => {
   };
 
   useEffect(() => {
+    // Offline / blocked fetches just skip this round instead of surfacing as an
+    // unhandled rejection; the last known status stays.
+    const runCheck = () => {
+      checkGCPStatus().catch((error) => {
+        console.info('[StatusCheck] GCP status check skipped:', error?.message ?? error);
+      });
+    };
     // Initial checks
-    checkGCPStatus();
+    runCheck();
     // Set up intervals
-    const gcpInterval = setInterval(checkGCPStatus, CHECK_INTERVALS.gcp);
+    const gcpInterval = setInterval(runCheck, CHECK_INTERVALS.gcp);
 
     return () => {
       clearInterval(gcpInterval);

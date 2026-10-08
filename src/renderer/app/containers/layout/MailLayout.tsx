@@ -14,6 +14,7 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
+import { shortName } from '@/renderer/app/lib/shortName';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useThreadListAtom } from '@/renderer/app/store/layout/threadList/useThreadListAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -80,10 +81,12 @@ const DragOverlayContent = React.memo(
             recipient={activeDragItem.data.current.from}
           />
         </div>
-        <div className="max-w-12 overflow-hidden text-ellipsis">
+        <div className="mt-1 max-w-16 overflow-hidden text-ellipsis rounded bg-popover px-1 text-popover-foreground shadow-sm">
           <span className="whitespace-nowrap text-xs">
-            {activeDragItem.data.current.from.name.split(' ')[0] ??
-              activeDragItem.data.current.from.email}
+            {shortName(
+              activeDragItem.data.current.from.name,
+              activeDragItem.data.current.from.email
+            )}
           </span>
         </div>
       </div>
@@ -143,11 +146,17 @@ export function MailLayout({}: MailLayoutProps) {
       //   pinned: true
       // };
 
-      // Use your contact atom to pin the contact
-      await pinEmailInSpace(recipient.email);
-
-      // Skip the drop animation by clearing the active drag item
-      setActiveDragItem(null);
+      // Use your contact atom to pin the contact. pinEmailInSpace rolls back
+      // and toasts on failure itself; the rethrow must not skip clearing the
+      // drag item (which left the overlay stuck) or go unhandled.
+      try {
+        await pinEmailInSpace(recipient.email);
+      } catch {
+        // already reported
+      } finally {
+        // Skip the drop animation by clearing the active drag item
+        setActiveDragItem(null);
+      }
       return;
     }
     setActiveDragItem(null);

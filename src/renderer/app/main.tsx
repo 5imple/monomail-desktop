@@ -61,33 +61,36 @@ console.info(logo);
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <ThemeProvider defaultTheme={'pure-light'} storageKey="ui-theme">
-    <InternetConnection>
-      <UndoProvider>
-        <AuthProvider>
-          <Router>
-            <RouteLogger>
-              <TooltipProvider delayDuration={300}>
-                <SyncHistoryProvider>
-                  <SyncThreadProvider>
-                    <MessageProvider>
-                      <HotkeysProvider initiallyActiveScopes={['GLOBAL']}>
-                        <HotkeyScopeProvider>
-                          <KeyboardNavigationProvider>
-                            <Toaster />
-                            <AppErrorBoundary>
+    {/* Outermost boundary short of the theme: a crash inside any provider
+        (auth, sync, hotkeys…) still shows the recovery screen instead of a
+        blank window. */}
+    <AppErrorBoundary>
+      <InternetConnection>
+        <UndoProvider>
+          <AuthProvider>
+            <Router>
+              <RouteLogger>
+                <TooltipProvider delayDuration={300}>
+                  <SyncHistoryProvider>
+                    <SyncThreadProvider>
+                      <MessageProvider>
+                        <HotkeysProvider initiallyActiveScopes={['GLOBAL']}>
+                          <HotkeyScopeProvider>
+                            <KeyboardNavigationProvider>
+                              <Toaster />
                               <AppRouter />
-                            </AppErrorBoundary>
-                          </KeyboardNavigationProvider>
-                        </HotkeyScopeProvider>
-                      </HotkeysProvider>
-                    </MessageProvider>
-                  </SyncThreadProvider>
-                </SyncHistoryProvider>
-              </TooltipProvider>
-            </RouteLogger>
-          </Router>
-        </AuthProvider>
-      </UndoProvider>
-    </InternetConnection>
+                            </KeyboardNavigationProvider>
+                          </HotkeyScopeProvider>
+                        </HotkeysProvider>
+                      </MessageProvider>
+                    </SyncThreadProvider>
+                  </SyncHistoryProvider>
+                </TooltipProvider>
+              </RouteLogger>
+            </Router>
+          </AuthProvider>
+        </UndoProvider>
+      </InternetConnection>
+    </AppErrorBoundary>
   </ThemeProvider>
 );

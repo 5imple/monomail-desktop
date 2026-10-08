@@ -1,8 +1,10 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import GlobalComposeCard from '@/renderer/app/components/card/compose/GlobalComposeCard';
 import InboxIcon from '@/renderer/app/components/icons/InboxIcon';
+import OfflineIndicator from '@/renderer/app/components/OfflineIndicator';
 import StatusIndicator from '@/renderer/app/components/StatusIndicator';
 import { Button } from '@/renderer/app/components/ui/button';
+import Loader from '@/renderer/app/components/ui/loader';
 import DialogManager from '@/renderer/app/containers/dialog/DialogManager';
 import AppCalendarPanelContainer from '@/renderer/app/containers/sidebar/AppCalendarPanelContainer';
 import AppMainPanelContainer from '@/renderer/app/containers/sidebar/AppMainPanelContainer';
@@ -10,6 +12,7 @@ import AppSidebarContainer from '@/renderer/app/containers/sidebar/AppSidebarCon
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
 import MailNavTabs from '@/renderer/app/containers/header/MailNavTabs';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { useAccountErrors } from '@/renderer/app/hooks/useAccountErrors';
 import { useRegisterHotkeys } from '@/renderer/app/hooks/useRegisterHotkeys';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
@@ -21,7 +24,7 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { CommandType } from '@/renderer/app/types';
 import { CalendarDays, CircleUserRound, SquarePen } from 'lucide-react';
-import { FC, useEffect, useRef, useState } from 'react';
+import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
@@ -29,6 +32,15 @@ interface AppLayoutProps {}
 
 const TITLEBAR_ACTION_ICON_CLASS = 'h-[17px] w-[17px]';
 const TITLEBAR_ACTION_ICON_STROKE_WIDTH = 1.8;
+
+// mailto: allows several comma-separated addresses per field (RFC 6068).
+const splitAddresses = (value?: string) =>
+  (value ?? '')
+    .split(',')
+    .map((address) => address.trim())
+    .filter(Boolean);
+
+type MailtoPayload = { email?: string; params: Record<string, string | undefined> };
 
 const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { t } = useTranslation();
@@ -41,7 +53,9 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
     useThreadAtom();
   const [isLoaded, setIsLoaded] = useState(false);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
+  const [startupSlow, setStartupSlow] = useState(false);
   const { accounts } = useAuth();
+  const accountErrors = useAccountErrors();
   const executeCommand = useExecuteCommand();
   const { openDialog } = useDialogs();
   useRegisterHotkeys();
@@ -72,9 +86,11 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
       }
 
       // An open dialog/menu owns Escape — let it close instead of navigating.
+      // So does the expanded compose: the reader / selection under it is out
+      // of sight and must not change.
       if (
         document.querySelector(
-          '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"]'
+          '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"], [data-compose-expanded="true"]'
         )
       ) {
         return;
@@ -117,25 +133,45 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
     };
   }, []);
 
-  useEffect(() => {
-    const removeListener = electronApi.on('renderer:mailto:compose', ({ email, params }) => {
-      if (!accounts[0]) return;
+  // A mailto: link opened before the accounts load is held (latest one only)
+  // and composed once they arrive.
+  const pendingMailtoRef = useRef<MailtoPayload | null>(null);
+  const composeFromMailto = useCallback(
+    ({ email, params }: MailtoPayload) => {
+      const account = accounts.find((a) => !a.isExpired) ?? accounts[0];
+      if (!account) {
+        pendingMailtoRef.current = { email, params };
+        return;
+      }
 
       const draft = new MonoDraft({
-        from: accounts[0].email,
-        to: email ? [email] : [],
-        cc: params.cc ? params.cc.split(',') : [],
-        bcc: params.bcc ? params.bcc.split(',') : [],
+        from: account.email,
+        to: splitAddresses(email),
+        cc: splitAddresses(params.cc),
+        bcc: splitAddresses(params.bcc),
         subject: params.subject || '',
         body: params.body || ''
       });
 
       executeCommand('COMPOSE_NEW_MESSAGE', { draft });
-    });
+    },
+    [accounts, executeCommand]
+  );
+
+  useEffect(() => {
+    const removeListener = electronApi.on('renderer:mailto:compose', composeFromMailto);
     return () => {
       removeListener();
     };
-  }, [accounts]);
+  }, [composeFromMailto]);
+
+  useEffect(() => {
+    const pending = pendingMailtoRef.current;
+    if (pending && accounts.length > 0) {
+      pendingMailtoRef.current = null;
+      composeFromMailto(pending);
+    }
+  }, [accounts, composeFromMailto]);
 
   // Proper loading animation with slight delay
   useEffect(() => {
@@ -150,16 +186,33 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
 
   useEffect(() => {
     if (isLoaded) {
+      setStartupSlow(false);
       setStartupTimedOut(false);
       return;
     }
 
+    // A quiet spinner only once loading is noticeably slow (normal launches
+    // never flash it), then the recovery card.
+    const slowTimer = setTimeout(() => {
+      setStartupSlow(true);
+    }, 400);
     const timer = setTimeout(() => {
       setStartupTimedOut(true);
     }, 3500);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(slowTimer);
+      clearTimeout(timer);
+    };
   }, [isLoaded]);
+
+  const accountsLabel =
+    accountErrors.length > 0
+      ? t('layout.titlebar.accounts_attention', {
+          defaultValue: 'Reconnect {{emails}} — open Accounts',
+          emails: accountErrors.map(({ account }) => account.email).join(', ')
+        })
+      : t('layout.titlebar.accounts', { defaultValue: 'Accounts' });
 
   return (
     <>
@@ -171,17 +224,20 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
               so we reserve an explicit left gutter to avoid rem-scale drift. */}
           <div className="drag relative z-50 flex h-[52px] w-full shrink-0 items-center bg-white pl-[92px] pr-[16px] dark:bg-background">
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="pointer-events-auto">
+              {/* Dimmed while the expanded compose covers the mail view. */}
+              <div className="pointer-events-auto transition-opacity [body:has([data-compose-expanded=true])_&]:opacity-50">
                 <MailNavTabs />
               </div>
             </div>
             <div className="no-drag absolute right-[16px] flex items-center gap-[6px]">
+              <OfflineIndicator />
               <Button
                 variant="ghost"
                 typeVariant="icon"
                 sizeVariant="sm"
                 className="h-[36px] w-[36px] text-muted-foreground hover:text-foreground"
-                tooltip="Compose"
+                tooltip={t('layout.titlebar.compose', { defaultValue: 'Compose' })}
+                shortcut="C"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
               >
                 <SquarePen
@@ -194,8 +250,27 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                 variant="ghost"
                 typeVariant="icon"
                 sizeVariant="sm"
-                className="h-[36px] w-[36px] text-muted-foreground hover:text-foreground"
-                tooltip="Accounts"
+                className="relative h-[36px] w-[36px] text-muted-foreground hover:text-foreground"
+                aria-label={accountsLabel}
+                tooltip={
+                  accountErrors.length > 0 ? (
+                    <div className="space-y-1">
+                      {accountErrors.map(({ account, reason }) => (
+                        <div key={account.uid}>
+                          <div className="font-medium">{account.email}</div>
+                          <div className="opacity-80">{reason}</div>
+                        </div>
+                      ))}
+                      <div className="opacity-80">
+                        {t('layout.titlebar.accounts_open_hint', {
+                          defaultValue: 'Click to open Accounts'
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    accountsLabel
+                  )
+                }
                 onClick={() => openDialog('preference', { defaultPage: 'integration' })}
               >
                 <CircleUserRound
@@ -203,6 +278,12 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                   strokeWidth={TITLEBAR_ACTION_ICON_STROKE_WIDTH}
                   aria-hidden="true"
                 />
+                {accountErrors.length > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background"
+                  />
+                )}
               </Button>
               <Button
                 variant="ghost"
@@ -213,7 +294,10 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                   'hover:text-foreground',
                   calendarDisplayPanel ? 'text-foreground' : 'text-muted-foreground'
                 )}
-                tooltip={calendarDisplayPanel ? 'Hide calendar' : 'Show calendar'}
+                tooltip={
+                  calendarDisplayPanel ? t('calendar.hide_calendar') : t('calendar.show_calendar')
+                }
+                aria-pressed={calendarDisplayPanel}
                 onClick={() => setCalendarDisplayPanel(!calendarDisplayPanel)}
               >
                 <CalendarDays
@@ -259,7 +343,9 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                   'absolute right-0 top-0 flex h-full w-[388px]',
                   !sidebarLoading && 'transition-all duration-300 ease-bouncy-in-out',
                   calendarDisplayPanel ? 'translate-x-0' : 'translate-x-[388px]',
-                  !calendarDisplayPanel && 'pointer-events-none'
+                  // `invisible` flips after the slide-out (transition-all), taking the
+                  // hidden calendar out of the Tab order and the accessibility tree.
+                  !calendarDisplayPanel && 'pointer-events-none invisible'
                 )}
               >
                 <AppCalendarPanelContainer
@@ -273,17 +359,29 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
             {globalDraftWindows.map((draft) => (
               <GlobalComposeCard key={draft.id} draft={draft} />
             ))}
+            {!isLoaded && startupSlow && !startupTimedOut && (
+              <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center duration-300 animate-in fade-in-0">
+                <Loader />
+              </div>
+            )}
             {!isLoaded && startupTimedOut && (
               <div className="absolute inset-0 z-50 flex items-center justify-center p-6">
                 <div className="w-full max-w-md rounded-md border bg-card/95 p-5 shadow-sm">
                   <div className="mb-4 flex items-center gap-3">
-                    <div className="rounded-md bg-destructive/10 p-2 text-destructive">
+                    <div className="rounded-md bg-muted p-2 text-muted-foreground">
                       <InboxIcon type="AlertCircle" className="h-5 w-5" />
                     </div>
                     <div>
-                      <h1 className="text-base font-medium">Mono Mail is still loading</h1>
+                      <h1 className="text-base font-medium">
+                        {t('layout.startup.slow_title', {
+                          defaultValue: 'Taking longer than usual…'
+                        })}
+                      </h1>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        The window opened, but the mail shell did not become ready.
+                        {t('layout.startup.slow_description', {
+                          defaultValue:
+                            'Mono Mail is still getting ready. Reload if it doesn’t open in a moment.'
+                        })}
                       </p>
                     </div>
                   </div>
@@ -320,9 +418,8 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
           className={cn(
             'no-drag fixed top-[8px] z-50',
             sidebarCollapsed ? 'left-[92px]' : 'left-[178px]',
-            globalDraftWindows.length > 0 && 'hidden',
-            isElectron ?? 'hidden'
-            // Remove opacity transition - inherits from parent
+            // Only the expanded compose covers it; a minimized compose doesn't.
+            '[body:has([data-compose-expanded=true])_&]:hidden'
           )}
         />
       </div>

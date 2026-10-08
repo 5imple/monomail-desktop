@@ -1,4 +1,6 @@
+import { isBackendConfigured } from '@/main/api/apiClient';
 import feedbackApi from '@/main/api/feedback/feedbackApi';
+import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import { DialogTitle } from '@/renderer/app/components/ui/dialog';
@@ -22,6 +24,9 @@ import { Separator } from '@/renderer/app/components/ui/separator';
 import { Textarea } from '@/renderer/app/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
+import { getSupportEmail } from '@/renderer/app/lib/runtimeBranding';
+import { shortName } from '@/renderer/app/lib/shortName';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FC, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -42,12 +47,22 @@ const feedbackFormSchema = z.object({
 
 type FeedbackFormValues = z.infer<typeof feedbackFormSchema>;
 
+const MAX_FILES = 10;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+const escapeHtml = (text: string) =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 interface SendFeedbackFormProps {
   onSubmit: (value: FeedbackFormValues) => void;
 }
 
 const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
-  const { member } = useAuth();
+  const { member, accounts } = useAuth();
+  const executeCommand = useExecuteCommand();
+  // Without a backend there is nowhere to post feedback, so the form sends it
+  // as an email to support instead — decided up front, not after typing.
+  const emailMode = !isBackendConfigured();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const feedbackTextareaRef = useRef<HTMLTextAreaElement>(null); // Reference for Textarea
   const [files, setFiles] = useState<File[]>([]);
@@ -95,20 +110,31 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
       const newFiles = Array.from(fileList);
       const validFiles: File[] = [];
       const newInvalidFiles: string[] = [];
+      const room = MAX_FILES - files.length;
 
       newFiles.forEach((file) => {
-        if (file.size <= 5 * 1024 * 1024 && validFiles.length < 10) {
-          validFiles.push(file);
-        } else {
+        if (file.size > MAX_FILE_BYTES) {
           newInvalidFiles.push(file.name);
+        } else if (validFiles.length >= room) {
+          // Over the cap: list it (so it isn't silently lost) rather than drop it.
+          newInvalidFiles.push(
+            t('dialog.send_feedback.too_many_files', {
+              defaultValue: '{{name}} (max {{max}} files)',
+              name: file.name,
+              max: MAX_FILES
+            })
+          );
+        } else {
+          validFiles.push(file);
         }
       });
 
-      setFiles((prevFiles) => [...prevFiles, ...validFiles].slice(0, 10));
+      const nextFiles = [...files, ...validFiles];
+      setFiles(nextFiles);
       setInvalidFiles(newInvalidFiles);
 
       const dataTransfer = new DataTransfer();
-      [...files, ...validFiles].forEach((file) => dataTransfer.items.add(file));
+      nextFiles.forEach((file) => dataTransfer.items.add(file));
       form.setValue('files', dataTransfer.files);
       setIsFormInvalid(newInvalidFiles.length > 0);
     }
@@ -131,7 +157,25 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
     setIsFormInvalid(newInvalidFiles.length > 0);
   };
 
+  const handleEmailFeedback = (data: FeedbackFormValues) => {
+    const category = categoryOptions.find((option) => option.value === data.category)?.label;
+    const from = (accounts.find((account) => !account.isExpired) ?? accounts[0])?.email;
+    executeCommand('COMPOSE_NEW_MESSAGE', {
+      draft: new MonoDraft({
+        ...(from ? { from } : {}),
+        to: [getSupportEmail()],
+        subject: `Mono Mail feedback${category ? `: ${category}` : ''}`,
+        body: escapeHtml(data.feedback).replace(/\n/g, '<br>')
+      })
+    });
+    onSubmit(data);
+  };
+
   const handleSubmit = async (data: FeedbackFormValues) => {
+    if (emailMode) {
+      handleEmailFeedback(data);
+      return;
+    }
     if (!isFormInvalid) {
       setIsLoading(true);
       try {
@@ -160,10 +204,16 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
       <form onSubmit={form.handleSubmit(handleSubmit)} className="">
         <div className="space-y-0.5 p-6">
           <DialogTitle className="">{t('dialog.send_feedback.title')}</DialogTitle>
-          <p className="text-muted-foreground">
-            {t('dialog.send_feedback.description')}
-            right.
-          </p>
+          <p className="text-muted-foreground">{t('dialog.send_feedback.description')}</p>
+          {emailMode && (
+            <p className="pt-1 text-sm text-muted-foreground">
+              {t('dialog.send_feedback.email_mode_note', {
+                defaultValue:
+                  'Your feedback opens as an email to {{email}} — add screenshots there before sending.',
+                email: getSupportEmail()
+              })}
+            </p>
+          )}
         </div>
         <Separator />
         <div className="border-b">
@@ -173,7 +223,7 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
             render={({ field }) => (
               <FormItem>
                 <FormControl>
-                  <Select defaultValue={field.value}>
+                  <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger className="border-none p-6 px-7 font-medium">
                       <SelectValue
                         placeholder={t('dialog.send_feedback.select_category')}
@@ -183,13 +233,7 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
                       <SelectGroup className="w-[95%]">
                         {categoryOptions.map((category) => {
                           return (
-                            <SelectItem
-                              key={category.value}
-                              onClick={() => {
-                                form.setValue(`category`, category.value);
-                              }}
-                              value={category.value}
-                            >
+                            <SelectItem key={category.value} value={category.value}>
                               {category.label}
                             </SelectItem>
                           );
@@ -212,7 +256,9 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
                 <FormControl ref={feedbackTextareaRef}>
                   <Textarea
                     disabled
-                    placeholder={`${t('dialog.send_feedback.placeholder', { name: member ? ` ${member.displayName?.split(' ')[0]}` : '' })}`}
+                    placeholder={t('dialog.send_feedback.placeholder', {
+                      name: member?.displayName ? `, ${shortName(member.displayName)}` : ''
+                    })}
                     className="h-[300px] w-full resize-none border-none text-lg outline-none"
                     {...field}
                   />
@@ -233,6 +279,10 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
                     type={'button'}
                     variant="text"
                     typeVariant={'icon'}
+                    aria-label={t('dialog.send_feedback.remove_file', {
+                      defaultValue: 'Remove {{name}}',
+                      name: file.name
+                    })}
                     onClick={() => handleFileDelete(index)}
                   >
                     <MonoIcon type={'X'} className="h-4 w-4" />
@@ -250,8 +300,11 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
                   <div className="flex items-center">
                     <span className="text-muted-foreground">{name}</span>
                     <Tooltip>
-                      <TooltipTrigger>
-                        <MonoIcon type={'AlertCircle'} className="ml-2 h-4 w-4 text-destructive" />
+                      {/* A bare TooltipTrigger is a <button> — inside the form it submitted it. */}
+                      <TooltipTrigger asChild>
+                        <span tabIndex={0} className="ml-2 inline-flex">
+                          <MonoIcon type={'AlertCircle'} className="h-4 w-4 text-destructive" />
+                        </span>
                       </TooltipTrigger>
                       <TooltipContent>{t('dialog.send_feedback.invalid_file')}</TooltipContent>
                     </Tooltip>
@@ -260,6 +313,10 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
                     type={'button'}
                     variant="text"
                     typeVariant={'icon'}
+                    aria-label={t('dialog.send_feedback.remove_file', {
+                      defaultValue: 'Remove {{name}}',
+                      name
+                    })}
                     onClick={() => handleInvalidFileDelete(index)}
                   >
                     <MonoIcon type={'X'} className="h-4 w-4" />
@@ -280,26 +337,39 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
                         type="file"
                         multiple
                         className="hidden"
-                        onChange={(e) => handleFileChange(e.target.files)}
+                        onChange={(e) => {
+                          // Copy the live FileList before resetting the input, so the
+                          // same file can be picked again after removing it.
+                          const picked = e.target.files ? Array.from(e.target.files) : [];
+                          e.target.value = '';
+                          if (picked.length === 0) return;
+                          const dataTransfer = new DataTransfer();
+                          picked.forEach((file) => dataTransfer.items.add(file));
+                          handleFileChange(dataTransfer.files);
+                        }}
                         ref={fileInputRef}
                       />
-                      <div
-                        className="flex cursor-pointer items-center rounded-md border text-sm"
-                        onClick={handleFileInputClick}
-                      >
-                        <Button variant="ghost">
-                          <MonoIcon type={'Paperclip'} className="h-4 w-4" />
+                      {/* In email mode, screenshots are added in the compose window. */}
+                      {!emailMode && (
+                        // type="button": inside the form a default button submits it.
+                        <Button type="button" variant="outline" onClick={handleFileInputClick}>
+                          <MonoIcon type={'Paperclip'} className="mr-2 h-4 w-4" />
+                          {t('dialog.send_feedback.attachments')}
                         </Button>
-                        {t('dialog.send_feedback.attachments')}
-                      </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              <Button disabled={!isFormValid || isFormInvalid || isLoading} type="submit">
+              <Button
+                disabled={!isFormValid || (!emailMode && isFormInvalid) || isLoading}
+                type="submit"
+              >
                 {isLoading && <Loader className="mr-2" />}
-                {t('dialog.send_feedback.title')}
+                {emailMode
+                  ? t('dialog.send_feedback.email_button', { defaultValue: 'Email feedback' })
+                  : t('dialog.send_feedback.title')}
               </Button>
             </div>
           </div>

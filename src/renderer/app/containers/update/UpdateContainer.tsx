@@ -42,21 +42,20 @@ const UpdateContainer: FC<UpdateContainerProps> = ({}) => {
       <div className="bg-background">
         <div className="mt-8 flex h-full flex-col items-center justify-center gap-6">
           <MonoLogo className="w-20" />
-          <div className="-mt-2 text-sm font-medium">
-            {updateInfo ? 'Downloading new updates' : 'Checking for updates...'}
+          {/* This window only opens once an update was found, so before the
+              first progress event it's preparing the download, not checking. */}
+          <div className="-mt-2 text-sm font-medium tabular-nums" aria-live="polite">
+            {updateInfo
+              ? `Downloading update… ${Math.round(updateInfo.percent)}%`
+              : 'Preparing update…'}
           </div>
           <div className="flex h-12 w-64 flex-col gap-2">
-            <Progress
-              className="h-[2px]"
-              isLoading={!updateInfo}
-              value={updateInfo?.percent ?? 0}
-            />
-            {/* {updateInfo && (
-              <div className="text-xs flex justify-between">
-                <div className="text-muted-foreground">{`${formatBytes(updateInfo.transferred)} / ${formatBytes(updateInfo.total)}`}</div>
-                <div>{`${formatBytes(updateInfo.bytesPerSecond)}/s`}</div>
+            <Progress className="h-1" isLoading={!updateInfo} value={updateInfo?.percent ?? 0} />
+            {updateInfo && updateInfo.total > 0 && (
+              <div className="text-center text-xs tabular-nums text-muted-foreground">
+                {`${formatBytes(updateInfo.transferred)} of ${formatBytes(updateInfo.total)}`}
               </div>
-            )} */}
+            )}
           </div>
         </div>
       </div>

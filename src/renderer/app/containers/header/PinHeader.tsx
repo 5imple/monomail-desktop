@@ -14,6 +14,7 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
+import { shortName } from '@/renderer/app/lib/shortName';
 import { cn } from '@/renderer/app/lib/utils';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -27,6 +28,7 @@ import {
   DropAnimation,
   KeyboardSensor,
   PointerSensor,
+  useDndContext,
   useDroppable,
   useSensor,
   useSensors
@@ -183,6 +185,8 @@ export const SortableEmailContact = ({
   );
 
   const displayName = emailItem.displayName || emailItem.email.split('@')[0];
+  // The chip shows a first name only, so two "Ryan"s need the full identity.
+  const fullLabel = `${displayName} <${emailItem.email}>`;
 
   return (
     <ContextMenu>
@@ -196,6 +200,8 @@ export const SortableEmailContact = ({
           onClick={handleMouseClick}
           onKeyDown={handleKeyboardActivation}
           data-keyboard-item={emailItem.email}
+          aria-label={fullLabel}
+          title={fullLabel}
           tabIndex={0} // Make it focusable
         >
           <div
@@ -214,7 +220,9 @@ export const SortableEmailContact = ({
             />
           </div>
           <div className="max-w-12 overflow-hidden text-ellipsis">
-            <span className="whitespace-nowrap text-xs">{displayName.split(' ')[0]}</span>
+            <span className="whitespace-nowrap text-xs">
+              {shortName(displayName, emailItem.email)}
+            </span>
           </div>
         </div>
       </ContextMenuTrigger>
@@ -299,9 +307,9 @@ const PinHeader: FC = () => {
     setTrashable(false);
     if (!over) return;
 
-    // Handle dropping to trash
+    // Handle dropping to trash (failures roll back and toast in the atom)
     if (over.id === 'trash') {
-      unpinEmailFromSpace(active.id);
+      unpinEmailFromSpace(active.id).catch(() => undefined);
       trackEvent('email_unpinned', { email: active.id });
       return;
     }
@@ -334,7 +342,11 @@ const PinHeader: FC = () => {
     setTrashable(true);
   };
 
-  const { setNodeRef } = useDroppable({ id: 'pin-header' });
+  // Outer (MailLayout) DnD context: a sender avatar dragged from the list
+  // pins on drop here. Show where to drop while that drag is on.
+  const { setNodeRef, isOver } = useDroppable({ id: 'pin-header' });
+  const { active: outerDragActive } = useDndContext();
+  const isDraggingContact = !!outerDragActive?.id?.toString().startsWith('thread-contact-');
 
   const handleClickNewEmail = (email: string) => {
     if (accounts[0]) {
@@ -397,6 +409,16 @@ const PinHeader: FC = () => {
           <ScrollArea className="flex-1">
             <div ref={containerRef} className="flex flex-1 items-center pb-1 pl-1">
               {trashable && <Trash id="trash" />}
+              {isDraggingContact && (
+                <div
+                  className={cn(
+                    'my-2 mr-2 flex h-12 shrink-0 items-center justify-center rounded-md border border-dashed px-4 text-xs text-muted-foreground transition-colors',
+                    isOver && 'border-foreground/40 bg-foreground/[0.04] text-foreground'
+                  )}
+                >
+                  {t('header.pin.drop_hint', { defaultValue: 'Drop to pin' })}
+                </div>
+              )}
 
               {pinnedEmailItems.map((emailItem) => (
                 <SortableEmailContact
@@ -405,7 +427,9 @@ const PinHeader: FC = () => {
                   emailItem={emailItem}
                   onNewEmail={handleClickNewEmail}
                   onClick={(e) => handleEmailContactClick(e, emailItem)}
-                  togglePinStatus={() => unpinEmailFromSpace(emailItem.email)}
+                  togglePinStatus={() => {
+                    unpinEmailFromSpace(emailItem.email).catch(() => undefined);
+                  }}
                 />
               ))}
             </div>
