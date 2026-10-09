@@ -99,10 +99,33 @@ export const TIMEZONE_OPTIONS: TimezoneOption[] = [
   { id: 'Atlantic/Azores', name: 'Azores Time', abbreviation: 'AZOT', region: 'Atlantic', city: 'Azores', utcOffset: 'UTC-1' },
 ];
 
-// Function to get timezone abbreviation
-export const getTimezoneAbbreviation = (timezoneId: string): string => {
+// The zone's abbreviation at a given moment: "EDT" in summer and "EST" in
+// winter, "GMT+1" where English has no short name. The table above holds one
+// fixed abbreviation per zone, so it only backs search and the fallback.
+export const getTimezoneAbbreviation = (timezoneId: string, at: Date = new Date()): string => {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: timezoneId, timeZoneName: 'short' })
+      .formatToParts(at)
+      .find(part => part.type === 'timeZoneName')?.value;
+    if (name) return name;
+  } catch {
+    // Unknown zone id: fall back to the table.
+  }
   const timezone = TIMEZONE_OPTIONS.find(tz => tz.id === timezoneId);
   return timezone?.abbreviation || timezoneId.split('/').pop() || timezoneId;
+};
+
+// The zone's daylight-saving-neutral name, e.g. "Eastern Time".
+export const getTimezoneLongName = (timezoneId: string, at: Date = new Date()): string => {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: timezoneId, timeZoneName: 'longGeneric' })
+      .formatToParts(at)
+      .find(part => part.type === 'timeZoneName')?.value;
+    if (name) return name;
+  } catch {
+    // Unknown zone id or no generic names: fall back to the table.
+  }
+  return TIMEZONE_OPTIONS.find(tz => tz.id === timezoneId)?.name || timezoneId;
 };
 
 // Function to get current GMT offset for a timezone

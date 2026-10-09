@@ -52,7 +52,8 @@ interface ParticipantListInputProps
   extends Omit<MultipleSelectorProps, 'CustomBadge' | 'placeholder'> {
   className?: string;
   contacts: Contact[];
-  organizer: Organizer;
+  // Omitted when it isn't known (an Outlook invitation lists no organizer).
+  organizer?: Organizer;
   originalAttendees?: Option[];
   placeholder?: string;
   attendeeChanges?: AttendeeDraftChange[]; // Draft changes to show removed attendees
@@ -270,18 +271,20 @@ const ParticipantListInput: React.FC<ParticipantListInputProps> = ({
   return (
     <div className={cn('space-y-2', className)}>
       {/* Organizer */}
-      <div className="flex items-center gap-4">
-        <div className="h-6 w-6 overflow-hidden rounded-full">
-          <RecipientAvatar
-            className="h-full w-full"
-            recipient={{ email: organizer.email, name: organizer.name || organizer.email }}
-          />
+      {organizer && (
+        <div className="flex items-center gap-4">
+          <div className="h-6 w-6 overflow-hidden rounded-full">
+            <RecipientAvatar
+              className="h-full w-full"
+              recipient={{ email: organizer.email, name: organizer.name || organizer.email }}
+            />
+          </div>
+          <div className="flex min-w-0 flex-col">
+            <div className="truncate text-sm font-medium">{organizer.name || organizer.email}</div>
+            <div className="text-xs text-muted-foreground">Organizer</div>
+          </div>
         </div>
-        <div className="flex min-w-0 flex-col">
-          <div className="truncate text-sm font-medium">{organizer.name || organizer.email}</div>
-          <div className="text-xs text-muted-foreground">Organizer</div>
-        </div>
-      </div>
+      )}
 
       {/* Selected attendees list */}
       {value.length > 0 && <div className="space-y-2 pt-1">{listItems}</div>}

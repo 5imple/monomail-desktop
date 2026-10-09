@@ -4,6 +4,7 @@ import { Button } from '@/renderer/app/components/ui/button';
 import { Calendar } from '@/renderer/app/components/ui/calendar';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/app/components/ui/tabs';
+import { TooltipProvider } from '@/renderer/app/components/ui/tooltip';
 import CalendarEventEditor from '@/renderer/app/containers/panel/calendar/CalendarEventEditor';
 import AccountSelector from '@/renderer/app/components/calendar/AccountSelector';
 import type { CalendarEvent } from '@/renderer/app/store/calendar/calendarAtoms';
@@ -15,8 +16,29 @@ import type {
 } from '@/renderer/app/store/calendar/calendarAtoms';
 import { useCalendar } from '@/renderer/app/store/calendar/useCalendar';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { addMonths, endOfMonth, format, isSameDay, startOfMonth, subMonths } from 'date-fns';
-import { parseEventDate } from '@/renderer/app/containers/panel/calendar/utils';
+import {
+  addDays,
+  addMonths,
+  endOfDay,
+  endOfMonth,
+  format,
+  isSameDay,
+  isSameMonth,
+  isSameYear,
+  startOfDay,
+  startOfMonth,
+  subDays,
+  subMonths
+} from 'date-fns';
+import { formatTimeRange, parseEventDate } from '@/renderer/app/containers/panel/calendar/utils';
+import { getAccountColor } from '@/renderer/app/containers/panel/calendar/shared';
+import {
+  getTimezoneAbbreviation,
+  getTimezoneLongName
+} from '@/renderer/app/containers/panel/calendar/timezoneUtils';
+import { calendarDisplayPanelAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import type { UserPreference } from '@/main/api/auth/types';
+import { useAtomValue } from 'jotai';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
@@ -31,40 +53,68 @@ interface CalendarPanelProps {
   className?: string;
 }
 
-// Agenda list for a specific date
+// Agenda list for a specific date. Rows are buttons (they were bare <li>s:
+// no hover, no focus, nothing saying they open the event).
 const AgendaList: React.FC<{
   date: Date;
   events: CalendarEvent[];
+  activeEventId: string | null;
+  preference?: UserPreference;
   onEventClick: (event: CalendarEvent, anchorEl: HTMLElement) => void;
-}> = ({ events, onEventClick }) => {
+  onNewEvent: (anchorEl: HTMLElement) => void;
+}> = ({ date, events, activeEventId, preference, onEventClick, onNewEvent }) => {
   return (
     <ScrollArea className="h-full w-full">
-      <ul className="divide-y">
-        {events.length === 0 && (
-          <li className="p-6 text-center text-sm text-muted-foreground">No events</li>
-        )}
-        {events.map((evt) => (
-          <li
-            key={evt.id}
-            className="px-3 py-2"
-            onClick={(e) => onEventClick(evt, e.currentTarget)}
-          >
-            <div className="line-clamp-1 text-sm font-medium text-foreground">{evt.title}</div>
-            <div className="text-xs text-muted-foreground">
-              {/* All-day start/end are both local midnight, which rendered
-                  as "12:00 AM – 12:00 AM". */}
-              {evt.allDay ? (
-                'All day'
-              ) : (
-                <>
-                  {format(parseEventDate(evt.start.dateTime) || new Date(), 'p')} –{' '}
-                  {format(parseEventDate(evt.end.dateTime) || new Date(), 'p')}
-                </>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      {events.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
+          <div className="text-sm text-muted-foreground">
+            No events on {format(date, 'EEE, MMM d')}
+          </div>
+          <Button variant="secondary" sizeVariant="sm" onClick={(e) => onNewEvent(e.currentTarget)}>
+            <MonoIcon type="Plus" className="mr-1 h-3.5 w-3.5" />
+            New event
+          </Button>
+        </div>
+      ) : (
+        <ul className="space-y-0.5 p-1.5">
+          {events.map((evt) => (
+            <li key={evt.id}>
+              <button
+                className={cn(
+                  'flex w-full gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  activeEventId === evt.id && 'bg-muted'
+                )}
+                onClick={(e) => onEventClick(evt, e.currentTarget)}
+              >
+                <span
+                  className="w-[3px] shrink-0 self-stretch rounded-full"
+                  style={{ backgroundColor: getAccountColor(preference, evt.accountUid) }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-foreground">
+                    {evt.title || <span className="text-muted-foreground">(No title)</span>}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {/* All-day start/end are both local midnight, which rendered
+                        as "12:00 AM – 12:00 AM". */}
+                    {evt.allDay
+                      ? 'All-day'
+                      : formatTimeRange(
+                          parseEventDate(evt.start.dateTime) || new Date(),
+                          parseEventDate(evt.end.dateTime) || new Date()
+                        )}
+                  </span>
+                  {evt.location && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {evt.location}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </ScrollArea>
   );
 };
@@ -93,8 +143,8 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     dayEvents,
 
     loadGoogleEvents,
-    removeEvent,
     updateEventFields,
+    activeEventId,
     getActiveEvent,
     setActiveEvent,
 
@@ -140,6 +190,12 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
   // MONTH LOADING LOGIC
   // ============================================================================
 
+  // Accounts whose last load failed, and how many loads are running. A failed
+  // load (no calendar consent, an expired token) looked exactly like an empty
+  // day; now it's named in a banner above the grid, with Retry.
+  const [loadErrors, setLoadErrors] = useState<Record<string, true>>({});
+  const [loadsInFlight, setLoadsInFlight] = useState(0);
+
   // Resolves false when the load failed (aborts don't count), so Refresh can
   // report the failure instead of always saying "refreshed successfully".
   const fetchMonth = async (m: Date, uid: string | null): Promise<boolean> => {
@@ -158,16 +214,30 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     const controller = new AbortController();
     abortControllersRef.current[key] = controller;
 
+    setLoadsInFlight((n) => n + 1);
     try {
-      const data = await calendarApi.getGoogleCalendarEvents(
-        {
-          calendarId: 'primary',
-          timeMin: startOfMonth(m).toISOString(),
-          timeMax: endOfMonth(m).toISOString(),
-          uid
-        },
-        controller.signal
-      );
+      const load = () =>
+        calendarApi.getGoogleCalendarEvents(
+          {
+            calendarId: 'primary',
+            timeMin: startOfMonth(m).toISOString(),
+            timeMax: endOfMonth(m).toISOString(),
+            uid
+          },
+          controller.signal
+        );
+      // The API client shares identical in-flight requests, so this load can
+      // join one whose starter then cancels it (reloading a month aborts the
+      // earlier load of it). That isn't this load failing: run it on its own.
+      const data = await load().catch((error: unknown) => {
+        if (
+          !controller.signal.aborted &&
+          (error as { name?: string } | null)?.name === 'AbortError'
+        ) {
+          return load();
+        }
+        throw error;
+      });
 
       // Load events into clean state. Only a complete listing (no further
       // page) may prune events the server no longer returns.
@@ -176,11 +246,20 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
         uid,
         data.nextPageToken ? undefined : { timeMin: startOfMonth(m), timeMax: endOfMonth(m) }
       );
+      setLoadErrors((prev) => {
+        if (!prev[uid]) return prev;
+        const next = { ...prev };
+        delete next[uid];
+        return next;
+      });
       return true;
     } catch (error) {
       if (controller.signal.aborted) return true;
       console.error('Failed to load calendar month:', error);
+      setLoadErrors((prev) => (prev[uid] ? prev : { ...prev, [uid]: true }));
       return false;
+    } finally {
+      setLoadsInFlight((n) => Math.max(0, n - 1));
     }
   };
 
@@ -268,15 +347,27 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     return () => clearInterval(timer);
   }, [today, setToday]);
 
+  // Today also scrolls the day grid back to now, even when today was already
+  // showing (it only changed dates, so nothing visibly happened).
+  const [scrollToNowNonce, setScrollToNowNonce] = useState(0);
   const goToday = () => {
     const now = new Date();
     setToday(now);
     setSelectedDate(now);
     setCurrentMonth(now);
+    setScrollToNowNonce((n) => n + 1);
   };
 
   const goPrevMonth = () => setCurrentMonth((d) => subMonths(d, 1));
   const goNextMonth = () => setCurrentMonth((d) => addMonths(d, 1));
+
+  // One day back or forward; the mini calendar (and its month loads) follow
+  // when that crosses into another month.
+  const stepDay = (direction: 1 | -1) => {
+    const next = direction === 1 ? addDays(selectedDate, 1) : subDays(selectedDate, 1);
+    setSelectedDate(next);
+    if (!isSameMonth(next, currentMonth)) setCurrentMonth(next);
+  };
 
   // Close editor when date changes
   useEffect(() => {
@@ -284,6 +375,13 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       activePopoverRef.current.hide();
     }
   }, [selectedDate]);
+
+  // The panel stays mounted while hidden, so its editor kept floating over
+  // the mail after the calendar was toggled off.
+  const calendarDisplayPanel = useAtomValue(calendarDisplayPanelAtom);
+  useEffect(() => {
+    if (!calendarDisplayPanel) activePopoverRef.current?.hide();
+  }, [calendarDisplayPanel]);
 
   // ============================================================================
   // POPOVER MANAGEMENT
@@ -340,6 +438,23 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     onCloseComplete?: () => void
   ) => {
     const container = document.createElement('div');
+    // An open dialog to the rest of the app, so its Escape (close the email)
+    // and Enter (Reply All) step aside while the editor is up. no-drag keeps
+    // it clickable if it's pushed under the titlebar drag strip.
+    container.setAttribute('role', 'dialog');
+    container.setAttribute('aria-label', mode === 'create' ? 'New event' : 'Edit event');
+    container.setAttribute('data-state', 'open');
+    container.setAttribute('data-calendar-editor', 'true');
+    container.classList.add('no-drag');
+    // Tippy's reference. It was document.body, which made every press "inside
+    // the reference", so clicking outside the editor never closed it.
+    const referenceEl = document.createElement('div');
+    referenceEl.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none';
+    document.body.appendChild(referenceEl);
+    // Where focus goes back to when the editor closes from the keyboard or its
+    // own buttons (an outside click leaves focus where it landed).
+    const returnFocusEl = document.activeElement as HTMLElement | null;
+    let restoreFocus = false;
     let scrollViewport: HTMLElement | null = null;
 
     // Find the scroll area viewport for the anchor element
@@ -350,6 +465,23 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     const root = createRoot(container);
     let instance: Instance | null = null;
     let rafId: number | null = null;
+
+    // Keys typed in the editor stay in it: a plain E, U, S, Z or Backspace on
+    // a focused button or switch reached the inbox hotkeys and acted on the
+    // email open in the reader. Added after createRoot, so React's handlers on
+    // this node run first; ⌘/Ctrl shortcuts pass through.
+    container.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey) return;
+      e.stopPropagation();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      // With attendee suggestions showing, Escape closes those first.
+      const suggestions = (e.target as HTMLElement | null)
+        ?.closest?.('[cmdk-root]')
+        ?.querySelector<HTMLElement>('[cmdk-list]');
+      if (suggestions && suggestions.offsetParent !== null) return;
+      restoreFocus = true;
+      instance?.hide();
+    });
 
     let finalized = false;
     const finalize = (closingInst?: Instance | null) => {
@@ -363,16 +495,33 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
         }
         rafId = null;
       }
-      // Only clear if the closing instance is the one currently tracked
-      if (!closingInst || activePopoverRef.current === closingInst) {
+      // A newer editor can open before this one finishes hiding. It owns the
+      // ref and the selection then: clearing the active event here unselected
+      // the event that was just clicked.
+      const replaced =
+        !!closingInst && !!activePopoverRef.current && activePopoverRef.current !== closingInst;
+      if (!replaced) {
         activePopoverRef.current = null;
       }
       root.unmount();
+      referenceEl.remove();
       // Clear the active selection when the editor closes
-      try {
-        setActiveEvent(null);
-      } catch {
-        // ignore
+      if (!replaced) {
+        try {
+          setActiveEvent(null);
+        } catch {
+          // ignore
+        }
+      }
+      const focused = document.activeElement;
+      if (
+        restoreFocus &&
+        returnFocusEl &&
+        returnFocusEl !== document.body &&
+        returnFocusEl.isConnected &&
+        (!focused || focused === document.body)
+      ) {
+        returnFocusEl.focus({ preventScroll: true });
       }
       try {
         if (typeof onCloseComplete === 'function') onCloseComplete();
@@ -382,6 +531,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     };
 
     const destroy = () => {
+      restoreFocus = true;
       try {
         instance?.destroy?.();
       } finally {
@@ -389,44 +539,52 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       }
     };
 
+    // The editor renders in its own root, outside the app's providers: its
+    // attendee status icons use tooltips, and without a TooltipProvider here
+    // every event with attendees opened blank.
     const renderEditor = () =>
       root.render(
-        <CalendarEventEditor
-          mode={mode}
-          accounts={accounts}
-          eventId={eventId}
-          defaultValues={defaults}
-          onClose={destroy}
-          onEventCreated={(createdEventId) => {
-            // Update active event to the newly created one
-            const createdEvent = getEvent(createdEventId);
-            if (createdEvent) {
-              setActiveEvent(createdEvent);
-            }
-            toast.success('Event created successfully');
+        <TooltipProvider delayDuration={300}>
+          <CalendarEventEditor
+            mode={mode}
+            accounts={accounts}
+            eventId={eventId}
+            defaultValues={defaults}
+            preference={preference}
+            onClose={destroy}
+            onEventCreated={(createdEventId) => {
+              // Update active event to the newly created one
+              const createdEvent = getEvent(createdEventId);
+              if (createdEvent) {
+                setActiveEvent(createdEvent);
+              }
+              // (No toast here: the editor already confirms, so it showed twice.)
 
-            // Refresh events for the target month
-            if (activeUid) {
-              const targetMonth = defaults?.start ? new Date(defaults.start) : new Date();
-              fetchMonth(targetMonth, activeUid);
-            }
-          }}
-          onEventUpdated={() => {
-            // Refresh events when an event is updated
-            if (activeUid) {
-              const targetMonth = defaults?.start ? new Date(defaults.start) : new Date();
-              fetchMonth(targetMonth, activeUid);
-            }
-          }}
-          onEventDeleted={(deletedEventId) => {
-            // Clear active event if it was deleted
-            const activeEvent = getActiveEvent();
-            if (activeEvent?.id === deletedEventId) {
-              setActiveEvent(null);
-            }
-          }}
-          initialAccountUid={mode === 'create' ? activeUid || undefined : undefined}
-        />
+              // Refresh events for the target month, in the event's own account
+              const uid = createdEvent?.accountUid ?? activeUid;
+              if (uid) {
+                const targetMonth = defaults?.start ? new Date(defaults.start) : new Date();
+                fetchMonth(targetMonth, uid);
+              }
+            }}
+            onEventUpdated={(updatedEventId) => {
+              // Refresh events when an event is updated
+              const uid = getEvent(updatedEventId)?.accountUid ?? activeUid;
+              if (uid) {
+                const targetMonth = defaults?.start ? new Date(defaults.start) : new Date();
+                fetchMonth(targetMonth, uid);
+              }
+            }}
+            onEventDeleted={(deletedEventId) => {
+              // Clear active event if it was deleted
+              const activeEvent = getActiveEvent();
+              if (activeEvent?.id === deletedEventId) {
+                setActiveEvent(null);
+              }
+            }}
+            initialAccountUid={mode === 'create' ? activeUid || undefined : undefined}
+          />
+        </TooltipProvider>
       );
 
     renderEditor();
@@ -621,7 +779,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
         }
         activePopoverRef.current = null;
       }
-      instance = tippy(document.body, {
+      instance = tippy(referenceEl, {
         getReferenceClientRect,
         appendTo: document.body,
         content: container,
@@ -644,11 +802,23 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
           try {
             const target = (event as MouseEvent)?.target as HTMLElement | null;
             // If the click is inside the tippy popper itself, ignore (tippy supplies this)
-            if (inst.popper.contains(target)) return;
-            // Allow interactions with our portaled dropdowns/selects that are marked to keep
-            const keep = target?.closest('[data-calendar-keep-popover="true"]');
+            if (!target || inst.popper.contains(target)) return;
+            // An open Radix Select blocks pointer events on the page, so the
+            // press lands on <html>/<body>: it closes the Select, not this.
+            if (
+              target === document.documentElement ||
+              target === document.body ||
+              document.body.style.pointerEvents === 'none'
+            ) {
+              return;
+            }
+            // The editor's portaled pickers and menus, and event blocks (their
+            // own click swaps the editor for theirs).
+            const keep = target.closest(
+              '[data-calendar-keep-popover="true"], [role="listbox"], [data-radix-popper-content-wrapper], [data-event-id], [data-calendar-pending-event]'
+            );
             if (keep) return;
-            instance?.hide?.();
+            inst.hide();
           } catch {
             // ignore
           }
@@ -765,10 +935,17 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       | { rect: { left: number; top: number; width: number; height: number } },
     endDate?: Date
   ) => {
-    const start = new Date(date);
+    // No hour means the all-day row: create an all-day event on that day (it
+    // made a timed one at whatever time the selected date carried).
+    const allDay = hour === undefined;
+    const start = allDay ? startOfDay(date) : new Date(date);
     if (hour !== undefined) start.setHours(hour);
     if (minute !== undefined) start.setMinutes(minute);
-    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 60 * 60 * 1000);
+    const end = endDate
+      ? new Date(endDate)
+      : allDay
+        ? endOfDay(date)
+        : new Date(start.getTime() + 60 * 60 * 1000);
     openEventPopover(
       anchor && 'rect' in anchor
         ? { rect: anchor.rect }
@@ -778,8 +955,30 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       'create',
       {
         start,
-        end
+        end,
+        ...(allDay ? { allDay: true } : {})
       }
+    );
+  };
+
+  // The header's New event: the next half hour on the selected day, for an
+  // hour, in the default account. Opens beside the panel's left edge.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const createNewEvent = (anchorEl: HTMLElement) => {
+    const now = new Date();
+    const minutes = Math.min(
+      Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 30) * 30,
+      23 * 60
+    );
+    const start = startOfDay(selectedDate);
+    start.setMinutes(minutes);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const panelLeft = panelRef.current?.getBoundingClientRect().left ?? anchorRect.left;
+    openEventPopover(
+      { rect: { left: panelLeft, top: anchorRect.top, width: 0, height: anchorRect.height } },
+      'create',
+      { start, end }
     );
   };
 
@@ -846,6 +1045,12 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       setDragSelection(null);
       return;
     }
+    // Slots are 15 minutes and the range includes the last one hovered, as
+    // the drag overlay shows; it ended at that slot's start, one slot short
+    // (and dropped the first slot when dragging upward).
+    if (dragSelection.startHour !== undefined) {
+      end = new Date(end.getTime() + 15 * 60 * 1000);
+    }
     // Defer opening; render a temporary event block and anchor popover to it
     setPendingCreate({ start, end });
     setIsDragSelecting(false);
@@ -896,10 +1101,10 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
   };
 
   const onEventDragEnd = async (event: CalendarEvent, newStart: Date, newEnd: Date) => {
+    const accountsInfo = accounts.map((acc) => ({ uid: acc.uid, email: acc.email }));
     // Use clean architecture's moveEvent method with accounts info
     // Create a local moveEvent wrapper that includes accounts
     const moveEventWithAccounts = (eventId: string, newStart: Date, newEnd: Date) => {
-      const accountsInfo = accounts.map((acc) => ({ uid: acc.uid, email: acc.email }));
       return updateEventFields(
         eventId,
         {
@@ -919,6 +1124,8 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
 
     // Check if event has attendees to determine notification behavior
     const eventHasAttendees = hasAttendees(event.id);
+    // What Undo puts back: the times exactly as they were, time zones included.
+    const before = { start: { ...event.start }, end: { ...event.end } };
 
     try {
       await moveEventWithAccounts(event.id, newStart, newEnd);
@@ -930,15 +1137,38 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       return;
     }
 
-    if (eventHasAttendees) {
-      // Show draft status message
-      toast.success('Event moved to draft - edit to send updates');
-    } else {
-      // For events without attendees, changes are auto-applied
-      toast.success('Event updated successfully');
+    if (!eventHasAttendees) {
+      // Saved already, so offer Undo rather than popping the editor open.
+      toast.success(`Rescheduled to ${formatTimeRange(newStart, newEnd)}`, {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            // Only while the event is still where this move left it.
+            const current = getEvent(event.id);
+            const at = (value: unknown) => parseEventDate(value)?.getTime();
+            if (
+              !current ||
+              at(current.start.dateTime) !== newStart.getTime() ||
+              at(current.end.dateTime) !== newEnd.getTime()
+            ) {
+              toast("The event has changed since, so the move wasn't undone");
+              return;
+            }
+            try {
+              await updateEventFields(event.id, before, 'drag', accountsInfo);
+            } catch (error) {
+              console.error('Failed to undo event move:', error);
+              toast.error("Couldn't undo the move");
+            }
+          }
+        }
+      });
+      return;
     }
 
-    // Open the editor near the dragged element for quick fine-tuning
+    // A meeting's move is a draft until updates are sent: open the editor
+    // near the dragged element so they can be.
+    toast.success('Moved — send updates to notify attendees');
     const eventElement = document.querySelector(`[data-event-id="${event.id}"]`) as HTMLElement;
     if (eventElement) {
       openEventPopover(
@@ -971,70 +1201,53 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     }
   };
 
-  // Request deletion (optimistic), with optional notifications flag
-  const requestDeleteEvent = async (eventId: CalendarEventID, sendNotifications = true) => {
-    if (!activeUid) return;
-
-    // Close popover and clear selection immediately
-    try {
-      activePopoverRef.current?.hide?.();
-    } catch {
-      // ignore
-    }
-
-    const activeEvent = getActiveEvent();
-    if (activeEvent?.id === eventId) setActiveEvent(null);
-
-    try {
-      await removeEvent(eventId, sendNotifications);
-      toast.success('Event deleted');
-    } catch (error) {
-      console.error('Failed to delete event:', error);
-      toast.error('Failed to delete event');
-    }
-  };
-
-  // Global keyboard shortcuts for calendar interaction
+  // Escape closes the editor while focus is outside it (inside, the editor's
+  // own key handler does). An Escape that already closed something, like a
+  // select menu or the date picker, is left alone: it closed the editor too.
+  // (A Backspace/Delete branch here meant to delete the selected event never
+  // could: it read the active event once, at mount.)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input/control
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase();
-      const isEditable =
-        tag === 'input' ||
-        tag === 'textarea' ||
-        tag === 'select' ||
-        (target && (target as HTMLElement).isContentEditable);
-
-      if (e.key === 'Escape') {
-        if (activePopoverRef.current) {
-          e.preventDefault();
-          try {
-            activePopoverRef.current.hide();
-          } catch {
-            // ignore
-          }
-        }
-        const activeEvent = getActiveEvent();
-        if (activeEvent) {
-          setActiveEvent(null);
-        }
-      }
-
-      if ((e.key === 'Backspace' || e.key === 'Delete') && !isEditable) {
-        const activeEvent = getActiveEvent();
-        if (activeEvent) {
-          e.preventDefault();
-          requestDeleteEvent(activeEvent.id, true);
-        }
+      if (e.key !== 'Escape' || e.defaultPrevented || !activePopoverRef.current) return;
+      e.preventDefault();
+      try {
+        activePopoverRef.current.hide();
+      } catch {
+        // ignore
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Refresh reloads the month on screen and the selected day's month (they
+  // differ after paging the mini calendar). Success needs no toast: the
+  // spinning icon is the feedback, and a failure stays named in the banner.
+  const refresh = async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+    setIsRefreshing(true);
+    try {
+      const months = isSameMonth(selectedDate, currentMonth)
+        ? [currentMonth]
+        : [currentMonth, selectedDate];
+      const results = await Promise.all(
+        selectedAccountUids.flatMap((uid) => months.map((m) => fetchMonth(m, uid)))
+      );
+      if (results.includes(false)) toast.error("Couldn't refresh the calendar");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+  const loading = isRefreshing || loadsInFlight > 0;
+  const failedAccounts = accounts.filter(
+    (acc) => loadErrors[acc.uid] && selectedAccountUids.includes(acc.uid)
+  );
+
+  const isSelectedToday = isSameDay(selectedDate, new Date());
+  const zoneAbbreviation = getTimezoneAbbreviation(userTimeZone, selectedDate);
+
   return (
-    <div className={cn('no-drag flex h-full w-full flex-col', className)}>
+    <div ref={panelRef} className={cn('no-drag flex h-full w-full flex-col', className)}>
       {/* Header */}
       <div className="drag flex items-center gap-2 p-2 pb-0">
         <div className="ml-1 line-clamp-1 shrink-0 font-semibold">
@@ -1045,40 +1258,30 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
           variant="ghost"
           sizeVariant="sm"
           typeVariant="icon"
-          tooltip="Refresh"
-          onClick={async () => {
-            if (isRefreshing) return; // Prevent multiple simultaneous refreshes
-
-            setIsRefreshing(true);
-            try {
-              // Refresh current month for all selected accounts
-              const results = await Promise.all(
-                selectedAccountUids.map((uid) => fetchMonth(currentMonth, uid))
-              );
-              if (results.includes(false)) throw new Error('One or more accounts failed to load');
-
-              // Add a small delay to ensure state propagation
-              await new Promise((resolve) => setTimeout(resolve, 100));
-
-              console.log('Calendar refresh completed. Current dayEvents:', dayEvents.length);
-              toast.success('Calendar refreshed successfully');
-            } catch (error) {
-              console.error('Failed to refresh calendar:', error);
-              toast.error('Failed to refresh calendar');
-            } finally {
-              setIsRefreshing(false);
-            }
-          }}
+          tooltip={loading ? 'Refreshing…' : 'Refresh'}
+          onClick={refresh}
           className="ml-1"
           disabled={isRefreshing}
         >
           <MonoIcon
             type="RotateCcw"
             className={cn(
-              'h-3.5 w-3.5 text-muted-foreground transition-transform duration-300',
-              isRefreshing && '-rotate-180'
+              'h-3.5 w-3.5 text-muted-foreground',
+              // Spins the way its arrow points while anything is loading.
+              loading && 'animate-spin [animation-direction:reverse]'
             )}
           />
+        </Button>
+        {/* Creating used to need a drag on the grid, with nothing hinting at it. */}
+        <Button
+          variant="ghost"
+          sizeVariant="sm"
+          typeVariant="icon"
+          tooltip="New event"
+          onClick={(e) => createNewEvent(e.currentTarget)}
+          className="-ml-1"
+        >
+          <MonoIcon type="Plus" className="h-4 w-4 text-muted-foreground" />
         </Button>
 
         <div className="ml-auto flex items-center gap-1">
@@ -1123,15 +1326,83 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
         hideNavigation
         classNames={{
           month: 'space-y-0',
-          caption_label: 'text-sm font-medium hidden'
+          caption_label: 'text-sm font-medium hidden',
+          week: 'flex w-full mt-1',
+          // Restates the base `day` classes (classNames replace them) and gives
+          // this month's days their own color: inheriting it through two
+          // transition-colors layers left them near-invisible after a switch
+          // to the dark theme.
+          day: cn(
+            'transition-colors rounded-md h-8 w-8 p-0 font-normal text-center text-sm mx-auto',
+            '[&:not([data-today])]:hover:bg-muted-low [&:not([data-today])]:focus-visible:relative [&:not([data-today])]:focus-visible:z-20',
+            '[data-selected="true"]:opacity-100',
+            '[data-today="true"]:hover:bg-destructive/80',
+            '[&:not([data-outside]):not([data-today]):not([data-disabled])]:text-foreground'
+          ),
+          // A visible keyboard focus ring (none showed), and no second color
+          // transition under the cell's.
+          day_button:
+            'h-8 w-8 rounded-md p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          // The selected day looked exactly like a hovered one: add a ring and
+          // weight. Today keeps its own fill.
+          selected: cn(
+            '[&:not([data-today])]:bg-muted-low [&:not([data-today])]:text-foreground [&:not([data-today])]:hover:bg-muted-low/80',
+            '[&:not([data-today])]:font-semibold [&:not([data-today])]:ring-1 [&:not([data-today])]:ring-inset [&:not([data-today])]:ring-foreground/30',
+            '[data-today="true"]:bg-destructive [data-today="true"]:text-destructive-foreground'
+          ),
+          // Dark text on the dark theme's lighter rose (white was about 2.7:1).
+          today:
+            'bg-destructive text-destructive-foreground hover:bg-destructive/80 hover:text-destructive-foreground dark:text-background dark:hover:text-background'
         }}
         onMonthChange={setCurrentMonth}
       />
 
-      {/* View switch */}
-      <div className="flex items-center justify-between border-b p-2">
-        <div className="ml-2 text-sm font-medium">{format(selectedDate, 'MMMM d, yyyy')}</div>
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as CalendarViewMode)}>
+      {/* Selected day: step a day either way, and the time zone times are
+          shown in. (The day grid's own header repeated this date.) */}
+      <div className="flex items-center gap-1 border-b p-2">
+        <Button
+          variant="ghost"
+          sizeVariant="xs"
+          typeVariant="icon"
+          tooltip="Previous day"
+          onClick={() => stepDay(-1)}
+        >
+          <MonoIcon type="ChevronLeft" className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          sizeVariant="xs"
+          typeVariant="icon"
+          tooltip="Next day"
+          onClick={() => stepDay(1)}
+        >
+          <MonoIcon type="ChevronRight" className="h-4 w-4" />
+        </Button>
+        <div className="ml-1 flex min-w-0 items-center gap-1 text-sm font-medium">
+          <span className="truncate">{format(selectedDate, 'EEE, MMM')}</span>
+          <span
+            className={cn(
+              'flex h-5 min-w-5 items-center justify-center rounded-md px-1 tabular-nums',
+              isSelectedToday && 'bg-destructive text-destructive-foreground dark:text-background'
+            )}
+          >
+            {format(selectedDate, 'd')}
+          </span>
+          {!isSameYear(selectedDate, new Date()) && (
+            <span className="shrink-0">{format(selectedDate, 'yyyy')}</span>
+          )}
+          <span
+            className="ml-1 shrink-0 text-xs font-normal text-muted-foreground"
+            title={`${getTimezoneLongName(userTimeZone, selectedDate)} (${userTimeZone})`}
+          >
+            {zoneAbbreviation}
+          </span>
+        </div>
+        <Tabs
+          className="ml-auto"
+          value={viewMode}
+          onValueChange={(v) => setViewMode(v as CalendarViewMode)}
+        >
           <TabsList className="h-9">
             <TabsTrigger className="h-7" value="DAY">
               Day
@@ -1142,6 +1413,28 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
           </TabsList>
         </Tabs>
       </div>
+
+      {failedAccounts.length > 0 && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 border-b bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+        >
+          <MonoIcon type="AlertCircle" className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            Couldn&apos;t load the calendar for{' '}
+            {failedAccounts.map((acc) => acc.email || acc.displayName).join(', ')}
+          </span>
+          <Button
+            variant="text"
+            sizeVariant="xs"
+            className="h-auto shrink-0 px-0 font-medium text-destructive hover:text-destructive/80"
+            onClick={refresh}
+            disabled={isRefreshing}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex min-h-0 w-full flex-1 duration-0">
@@ -1195,9 +1488,18 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
             }}
             preference={preference}
             selectedAccountUids={selectedAccountUids}
+            pendingAccountUid={activeUid}
+            scrollToNowNonce={scrollToNowNonce}
           />
         ) : (
-          <AgendaList date={selectedDate} events={dayEvents} onEventClick={handleEventClick} />
+          <AgendaList
+            date={selectedDate}
+            events={dayEvents}
+            activeEventId={activeEventId}
+            preference={preference}
+            onEventClick={handleEventClick}
+            onNewEvent={createNewEvent}
+          />
         )}
       </div>
     </div>

@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { addDays } from 'date-fns';
 
+import calendarApi from '@/main/api/calendar/calendarApi';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
-import type { MonoAccount } from '@/main/api/auth/types';
+import type { MonoAccount, UserPreference } from '@/main/api/auth/types';
 import DateInput from '@/renderer/app/components/ui/date-input';
 import { Input } from '@/renderer/app/components/ui/input';
 import {
@@ -27,6 +28,17 @@ import type {
   CalendarEventDraft
 } from '@/renderer/app/store/calendar/calendarAtoms';
 import { parseEventDate } from '@/renderer/app/containers/panel/calendar/utils';
+import { getAccountColor } from '@/renderer/app/containers/panel/calendar/shared';
+import {
+  findJoinLink,
+  htmlToPlainText,
+  looksLikeHtml
+} from '@/renderer/app/containers/panel/calendar/eventText';
+import {
+  getTimezoneAbbreviation,
+  getTimezoneLongName
+} from '@/renderer/app/containers/panel/calendar/timezoneUtils';
+import { cn } from '@/renderer/app/lib/utils';
 import { toast } from 'sonner';
 
 // Helper functions for proper all-day date handling
@@ -42,6 +54,13 @@ const addDayForGoogleCalendar = (date: Date): Date => {
   // Google Calendar all-day events have exclusive end dates, so add 1 day
   return addDays(date, 1);
 };
+
+type RsvpResponse = 'accepted' | 'tentative' | 'declined';
+const RSVP_OPTIONS: Array<{ value: RsvpResponse; label: string; done: string }> = [
+  { value: 'accepted', label: 'Yes', done: 'Accepted' },
+  { value: 'tentative', label: 'Maybe', done: 'Tentatively accepted' },
+  { value: 'declined', label: 'No', done: 'Declined' }
+];
 
 type EditorMode = 'create' | 'edit';
 
@@ -62,6 +81,9 @@ export interface CalendarEventEditorProps {
   onEventUpdated?: (eventId: CalendarEventID) => void;
   onEventDeleted?: (eventId: CalendarEventID) => void;
   initialAccountUid?: string;
+  // For the account colors in the account picker. Passed in: the editor
+  // renders in its own React root, outside the app's providers.
+  preference?: UserPreference;
 }
 
 /**
@@ -83,7 +105,8 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
   onEventCreated,
   onEventUpdated,
   onEventDeleted,
-  initialAccountUid
+  initialAccountUid,
+  preference
 }) => {
   const { contactArray } = useContactAtom();
   const {
@@ -111,6 +134,9 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
   const status = eventId ? getEventStatus(eventId) : 'synced';
   const eventHasAttendees = eventId ? hasAttendees(eventId) : false;
   const isLoading = eventId ? isSaving(eventId) : false;
+  const draft = eventId ? drafts[eventId] : undefined;
+  // Drafts restored after a restart have no 'draft' status, so check both.
+  const hasChanges = mode === 'edit' && !!eventId && (!!draft || hasUnsavedChanges(eventId));
 
   // Local UI state (for creation and temporary edits)
   const [localTitle, setLocalTitle] = useState(defaultValues?.title || '');
@@ -126,6 +152,54 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
   const [selectedAccountUid, setSelectedAccountUid] = useState(
     initialAccountUid || accounts[0]?.uid || ''
   );
+
+  // An invitation from someone else: you answer it, and edits only change
+  // your own copy, so nothing is "sent" to anyone.
+  const eventAccount = accounts.find((a) => a.uid === event?.accountUid);
+  const selfEmail = eventAccount?.email?.toLowerCase();
+  const selfAttendee =
+    mode === 'edit' && selfEmail
+      ? event?.attendees.find((a) => !a.isOrganizer && a.email?.toLowerCase() === selfEmail)
+      : undefined;
+  const isInvitee = !!selfAttendee;
+  const [rsvp, setRsvp] = useState<RsvpResponse | null>(() => {
+    // Outlook's attendee list doesn't reliably carry your own reply, so there
+    // a choice only shows once you make one here.
+    const response = selfAttendee?.response;
+    return eventAccount?.provider === 'google' &&
+      (response === 'accepted' || response === 'tentative' || response === 'declined')
+      ? response
+      : null;
+  });
+  const [rsvpSending, setRsvpSending] = useState(false);
+
+  // Save / delete progress. Refs as well as state: two clicks in the same
+  // frame both saw `false` and created the event twice.
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [holdConfirm, setHoldConfirm] = useState(false);
+  const [editingDescription, setEditingDescription] = useState(false);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const backButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmRowRef = useRef<HTMLDivElement>(null);
+  const accountSelectId = React.useId();
+
+  // Focus moves into the editor when it opens: the title for a new event, the
+  // editor itself for an existing one (so nothing is selected or typed over).
+  // It used to stay behind, unreachable by Tab, with keys going to the inbox.
+  useEffect(() => {
+    const target = mode === 'create' ? titleRef.current : rootRef.current;
+    const frame = requestAnimationFrame(() => {
+      if (target?.isConnected) target.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   // ============================================================================
   // REACTIVE STATE SYNC
@@ -235,44 +309,36 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
 
   const handleTimeChange = useCallback(
     (field: 'start' | 'end', date: Date) => {
+      const startFields = (start: Date) => ({
+        dateTime: localAllDay ? null : start.toISOString(),
+        date: localAllDay ? formatDateForGoogleCalendar(start) : null,
+        timeZone: localTimeZone
+      });
+      const endFields = (end: Date) => ({
+        dateTime: localAllDay ? null : end.toISOString(),
+        date: localAllDay ? formatDateForGoogleCalendar(addDayForGoogleCalendar(end)) : null,
+        timeZone: localTimeZone
+      });
       if (field === 'start') {
+        // A new start keeps the duration: the end moves with it (it used to
+        // stay put, shrinking the event, or snap to a flat hour).
+        const duration =
+          localEnd.getTime() > localStart.getTime()
+            ? localEnd.getTime() - localStart.getTime()
+            : 3600000;
+        const newEnd = new Date(date.getTime() + duration);
         setLocalStart(date);
-        // Ensure end is after start
-        if (date >= localEnd) {
-          const newEnd = new Date(date.getTime() + 3600000); // +1 hour
-          setLocalEnd(newEnd);
-          if (eventId) {
-            updateEventFields(eventId, {
-              start: {
-                dateTime: localAllDay ? null : date.toISOString(),
-                date: localAllDay ? formatDateForGoogleCalendar(date) : null,
-                timeZone: localTimeZone
-              },
-              end: {
-                dateTime: localAllDay ? null : newEnd.toISOString(),
-                date: localAllDay
-                  ? formatDateForGoogleCalendar(addDayForGoogleCalendar(newEnd))
-                  : null,
-                timeZone: localTimeZone
-              }
-            });
-          }
-        } else if (eventId) {
-          updateEventField(eventId, 'start', {
-            dateTime: localAllDay ? null : date.toISOString(),
-            date: localAllDay ? formatDateForGoogleCalendar(date) : null,
-            timeZone: localTimeZone
-          });
-        }
-      } else {
-        const newEnd = date <= localStart ? new Date(localStart.getTime() + 3600000) : date;
         setLocalEnd(newEnd);
         if (eventId) {
-          updateEventField(eventId, 'end', {
-            dateTime: localAllDay ? null : newEnd.toISOString(),
-            date: localAllDay ? formatDateForGoogleCalendar(addDayForGoogleCalendar(newEnd)) : null,
-            timeZone: localTimeZone
-          });
+          updateEventFields(eventId, { start: startFields(date), end: endFields(newEnd) });
+        }
+      } else {
+        // An end at or before the start stays here, with an inline error,
+        // until it's valid. Snapping it an hour past the start mid-typing
+        // turned "3:30" into 4:30.
+        setLocalEnd(date);
+        if (eventId && date.getTime() > localStart.getTime()) {
+          updateEventField(eventId, 'end', endFields(date));
         }
       }
     },
@@ -452,7 +518,17 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
   // ACTION HANDLERS
   // ============================================================================
 
+  const timesInvalid = !localAllDay && localEnd.getTime() <= localStart.getTime();
+  const titleMissing = mode === 'create' && !localTitle.trim();
+  const busy = isLoading || submitting || deleting;
+  // Edit mode needs something to save, not a title: an untitled event's other
+  // changes must still be sendable.
+  const saveDisabled = busy || timesInvalid || (mode === 'create' ? titleMissing : !hasChanges);
+
   const handleSave = useCallback(async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     try {
       if (mode === 'create') {
         // Create new event
@@ -511,20 +587,34 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
 
         const accountsInfo = accounts.map((acc) => ({ uid: acc.uid, email: acc.email }));
         const newEventId = await addEvent(newEventData, accountsInfo);
-        toast.success('Event created successfully');
+        toast.success(
+          localAttendees.length > 0 ? 'Event created · invitations sent' : 'Event created'
+        );
         onEventCreated?.(newEventId);
         onClose();
       } else if (eventId) {
-        // Save existing event
+        // Only a draft has anything to apply (saveEvent returns without one),
+        // yet "Updates sent" used to be toasted regardless.
+        if (!drafts[eventId]) {
+          discardEventChanges(eventId); // clears a leftover error status
+          onClose();
+          return;
+        }
         const accountsInfo = accounts.map((acc) => ({ uid: acc.uid, email: acc.email }));
         await saveEvent(eventId, eventHasAttendees, accountsInfo);
-        const message = eventHasAttendees ? 'Updates sent to attendees' : 'Event updated';
-        toast.success(message);
+        // An invitee's edits change only their own copy; nobody is notified.
+        toast.success(
+          eventHasAttendees && !isInvitee ? 'Updates sent to attendees' : 'Event updated'
+        );
         onEventUpdated?.(eventId);
+        onClose();
       }
     } catch (error) {
       console.error('Failed to save event:', error);
-      toast.error('Failed to save event');
+      toast.error(mode === 'create' ? "Couldn't create the event" : "Couldn't save the event");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }, [
     mode,
@@ -540,8 +630,11 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
     localAllDay,
     localAttendees,
     eventHasAttendees,
+    isInvitee,
+    drafts,
     addEvent,
     saveEvent,
+    discardEventChanges,
     onEventCreated,
     onEventUpdated,
     onClose
@@ -549,6 +642,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
 
   const handleDiscard = useCallback(() => {
     if (eventId) {
+      const changed = !!drafts[eventId] || hasUnsavedChanges(eventId);
       // Use the base event to get clean data without draft changes
       const baseEvent = getBaseEvent(eventId);
 
@@ -583,68 +677,242 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
         setOriginalAttendees(attendeeOptions);
       }
 
-      toast.success('Changes discarded');
+      // Only when something was actually thrown away.
+      if (changed) toast.success('Changes discarded');
     }
     onClose();
-  }, [eventId, discardEventChanges, onClose, getBaseEvent]);
+  }, [eventId, drafts, hasUnsavedChanges, discardEventChanges, onClose, getBaseEvent]);
 
   const handleDelete = useCallback(async () => {
-    if (!eventId) return;
-
+    if (!eventId || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
     try {
       await removeEvent(eventId, eventHasAttendees);
-      toast.success('Event deleted');
+      toast.success(
+        isInvitee
+          ? 'Removed from your calendar'
+          : eventHasAttendees
+            ? 'Meeting canceled'
+            : 'Event deleted'
+      );
       onEventDeleted?.(eventId);
       onClose();
     } catch (error) {
       console.error('Failed to delete event:', error);
-      toast.error('Failed to delete event');
+      toast.error("Couldn't delete the event");
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
     }
-  }, [eventId, eventHasAttendees, removeEvent, onEventDeleted, onClose]);
+  }, [eventId, eventHasAttendees, isInvitee, removeEvent, onEventDeleted, onClose]);
+
+  // Delete takes a second click on an explicit confirmation (it used to act on
+  // the first, cancelling meetings for every attendee). The question reverts
+  // on its own after a few seconds, but not while the pointer is on it.
+  const closeConfirm = useCallback(() => {
+    const hadFocus = !!confirmRowRef.current?.contains(document.activeElement);
+    setConfirmingDelete(false);
+    if (hadFocus) requestAnimationFrame(() => deleteButtonRef.current?.focus());
+  }, []);
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    backButtonRef.current?.focus();
+  }, [confirmingDelete]);
+  useEffect(() => {
+    if (!confirmingDelete || deleting || holdConfirm) return;
+    const timer = window.setTimeout(closeConfirm, 4000);
+    return () => window.clearTimeout(timer);
+  }, [confirmingDelete, deleting, holdConfirm, closeConfirm]);
+
+  const handleRsvp = async (response: RsvpResponse) => {
+    if (!event || rsvpSending || response === rsvp) return;
+    const previous = rsvp;
+    setRsvp(response);
+    setRsvpSending(true);
+    try {
+      await calendarApi.sendEventRsvp({
+        calendarId: 'primary',
+        eventId: event.id,
+        responseStatus: response,
+        // Outlook only tells the organizer when asked to; Google records the
+        // reply on the event either way.
+        sendNotifications: eventAccount?.provider === 'microsoft',
+        uid: event.accountUid
+      });
+      toast.success(RSVP_OPTIONS.find((option) => option.value === response)?.done);
+      onEventUpdated?.(event.id);
+    } catch (error) {
+      console.error('Failed to send RSVP:', error);
+      setRsvp(previous);
+      toast.error("Couldn't send your response");
+    } finally {
+      setRsvpSending(false);
+    }
+  };
 
   // ============================================================================
-  // TIME ZONE OPTIONS
+  // DISPLAY
   // ============================================================================
 
-  const timeZones = [
-    { value: 'America/New_York', label: 'Eastern Time (ET)' },
-    { value: 'America/Chicago', label: 'Central Time (CT)' },
-    { value: 'America/Denver', label: 'Mountain Time (MT)' },
-    { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
-    { value: 'Europe/London', label: 'London (GMT)' },
-    { value: 'Europe/Paris', label: 'Central European Time' },
-    { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-    { value: 'UTC', label: 'UTC' }
-  ];
+  // Join button for online meetings: conference entry points first, then the
+  // location and the body (where Outlook puts the Teams link).
+  const joinLink = useMemo(
+    () =>
+      mode === 'edit'
+        ? findJoinLink([
+            ...(event?.conferenceData?.entryPoints ?? [])
+              .filter((entry) => entry.entryPointType === 'video')
+              .map((entry) => entry.uri),
+            localLocation,
+            localDescription
+          ])
+        : null,
+    [mode, event?.conferenceData, localDescription, localLocation]
+  );
+  const descriptionIsHtml = useMemo(() => looksLikeHtml(localDescription), [localDescription]);
+  const descriptionText = useMemo(
+    () => (descriptionIsHtml ? htmlToPlainText(localDescription) : ''),
+    [descriptionIsHtml, localDescription]
+  );
+
+  // Times are entered and shown in the computer's time zone (the grid too),
+  // so say which. The old picker here relabeled times without converting them.
+  const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zoneCaption = `${getTimezoneLongName(localZone, localStart)} (${getTimezoneAbbreviation(localZone, localStart)})`;
+
+  // The organizer row: this account for its own and new events. An
+  // invitation named this account "Organizer" too; it shows the organizer the
+  // event lists instead (Google does, Outlook's attendee list leaves them out).
+  const organizerAttendee = event?.attendees.find((a) => a.isOrganizer);
+  const organizer = isInvitee
+    ? organizerAttendee && { name: organizerAttendee.name, email: organizerAttendee.email }
+    : {
+        name: accounts.find((a) => a.uid === selectedAccountUid)?.displayName,
+        email: accounts.find((a) => a.uid === selectedAccountUid)?.email || ''
+      };
+
+  const notifiedCount = localAttendees.length;
+  const deleteCopy = isInvitee
+    ? { action: 'Remove', question: 'Remove this event from your calendar?', confirm: 'Remove' }
+    : eventHasAttendees
+      ? {
+          action: 'Delete',
+          question:
+            notifiedCount > 0
+              ? `Cancel this meeting and notify ${notifiedCount} ${notifiedCount === 1 ? 'person' : 'people'}?`
+              : 'Cancel this meeting and notify attendees?',
+          confirm: 'Cancel meeting'
+        }
+      : { action: 'Delete', question: 'Delete this event?', confirm: 'Delete' };
+
+  const primaryLabel =
+    mode === 'create'
+      ? localAttendees.length > 0
+        ? 'Create & invite'
+        : 'Create'
+      : eventHasAttendees && !isInvitee
+        ? 'Send updates'
+        : 'Save';
+  // Why the primary button is disabled (a disabled button can't show a tooltip).
+  const saveHint =
+    mode === 'create' ? (titleMissing ? 'Add a title' : null) : !hasChanges ? 'No changes' : null;
+
+  const timeValue = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
   // ============================================================================
   // RENDER
   // ============================================================================
 
   return (
-    <div className="min-w-[360px] max-w-[380px] p-1">
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      className="min-w-[360px] max-w-[380px] space-y-2 p-2 outline-none"
+      onKeyDown={(e) => {
+        // ⌘↩ saves, as in compose.
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!saveDisabled) void handleSave();
+        }
+      }}
+    >
       {/* Title */}
-      <div className="p-1">
-        <Input
-          placeholder="Title"
-          value={localTitle}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          className="my-2 rounded-md"
-        />
-      </div>
+      <Input
+        ref={titleRef}
+        placeholder="Title"
+        aria-label="Title"
+        value={localTitle}
+        onChange={(e) => handleTitleChange(e.target.value)}
+        onKeyDown={(e) => {
+          // Enter creates a new event, like a one-line form.
+          if (e.key !== 'Enter' || mode !== 'create' || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (!saveDisabled) void handleSave();
+        }}
+        className="rounded-md"
+      />
 
-      {/* Account selector (create mode only) */}
-      {mode === 'create' && (
-        <div className="p-1">
-          <div className="mb-1 text-xs text-muted-foreground">Account</div>
+      {joinLink && (
+        <Button
+          variant="default"
+          sizeVariant="sm"
+          className="w-full"
+          onClick={() => window.open(joinLink.url, '_blank')}
+        >
+          <MonoIcon type="ExternalLink" className="mr-1.5 h-3.5 w-3.5" />
+          {joinLink.label}
+        </Button>
+      )}
+
+      {isInvitee && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Going?</span>
+          <div role="group" aria-label="Your response" className="flex gap-1">
+            {RSVP_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                variant={rsvp === option.value ? 'default' : 'secondary'}
+                sizeVariant="xs"
+                className="px-2.5"
+                aria-pressed={rsvp === option.value}
+                disabled={rsvpSending}
+                onClick={() => handleRsvp(option.value)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Account selector (create mode only, and only when there's a choice) */}
+      {mode === 'create' && accounts.length > 1 && (
+        <div className="space-y-1">
+          <label htmlFor={accountSelectId} className="text-xs text-muted-foreground">
+            Account
+          </label>
           <Select value={selectedAccountUid} onValueChange={setSelectedAccountUid}>
-            <SelectTrigger className="w-full shadow-sm">
+            <SelectTrigger id={accountSelectId} className="w-full min-w-0 shadow-sm">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="dark max-h-72 w-[360px]">
+            <SelectContent className="max-h-72">
               {accounts.map((acc) => (
                 <SelectItem key={acc.uid} value={acc.uid}>
-                  {acc.displayName || acc.email}
+                  {/* Name and address: two accounts often share a name. */}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: getAccountColor(preference, acc.uid) }}
+                    />
+                    <span className="truncate">{acc.displayName || acc.email}</span>
+                    {acc.displayName && acc.displayName !== acc.email && (
+                      <span className="truncate text-xs text-muted-foreground">{acc.email}</span>
+                    )}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -652,12 +920,43 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
         </div>
       )}
 
-      {/* Date & Time */}
-      <div className="p-1">
+      {/* Date & time: the date first and always present, so toggling All-day
+          below only hides the times and nothing under the cursor moves. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <DateInput
+          className="h-8 w-[112px] px-2 shadow-sm"
+          value={localStart}
+          onValueChange={(d) => {
+            const newStart = new Date(d);
+            newStart.setHours(localStart.getHours(), localStart.getMinutes(), 0, 0);
+            const duration = localEnd.getTime() - localStart.getTime();
+            const newEnd = new Date(newStart.getTime() + Math.max(duration, 15 * 60 * 1000));
+            setLocalStart(newStart);
+            setLocalEnd(newEnd);
+            if (eventId) {
+              updateEventFields(eventId, {
+                start: {
+                  dateTime: localAllDay ? null : newStart.toISOString(),
+                  date: localAllDay ? formatDateForGoogleCalendar(newStart) : null,
+                  timeZone: localTimeZone
+                },
+                end: {
+                  dateTime: localAllDay ? null : newEnd.toISOString(),
+                  date: localAllDay
+                    ? formatDateForGoogleCalendar(addDayForGoogleCalendar(newEnd))
+                    : null,
+                  timeZone: localTimeZone
+                }
+              });
+            }
+          }}
+        />
         {!localAllDay && (
-          <div className="my-2 flex items-center gap-2">
+          <>
             <TimeInput
-              value={`${String(localStart.getHours()).padStart(2, '0')}:${String(localStart.getMinutes()).padStart(2, '0')}`}
+              keepPopoverAttr
+              className="w-[100px]"
+              value={timeValue(localStart)}
               onValueChange={(v) => {
                 const [h, m] = v.split(':').map((n) => parseInt(n, 10));
                 if (!isNaN(h) && !isNaN(m)) {
@@ -667,9 +966,11 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
                 }
               }}
             />
-            <MonoIcon type="ChevronRight" className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">–</span>
             <TimeInput
-              value={`${String(localEnd.getHours()).padStart(2, '0')}:${String(localEnd.getMinutes()).padStart(2, '0')}`}
+              keepPopoverAttr
+              className="w-[100px]"
+              value={timeValue(localEnd)}
               onValueChange={(v) => {
                 const [h, m] = v.split(':').map((n) => parseInt(n, 10));
                 if (!isNaN(h) && !isNaN(m)) {
@@ -679,168 +980,184 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
                 }
               }}
             />
-          </div>
+          </>
         )}
-
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Switch size="sm" checked={localAllDay} onCheckedChange={handleAllDayChange} />
-            <span className="text-sm">All-day</span>
-            <DateInput
-              className="shadow-sm"
-              value={localStart}
-              onValueChange={(d) => {
-                const newStart = new Date(d);
-                newStart.setHours(localStart.getHours(), localStart.getMinutes(), 0, 0);
-                const duration = localEnd.getTime() - localStart.getTime();
-                const newEnd = new Date(newStart.getTime() + Math.max(duration, 15 * 60 * 1000));
-                setLocalStart(newStart);
-                setLocalEnd(newEnd);
-                if (eventId) {
-                  updateEventFields(eventId, {
-                    start: {
-                      dateTime: localAllDay ? null : newStart.toISOString(),
-                      date: localAllDay ? formatDateForGoogleCalendar(newStart) : null,
-                      timeZone: localTimeZone
-                    },
-                    end: {
-                      dateTime: localAllDay ? null : newEnd.toISOString(),
-                      date: localAllDay
-                        ? formatDateForGoogleCalendar(addDayForGoogleCalendar(newEnd))
-                        : null,
-                      timeZone: localTimeZone
-                    }
-                  });
-                }
-              }}
-            />
-          </div>
-
-          {!localAllDay && (
-            <div className="flex items-center gap-2">
-              <Select value={localTimeZone} onValueChange={setLocalTimeZone}>
-                <SelectTrigger className="w-[260px] shadow-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="dark max-h-72 w-[360px]">
-                  {timeZones.map((tz) => (
-                    <SelectItem key={tz.value} value={tz.value}>
-                      {tz.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
       </div>
-
-      {/* Location */}
-      <div className="p-1">
-        <Input
-          placeholder="Location"
-          value={localLocation}
-          onChange={(e) => handleLocationChange(e.target.value)}
-          className="my-2 rounded-md"
-        />
-      </div>
-
-      {/* Attendees */}
-      <div className="p-1 pt-4">
-        <ParticipantListInput
-          contacts={contactArray}
-          organizer={{
-            name: accounts.find((a) => a.uid === selectedAccountUid)?.displayName,
-            email: accounts.find((a) => a.uid === selectedAccountUid)?.email || ''
-          }}
-          value={localAttendees}
-          onChange={handleAttendeesChange}
-          originalAttendees={originalAttendees}
-          showDraftChanges={mode === 'edit' && !!eventId}
-          attendeeChanges={
-            eventId && drafts[eventId]?.removedAttendeeEmails
-              ? drafts[eventId].removedAttendeeEmails!.map((email) => ({
-                  type: 'removed' as const,
-                  email
-                }))
-              : []
-          }
-          onRemoveAttendee={handleRemoveAttendee}
-          onReAddAttendee={handleReAddAttendee}
-        />
-      </div>
-
-      {/* Draft Status (edit mode only) */}
-      {mode === 'edit' && eventId && hasUnsavedChanges(eventId) && (
-        <div className="p-1">
-          <div className="mb-2 flex items-center gap-2">
-            <div
-              className={`rounded-md px-2 py-1 text-xs font-medium ${
-                status === 'draft'
-                  ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
-                  : status === 'saving'
-                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                    : status === 'error'
-                      ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                      : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'
-              }`}
-            >
-              {status === 'draft' && 'Draft'}
-              {status === 'saving' && 'Saving...'}
-              {status === 'error' && 'Error'}
-            </div>
-            {eventHasAttendees && status === 'draft' && (
-              <span className="text-xs text-muted-foreground">
-                Changes will be held until you send updates
-              </span>
-            )}
-          </div>
+      {timesInvalid && (
+        <div role="alert" className="text-xs text-destructive">
+          The end time must be after the start time.
         </div>
       )}
 
-      {/* Description */}
-      <div className="p-1">
+      <div className="flex items-center gap-2">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Switch size="sm" checked={localAllDay} onCheckedChange={handleAllDayChange} />
+          All-day
+        </label>
+        {!localAllDay && (
+          <span
+            className="ml-auto min-w-0 truncate text-xs text-muted-foreground"
+            title={localZone}
+          >
+            {zoneCaption}
+          </span>
+        )}
+      </div>
+
+      {/* Location */}
+      <Input
+        placeholder="Location"
+        aria-label="Location"
+        value={localLocation}
+        onChange={(e) => handleLocationChange(e.target.value)}
+        className="rounded-md"
+      />
+
+      {/* Attendees */}
+      <ParticipantListInput
+        contacts={contactArray}
+        organizer={organizer}
+        value={localAttendees}
+        onChange={handleAttendeesChange}
+        originalAttendees={originalAttendees}
+        showDraftChanges={mode === 'edit' && !!eventId}
+        attendeeChanges={
+          eventId && drafts[eventId]?.removedAttendeeEmails
+            ? drafts[eventId].removedAttendeeEmails!.map((email) => ({
+                type: 'removed' as const,
+                email
+              }))
+            : []
+        }
+        onRemoveAttendee={handleRemoveAttendee}
+        onReAddAttendee={handleReAddAttendee}
+      />
+
+      {/* Draft Status (edit mode only) */}
+      {mode === 'edit' && eventId && hasUnsavedChanges(eventId) && (
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium',
+              status === 'error'
+                ? 'bg-destructive/10 text-destructive'
+                : status === 'draft' || status === 'saving'
+                  ? 'bg-secondary-accent/15 text-foreground'
+                  : 'bg-muted text-muted-foreground'
+            )}
+          >
+            {(status === 'draft' || status === 'saving') && (
+              <span className="h-1.5 w-1.5 rounded-full bg-secondary-accent" />
+            )}
+            {status === 'draft' && 'Draft'}
+            {status === 'saving' && 'Saving...'}
+            {status === 'error' && 'Error'}
+          </div>
+          {status === 'error' && draft && (
+            <Button
+              variant="text"
+              sizeVariant="xs"
+              className="h-auto px-0 font-medium text-destructive hover:text-destructive/80"
+              onClick={handleSave}
+              disabled={busy}
+            >
+              Retry
+            </Button>
+          )}
+          {eventHasAttendees && !isInvitee && status === 'draft' && (
+            <span className="text-xs text-muted-foreground">
+              Changes will be held until you send updates
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Description: an HTML body (Outlook) reads as text until you edit it,
+          and editing shows the raw value as before. */}
+      {descriptionIsHtml && !editingDescription ? (
+        <div>
+          <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            {descriptionText || <span className="text-muted-foreground">No description</span>}
+          </div>
+          <Button
+            variant="text"
+            sizeVariant="xs"
+            className="mt-1 h-auto px-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setEditingDescription(true)}
+          >
+            Edit description
+          </Button>
+        </div>
+      ) : (
         <Textarea
           placeholder="Add description"
+          aria-label="Description"
           className="min-h-[80px]"
           value={localDescription}
           onChange={(e) => handleDescriptionChange(e.target.value)}
+          autoFocus={editingDescription}
           style={{ resize: 'none' }}
         />
-      </div>
+      )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2 p-1 pt-4">
-        <Button variant="secondary" sizeVariant="sm" onClick={handleDiscard} disabled={isLoading}>
-          Cancel
-        </Button>
-
-        {mode === 'edit' && eventId && (
-          <Button
-            variant="destructive"
-            sizeVariant="sm"
-            onClick={handleDelete}
-            disabled={isLoading}
-          >
-            Delete
-          </Button>
-        )}
-
-        <Button
-          variant="default"
-          sizeVariant="sm"
-          onClick={handleSave}
-          disabled={isLoading || !localTitle.trim()}
-          className="ml-auto"
+      {confirmingDelete ? (
+        <div
+          ref={confirmRowRef}
+          className="flex items-center gap-2 rounded-md bg-destructive/10 p-2"
+          onPointerEnter={() => setHoldConfirm(true)}
+          onPointerLeave={() => setHoldConfirm(false)}
         >
-          {isLoading ? (
-            <MonoIcon type="Loader2" className="mr-1 h-3 w-3 animate-spin" />
-          ) : eventHasAttendees && mode === 'edit' ? (
-            <MonoIcon type="Send" className="mr-1 h-3 w-3" />
-          ) : null}
-          {mode === 'create' ? 'Create' : eventHasAttendees ? 'Send updates' : 'Save'}
-        </Button>
-      </div>
+          <span className="min-w-0 flex-1 text-xs text-destructive">{deleteCopy.question}</span>
+          <Button
+            ref={backButtonRef}
+            variant="secondary"
+            sizeVariant="sm"
+            onClick={closeConfirm}
+            disabled={deleting}
+          >
+            Back
+          </Button>
+          <Button variant="destructive" sizeVariant="sm" onClick={handleDelete} disabled={deleting}>
+            {deleting && <MonoIcon type="Loader2" className="mr-1 h-3 w-3 animate-spin" />}
+            {deleteCopy.confirm}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 pt-1">
+          {/* "Cancel" read like "cancel the meeting"; say what it does. */}
+          <Button variant="secondary" sizeVariant="sm" onClick={handleDiscard} disabled={busy}>
+            {mode === 'create' ? 'Cancel' : hasChanges ? 'Discard' : 'Close'}
+          </Button>
+
+          {mode === 'edit' && eventId && (
+            <Button
+              ref={deleteButtonRef}
+              variant="ghost"
+              sizeVariant="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={busy}
+            >
+              {deleteCopy.action}
+            </Button>
+          )}
+
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            {saveHint && !busy && (
+              <span className="truncate text-xs text-muted-foreground">{saveHint}</span>
+            )}
+            <Button variant="default" sizeVariant="sm" onClick={handleSave} disabled={saveDisabled}>
+              {isLoading || submitting ? (
+                <MonoIcon type="Loader2" className="mr-1 h-3 w-3 animate-spin" />
+              ) : eventHasAttendees && mode === 'edit' && !isInvitee ? (
+                <MonoIcon type="Send" className="mr-1 h-3 w-3" />
+              ) : null}
+              {primaryLabel}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -14,7 +14,14 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { CalendarEvent, CalendarViewProps } from '@/renderer/app/store/calendar/calendarAtoms';
 import { GRID_CONSTANTS } from './constants';
 import { getEventDateRange, eventSpansDay } from './utils';
-import { CurrentTimeLine, DraggableEvent, DroppableTimeSlot, DragSelectionOverlay } from './shared';
+import {
+  CurrentTimeLine,
+  DraggableEvent,
+  DroppableTimeSlot,
+  DragSelectionOverlay,
+  PendingEventBlock,
+  getAccountColor
+} from './shared';
 import { TimezoneSelector } from './TimezoneSelector';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import {
@@ -30,6 +37,11 @@ import {
 interface DayViewProps extends CalendarViewProps {
   date: Date;
   numDays?: number;
+  // The account a new event is created in (the editor's default); its color
+  // styles the new-event block.
+  pendingAccountUid?: string | null;
+  // Bumped by Today: scroll back to now even when today is already showing.
+  scrollToNowNonce?: number;
 }
 
 // Remembers the day grid's vertical scroll position per day-key for the session.
@@ -65,7 +77,9 @@ export const DayView: React.FC<DayViewProps> = ({
   onEventDragEnd,
   onEventUpdate,
   preference,
-  selectedAccountUids
+  selectedAccountUids,
+  pendingAccountUid,
+  scrollToNowNonce = 0
 }) => {
   // ============================================================================
   // COMPONENT STATE MANAGEMENT
@@ -97,6 +111,9 @@ export const DayView: React.FC<DayViewProps> = ({
   const pixelsPerHour = isWeekView
     ? GRID_CONSTANTS.WEEK_PIXELS_PER_HOUR
     : GRID_CONSTANTS.DAY_PIXELS_PER_HOUR;
+
+  // New-event blocks take the color of the account the event will be created in.
+  const pendingColor = getAccountColor(preference, pendingAccountUid ?? selectedAccountUids[0]);
 
   const timeSlots = Array.from({ length: 96 }, (_, i) => ({
     hour: Math.floor(i / 4),
@@ -190,6 +207,13 @@ export const DayView: React.FC<DayViewProps> = ({
   // check the day headers / current-time line use — so the scroll lands exactly
   // where the red line is.
   const hasAutoScrolledRef = React.useRef<string | null>(null);
+  // A quarter hour above the target hour, so its hour line isn't flush with
+  // the header border (the two merged into one thick rule).
+  const initialScrollTop = (day: Date): number => {
+    const now = new Date();
+    const targetHour = isSameDay(day, now) ? Math.max(0, now.getHours() - 2) : 8;
+    return Math.max(0, targetHour * pixelsPerHour - pixelsPerHour / 4);
+  };
   React.useEffect(() => {
     const key = dayScrollKey(date, numDays);
     if (hasAutoScrolledRef.current === key) return;
@@ -203,10 +227,7 @@ export const DayView: React.FC<DayViewProps> = ({
       return;
     }
 
-    const now = new Date();
-    const isToday = isSameDay(date, now);
-    const targetHour = isToday ? Math.max(0, now.getHours() - 2) : 8;
-    const top = targetHour * pixelsPerHour;
+    const top = initialScrollTop(date);
     viewport.scrollTo({ top, behavior: 'auto' });
     dayViewScrollByKey.set(key, top);
   }, [date, numDays, pixelsPerHour]);
@@ -221,6 +242,21 @@ export const DayView: React.FC<DayViewProps> = ({
     viewport.addEventListener('scroll', onScroll, { passive: true });
     return () => viewport.removeEventListener('scroll', onScroll);
   }, [date, numDays]);
+
+  // Today: back to now, even when today was already showing (the remembered
+  // position kept the grid where the user had scrolled). Declared after the
+  // effects above so it wins when the date changes in the same render, and
+  // remembered so a Day/Agenda switch comes back here.
+  const lastScrollToNowNonceRef = React.useRef(scrollToNowNonce);
+  React.useEffect(() => {
+    if (scrollToNowNonce === lastScrollToNowNonceRef.current) return;
+    lastScrollToNowNonceRef.current = scrollToNowNonce;
+    const viewport = document.getElementById('calendar-day-viewport');
+    if (!viewport) return;
+    const top = initialScrollTop(new Date());
+    viewport.scrollTo({ top, behavior: 'smooth' });
+    dayViewScrollByKey.set(dayScrollKey(new Date(), numDays), top);
+  }, [scrollToNowNonce]);
 
   // Merge live drag delta/over to reflect real-time during drag
   const getEventWithDragLive = (event: CalendarEvent): CalendarEvent => {
@@ -480,16 +516,34 @@ export const DayView: React.FC<DayViewProps> = ({
   );
 
   const handleDragEnd = (e: DragEndEvent) => {
-    const { active, over } = e;
-    if (!over || !active?.data?.current) return;
-    const data = active.data.current as { event: CalendarEvent; handle: 'move' | 'start' | 'end' };
-    const drop = parseSlotId(String(over.id));
-    if (!drop) return;
+    // The live preview ends however this returns: a drop outside the grid used
+    // to leave the event drawn where it was let go.
     try {
+      const { active, over } = e;
+      if (!over || !active?.data?.current) return;
+      const data = active.data.current as {
+        event: CalendarEvent;
+        handle: 'move' | 'start' | 'end';
+      };
+      const drop = parseSlotId(String(over.id));
+      if (!drop) return;
       const event = data.event as CalendarEvent;
       const handle = data.handle as 'move' | 'start' | 'end';
       const { start: origStart, end: origEnd } = getEventDateRange(event);
       if (!origStart || !origEnd) return;
+
+      // Neither of these is a move, so treat it as the click it probably was:
+      // open the editor, with no save and no toast.
+      const openAsClick = () => {
+        const el = document.querySelector(`[data-event-id="${event.id}"]`) as HTMLElement | null;
+        onEventClick(event, el ?? undefined);
+      };
+      // An all-day event has no other day to go to in the one-day grid, and
+      // dropping it on an hour rewrote it as a one-day timed event.
+      if (event.allDay && days.length === 1) {
+        openAsClick();
+        return;
+      }
 
       const durationMs = origEnd.getTime() - origStart.getTime();
       let newStart = new Date(origStart);
@@ -526,6 +580,20 @@ export const DayView: React.FC<DayViewProps> = ({
         }
       }
 
+      // A nudge that lands where it started. Compared with the event as it was
+      // before the drag: data.event already carries the live preview times.
+      const before = activeDragEvent?.eventId === event.id ? activeDragEvent.originalEvent : event;
+      const { start: wasStart, end: wasEnd } = getEventDateRange(before);
+      if (
+        wasStart &&
+        wasEnd &&
+        newStart.getTime() === wasStart.getTime() &&
+        newEnd.getTime() === wasEnd.getTime()
+      ) {
+        openAsClick();
+        return;
+      }
+
       // Create updated event for optimistic UI update
       const updatedEvent: CalendarEvent = {
         ...event,
@@ -552,8 +620,9 @@ export const DayView: React.FC<DayViewProps> = ({
       }
     } catch {
       // ignore
+    } finally {
+      setActiveDragEvent(null);
     }
-    setActiveDragEvent(null);
   };
 
   const handleDragStart = (e: DragStartEvent) => {
@@ -597,100 +666,111 @@ export const DayView: React.FC<DayViewProps> = ({
         onDragStart={handleDragStart}
         onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
+        onDragCancel={() => setActiveDragEvent(null)}
       >
-        {/* Header section with day names - always visible */}
-        <div className="flex gap-0 border-b">
-          <TimezoneSelector
-            selectedTimeZone={selectedTimeZone}
-            setSelectedTimeZone={setSelectedTimeZone}
-            userTimeZone={userTimeZone}
-            className=""
-            style={{ width: `${timeColWidth}px` }}
-          />
-          <div className="flex flex-1">
-            {days.map((day) => (
-              <div
-                key={day.toISOString()}
-                className={cn(
-                  'flex-1 overflow-hidden border-r p-2 text-center text-sm last:border-r-0',
-                  isSameDay(day, new Date()) ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
+        {/* Day-name header, for multi-day views. With one day the panel's date
+            row above already names it (and shows the time zone), so a third
+            copy of the date only took grid space. */}
+        {days.length > 1 && (
+          <div className="flex gap-0 border-b">
+            <TimezoneSelector
+              selectedTimeZone={selectedTimeZone}
+              setSelectedTimeZone={setSelectedTimeZone}
+              userTimeZone={userTimeZone}
+              className=""
+              style={{ width: `${timeColWidth}px` }}
+            />
+            <div className="flex flex-1">
+              {days.map((day) => (
                 <div
+                  key={day.toISOString()}
                   className={cn(
-                    'flex items-center justify-center gap-1 overflow-hidden text-xs',
-                    isSameDay(day, new Date()) && 'font-medium'
+                    'flex-1 overflow-hidden border-r p-2 text-center text-sm last:border-r-0',
+                    isSameDay(day, new Date()) ? 'text-foreground' : 'text-muted-foreground'
                   )}
                 >
-                  <span className="truncate">{format(day, 'EEE')}</span>
                   <div
                     className={cn(
-                      'flex h-5 w-5 items-center justify-center rounded-sm',
-                      isSameDay(day, new Date()) && 'bg-destructive text-destructive-foreground'
+                      'flex items-center justify-center gap-1 overflow-hidden text-xs',
+                      isSameDay(day, new Date()) && 'font-medium'
                     )}
                   >
-                    {format(day, 'd')}
+                    <span className="truncate">{format(day, 'EEE')}</span>
+                    <div
+                      className={cn(
+                        'flex h-5 w-5 items-center justify-center rounded-md',
+                        isSameDay(day, new Date()) &&
+                          'bg-destructive text-destructive-foreground dark:text-background'
+                      )}
+                    >
+                      {format(day, 'd')}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* All-day events section - sticky at top */}
+        {/* All-day events section */}
         {(() => {
           const allAllDayEvents = days.flatMap((day) => getAllDayEvents(day));
           if (allAllDayEvents.length === 0) return null;
           return (
-            <div className="sticky top-0 z-30 border-b shadow-sm" data-all-day-section="true">
-              <div className="relative flex gap-0">
-                <div
-                  className="flex min-h-[32px] items-center border-r"
-                  style={{ width: `${timeColWidth}px` }}
-                >
-                  <div className="flex w-full items-center justify-center px-1 text-xs text-muted-foreground">
-                    All-day
+            <div className="relative z-30 border-b shadow-sm" data-all-day-section="true">
+              {/* Capped: five or more all-day events pushed the grid ~130px
+                  down. The whole row scrolls, so the slot behind each column
+                  (drops, double-click) still spans all of its events. */}
+              <div className="max-h-[88px] overflow-y-auto">
+                <div className="relative flex gap-0">
+                  <div
+                    className="flex min-h-[32px] items-center border-r bg-muted/50"
+                    style={{ width: `${timeColWidth}px` }}
+                  >
+                    <div className="flex w-full items-center justify-center px-1 text-xs text-muted-foreground">
+                      All-day
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-1">
-                  {days.map((day) => {
-                    const dayAllDayEvents = getAllDayEvents(day);
-                    return (
-                      <div
-                        key={`allday-${day.toISOString()}`}
-                        className="relative min-h-[32px] flex-1"
-                      >
-                        <DroppableTimeSlot
-                          id={`day-${format(day, 'yyyy-MM-dd')}`}
-                          date={day}
-                          onCreateEvent={onCreateEvent}
-                          onDragSelectionStart={onDragSelectionStart}
-                          onDragSelectionChange={onDragSelectionChange}
-                          onDragSelectionEnd={onDragSelectionEnd}
-                          onClearSelection={onClearSelection}
-                          isDragSelecting={isDragSelecting}
-                          allowDoubleClickCreate={true}
-                          className={cn('absolute inset-0 transition-colors hover:bg-muted/20')}
-                        />
-                        <div className="space-y-1 p-2">
-                          {dayAllDayEvents.map((event) => {
-                            return (
-                              <DraggableEvent
-                                key={event.id}
-                                event={event}
-                                onClick={(target) => onEventClick(event, target)}
-                                className="text-xs"
-                                isActive={activeEvent?.id === event.id}
-                                isDraft={getEventDraftStatus?.(event.id) === 'draft'}
-                                currentDate={day}
-                                preference={preference}
-                              />
-                            );
-                          })}
+                  <div className="flex flex-1">
+                    {days.map((day) => {
+                      const dayAllDayEvents = getAllDayEvents(day);
+                      return (
+                        <div
+                          key={`allday-${day.toISOString()}`}
+                          className="relative min-h-[32px] flex-1"
+                        >
+                          <DroppableTimeSlot
+                            id={`day-${format(day, 'yyyy-MM-dd')}`}
+                            date={day}
+                            onCreateEvent={onCreateEvent}
+                            onDragSelectionStart={onDragSelectionStart}
+                            onDragSelectionChange={onDragSelectionChange}
+                            onDragSelectionEnd={onDragSelectionEnd}
+                            onClearSelection={onClearSelection}
+                            isDragSelecting={isDragSelecting}
+                            allowDoubleClickCreate={true}
+                            className={cn('absolute inset-0 transition-colors hover:bg-muted')}
+                          />
+                          <div className="space-y-1 p-2">
+                            {dayAllDayEvents.map((event) => {
+                              return (
+                                <DraggableEvent
+                                  key={event.id}
+                                  event={event}
+                                  onClick={(target) => onEventClick(event, target)}
+                                  className="text-xs"
+                                  isActive={activeEvent?.id === event.id}
+                                  isDraft={getEventDraftStatus?.(event.id) === 'draft'}
+                                  currentDate={day}
+                                  preference={preference}
+                                />
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -799,11 +879,16 @@ export const DayView: React.FC<DayViewProps> = ({
                           event={eventWithDrag}
                           onClick={(target) => onEventClick(event, target)}
                           className="h-full text-xs"
-                          style={{ height: '100%' }}
+                          heightPx={height}
                           isActive={activeEvent?.id === event.id}
                           isDraft={getEventDraftStatus?.(event.id) === 'draft'}
                           currentDate={day}
-                          pixelsPerHour={pixelsPerHour}
+                          // The dragged event is already drawn at its live
+                          // position; the drag offset on top doubled the move
+                          // in its time label.
+                          pixelsPerHour={
+                            activeDragEvent?.eventId === event.id ? undefined : pixelsPerHour
+                          }
                           preference={preference}
                         />
                       </div>
@@ -834,16 +919,13 @@ export const DayView: React.FC<DayViewProps> = ({
                             height: `${heightPx}px`
                           }}
                         >
-                          <div
+                          <PendingEventBlock
                             ref={setPendingAnchorRef}
-                            className="group relative h-full cursor-pointer rounded-sm px-1 py-0.5 text-xs"
-                            style={{
-                              borderColor:
-                                preference?.account?.accentColor?.[selectedAccountUids[0]] ||
-                                '#035ddf',
-                              backgroundColor: `${preference?.account?.accentColor?.[selectedAccountUids[0]] || '#035ddf'}10`
-                            }}
-                          ></div>
+                            start={start}
+                            end={end}
+                            color={pendingColor}
+                            className="group relative h-full cursor-pointer"
+                          />
                         </div>
                       );
                     } catch {
@@ -854,7 +936,11 @@ export const DayView: React.FC<DayViewProps> = ({
               );
             })}
 
-            <DragSelectionOverlay selection={dragSelection} currentView="day" />
+            <DragSelectionOverlay
+              selection={dragSelection}
+              currentView="day"
+              accentColor={pendingColor}
+            />
 
             {days.some((day) => isSameDay(day, new Date())) && (
               <CurrentTimeLine

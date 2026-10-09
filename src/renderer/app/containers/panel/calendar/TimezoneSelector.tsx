@@ -17,6 +17,7 @@ import {
   POPULAR_TIMEZONES,
   getTimezonesByRegion,
   getTimezoneAbbreviation,
+  getTimezoneLongName,
   getCurrentTimeWithAbbreviation,
   getCurrentGMTOffset,
   searchTimezones,
@@ -73,27 +74,30 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {/* <PopoverTrigger asChild> */}
+      {/* A label, not a control (the picker is disabled): no hover state. It
+          sits over the hour gutter, so it shares the gutter tint. */}
       <div
         className={cn(
-          'flex flex-col items-center justify-center border-r p-1 text-xs font-medium transition-colors hover:bg-card/80',
+          'flex flex-col items-center justify-center border-r bg-muted/50 p-1 text-xs font-medium',
           className
         )}
         style={style}
+        title={`${getTimezoneLongName(selectedTimeZone)} (${selectedTimeZone})`}
       >
-        <div className="flex items-center gap-1">
-          <span className="text-muted-foreground">{abbreviation}</span>
+        <div className="flex min-w-0 max-w-full items-center gap-1">
+          <span className="truncate whitespace-nowrap text-muted-foreground">{abbreviation}</span>
         </div>
       </div>
       {/* </PopoverTrigger> */}
       <PopoverContent className="w-96 p-0" align="start">
-        <Command className="dark rounded-xl">
+        <Command className="rounded-xl">
           <CommandInput
             placeholder="Search timezones..."
             value={searchQuery}
             onValueChange={setSearchQuery}
             className="m-2 flex h-fit w-full p-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
           />
-          <CommandList className="dark">
+          <CommandList>
             <ScrollArea className="max-h-80">
               <CommandEmpty>No timezone found.</CommandEmpty>
 

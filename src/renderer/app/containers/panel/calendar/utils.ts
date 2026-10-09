@@ -206,3 +206,10 @@ export const isEventInPast = (event: CalendarEvent): boolean => {
     return false;
   }
 };
+
+// One time-range format for event blocks, the agenda and new-event blocks:
+// "3:00 – 4:00 PM", or "11:30 AM – 12:30 PM" when the range crosses noon.
+export const formatTimeRange = (start: Date, end: Date): string => {
+  const sameMeridiem = format(start, 'a') === format(end, 'a');
+  return `${format(start, sameMeridiem ? 'h:mm' : 'h:mm a')} – ${format(end, 'h:mm a')}`;
+};

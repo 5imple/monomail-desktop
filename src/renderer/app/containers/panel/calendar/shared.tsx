@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
@@ -20,7 +20,8 @@ import {
 import { UserPreference } from '@/main/api/auth/types/user';
 import { GRID_CONSTANTS } from './constants';
 import { useCalendar } from '@/renderer/app/store/calendar/useCalendar';
-import { getEventDateRange, isEventInPast } from './utils';
+import { formatTimeRange, getEventDateRange, isEventInPast } from './utils';
+import { readableTextOn } from './eventText';
 
 export const CurrentTimeLine: React.FC<{
   currentView: CalendarView;
@@ -77,7 +78,7 @@ export const CurrentTimeLine: React.FC<{
           className="absolute z-40 flex items-center"
           style={{ left: lineLeft, transform: 'translateX(calc(-100%))' }}
         >
-          <div className="flex h-5 items-center whitespace-nowrap rounded bg-destructive px-1.5 text-xs font-medium text-destructive-foreground shadow-md">
+          <div className="flex h-5 items-center whitespace-nowrap rounded-md bg-destructive px-1.5 text-xs font-medium text-destructive-foreground shadow-md dark:text-background">
             {timeString}
           </div>
         </div>
@@ -111,6 +112,24 @@ export const CurrentTimeLine: React.FC<{
   );
 };
 
+// The account's accent color (Settings › Accounts), or the default blue.
+export const DEFAULT_EVENT_COLOR = '#035ddf';
+export const getAccountColor = (preference?: UserPreference, accountUid?: string | null): string =>
+  (accountUid && preference?.account?.accentColor?.[accountUid]) || DEFAULT_EVENT_COLOR;
+
+const tint = (color: string) => `linear-gradient(${color}, ${color})`;
+
+// Title clamp by block height (text-xs lines are 16px; 4px padding plus the
+// time line below). Literal classes so Tailwind generates them.
+const TITLE_LINE_CLAMP = [
+  'line-clamp-1',
+  'line-clamp-2',
+  'line-clamp-3',
+  'line-clamp-4',
+  'line-clamp-5',
+  'line-clamp-6'
+];
+
 const DraggableEventInner: React.FC<{
   event: CalendarEvent;
   style?: React.CSSProperties;
@@ -121,6 +140,8 @@ const DraggableEventInner: React.FC<{
   isActive?: boolean;
   currentDate?: Date;
   pixelsPerHour?: number;
+  // Rendered height of a timed block; all-day chips leave it unset.
+  heightPx?: number;
   preference?: UserPreference;
 }> = ({
   event,
@@ -132,6 +153,7 @@ const DraggableEventInner: React.FC<{
   isActive = false,
   currentDate,
   pixelsPerHour,
+  heightPx,
   preference
 }) => {
   const [hoveredHandle, setHoveredHandle] = useState<CalendarDragHandle | null>(null);
@@ -145,16 +167,9 @@ const DraggableEventInner: React.FC<{
   const draftChanges = event?.id ? getEventDraftChanges?.(event.id) : undefined;
   const displayedTitle =
     (draftChanges?.title as string | undefined) ?? event.title ?? event.summary;
+  const title = displayedTitle?.trim() ? displayedTitle : null;
 
-  // Get account-specific color
-  const getAccountColor = (accountUid?: string): string => {
-    if (!accountUid || !preference?.account?.accentColor) {
-      return '#035ddf'; // Default blue
-    }
-    return preference.account.accentColor[accountUid] || '#035ddf';
-  };
-
-  const accountColor = getAccountColor(event.accountUid);
+  const accountColor = getAccountColor(preference, event.accountUid);
   const accountColorStyles = {
     '--account-color': accountColor,
     '--account-color-20': `${accountColor}20`,
@@ -298,6 +313,55 @@ const DraggableEventInner: React.FC<{
     }
   };
 
+  const timeText = (() => {
+    if (isAllDay) return null;
+    const { start: ps, end: pe } = getPreviewRange();
+    if (!ps || !pe || isNaN(ps.getTime()) || isNaN(pe.getTime())) return 'Time unavailable';
+    return formatTimeRange(ps, pe);
+  })();
+
+  // Fills paint over an opaque card base, so hour lines and the slot hover no
+  // longer show through (a bare 6% tint left only the colored bar on dark
+  // themes). The layers are CSS variables so a class can swap them on hover;
+  // inline background colors used to override every hover and draft style.
+  const solidFill = isActive && !needsActionForSelf;
+  const fillRest = isDraft
+    ? tint('hsl(var(--secondary-accent) / 0.15)')
+    : needsActionForSelf
+      ? isActive
+        ? tint('var(--account-color-40)')
+        : 'none'
+      : isMultiDayEvent
+        ? 'linear-gradient(to right, var(--account-color-20), var(--account-color-10), var(--account-color-20))'
+        : tint('var(--account-color-20)');
+  const fillHover = isDraft
+    ? tint('hsl(var(--secondary-accent) / 0.25)')
+    : tint('var(--account-color-40)');
+
+  const titleContent = (
+    <>
+      {isDraft && (
+        <span
+          className="mr-1 inline-block h-2 w-2 rounded-full bg-secondary-accent"
+          title="Draft changes pending"
+        />
+      )}
+      {isMultiDayEvent && !isDraft && (
+        <span
+          className="mr-1 inline-block h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: 'var(--account-color-60)' }}
+        />
+      )}
+      {title ?? (
+        <span className={isActive ? 'opacity-80' : 'text-muted-foreground'}>(No title)</span>
+      )}
+    </>
+  );
+
+  const compact = heightPx !== undefined && heightPx < 36;
+  const titleLines =
+    heightPx === undefined ? 1 : Math.min(6, Math.max(1, Math.floor((heightPx - 20) / 16)));
+
   return (
     <div
       data-event-id={event.id}
@@ -305,62 +369,46 @@ const DraggableEventInner: React.FC<{
       ref={shouldDisableDrag ? undefined : moveDraggable.setNodeRef}
       {...(shouldDisableDrag ? {} : moveDraggable.listeners)}
       {...(shouldDisableDrag ? {} : moveDraggable.attributes)}
+      aria-label={`${title ?? '(No title)'}, ${timeText ?? 'All-day'}`}
       className={cn(
-        'group relative cursor-pointer rounded-sm transition-colors',
+        'group relative cursor-pointer rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         // Default left accent bar unless we render full dashed border for needs-action
         !isNewDraftEvent && !needsActionForSelf && 'border-l-4',
-        isActive
-          ? needsActionForSelf
-            ? 'border border-dashed text-white'
-            : 'text-white'
-          : needsActionForSelf
-            ? 'border border-dashed bg-transparent'
-            : '',
-        isDraft && !isActive && 'border-amber-400/50 bg-amber-100/20 ring-1 ring-amber-400/30',
-        isDraft && isActive && 'text-amber-foreground border-amber-400 bg-amber-400',
+        needsActionForSelf && 'border border-dashed',
+        !solidFill && 'bg-card [background-image:var(--event-fill)]',
+        !solidFill && !isDragging && 'hover:[background-image:var(--event-fill-hover)]',
+        isDraft && !isActive && 'ring-1 ring-secondary-accent/40',
         isDragging && 'opacity-40',
         isMultiDayEvent && !isActive && 'shadow-sm',
         isMultiDayEvent && isActive && 'shadow-md',
         'px-1 py-0.5 text-xs',
         className
       )}
-      style={{
-        ...eventStyle,
-        // Use CSS custom properties for dynamic colors
-        borderColor: isActive
-          ? 'var(--account-color)'
-          : needsActionForSelf
-            ? 'var(--account-color)'
-            : 'var(--account-color)',
-        backgroundColor: isActive
-          ? needsActionForSelf
-            ? 'var(--account-color-20)'
-            : 'var(--account-color)'
-          : needsActionForSelf
-            ? 'transparent'
-            : isMultiDayEvent
-              ? 'var(--account-color-10)'
-              : 'var(--account-color-10)',
-        ...(isMultiDayEvent &&
-          !isActive && {
-            background: `linear-gradient(to right, var(--account-color-20), var(--account-color-10), var(--account-color-20))`
-          }),
-        ...(needsActionForSelf &&
-          !isActive && {
-            ':hover': {
-              backgroundColor: 'var(--account-color-20)'
-            }
-          }),
-        ...(!needsActionForSelf &&
-          !isActive && {
-            ':hover': {
-              backgroundColor: 'var(--account-color-20)'
-            }
-          })
-      }}
+      style={
+        {
+          ...eventStyle,
+          borderColor:
+            isDraft && !isActive ? 'hsl(var(--secondary-accent))' : 'var(--account-color)',
+          ...(solidFill
+            ? { backgroundColor: 'var(--account-color)', color: readableTextOn(accountColor) }
+            : { '--event-fill': fillRest, '--event-fill-hover': fillHover })
+        } as React.CSSProperties
+      }
       onClick={(e) => {
         e.stopPropagation();
         onClick?.(e.currentTarget as HTMLElement);
+      }}
+      onKeyDown={(e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick?.(e.currentTarget as HTMLElement);
+          return;
+        }
+        // Keys on a focused event belong to the calendar: Backspace, E, U…
+        // used to reach the inbox hotkeys and act on the open email.
+        if (e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
       }}
     >
       {isMultiDayEvent && continuesFromPrevious && (
@@ -375,69 +423,46 @@ const DraggableEventInner: React.FC<{
           style={{ backgroundColor: 'var(--account-color-40)' }}
         />
       )}
+      {/* Clipped here, not on the root: the resize strips and grab pills sit
+          partly outside the block. */}
       <div
         className={cn(
-          'relative z-10',
+          'relative z-10 h-full min-h-0 overflow-hidden',
           shouldDisableDrag ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
         )}
       >
-        {(() => {
-          try {
-            const { isAllDay: allDay } = getEventDateRange(event);
-            const eventHeight = style?.height
-              ? parseInt(String(style.height).replace('px', ''))
-              : 0;
-
-            const useDoubleLineClamp = !allDay && eventHeight > 32;
-            return (
-              <div className={cn('flex flex-col', eventHeight === 100 && 'flex-row gap-2')}>
-                <div
-                  className={cn(
-                    'text-xs font-medium',
-                    useDoubleLineClamp ? 'line-clamp-2' : 'line-clamp-1'
-                  )}
-                >
-                  {isDraft && (
-                    <span
-                      className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-500"
-                      title="Draft changes pending"
-                    />
-                  )}
-                  {isMultiDayEvent && !isDraft && (
-                    <span
-                      className="mr-1 inline-block h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: 'var(--account-color-60)' }}
-                    />
-                  )}
-                  {displayedTitle}
-                </div>
-                {allDay
-                  ? null
-                  : (() => {
-                      const { start: ps, end: pe } = getPreviewRange();
-                      if (!ps || !pe || isNaN(ps.getTime()) || isNaN(pe.getTime())) {
-                        return <div className="text-sm opacity-70">Time unavailable</div>;
-                      }
-                      return (
-                        <div className="line-clamp-1 text-xs opacity-70">{`${format(ps, 'h:mm a')} - ${format(pe, 'h:mm a')}`}</div>
-                      );
-                    })()}
-              </div>
-            );
-          } catch {
-            return <div className="text-sm opacity-70">Time unavailable</div>;
-          }
-        })()}
+        {isAllDay || heightPx === undefined ? (
+          <div className="flex flex-col">
+            <div className="line-clamp-1 text-xs font-medium">{titleContent}</div>
+            {timeText && <div className="line-clamp-1 text-xs opacity-70">{timeText}</div>}
+          </div>
+        ) : compact ? (
+          // Too short for two lines: title and time share one row.
+          <div className="flex min-w-0 items-baseline gap-1">
+            <div className="min-w-0 truncate text-xs font-medium">{titleContent}</div>
+            <div className="shrink-0 text-xs opacity-70">{timeText}</div>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            <div className={cn('text-xs font-medium', TITLE_LINE_CLAMP[titleLines - 1])}>
+              {titleContent}
+            </div>
+            <div className="line-clamp-1 text-xs opacity-70">{timeText}</div>
+          </div>
+        )}
       </div>
       {isTimedEvent && !shouldDisableDrag && showStart && (
         <div
           ref={startDraggable.setNodeRef}
           {...startDraggable.attributes}
           {...startDraggable.listeners}
+          // Pointer-only resize strips: not a tab stop or a nameless button.
+          tabIndex={-1}
+          aria-hidden
           className={cn(
             'absolute -top-1 left-0 right-0 z-30 h-2 cursor-ns-resize rounded-sm opacity-0 transition-all group-hover:opacity-100',
-            hoveredHandle === 'start' && 'bg-[hsl(var(--chart-1)/0.3)]',
-            startDraggable.isDragging && 'h-3 bg-[hsl(var(--chart-1)/0.4)] opacity-100'
+            hoveredHandle === 'start' && 'bg-[color:var(--account-color-40)]',
+            startDraggable.isDragging && 'h-3 bg-[color:var(--account-color-50)] opacity-100'
           )}
           onMouseEnter={() => setHoveredHandle('start')}
           onMouseLeave={() => setHoveredHandle(null)}
@@ -448,10 +473,12 @@ const DraggableEventInner: React.FC<{
           ref={endDraggable.setNodeRef}
           {...endDraggable.attributes}
           {...endDraggable.listeners}
+          tabIndex={-1}
+          aria-hidden
           className={cn(
             'absolute -bottom-1 left-0 right-0 z-30 h-2 cursor-ns-resize rounded-sm opacity-0 transition-all group-hover:opacity-100',
-            hoveredHandle === 'end' && 'bg-[hsl(var(--chart-1)/0.3)]',
-            endDraggable.isDragging && 'h-3 bg-[hsl(var(--chart-1)/0.4)] opacity-100'
+            hoveredHandle === 'end' && 'bg-[color:var(--account-color-40)]',
+            endDraggable.isDragging && 'h-3 bg-[color:var(--account-color-50)] opacity-100'
           )}
           onMouseEnter={() => setHoveredHandle('end')}
           onMouseLeave={() => setHoveredHandle(null)}
@@ -464,7 +491,7 @@ const DraggableEventInner: React.FC<{
               className={cn(
                 'absolute -top-0.5 left-1/2 z-20 h-1 w-8 -translate-x-1/2 rounded-full transition-all',
                 startDraggable.isDragging
-                  ? 'h-1.5 w-12 bg-chart-1 opacity-100'
+                  ? 'h-1.5 w-12 bg-[color:var(--account-color)] opacity-100'
                   : 'opacity-0 group-hover:opacity-100'
               )}
               style={
@@ -479,7 +506,7 @@ const DraggableEventInner: React.FC<{
               className={cn(
                 'absolute -bottom-0.5 left-1/2 z-20 h-1 w-8 -translate-x-1/2 rounded-full transition-all',
                 endDraggable.isDragging
-                  ? 'h-1.5 w-12 bg-chart-1 opacity-100'
+                  ? 'h-1.5 w-12 bg-[color:var(--account-color)] opacity-100'
                   : 'opacity-0 group-hover:opacity-100'
               )}
               style={
@@ -504,6 +531,7 @@ export const DraggableEvent = React.memo(DraggableEventInner, (prev, next) => {
     prev.isActive === next.isActive &&
     shallowEq(prev.className, next.className) &&
     shallowEq(prev.pixelsPerHour, next.pixelsPerHour) &&
+    prev.heightPx === next.heightPx &&
     // Compare account UID for color changes
     prev.event.accountUid === next.event.accountUid &&
     // Compare relevant preference fields for color changes
@@ -522,6 +550,27 @@ export const DraggableEvent = React.memo(DraggableEventInner, (prev, next) => {
       (next.event.allDay ? next.event.end?.date : next.event.end?.dateTime)
   );
 });
+
+// The block a new event occupies while it's being drag-selected and while its
+// editor is open, styled like an event of the account it will be created in.
+export const PendingEventBlock = React.forwardRef<
+  HTMLDivElement,
+  { start: Date; end: Date; color: string; className?: string; style?: React.CSSProperties }
+>(({ start, end, color, className, style }, ref) => (
+  <div
+    ref={ref}
+    data-calendar-pending-event="true"
+    className={cn(
+      'overflow-hidden rounded-sm border-l-4 bg-card px-1 py-0.5 text-xs shadow-sm',
+      className
+    )}
+    style={{ borderColor: color, backgroundImage: tint(`${color}33`), ...style }}
+  >
+    <div className="truncate font-medium text-muted-foreground">(No title)</div>
+    <div className="truncate opacity-70">{formatTimeRange(start, end)}</div>
+  </div>
+));
+PendingEventBlock.displayName = 'PendingEventBlock';
 
 const DroppableTimeSlotInner: React.FC<{
   id: string;
@@ -570,13 +619,22 @@ const DroppableTimeSlotInner: React.FC<{
 }) => {
   const { setNodeRef, isOver } = useDroppable({ id });
 
-  const handleClick = () => {
+  // A single click clears the selection after a beat. A double-click's clicks
+  // must not: the clear landed ~200 ms after the new-event editor opened and
+  // closed it again.
+  const clearTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(clearTimerRef.current), []);
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (e.detail > 1) return;
     if (onClearSelection && !isDragSelecting) {
-      setTimeout(() => onClearSelection(), 200);
+      window.clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = window.setTimeout(() => onClearSelection(), 200);
     }
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
+    window.clearTimeout(clearTimerRef.current);
     if (onCreateEvent && !isDragSelecting && allowDoubleClickCreate) {
       e.stopPropagation();
       let eventDate = date;
@@ -584,7 +642,10 @@ const DroppableTimeSlotInner: React.FC<{
         eventDate = addHours(startOfDay(date), hour);
         if (minute !== undefined) eventDate = addMinutes(eventDate, minute);
       }
-      onCreateEvent(eventDate, hour, minute, { clientX: e.clientX, clientY: e.clientY });
+      // Anchored at the column's edge, so the editor opens beside the slot
+      // rather than over the time just clicked.
+      const slotLeft = (e.currentTarget as HTMLElement).getBoundingClientRect().left;
+      onCreateEvent(eventDate, hour, minute, { clientX: slotLeft, clientY: e.clientY });
     }
   };
 
@@ -657,8 +718,36 @@ export const DragSelectionOverlay: React.FC<{
   currentView: CalendarView;
   viewStartDate?: Date;
   days?: Date[];
-}> = ({ selection, currentView, days }) => {
+  accentColor?: string;
+}> = ({ selection, currentView, days, accentColor }) => {
   if (!selection) return null;
+
+  if (currentView === 'day') {
+    const startMinutes = (selection.startHour || 0) * 60 + (selection.startMinute || 0);
+    const endMinutes = (selection.endHour || 0) * 60 + (selection.endMinute || 0);
+    // A press that hasn't left its slot is still a click, not a selection.
+    if (startMinutes === endMinutes) return null;
+    // The range includes the slot under the cursor, in either drag direction
+    // (as onDragSelectionEnd creates it), so it no longer stops one slot short.
+    const rangeStart = Math.min(startMinutes, endMinutes);
+    const rangeEnd =
+      Math.max(startMinutes, endMinutes) + (selection.startHour !== undefined ? 15 : 0);
+    const dayStart = startOfDay(selection.startDate);
+    return (
+      <PendingEventBlock
+        start={addMinutes(dayStart, rangeStart)}
+        end={addMinutes(dayStart, rangeEnd)}
+        color={accentColor ?? DEFAULT_EVENT_COLOR}
+        className="pointer-events-none absolute z-20"
+        style={{
+          left: `${GRID_CONSTANTS.DAY_TIME_COL_WIDTH}px`,
+          width: `calc(100% - ${GRID_CONSTANTS.DAY_TIME_COL_WIDTH}px)`,
+          top: `${(rangeStart / 60) * GRID_CONSTANTS.DAY_PIXELS_PER_HOUR}px`,
+          height: `${((rangeEnd - rangeStart) / 60) * GRID_CONSTANTS.DAY_PIXELS_PER_HOUR}px`
+        }}
+      />
+    );
+  }
 
   const calculateSelectionBounds = () => {
     if (currentView === 'week') {
@@ -708,17 +797,6 @@ export const DragSelectionOverlay: React.FC<{
         }
       }
       return { selectionBlocks };
-    } else if (currentView === 'day') {
-      const startMinutes = (selection.startHour || 0) * 60 + (selection.startMinute || 0);
-      const endMinutes = (selection.endHour || 0) * 60 + (selection.endMinute || 0);
-      const actualStartMinutes = Math.min(startMinutes, endMinutes);
-      const actualEndMinutes = Math.max(startMinutes, endMinutes);
-      return {
-        left: `${GRID_CONSTANTS.DAY_TIME_COL_WIDTH}px`,
-        width: `calc(100% - ${GRID_CONSTANTS.DAY_TIME_COL_WIDTH}px)`,
-        top: `${(actualStartMinutes / 60) * GRID_CONSTANTS.DAY_PIXELS_PER_HOUR}px`,
-        height: `${((actualEndMinutes - actualStartMinutes) / 60) * GRID_CONSTANTS.DAY_PIXELS_PER_HOUR}px`
-      };
     }
     return null;
   };
@@ -759,10 +837,5 @@ export const DragSelectionOverlay: React.FC<{
       </>
     );
   }
-  return (
-    <div
-      className="pointer-events-none absolute z-20 bg-primary/20"
-      style={bounds as React.CSSProperties}
-    />
-  );
+  return null;
 };
