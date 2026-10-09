@@ -725,7 +725,7 @@ export function useCustomSidebarAtom() {
 
   // Create new folder - OPTIMISTIC UPDATE
   const createFolder = useCallback(
-    async (folderName: string) => {
+    async (folderName: string): Promise<string | false> => {
       if (!activeSpace) return false;
 
       try {
@@ -772,7 +772,8 @@ export function useCustomSidebarAtom() {
             console.warn('Failed to sync create folder to server:', error);
           });
 
-        return true;
+        // The new folder's id, so the caller can put it straight into rename.
+        return folderId;
       } catch (error) {
         console.error('Failed to create folder:', error);
         toast.error(t('toast.error.sidebar_create_folder'));

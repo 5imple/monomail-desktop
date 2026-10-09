@@ -55,7 +55,16 @@
     "delete_item": "Delete",
     "create_folder_prompt": "Enter folder name:",
     "save_name": "Save name",
-    "cancel_rename": "Cancel rename"
+    "cancel_rename": "Cancel rename",
+    "rename": "Rename",
+    "delete_folder": "Delete folder",
+    "remove_from_sidebar": "Remove from sidebar",
+    "removed_from_sidebar": "{{name}} removed from sidebar",
+    "folder_deleted": "Folder “{{name}}” deleted",
+    "folder_empty": "Empty — drag items here",
+    "show_in_sidebar": "Show in sidebar",
+    "expand": "Expand {{name}}",
+    "collapse": "Collapse {{name}}"
   },
   "account_switcher": {
     "switch_account": "Switch Account",

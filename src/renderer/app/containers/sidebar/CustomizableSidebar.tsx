@@ -9,12 +9,14 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger
 } from '@/renderer/app/components/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/renderer/app/components/ui/dropdown-menu';
@@ -56,11 +58,13 @@ import {
   defaultAnimateLayoutChanges
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { FC, useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import { Children, FC, useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
-import { DBGetThreadCountByLabels, ValidLabel } from '@/renderer/app/lib/db/thread';
+import { DBGetThreadCountsByLabelSets, ValidLabel } from '@/renderer/app/lib/db/thread';
+import { restoreSidebarSubtree } from '@/renderer/app/lib/sidebarRestore';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { ringVariants } from '@/renderer/app/components/ui/constants';
@@ -75,8 +79,11 @@ const SpecialDropZone: FC<{ id: string; isActive: boolean }> = ({ id, isActive }
       ref={setNodeRef}
       data-id={id}
       className={cn(
-        'h-2 w-full transition-all duration-200'
-        // isActive ? 'rounded border-2 border-dashed border-primary bg-primary/20' : 'opacity-0'
+        // The same 2px line as the row drop lines, drawn without changing the
+        // zone's height (it showed nothing before).
+        'relative h-2 w-full',
+        isActive &&
+          'after:pointer-events-none after:absolute after:inset-x-0 after:top-1/2 after:z-50 after:h-[2px] after:-translate-y-1/2 after:rounded after:bg-primary after:content-[""]'
       )}
     />
   );
@@ -100,6 +107,30 @@ const dropAnimation: DropAnimation = {
   })
 };
 
+// Children sit under the parent's title with a guide line (~22px a level,
+// so two levels still fit the 220px sidebar); ml-2 alone made nested labels
+// look like siblings of Inbox.
+const CHILD_INDENT = 'ml-[1.1rem] mt-1 flex flex-col gap-1 border-l border-border/60 pl-1.5';
+
+// 'text-muted-foreground' is the stored "no colour" sentinel for labels.
+const labelSwatchColor = (color?: string) =>
+  !color || color === 'text-muted-foreground' ? 'hsl(var(--muted-foreground))' : color;
+
+// A label's colour as a 4px bar centred in an icon-sized slot, so label rows
+// line up with icon rows (it was drawn three different ways). The hairline
+// keeps white and black swatches visible.
+const LabelSwatch: FC<{ color?: string; className?: string }> = ({ color, className }) => (
+  <span
+    aria-hidden
+    className={cn('flex h-[18px] w-[18px] shrink-0 items-center justify-center', className)}
+  >
+    <span
+      className="h-3 w-1 rounded-full ring-1 ring-foreground/15"
+      style={{ backgroundColor: labelSwatchColor(color) }}
+    />
+  </span>
+);
+
 interface SortableNavItemProps {
   item: CustomNavItem;
   isActive: boolean;
@@ -121,6 +152,8 @@ interface SortableNavItemProps {
   accounts?: Array<{ uid: string; email: string }>;
   hasMultipleAccounts?: boolean;
   isChildActive?: (accountId: string) => boolean;
+  /** Opened for the moment by a drag hovering over it (not saved). */
+  isSpringOpen?: boolean;
   append?: React.ReactNode;
 }
 
@@ -145,6 +178,7 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
   accounts = [],
   hasMultipleAccounts = false,
   isChildActive,
+  isSpringOpen = false,
   append
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -191,22 +225,26 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
 
   const handleClick = useCallback(
     (e?: React.MouseEvent) => {
-      // For folders, don't toggle on main click - only the toggle button should do that
-      // This allows double-click editing to work properly
       if (item.type === 'folder') {
+        // A click toggles the folder; the second click of a double-click
+        // (rename) mustn't toggle it straight back.
+        if (e && e.detail > 1) return;
         handleToggleClick(e);
-        // Do nothing for folder clicks, let the toggle button handle expansion
         return;
       } else {
         onItemClick(item);
       }
     },
-    [item]
+    // With [item] alone a folder kept a stale toggle handler that wrote an
+    // old sidebar snapshot back, undoing recent edits.
+    [item, handleToggleClick, onItemClick]
   );
 
   // Handle keyboard activation (Enter/Space) - only trigger click, not drag
   const handleKeyboardActivation = useCallback(
     (e: React.KeyboardEvent) => {
+      // Typing in the rename field: Space is a character, not "toggle".
+      if ((e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         e.stopPropagation();
@@ -245,6 +283,25 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
     }
   }, [item.id, item.type, onStartEditing]);
 
+  // Rename from the context menu. Radix hands focus back to the row as the
+  // menu closes, which would pull it straight out of the new rename field.
+  const renamePendingRef = useRef(false);
+  const handleRenameSelect = useCallback(() => {
+    renamePendingRef.current = true;
+    setTimeout(() => onStartEditing?.(item.id), 0);
+  }, [item.id, onStartEditing]);
+  const handleMenuCloseAutoFocus = useCallback((event: Event) => {
+    if (!renamePendingRef.current) return;
+    renamePendingRef.current = false;
+    event.preventDefault();
+  }, []);
+
+  const itemTitle = item.title.replace('Mono/', '');
+  const toggleLabel = (open: boolean) =>
+    open ? t('sidebar.collapse', { name: itemTitle }) : t('sidebar.expand', { name: itemTitle });
+  // The in-list source of a drag fades so the moving copy reads as "lifted".
+  const wrapperClassName = cn(isDragging && !isOverlay && 'opacity-40');
+
   // Handle unified inbox navigation for primary/secondary items with multiple accounts
   const shouldShowAccountExpansion =
     hasMultipleAccounts &&
@@ -252,70 +309,80 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
     !item.accountId;
 
   if (item.type === 'folder') {
-    // When editing, don't wrap in ContextMenu to prevent interference
+    const folderOpen = !item.isCollapsed || isSpringOpen;
+    const folderPrepend = (
+      <div className="flex items-center gap-2">
+        <CollapsibleTrigger asChild>
+          <Button
+            className="relative mr-2"
+            variant="ghost"
+            typeVariant="inline"
+            sizeVariant="sm"
+            // The row toggles on click and Enter itself, so this isn't a
+            // second Tab stop.
+            tabIndex={-1}
+            aria-label={toggleLabel(folderOpen)}
+            onClick={handleToggleClick}
+          >
+            <MonoIcon
+              type="Dropdown"
+              className={cn(
+                'transition-all duration-300',
+                folderOpen ? '' : '-rotate-90',
+                'absolute text-muted-foreground opacity-0 group-pointer-hover:opacity-100'
+              )}
+            />
+            <MonoIcon
+              type={folderOpen ? 'FolderOpen' : (item.icon as MonoIconType)}
+              className="text-muted-foreground opacity-100 transition-all duration-300 group-pointer-hover:opacity-0"
+            />
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+    );
+    const folderContent = (
+      <CollapsibleContent>
+        <div className={CHILD_INDENT}>
+          {Children.count(children) > 0 ? (
+            children
+          ) : (
+            // Nothing inside (e.g. an account folder with no labels yet):
+            // say so instead of opening onto nothing.
+            <div className="pointer-events-none select-none py-1.5 pl-3 text-xs text-muted-foreground">
+              {t('sidebar.folder_empty')}
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    );
+
+    // When editing, don't wrap in ContextMenu to prevent interference. No
+    // row keyboard/click handlers either: Space toggled the folder instead
+    // of typing, and clicks in the field or on ✓ toggled it too.
     if (isEditing) {
       return (
         <div
           ref={combinedRef}
           style={style}
           data-id={item.id}
-          onKeyDown={handleKeyboardActivation}
           data-keyboard-item={item.id}
-          tabIndex={0}
+          tabIndex={-1}
+          className={wrapperClassName}
         >
-          <Collapsible open={!item.isCollapsed}>
+          <Collapsible open={folderOpen}>
             <div className="flex w-full flex-col">
               <NavItem
                 variant={'ghost'}
                 id={item.id}
-                title={item.title.replace('Mono/', '')}
+                title={itemTitle}
                 isEditing={isEditing}
                 onEdit={onEditFolder ? (newTitle) => onEditFolder(item.id, newTitle) : undefined}
                 onCancelEdit={onCancelEdit}
                 onDoubleClick={handleDoubleClick}
                 append={append}
-                onClick={handleMouseClick}
-                prepend={
-                  <div className="flex items-center gap-2">
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        className="relative mr-2"
-                        variant="ghost"
-                        typeVariant="inline"
-                        sizeVariant="sm"
-                        onClick={handleToggleClick}
-                      >
-                        <MonoIcon
-                          type="Dropdown"
-                          className={cn(
-                            'transition-all duration-300',
-                            !item.isCollapsed ? '' : '-rotate-90',
-                            'absolute text-muted-foreground opacity-0 group-hover:opacity-100'
-                          )}
-                        />
-                        {!item.isCollapsed ? (
-                          <MonoIcon
-                            type={'FolderOpen'}
-                            className={cn(
-                              'text-muted-foreground opacity-100 transition-all duration-300 group-hover:opacity-0'
-                            )}
-                          />
-                        ) : (
-                          <MonoIcon
-                            type={item.icon as MonoIconType}
-                            className={cn(
-                              'text-muted-foreground opacity-100 transition-all duration-300 group-hover:opacity-0'
-                            )}
-                          />
-                        )}
-                      </Button>
-                    </CollapsibleTrigger>
-                  </div>
-                }
+                prepend={folderPrepend}
               />
-              <CollapsibleContent>
-                <div className="ml-2 mt-1 flex flex-col gap-1">{children}</div>
-              </CollapsibleContent>
+              {folderContent}
             </div>
           </Collapsible>
         </div>
@@ -330,74 +397,49 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
         data-id={item.id}
         onKeyDown={handleKeyboardActivation}
         data-keyboard-item={item.id}
-        tabIndex={0}
+        // After the dnd-kit spread (it adds tabIndex 0): the NavItem inside
+        // is the row's one Tab stop.
+        tabIndex={-1}
+        className={wrapperClassName}
       >
         <ContextMenu>
           <ContextMenuTrigger>
-            <Collapsible open={!item.isCollapsed}>
+            <Collapsible open={folderOpen}>
               <div className="flex w-full flex-col">
                 <NavItem
-                  className={cn('group', isDragOver && 'border bg-card shadow-sm')}
+                  // Drop target: fill + inset ring, no border (a border moved
+                  // the row 1px).
+                  className={cn(
+                    'group',
+                    isDragOver && 'bg-muted ring-1 ring-inset ring-primary/30'
+                  )}
                   variant={'ghost'}
                   id={item.id}
-                  title={item.title.replace('Mono/', '')}
+                  title={itemTitle}
                   isEditing={isEditing}
                   onEdit={onEditFolder ? (newTitle) => onEditFolder(item.id, newTitle) : undefined}
                   onCancelEdit={onCancelEdit}
                   onDoubleClick={handleDoubleClick}
-                  prepend={
-                    <div className="flex items-center gap-2">
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          className="relative mr-2"
-                          variant="ghost"
-                          typeVariant="inline"
-                          sizeVariant="sm"
-                          onClick={handleToggleClick}
-                        >
-                          <MonoIcon
-                            type="Dropdown"
-                            className={cn(
-                              'transition-all duration-300',
-                              !item.isCollapsed ? '' : '-rotate-90',
-                              'absolute text-muted-foreground opacity-0 group-hover:opacity-100'
-                            )}
-                          />
-                          {!item.isCollapsed ? (
-                            <MonoIcon
-                              type={'FolderOpen'}
-                              className={cn(
-                                'text-muted-foreground opacity-100 transition-all duration-300 group-hover:opacity-0'
-                              )}
-                            />
-                          ) : (
-                            <MonoIcon
-                              type={item.icon as MonoIconType}
-                              className={cn(
-                                'text-muted-foreground opacity-100 transition-all duration-300 group-hover:opacity-0'
-                              )}
-                            />
-                          )}
-                        </Button>
-                      </CollapsibleTrigger>
-                    </div>
-                  }
+                  prepend={folderPrepend}
                   append={append}
                   onClick={handleMouseClick}
                 />
-                <CollapsibleContent>
-                  <div className="ml-2 mt-1 flex flex-col gap-1">{children}</div>
-                </CollapsibleContent>
+                {folderContent}
               </div>
             </Collapsible>
           </ContextMenuTrigger>
-          <ContextMenuContent className="dark">
+          <ContextMenuContent className="dark" onCloseAutoFocus={handleMenuCloseAutoFocus}>
+            <ContextMenuItem onSelect={handleRenameSelect}>
+              <MonoIcon type="Pen" className="mr-2 h-4 w-4" />
+              {t('sidebar.rename')}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
             <ContextMenuItem
               onClick={handleDelete}
               className="text-destructive focus:text-destructive"
             >
               <MonoIcon type="Trash" className="mr-2 h-4 w-4" />
-              {t('sidebar.delete_item') || 'Delete'}
+              {t('sidebar.delete_folder')}
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
@@ -405,8 +447,85 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
     );
   }
 
+  // Only rows that hide a row (not a folder): neutral, since no mail is touched.
+  const removeMenu = (
+    <ContextMenuContent className="dark">
+      <ContextMenuItem onClick={handleDelete}>
+        <MonoIcon type="EyeSlash" className="mr-2 h-4 w-4" />
+        {t('sidebar.remove_from_sidebar')}
+      </ContextMenuItem>
+    </ContextMenuContent>
+  );
+
   // Handle unified inbox navigation for primary/secondary items with multiple accounts
   if (shouldShowAccountExpansion) {
+    // Collapsed with one account's view open: the parent row carries the
+    // highlight (it vanished until you expanded the row).
+    const parentActive =
+      isActive || (!isItemExpanded && accounts.some((account) => isChildActive?.(account.uid)));
+    const expandPrepend = (
+      <div className="flex items-center gap-2">
+        <CollapsibleTrigger asChild>
+          <Button
+            className="relative mr-2"
+            variant="ghost"
+            typeVariant="inline"
+            sizeVariant="sm"
+            // Enter on the row navigates, so this stays focusable: it's the
+            // keyboard way to expand.
+            aria-label={toggleLabel(isItemExpanded)}
+            onClick={handleToggleClick}
+          >
+            <MonoIcon
+              type="Dropdown"
+              className={cn(
+                'transition-all duration-300',
+                isItemExpanded ? '' : '-rotate-90',
+                'absolute text-muted-foreground opacity-0 group-pointer-hover:opacity-100'
+              )}
+            />
+            <MonoIcon
+              type={item.icon as MonoIconType}
+              className={cn(
+                'text-muted-foreground opacity-100 transition-all duration-300 group-pointer-hover:opacity-0',
+                parentActive && item.iconColor
+              )}
+            />
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+    );
+    const accountRows = (
+      <CollapsibleContent>
+        <div className={CHILD_INDENT}>
+          {accounts.map((account) => {
+            const childActive = isChildActive ? isChildActive(account.uid) : false;
+            return (
+              <NavItem
+                key={`${item.id}-${account.uid}`}
+                // An id registers the row for arrow-key navigation.
+                id={`${item.id}-${account.uid}`}
+                variant={'ghost'}
+                title={account.email}
+                iconColor={item.iconColor}
+                active={childActive}
+                prepend={
+                  <MonoIcon
+                    type={item.icon as MonoIconType}
+                    className={cn(
+                      'mr-2 text-muted-foreground transition-all duration-300',
+                      childActive && item.iconColor
+                    )}
+                  />
+                }
+                onClick={() => onAccountClick && onAccountClick(item, account.uid)}
+              />
+            );
+          })}
+        </div>
+      </CollapsibleContent>
+    );
+
     // When editing, don't wrap in ContextMenu to prevent interference
     if (isEditing) {
       return (
@@ -416,7 +535,8 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
           data-id={item.id}
           onKeyDown={handleKeyboardActivation}
           data-keyboard-item={item.id}
-          tabIndex={0}
+          tabIndex={-1}
+          className={wrapperClassName}
         >
           <Collapsible open={isItemExpanded}>
             <div className="flex w-full flex-col">
@@ -424,8 +544,8 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
                 className="group"
                 variant={'ghost'}
                 id={item.id}
-                title={item.title.replace('Mono/', '')}
-                active={isActive}
+                title={itemTitle}
+                active={parentActive}
                 isEditing={isEditing}
                 iconColor={item.iconColor}
                 hotkey={item.hotkey}
@@ -433,74 +553,10 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
                 onCancelEdit={undefined}
                 onDoubleClick={undefined}
                 append={append}
-                prepend={
-                  <div className="flex items-center gap-2">
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        className="relative mr-2"
-                        variant="ghost"
-                        typeVariant="inline"
-                        sizeVariant="sm"
-                        onClick={handleToggleClick}
-                      >
-                        <MonoIcon
-                          type="Dropdown"
-                          className={cn(
-                            'transition-all duration-300',
-                            isItemExpanded ? '' : '-rotate-90',
-                            'absolute text-muted-foreground opacity-0 group-hover:opacity-100'
-                          )}
-                        />
-                        {item.type === 'account-label' ? (
-                          <div
-                            className="ml-1 mr-3 h-3 w-[4px] rounded-full"
-                            style={{ backgroundColor: item.iconColor ?? 'hsl(var(--foreground))' }}
-                          />
-                        ) : (
-                          <MonoIcon
-                            type={item.icon as MonoIconType}
-                            className={cn(
-                              'text-muted-foreground opacity-100 transition-all duration-300 group-hover:opacity-0',
-                              isActive && item.iconColor
-                            )}
-                          />
-                        )}
-                      </Button>
-                    </CollapsibleTrigger>
-                  </div>
-                }
+                prepend={expandPrepend}
                 onClick={() => !isDragging && onItemClick(item)}
               />
-              <CollapsibleContent>
-                <div className="ml-2 mt-1 flex flex-col gap-1">
-                  {accounts.map((account) => (
-                    <NavItem
-                      key={`${item.id}-${account.uid}`}
-                      variant={'ghost'}
-                      title={account.email}
-                      iconColor={item.iconColor}
-                      active={isChildActive ? isChildActive(account.uid) : false}
-                      prepend={
-                        item.type === 'account-label' ? (
-                          <div
-                            className="ml-1 mr-3 h-3 w-[4px] rounded-full"
-                            style={{ backgroundColor: item.iconColor ?? 'hsl(var(--foreground))' }}
-                          />
-                        ) : (
-                          <MonoIcon
-                            type={item.icon as MonoIconType}
-                            className={cn(
-                              'mr-2 text-muted-foreground transition-all duration-300',
-                              isChildActive && isChildActive(account.uid) && item.iconColor
-                            )}
-                          />
-                        )
-                      }
-                      onClick={() => onAccountClick && onAccountClick(item, account.uid)}
-                    />
-                  ))}
-                </div>
-              </CollapsibleContent>
+              {accountRows}
             </div>
           </Collapsible>
         </div>
@@ -515,7 +571,8 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
         data-id={item.id}
         onKeyDown={handleKeyboardActivation}
         data-keyboard-item={item.id}
-        tabIndex={0}
+        tabIndex={-1}
+        className={wrapperClassName}
       >
         <ContextMenu>
           <ContextMenuTrigger>
@@ -525,8 +582,8 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
                   className="group"
                   variant={'ghost'}
                   id={item.id}
-                  title={item.title.replace('Mono/', '')}
-                  active={isActive}
+                  title={itemTitle}
+                  active={parentActive}
                   isEditing={isEditing}
                   iconColor={item.iconColor}
                   hotkey={item.hotkey}
@@ -534,96 +591,38 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
                   onCancelEdit={undefined}
                   onDoubleClick={undefined}
                   append={append}
-                  prepend={
-                    <div className="flex items-center gap-2">
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          className="relative mr-2"
-                          variant="ghost"
-                          typeVariant="inline"
-                          sizeVariant="sm"
-                          onClick={handleToggleClick}
-                        >
-                          <MonoIcon
-                            type="Dropdown"
-                            className={cn(
-                              'transition-all duration-300',
-                              isItemExpanded ? '' : '-rotate-90',
-                              'absolute text-muted-foreground opacity-0 group-hover:opacity-100'
-                            )}
-                          />
-                          {item.type === 'account-label' ? (
-                            <div
-                              className="ml-1 mr-3 h-3 w-[4px] rounded-full"
-                              style={{
-                                backgroundColor: item.iconColor ?? 'hsl(var(--foreground))'
-                              }}
-                            />
-                          ) : (
-                            <MonoIcon
-                              type={item.icon as MonoIconType}
-                              className={cn(
-                                'text-muted-foreground opacity-100 transition-all duration-300 group-hover:opacity-0',
-                                isActive && item.iconColor
-                              )}
-                            />
-                          )}
-                        </Button>
-                      </CollapsibleTrigger>
-                    </div>
-                  }
+                  prepend={expandPrepend}
                   onClick={() => !isDragging && onItemClick(item)}
                 />
-                <CollapsibleContent>
-                  <div className="ml-2 mt-1 flex flex-col gap-1">
-                    {accounts.map((account) => (
-                      <NavItem
-                        key={`${item.id}-${account.uid}`}
-                        variant={'ghost'}
-                        title={account.email}
-                        iconColor={item.iconColor}
-                        active={isChildActive ? isChildActive(account.uid) : false}
-                        prepend={
-                          item.type === 'account-label' ? (
-                            <div
-                              className="ml-1 mr-3 h-3 w-[4px] rounded-full"
-                              style={{
-                                backgroundColor: item.iconColor ?? 'hsl(var(--foreground))'
-                              }}
-                            />
-                          ) : (
-                            <MonoIcon
-                              type={item.icon as MonoIconType}
-                              className={cn(
-                                'mr-2 text-muted-foreground transition-all duration-300',
-                                isChildActive && isChildActive(account.uid) && item.iconColor
-                              )}
-                            />
-                          )
-                        }
-                        onClick={() => onAccountClick && onAccountClick(item, account.uid)}
-                      />
-                    ))}
-                  </div>
-                </CollapsibleContent>
+                {accountRows}
               </div>
             </Collapsible>
           </ContextMenuTrigger>
-          <ContextMenuContent className="dark">
-            <ContextMenuItem
-              onClick={handleDelete}
-              className="text-destructive focus:text-destructive"
-            >
-              <MonoIcon type="Trash" className="mr-2 h-4 w-4" />
-              {t('sidebar.delete_item') || 'Delete'}
-            </ContextMenuItem>
-          </ContextMenuContent>
+          {removeMenu}
         </ContextMenu>
       </div>
     );
   }
 
   // Regular nav item (non-folder, non-expandable)
+  const regularPrepend =
+    item.type === 'account-label' ? (
+      <LabelSwatch color={item.iconColor} className="mr-2" />
+    ) : (
+      <MonoIcon
+        type={item.icon as MonoIconType}
+        className={cn(
+          'mr-2 text-muted-foreground transition-all duration-300',
+          isActive && item.iconColor
+        )}
+        style={
+          item.iconColor && item.iconColor !== 'text-muted-foreground'
+            ? { color: item.iconColor }
+            : undefined
+        }
+      />
+    );
+
   // When editing, don't wrap in ContextMenu to prevent interference
   if (isEditing) {
     return (
@@ -633,12 +632,13 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
         data-id={item.id}
         onKeyDown={handleKeyboardActivation}
         data-keyboard-item={item.id}
-        tabIndex={0}
+        tabIndex={-1}
+        className={wrapperClassName}
       >
         <NavItem
           variant={'ghost'}
           id={item.id}
-          title={item.title.replace('Mono/', '')}
+          title={itemTitle}
           active={isActive}
           isEditing={isEditing}
           iconColor={item.iconColor}
@@ -646,27 +646,7 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
           onEdit={undefined}
           onCancelEdit={undefined}
           append={append}
-          prepend={
-            item.type === 'account-label' ? (
-              <div
-                className="mr-2 h-2 w-2 rounded-full"
-                style={{ backgroundColor: item.iconColor ?? 'hsl(var(--foreground))' }}
-              />
-            ) : (
-              <MonoIcon
-                type={item.icon as MonoIconType}
-                className={cn(
-                  'mr-2 text-muted-foreground transition-all duration-300',
-                  isActive && item.iconColor
-                )}
-                style={
-                  item.iconColor && item.iconColor !== 'text-muted-foreground'
-                    ? { color: item.iconColor }
-                    : undefined
-                }
-              />
-            )
-          }
+          prepend={regularPrepend}
           onClick={() => !isDragging && onItemClick(item)}
           onDoubleClick={undefined}
         />
@@ -682,14 +662,15 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
       data-id={item.id}
       onKeyDown={handleKeyboardActivation}
       data-keyboard-item={item.id}
-      tabIndex={0}
+      tabIndex={-1}
+      className={wrapperClassName}
     >
       <ContextMenu>
         <ContextMenuTrigger>
           <NavItem
             variant={'ghost'}
             id={item.id}
-            title={item.title.replace('Mono/', '')}
+            title={itemTitle}
             active={isActive}
             isEditing={isEditing}
             iconColor={item.iconColor}
@@ -697,45 +678,12 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
             onEdit={undefined}
             onCancelEdit={undefined}
             append={append}
-            prepend={
-              item.type === 'account-label' ? (
-                <div
-                  className="ml-1 mr-3 h-3 w-[4px] rounded-full"
-                  style={{
-                    backgroundColor:
-                      item.iconColor === 'text-muted-foreground'
-                        ? 'hsl(var(--muted-foreground))'
-                        : (item.iconColor ?? 'hsl(var(--foreground))')
-                  }}
-                />
-              ) : (
-                <MonoIcon
-                  type={item.icon as MonoIconType}
-                  className={cn(
-                    'mr-2 text-muted-foreground transition-all duration-300',
-                    isActive && item.iconColor
-                  )}
-                  style={
-                    item.iconColor && item.iconColor !== 'text-muted-foreground'
-                      ? { color: item.iconColor }
-                      : undefined
-                  }
-                />
-              )
-            }
+            prepend={regularPrepend}
             onClick={() => !isDragging && onItemClick(item)}
             onDoubleClick={undefined}
           />
         </ContextMenuTrigger>
-        <ContextMenuContent className="dark">
-          <ContextMenuItem
-            onClick={handleDelete}
-            className="text-destructive focus:text-destructive"
-          >
-            <MonoIcon type="Trash" className="mr-2 h-4 w-4" />
-            {t('sidebar.delete_item') || 'Delete'}
-          </ContextMenuItem>
-        </ContextMenuContent>
+        {removeMenu}
       </ContextMenu>
     </div>
   );
@@ -761,6 +709,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
     moveItemToFolder,
     getAvailableNavItems,
     getCurrentSidebarState,
+    sidebarsBySpace,
     setSidebarsBySpace
   } = useCustomSidebarAtom();
 
@@ -780,6 +729,19 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   const currentMouseYRef = useRef<number>(0);
   const [specialDropZone, setSpecialDropZone] = useState<'top' | 'bottom' | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  // Folders opened for the moment by a drag hovering over them. Kept out of
+  // the stored sidebar: passing over a folder used to expand (and save) it
+  // at once, shoving everything below it down mid-drag.
+  const [springOpenFolders, setSpringOpenFolders] = useState<Set<string>>(() => new Set());
+  const springTimerRef = useRef<number | null>(null);
+  const dragOverIdRef = useRef<string | null>(null);
+  const clearSpringTimer = useCallback(() => {
+    if (springTimerRef.current !== null) {
+      window.clearTimeout(springTimerRef.current);
+      springTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => clearSpringTimer, [clearSpringTimer]);
   const [labelCounts, setLabelCounts] = useState<Record<string, number>>({});
   const { threadsMap } = useThreadAtom();
   const { getDraftsForAccount } = useDraftAtom();
@@ -940,6 +902,22 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
     loadAvailableItems();
   }, [getAvailableNavItems]);
 
+  // Social / Promotions / Updates / Forums are Gmail categories; Microsoft
+  // accounts have none, so they're only offered with a Gmail account in the
+  // space — or when already in the sidebar, so they can still be unticked.
+  const showGmailCategories = spaceAccounts.some((account) => account.provider !== 'microsoft');
+  const menuItems = useMemo(
+    () =>
+      allAvailableItems.filter(
+        (item) =>
+          showGmailCategories ||
+          !(item.type === 'secondary' && item.query?.startsWith('category:')) ||
+          sidebarState?.items[item.id] !== undefined
+      ),
+    [allAvailableItems, showGmailCategories, sidebarState]
+  );
+  const folderRenamePendingRef = useRef(false);
+
   // Toggle account expansion in the dropdown
   const toggleAccountExpansion = useCallback((accountId: string) => {
     setExpandedAccounts((prev) => ({
@@ -1053,6 +1031,11 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
       const { over, active } = event;
+      const overId = (over?.id as string | undefined) ?? null;
+      if (dragOverIdRef.current !== overId) {
+        dragOverIdRef.current = overId;
+        clearSpringTimer();
+      }
       if (!over || !sidebarState || !active) {
         setDragOverFolder(null);
         setDropLinePosition(null);
@@ -1093,16 +1076,26 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
         setDragOverFolder(over.id as string);
         setDropLinePosition(null);
 
-        // Auto-expand folder when dragging over it
-        if (overItem.isCollapsed) {
-          handleToggleFolder(over.id as string);
+        // Spring open after a short hover, like Finder: just passing over a
+        // folder no longer opens it.
+        const folderId = over.id as string;
+        if (
+          overItem.isCollapsed &&
+          !springOpenFolders.has(folderId) &&
+          springTimerRef.current === null
+        ) {
+          springTimerRef.current = window.setTimeout(() => {
+            springTimerRef.current = null;
+            if (dragOverIdRef.current !== folderId) return;
+            setSpringOpenFolders((prev) => new Set(prev).add(folderId));
+          }, 600);
         }
       } else {
         setDragOverFolder(null);
         // Drop line calculation moved to handleDragMove for real-time updates
       }
     },
-    [sidebarState, handleToggleFolder, isFolderDescendant]
+    [sidebarState, isFolderDescendant, clearSpringTimer, springOpenFolders]
   );
 
   // Handle drag move (for real-time drop line positioning)
@@ -1143,11 +1136,16 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
           // Show above if mouse is in upper half, below if in lower half
           const position = currentMouseYRef.current < itemCenterY ? 'above' : 'below';
 
-          setDropLinePosition({
-            itemId: over.id,
-            position,
-            isInFolder
-          });
+          // Same line as before → keep the state object (no re-render on
+          // every mouse move).
+          setDropLinePosition((prev) =>
+            prev &&
+            prev.itemId === over.id &&
+            prev.position === position &&
+            prev.isInFolder === isInFolder
+              ? prev
+              : { itemId: over.id, position, isInFolder }
+          );
         } else {
           setDropLinePosition(null);
         }
@@ -1160,11 +1158,14 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
 
   // Handle drag cancel (when ESC is pressed)
   const handleDragCancel = useCallback(() => {
+    clearSpringTimer();
+    dragOverIdRef.current = null;
+    setSpringOpenFolders(new Set());
     setActiveItem(null);
     setDragOverFolder(null);
     setDropLinePosition(null);
     setSpecialDropZone(null);
-  }, []);
+  }, [clearSpringTimer]);
 
   // Handle drag end
   const handleDragEnd = useCallback(
@@ -1174,6 +1175,17 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
       // Capture drop line position and special zone before clearing
       const currentDropPosition = dropLinePosition;
       const currentSpecialZone = specialDropZone;
+      const sprungOpen = springOpenFolders;
+      clearSpringTimer();
+      dragOverIdRef.current = null;
+      setSpringOpenFolders(new Set());
+      // A folder that sprang open and got the drop stays open (saved with the
+      // drop itself); any other just closes again.
+      const keepOpen = (items: Record<string, CustomNavItem>, folderId?: string) => {
+        if (folderId && sprungOpen.has(folderId) && items[folderId]?.type === 'folder') {
+          items[folderId] = { ...items[folderId], isCollapsed: false };
+        }
+      };
 
       // Helper function to clear all drag state
       const clearDragState = () => {
@@ -1262,6 +1274,20 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
             console.error('Failed to persist drag operation');
           });
         } else {
+          // A root row dropped on a zone moves to the very start / end.
+          const rest = sidebarState.order.filter((id) => id !== activeId);
+          const newRootOrder =
+            currentSpecialZone === 'top' ? [activeId, ...rest] : [...rest, activeId];
+          if (newRootOrder.join('\u0000') !== sidebarState.order.join('\u0000')) {
+            const updatedSidebar: CustomSidebarState = { ...sidebarState, order: newRootOrder };
+            setSidebarsBySpace((prev) => ({
+              ...prev,
+              [activeSpace.id]: updatedSidebar
+            }));
+            reorderNavItems(newRootOrder, updatedSidebar).catch(() => {
+              console.error('Failed to persist reorder operation');
+            });
+          }
           setActiveItem(null);
           setDragOverFolder(null);
           setDropLinePosition(null);
@@ -1320,6 +1346,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
             children: [...(newParent.children || []), activeId]
           };
         }
+        keepOpen(updatedItems, overId);
 
         // Remove from root order if moving from root to folder
         let updatedOrder = sidebarState.order;
@@ -1345,9 +1372,17 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
         setSpecialDropZone(null);
 
         // Background async operation
-        moveItemToFolder(activeId, overId, false).catch(() => {
-          console.error('Failed to persist move to folder operation');
-        });
+        if (sprungOpen.has(overId)) {
+          // moveItemToFolder would rebuild from the pre-drop snapshot and lose
+          // the "stays open"; save exactly what's on screen.
+          updateSidebarForSpace(activeSpace.id, updatedSidebar).catch(() => {
+            console.error('Failed to persist move to folder operation');
+          });
+        } else {
+          moveItemToFolder(activeId, overId, false).catch(() => {
+            console.error('Failed to persist move to folder operation');
+          });
+        }
         return;
       }
 
@@ -1595,6 +1630,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
               children: currentChildren
             };
           }
+          keepOpen(updatedItems, overParentId);
 
           // Remove from root order if moving from root to folder
           let updatedOrder = sidebarState.order;
@@ -1686,7 +1722,9 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
       dropLinePosition,
       specialDropZone,
       isFolderDescendant,
-      setSidebarsBySpace
+      setSidebarsBySpace,
+      springOpenFolders,
+      clearSpringTimer
     ]
   );
 
@@ -1712,6 +1750,10 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
     [isItemInSidebar, removeNavItem, addNavItem]
   );
 
+  // The latest sidebars, for an Undo that runs after other edits.
+  const sidebarsRef = useRef(sidebarsBySpace);
+  sidebarsRef.current = sidebarsBySpace;
+
   // Handle deleting item
   const handleDeleteItem = useCallback(
     async (itemId: string) => {
@@ -1720,10 +1762,35 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
         setEditingItemId(null);
       }
 
+      const before = sidebarState;
+      const removedItem = before?.items[itemId];
+      const spaceId = activeSpace?.id;
+
       // Atom updated automatically
-      await removeNavItem(itemId);
+      const removed = await removeNavItem(itemId);
+      if (!removed || !before || !removedItem || !spaceId) return;
+
+      // It used to vanish at once with no way back (a folder took everything
+      // inside it along). Undo puts it back where it was, keeping any other
+      // sidebar edits made since.
+      const name = getNavItemWithDynamicProperties(removedItem).title.replace('Mono/', '');
+      toast(
+        removedItem.type === 'folder'
+          ? t('sidebar.folder_deleted', { name })
+          : t('sidebar.removed_from_sidebar', { name }),
+        {
+          action: {
+            label: t('toast.undo'),
+            onClick: () => {
+              const current = sidebarsRef.current[spaceId];
+              if (!current) return;
+              void updateSidebarForSpace(spaceId, restoreSidebarSubtree(before, current, itemId));
+            }
+          }
+        }
+      );
     },
-    [removeNavItem, editingItemId]
+    [removeNavItem, editingItemId, sidebarState, activeSpace, updateSidebarForSpace, t]
   );
 
   // Handle updating folder name
@@ -1734,6 +1801,13 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
       const folder = sidebarState.items[folderId];
       if (!folder || folder.type !== 'folder') return;
 
+      // "  " or "Work " shouldn't become a folder name.
+      const title = newTitle.trim();
+      if (!title || title === folder.title) {
+        setEditingItemId(null);
+        return;
+      }
+
       // The atom will be updated automatically
       const updatedSidebar = {
         ...sidebarState,
@@ -1741,7 +1815,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
           ...sidebarState.items,
           [folderId]: {
             ...folder,
-            title: newTitle
+            title
           }
         }
       };
@@ -1806,33 +1880,38 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
     if (!activeSpace) return;
 
     const defaultFolderName = t('sidebar.new_folder') || 'New Folder';
-    // Atom updated automatically
-    await createFolder(defaultFolderName);
+    // Atom updated automatically. Then straight into rename, so the folder
+    // isn't left as "New Folder" with no visible way to name it.
+    const folderId = await createFolder(defaultFolderName);
+    if (folderId) setEditingItemId(folderId);
   }, [createFolder, activeSpace, t]);
 
-  // Fetch unread counts for every sidebar item
+  // Fetch unread counts for every sidebar item. One read of each account's
+  // threads per pass (it was a full scan per item and account, one after
+  // another), and only the newest pass may write the result.
+  const countRunRef = useRef(0);
   const fetchLabelCounts = useCallback(async () => {
     if (!sidebarState || !activeSpace) return;
+    const run = ++countRunRef.current;
 
     const counts: Record<string, number> = {};
+    const labelSetsByAccount: Record<string, Record<string, (ValidLabel | string)[]>> = {};
+    const countFor = (accountIds: string[], itemId: string, labels: (ValidLabel | string)[]) => {
+      counts[itemId] = 0;
+      accountIds.forEach((accountId) => {
+        (labelSetsByAccount[accountId] ??= {})[itemId] = labels;
+      });
+    };
 
     for (const item of Object.values(sidebarState.items)) {
       if (item.type === 'folder') continue;
 
       if (item.type === 'account-label' && item.labelId) {
         // Specific Gmail label
-        if (item.accountId) {
-          counts[item.id] = await DBGetThreadCountByLabels(item.accountId, [
-            item.labelId,
-            'UNREAD'
-          ]);
-        } else {
-          let total = 0;
-          for (const accountId of activeSpace.accountUids) {
-            total += await DBGetThreadCountByLabels(accountId, [item.labelId, 'UNREAD']);
-          }
-          counts[item.id] = total;
-        }
+        countFor(item.accountId ? [item.accountId] : activeSpace.accountUids, item.id, [
+          item.labelId,
+          'UNREAD'
+        ]);
         continue;
       }
 
@@ -1856,27 +1935,46 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
         default: {
           // Map id -> label
           const label = item.id === 'all-mail' ? 'ALL' : item.id.toUpperCase();
-          let total = 0;
-          for (const accountId of activeSpace.accountUids) {
-            total += await DBGetThreadCountByLabels(accountId, [label as ValidLabel, 'UNREAD']);
-          }
-          counts[item.id] = total;
+          countFor(activeSpace.accountUids, item.id, [label as ValidLabel, 'UNREAD']);
         }
       }
     }
 
+    const perAccount = await Promise.all(
+      Object.entries(labelSetsByAccount).map(([accountId, labelSets]) =>
+        DBGetThreadCountsByLabelSets(accountId, labelSets)
+      )
+    );
+    if (run !== countRunRef.current) return;
+    perAccount.forEach((accountCounts) => {
+      Object.entries(accountCounts).forEach(([itemId, count]) => {
+        counts[itemId] = (counts[itemId] ?? 0) + count;
+      });
+    });
+
     setLabelCounts(counts);
   }, [sidebarState, activeSpace, getDraftsForAccount]);
 
-  // Re-fetch counts when threads or sidebar change
+  // Re-fetch counts when threads or sidebar change (bursts coalesce)
   useEffect(() => {
-    fetchLabelCounts();
+    const timer = window.setTimeout(() => void fetchLabelCounts(), 150);
+    return () => window.clearTimeout(timer);
   }, [threadsMap, sidebarState, activeSpace, fetchLabelCounts]);
 
-  // Render count badge
+  // Render count badge. A closed folder sums what's inside it (drafts aside),
+  // so unread mail in it isn't invisible.
   const renderCountBadge = useCallback(
-    (itemId: string) => {
-      const count = labelCounts[itemId] || 0;
+    (item: CustomNavItem, folderClosed = false) => {
+      let count = labelCounts[item.id] || 0;
+      if (item.type === 'folder' && folderClosed && sidebarState) {
+        const sum = (folder: CustomNavItem): number =>
+          (folder.children ?? []).reduce((total, childId) => {
+            const child = sidebarState.items[childId];
+            if (!child || child.id === 'draft') return total;
+            return total + (child.type === 'folder' ? sum(child) : labelCounts[child.id] || 0);
+          }, 0);
+        count = sum(item);
+      }
       if (count === 0) return null;
       return (
         <div className="ml-auto flex items-center justify-center rounded-md border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
@@ -1884,7 +1982,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
         </div>
       );
     },
-    [labelCounts]
+    [labelCounts, sidebarState]
   );
 
   // Function to get dynamic properties for nav items
@@ -1923,8 +2021,8 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
             dropLinePosition?.position === 'above' &&
             dropLinePosition?.isInFolder && (
               <>
-                <div className="absolute -top-[4px] left-0 right-0 ml-2 h-[2px] rounded bg-primary" />
-                <div className="absolute -top-[6.5px] left-0 h-2 w-2 rounded-full bg-primary" />
+                <div className="pointer-events-none absolute -top-[4px] left-0 right-0 z-50 ml-2 h-[2px] rounded bg-primary" />
+                <div className="pointer-events-none absolute -top-[6.5px] left-0 z-50 h-2 w-2 rounded-full bg-primary" />
               </>
             )}
 
@@ -1949,7 +2047,11 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
             isChildActive={(accountId) =>
               isChildNavItemActive(itemWithDynamicProperties, accountId)
             }
-            append={renderCountBadge(item.id)}
+            isSpringOpen={springOpenFolders.has(item.id)}
+            append={renderCountBadge(
+              item,
+              item.type === 'folder' && !!item.isCollapsed && !springOpenFolders.has(item.id)
+            )}
           >
             {childItems.map((childItem) => childItem && renderNavItem(childItem, depth + 1))}
           </SortableNavItem>
@@ -1959,8 +2061,8 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
             dropLinePosition?.position === 'below' &&
             dropLinePosition?.isInFolder && (
               <>
-                <div className="absolute -bottom-[2.5px] left-0 right-0 ml-2 h-[2px] rounded bg-primary" />
-                <div className="absolute -bottom-[5px] left-0 h-2 w-2 rounded-full bg-primary" />
+                <div className="pointer-events-none absolute -bottom-[2.5px] left-0 right-0 z-50 ml-2 h-[2px] rounded bg-primary" />
+                <div className="pointer-events-none absolute -bottom-[5px] left-0 z-50 h-2 w-2 rounded-full bg-primary" />
               </>
             )}
         </div>
@@ -1986,7 +2088,8 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
       handleToggleItemExpanded,
       isChildNavItemActive,
       renderCountBadge,
-      getNavItemWithDynamicProperties
+      getNavItemWithDynamicProperties,
+      springOpenFolders
     ]
   );
 
@@ -2047,8 +2150,8 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
                   dropLinePosition?.position === 'above' &&
                   !dropLinePosition?.isInFolder && (
                     <>
-                      <div className="absolute -top-[3.5px] left-0 right-0 z-50 h-[2px] rounded bg-primary" />
-                      <div className="absolute -top-[6px] left-0 h-2 w-2 rounded-full bg-primary" />
+                      <div className="pointer-events-none absolute -top-[3.5px] left-0 right-0 z-50 h-[2px] rounded bg-primary" />
+                      <div className="pointer-events-none absolute -top-[6px] left-0 z-50 h-2 w-2 rounded-full bg-primary" />
                     </>
                   )}
                 {renderNavItem(item)}
@@ -2057,15 +2160,15 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
                   dropLinePosition?.position === 'below' &&
                   !dropLinePosition?.isInFolder && (
                     <>
-                      <div className="absolute -bottom-[2px] left-0 right-0 z-50 h-[2px] rounded bg-primary" />
-                      <div className="absolute -bottom-[4.5px] left-0 h-2 w-2 rounded-full bg-primary" />
+                      <div className="pointer-events-none absolute -bottom-[2px] left-0 right-0 z-50 h-[2px] rounded bg-primary" />
+                      <div className="pointer-events-none absolute -bottom-[4.5px] left-0 z-50 h-2 w-2 rounded-full bg-primary" />
                     </>
                   )}
               </div>
             ))}
 
-            {/* Special drop zone at the bottom */}
-            {/* <SpecialDropZone id="special-drop-bottom" isActive={specialDropZone === 'bottom'} /> */}
+            {/* Special drop zone at the bottom (moves a row to the end) */}
+            <SpecialDropZone id="special-drop-bottom" isActive={specialDropZone === 'bottom'} />
 
             {/* More button */}
             <DropdownMenu>
@@ -2078,13 +2181,24 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
                   />
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="dark h-96 w-64" align="start">
+              <DropdownMenuContent
+                className="dark h-96 w-64"
+                align="start"
+                // A new folder opens straight into rename; don't hand focus
+                // back to "More" as the menu closes.
+                onCloseAutoFocus={(event) => {
+                  if (!folderRenamePendingRef.current) return;
+                  folderRenamePendingRef.current = false;
+                  event.preventDefault();
+                }}
+              >
                 <ScrollArea className="h-full">
                   {/* Create folder option at the top */}
                   <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      handleCreateFolder();
+                    onSelect={() => {
+                      // The menu closes and the new folder opens in rename.
+                      folderRenamePendingRef.current = true;
+                      void handleCreateFolder();
                     }}
                   >
                     <MonoIcon type="Plus" className="mr-2" />
@@ -2092,18 +2206,27 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
                   </DropdownMenuItem>
 
                   {/* Separator after create folder */}
-                  {(allAvailableItems.length > 0 || organizedAccountLabels.length > 0) && (
+                  {(menuItems.length > 0 || organizedAccountLabels.length > 0) && (
                     <DropdownMenuSeparator />
                   )}
 
+                  {/* These add or remove sidebar rows; the label says so. */}
+                  {(menuItems.length > 0 || organizedAccountLabels.length > 0) && (
+                    <DropdownMenuLabel>{t('sidebar.show_in_sidebar')}</DropdownMenuLabel>
+                  )}
+
                   {/* Available general items */}
-                  {allAvailableItems.length > 0 && (
+                  {menuItems.length > 0 && (
                     <>
-                      {allAvailableItems.map((item) => {
+                      {menuItems.map((item) => {
                         const itemWithDynamicProperties = getNavItemWithDynamicProperties(item);
+                        const title = itemWithDynamicProperties.title.replace('Mono/', '');
+                        const inSidebar = isItemInSidebar(item.id);
                         return (
                           <DropdownMenuItem
                             key={item.id}
+                            role="menuitemcheckbox"
+                            aria-checked={inSidebar}
                             onSelect={(e) => {
                               e.preventDefault();
                               handleToggleItem(item);
@@ -2113,9 +2236,11 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
                               type={itemWithDynamicProperties.icon as MonoIconType}
                               className="mr-2"
                             />
-                            {itemWithDynamicProperties.title.replace('Mono/', '')}
-                            {isItemInSidebar(item.id) && (
-                              <MonoIcon type="Check" className="ml-auto h-4 w-4" />
+                            <span className="min-w-0 flex-1 truncate" title={title}>
+                              {title}
+                            </span>
+                            {inSidebar && (
+                              <MonoIcon type="Check" className="ml-2 h-4 w-4 shrink-0" />
                             )}
                           </DropdownMenuItem>
                         );
@@ -2129,39 +2254,34 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
                     ({ accountId, accountEmail, labels }, accountIndex) => (
                       <div key={accountId} className="w-full">
                         {/* Account header */}
-                        <div className="px-2 py-1">
-                          <span className="text-xs font-medium text-muted-foreground/70">
-                            {accountEmail}
-                          </span>
-                        </div>
+                        <DropdownMenuLabel className="truncate" title={accountEmail}>
+                          {accountEmail}
+                        </DropdownMenuLabel>
 
                         {/* Account labels */}
-                        {labels.map((label) => (
-                          <DropdownMenuItem
-                            key={label.id}
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              handleToggleItem(label);
-                            }}
-                            className="pl-4"
-                          >
-                            <div
-                              className="-ml-1 mr-2 h-3 w-[4px] rounded-full"
-                              style={
-                                label.iconColor && label.iconColor !== 'text-muted-foreground'
-                                  ? {
-                                      backgroundColor: label.iconColor
-                                    }
-                                  : undefined
-                              }
-                            />
-
-                            <span>{label.title.replace('Mono/', '')}</span>
-                            {isItemInSidebar(label.id) && (
-                              <MonoIcon type="Check" className="ml-auto h-4 w-4" />
-                            )}
-                          </DropdownMenuItem>
-                        ))}
+                        {labels.map((label) => {
+                          const title = label.title.replace('Mono/', '');
+                          const inSidebar = isItemInSidebar(label.id);
+                          return (
+                            <DropdownMenuItem
+                              key={label.id}
+                              role="menuitemcheckbox"
+                              aria-checked={inSidebar}
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                handleToggleItem(label);
+                              }}
+                            >
+                              <LabelSwatch color={label.iconColor} className="mr-2" />
+                              <span className="min-w-0 flex-1 truncate" title={title}>
+                                {title}
+                              </span>
+                              {inSidebar && (
+                                <MonoIcon type="Check" className="ml-2 h-4 w-4 shrink-0" />
+                              )}
+                            </DropdownMenuItem>
+                          );
+                        })}
 
                         {/* Separator between accounts (except last one) */}
                         {accountIndex < organizedAccountLabels.length - 1 && (
@@ -2178,20 +2298,30 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
 
         {createPortal(
           <DragOverlay dropAnimation={dropAnimation}>
-            {activeItem ? (
-              <SortableNavItem
-                item={getNavItemWithDynamicProperties(activeItem)}
-                isActive={false}
-                onItemClick={() => {}}
-                onDeleteItem={() => {}}
-                onToggleFolder={() => {}}
-                onEditFolder={() => {}}
-                onEditItem={() => {}}
-                onStartEditing={() => {}}
-                onCancelEdit={() => {}}
-                isOverlay
-              />
-            ) : null}
+            {activeItem
+              ? (() => {
+                  // A plain picture of the row: re-rendering the live row here
+                  // registered a second sortable and keyboard item under the
+                  // same id, and its transparent ghost was bare text over the
+                  // list.
+                  const preview = getNavItemWithDynamicProperties(activeItem);
+                  return (
+                    <div className="flex h-9 items-center rounded-lg border bg-popover px-3 text-sm text-foreground shadow-md">
+                      {preview.type === 'account-label' ? (
+                        <LabelSwatch color={preview.iconColor} className="mr-2" />
+                      ) : (
+                        <MonoIcon
+                          type={
+                            (preview.type === 'folder' ? 'Folder' : preview.icon) as MonoIconType
+                          }
+                          className="mr-2 text-muted-foreground"
+                        />
+                      )}
+                      <span className="truncate">{preview.title.replace('Mono/', '')}</span>
+                    </div>
+                  );
+                })()
+              : null}
           </DragOverlay>,
           document.body
         )}

@@ -610,6 +610,46 @@ export function getOldestTimestamp(threads: MonoThread[]): number | undefined {
   return Math.min(...threads.map((thread) => thread.timestamp));
 }
 
+// The match rules behind the unread counts: TRASH/SPAM never count, PRIMARY
+// is decided by isPrimaryThread with the user's preference, Gmail category
+// names map to their CATEGORY_* labels, and every other label must be present.
+const threadLabelMatcher = (labels: (ValidLabel | string)[], preference: UserPreference) => {
+  // Check if PRIMARY is in the requested labels
+  const hasPrimary = labels.some((label) => label.toUpperCase() === 'PRIMARY');
+
+  // Process non-PRIMARY labels
+  const nonPrimaryLabels = labels
+    .filter((label) => label.toUpperCase() !== 'PRIMARY')
+    .map((label) => {
+      const upperLabel = label;
+
+      // Special handling for Gmail categories
+      const isCategory =
+        upperLabel === 'SOCIAL' ||
+        upperLabel === 'PROMOTIONS' ||
+        upperLabel === 'UPDATES' ||
+        upperLabel === 'FORUMS';
+
+      // Return category label if applicable, otherwise the uppercase label
+      return isCategory ? getCategoryLabel(upperLabel) : upperLabel;
+    });
+
+  return (thread: MonoThread) => {
+    // Skip trash and spam threads
+    if (thread.labelIds.includes('TRASH') || thread.labelIds.includes('SPAM')) {
+      return false;
+    }
+
+    // Check PRIMARY label using isPrimaryThread if required
+    if (hasPrimary && preference && !isPrimaryThread(thread, preference)) {
+      return false;
+    }
+
+    // Check all other requested labels
+    return nonPrimaryLabels.every((label) => thread.labelIds.includes(label));
+  };
+};
+
 /**
  * Get the count of threads with multiple labels for a user
  *
@@ -632,50 +672,43 @@ export async function DBGetThreadCountByLabels(
   const tx = db.transaction(['threads'], 'readonly');
   const threadsStore = tx.objectStore('threads');
 
-  // Check if PRIMARY is in the requested labels
-  const hasPrimary = labels.some((label) => label.toUpperCase() === 'PRIMARY');
-
-  // Process non-PRIMARY labels
-  const nonPrimaryLabels = labels
-    .filter((label) => label.toUpperCase() !== 'PRIMARY')
-    .map((label) => {
-      const upperLabel = label;
-
-      // Special handling for Gmail categories
-      const isCategory =
-        upperLabel === 'SOCIAL' ||
-        upperLabel === 'PROMOTIONS' ||
-        upperLabel === 'UPDATES' ||
-        upperLabel === 'FORUMS';
-
-      // Return category label if applicable, otherwise the uppercase label
-      return isCategory ? getCategoryLabel(upperLabel) : upperLabel;
-    });
-
   // Get all threads - needed for PRIMARY checking or multiple label filtering
   const allThreads = await threadsStore.getAll();
-
-  // Filter threads that have all the specified labels
-  const matchingThreads = allThreads.filter((thread) => {
-    // Skip trash and spam threads
-    if (thread.labelIds.includes('TRASH') || thread.labelIds.includes('SPAM')) {
-      return false;
-    }
-
-    // Check PRIMARY label using isPrimaryThread if required
-    if (hasPrimary && preference && !isPrimaryThread(thread, preference)) {
-      return false;
-    }
-
-    // Check all other requested labels
-    if (!nonPrimaryLabels.every((label) => thread.labelIds.includes(label))) {
-      return false;
-    }
-
-    // All conditions met
-    return true;
-  });
-
   await tx.done;
-  return matchingThreads.length;
+
+  return allThreads.filter(threadLabelMatcher(labels, preference)).length;
+}
+
+/**
+ * Several DBGetThreadCountByLabels counts in one pass: the preference is read
+ * once and the account's threads once, instead of a full scan per count.
+ * @param labelSets - key → labels a thread must ALL have (same rules as above)
+ * @returns key → count
+ */
+export async function DBGetThreadCountsByLabelSets(
+  uid: string,
+  labelSets: Record<string, (ValidLabel | string)[]>
+): Promise<Record<string, number>> {
+  const keys = Object.keys(labelSets);
+  const counts: Record<string, number> = Object.fromEntries(keys.map((key) => [key, 0]));
+  if (keys.length === 0) return counts;
+
+  const authCacheData = await authCache.getCachedData();
+  const preference = authCacheData?.preference;
+  if (!preference) return counts;
+
+  const db = await initDB(uid);
+  const tx = db.transaction(['threads'], 'readonly');
+  const allThreads = await tx.objectStore('threads').getAll();
+  await tx.done;
+
+  const matchers = keys.map(
+    (key) => [key, threadLabelMatcher(labelSets[key], preference)] as const
+  );
+  for (const thread of allThreads) {
+    for (const [key, matches] of matchers) {
+      if (matches(thread)) counts[key] += 1;
+    }
+  }
+  return counts;
 }

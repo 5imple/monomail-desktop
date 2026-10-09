@@ -276,6 +276,8 @@ const NavItem = React.memo<NavItemProps>(
               }}
               onKeyDown={handleKeyDown}
               onBlur={handleBlur}
+              // Typing replaces the old name (e.g. "New Folder") right away.
+              onFocus={(e) => e.currentTarget.select()}
               sizeVariant={'sm'}
               variant={'transparent'}
               className="-ml-2"

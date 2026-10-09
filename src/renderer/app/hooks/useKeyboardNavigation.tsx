@@ -279,7 +279,12 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     (area: FocusableArea): NavigationItem[] => {
       switch (area) {
         case 'sidebar-nav':
-          return navigationState.sidebarNavItems;
+          // Screen order, not registration order: rows inside a folder (or an
+          // account list) register when it opens and were reached last.
+          return [...navigationState.sidebarNavItems].sort((a, b) => {
+            if (!a.ref || !b.ref || a.ref === b.ref) return 0;
+            return a.ref.compareDocumentPosition(b.ref) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+          });
         case 'space-nav':
           return navigationState.spaceNavItems;
         case 'pin-header':
