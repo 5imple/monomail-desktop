@@ -18,6 +18,29 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { useTranslation } from 'react-i18next';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
+import { useAuth } from '@/renderer/app/context/AuthContext';
+
+// What a Microsoft 365 search can use: the local search's operators (from:,
+// to:, subject:, cc:, bcc:, label:, in:, is:, has:, negation, OR) plus the
+// read / flag filters Graph applies. The rest of the list is Gmail syntax.
+const MICROSOFT_OPERATORS = new Set([
+  'from:',
+  'to:',
+  'subject:',
+  'cc:',
+  'bcc:',
+  'label:',
+  'in:',
+  'is:',
+  'OR',
+  '-',
+  '""',
+  'has:attachment',
+  'in:inbox',
+  'is:starred',
+  'is:unread',
+  'is:read'
+]);
 
 interface SearchCommandPageProps {
   searchQuery: string;
@@ -26,6 +49,9 @@ interface SearchCommandPageProps {
   onSelect: () => void;
   pushPage: (value: string[]) => void;
   onKeydown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  /** The space's only account, if it has just one (no account step needed). */
+  onlyAccountId?: string;
+  setSelectedAccountId?: (accountId: string) => void;
 }
 
 const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
@@ -34,7 +60,9 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   onClose,
   onSelect,
   pushPage,
-  onKeydown
+  onKeydown,
+  onlyAccountId,
+  setSelectedAccountId
 }) => {
   const [searchState, setSearchState] = useState({
     currentQueryPart: '',
@@ -44,6 +72,14 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   const { closeDialog } = useDialogs();
   const { contactArray } = useContactAtom();
   const { activeSpace } = useSpaceAtom();
+  const { accounts } = useAuth();
+  const microsoftOnly = useMemo(() => {
+    const uids = activeSpace?.activeAccountUids ?? [];
+    return (
+      uids.length > 0 &&
+      uids.every((uid) => accounts.find((account) => account.uid === uid)?.provider === 'microsoft')
+    );
+  }, [activeSpace?.activeAccountUids, accounts]);
 
   const unpinnedContacts = useMemo(() => {
     const pinnedEmails = activeSpace?.pinnedEmails || [];
@@ -75,7 +111,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
     { operator: 'smaller:', description: t('command_palette.search.smaller.description') }
   ];
 
-  const allOperators = [
+  const everyOperator = [
     ...parentOperators,
     { operator: 'OR', description: t('command_palette.search.OR.description') },
     { operator: '-', description: t('command_palette.search.-.description') },
@@ -122,6 +158,9 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
     },
     { operator: 'is:muted', description: t('command_palette.search.is:muted.description') }
   ];
+  const allOperators = microsoftOnly
+    ? everyOperator.filter((operator) => MICROSOFT_OPERATORS.has(operator.operator))
+    : everyOperator;
 
   // Update search state based on the latest query part.
   useEffect(() => {
@@ -198,14 +237,19 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   // Handler for initiating bookmark creation
   const handleBookmarkCreate = () => {
     onSelect();
-    // Navigate to account selection page instead of directly to name page
-    pushPage(['BOOKMARK_ACCOUNT']);
+    // Straight to naming when there's only one account to save it for.
+    if (onlyAccountId && setSelectedAccountId) {
+      setSelectedAccountId(onlyAccountId);
+      pushPage(['BOOKMARK_NAME']);
+    } else {
+      pushPage(['BOOKMARK_ACCOUNT']);
+    }
     trackEvent('bookmark_initiated', { query: searchQuery });
   };
 
   const commandListRef = useRef<HTMLDivElement>(null);
   const commandScrollListRef = useRef<HTMLDivElement>(null);
-  const [listHeight, setListHeight] = useState(0);
+  const [listHeight, setListHeight] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -236,7 +280,8 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   return (
     <div className="relative">
       <EnhancedCommandInput
-        placeholder={t('command_palette.search.placeholder')}
+        // The old text promised "press Tab for AI search"; Tab does nothing.
+        placeholder={t('command_palette.search.placeholder_v2', 'Search mail')}
         autoFocus
         value={searchQuery}
         onValueChange={setSearchQuery}
@@ -245,25 +290,25 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
       />
       <CommandList
         ref={commandScrollListRef}
-        className={cn(
-          'h-[0px] origin-top transition-all duration-200 ease-bouncy-in-out',
-          loading ? '' : `h-[${listHeight}px]`
-        )}
-        style={{
-          transition: 'height 300ms',
-          height: `${listHeight}px`
-        }}
+        className="origin-top transition-all duration-200 ease-bouncy-in-out"
+        style={
+          listHeight === undefined
+            ? { transition: 'height 300ms' }
+            : { transition: 'height 300ms', height: `${listHeight}px` }
+        }
       >
         <div ref={commandListRef}>
           {countQueries(searchQuery) > 0 && (
-            <CommandGroup heading={t('command_palette.header.search')} className="p-2">
+            <CommandGroup heading={t('command_palette.header.actions')} className="p-2">
               <CommandItem
                 variant="raycast"
                 value={searchQuery.trim()}
                 onSelect={() => performSearch(searchQuery)}
               >
                 <CommandIcon type="Search" />
-                <span>{t('command_palette.search.query_search', { query: searchQuery })}</span>
+                <span className="truncate">
+                  {t('command_palette.search.search_for', { query: searchQuery.trim() })}
+                </span>
               </CommandItem>
 
               <CommandItem
@@ -278,7 +323,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
           )}
 
           {filteredContacts.length > 0 && (
-            <CommandGroup className="p-2">
+            <CommandGroup heading={t('command_palette.header.contacts')} className="p-2">
               {filteredContacts.map((contact) => (
                 <CommandItem
                   key={contact.emailAddress}
@@ -292,12 +337,22 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
                   }}
                 >
                   <RecipientAvatar
+                    className="mr-3"
                     recipient={{ email: contact.emailAddress, name: contact.displayName }}
                   />
-                  <span className="ml-2">
-                    {ellipsisString(contact.displayName)} (
-                    {ellipsisEmailString(contact.emailAddress)})
-                  </span>
+                  {/* Name, then the address muted — or just the address. */}
+                  {contact.displayName?.trim() &&
+                  contact.displayName.trim().toLowerCase() !==
+                    contact.emailAddress.toLowerCase() ? (
+                    <span className="flex min-w-0 flex-1 items-baseline">
+                      <span className="truncate">{ellipsisString(contact.displayName)}</span>
+                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                        {ellipsisEmailString(contact.emailAddress)}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="truncate">{ellipsisEmailString(contact.emailAddress)}</span>
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -305,7 +360,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
 
           {searchHistory.length > 0 && (
             <CommandGroup
-              heading={t('command_palette.header.recent_searches', 'Recent Searches')}
+              heading={t('command_palette.header.recent_searches', 'Recent searches')}
               className="p-2"
             >
               {searchHistory.map((historyQuery, index) => (
@@ -318,17 +373,24 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
                 >
                   <CommandIcon type={'Clock'} />
                   <span className="flex-1">{historyQuery}</span>
+                  {/* Only on the hovered or keyboard-selected row (it sat on
+                      every row). */}
                   <Button
                     variant={'ghost'}
                     sizeVariant={'xs'}
                     typeVariant={'icon'}
+                    className="opacity-0 group-data-[selected=true]:opacity-100 group-pointer-hover:opacity-100"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       removeFromSearchHistory(historyQuery);
                       trackEvent('search_history_removed', { query: historyQuery });
                     }}
-                    title="Remove from search history"
+                    title={t('command_palette.search.remove_history', 'Remove from search history')}
+                    aria-label={t(
+                      'command_palette.search.remove_history',
+                      'Remove from search history'
+                    )}
                   >
                     <MonoIcon type={'X'} className="h-4 w-4" />
                   </Button>
@@ -357,7 +419,8 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
                       >
                         <span className="grid grid-cols-1">
                           <div className="flex items-center">
-                            {/* <CommandIcon type={'Search'} /> */}
+                            {/* The same 32px leading column as every other row. */}
+                            <span aria-hidden className="mr-3 w-8 shrink-0" />
                             <span className="mr-2 w-48 whitespace-nowrap">
                               <span
                                 className={cn(

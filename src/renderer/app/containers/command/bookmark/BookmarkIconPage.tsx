@@ -13,6 +13,7 @@ import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 interface BookmarkIconPageProps {
   searchQuery: string;
@@ -53,6 +54,7 @@ const BookmarkIconPage: React.FC<BookmarkIconPageProps> = ({
       title: bookmarkName,
       icon: icon
     });
+    toast.success(t('toast.bookmark_saved', { name: bookmarkName }));
 
     searchNewQuery(searchQuery, undefined, false);
     bounce();
@@ -74,7 +76,8 @@ const BookmarkIconPage: React.FC<BookmarkIconPageProps> = ({
   return (
     <>
       <EnhancedCommandInput
-        placeholder={t('command_palette.bookmark.icon.placeholder')}
+        // The stored key is an empty string, so a default can't apply to it.
+        placeholder={t('command_palette.bookmark.icon.search_placeholder', 'Search icons…')}
         value={bookmarkIcon}
         onValueChange={setBookmarkIcon}
         autoFocus
@@ -84,25 +87,19 @@ const BookmarkIconPage: React.FC<BookmarkIconPageProps> = ({
       <CommandList>
         <CommandEmpty>{t('command_palette.no_result')}</CommandEmpty>
         <CommandGroup className="p-2" heading={t('command_palette.header.icons')}>
-          {iconList.map((icon) => {
-            if (!bookmarkIcon || !bookmarkIcon.includes(icon)) {
-              return (
-                <CommandItem
-                  variant={'raycast'}
-                  onSelect={handleIconSelect}
-                  value={icon as string}
-                  key={icon}
-                  onClick={() => {
-                    setBookmarkIcon(icon);
-                    setTimeout(() => onClose(), 300);
-                  }}
-                >
-                  <CommandIcon type={icon} className="mr-2" />
-                  <span>{icon}</span>
-                </CommandItem>
-              );
-            } else return null;
-          })}
+          {/* cmdk filters by value (the old guard hid the icon you typed, and
+              the extra onClick left its name behind for the next visit). */}
+          {iconList.map((icon) => (
+            <CommandItem
+              variant={'raycast'}
+              onSelect={handleIconSelect}
+              value={icon as string}
+              key={icon}
+            >
+              <CommandIcon type={icon} />
+              <span>{icon}</span>
+            </CommandItem>
+          ))}
         </CommandGroup>
       </CommandList>
     </>

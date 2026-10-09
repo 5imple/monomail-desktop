@@ -37,7 +37,6 @@ const BookmarkAccountPage: React.FC<BookmarkAccountPageProps> = ({
     const uid = getUidFromEmail(email);
 
     bounce();
-    setTimeout(() => setSearchValue(email), 250);
 
     if (uid) {
       setSelectedAccountId(uid);
@@ -80,7 +79,7 @@ const BookmarkAccountPage: React.FC<BookmarkAccountPageProps> = ({
                 onSelect={() => handleAccountSelect(accountInfo.email)}
               >
                 <RecipientAvatar
-                  className="mr-2"
+                  className="mr-3"
                   recipient={{ email: accountInfo.email, name: accountInfo.displayName }}
                 />
                 <span>{accountInfo.email}</span>

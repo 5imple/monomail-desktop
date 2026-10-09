@@ -11,6 +11,19 @@ import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useTranslation } from 'react-i18next';
 
+// A dark icon on light space colours (white on Yellow or Silver was ~1.5:1),
+// white otherwise. Only for #rrggbb; anything else keeps white.
+const iconColorOn = (hex?: string) => {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex ?? '');
+  if (!match) return '#ffffff';
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const channel = parseInt(match[1].slice(i, i + 2), 16) / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.45 ? 'hsl(24 10% 10%)' : '#ffffff';
+};
+
 interface SpaceSelectionPageProps {
   spaceName: string;
   setSpaceName: (name: string) => void;
@@ -85,19 +98,19 @@ const SpaceSelectionPage: React.FC<SpaceSelectionPageProps> = ({
                   onSelectSpace(space.id);
                 }}
               >
-                <div className="flex items-center">
+                <div className="flex min-w-0 items-center">
                   <div
-                    className="mr-3 flex items-center justify-center rounded-md p-1.5 text-white"
+                    className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
                     style={{
-                      backgroundColor: `${space.color}`
-                      // color: `${space.color}`
+                      backgroundColor: `${space.color}`,
+                      color: iconColorOn(space.color)
                     }}
                   >
                     <MonoIcon type={space.icon as MonoIconType} />
                   </div>
-                  <span>{space.name}</span>
+                  <span className="truncate">{space.name}</span>
                 </div>
-                <span className="ml-2 text-xs text-muted-foreground">
+                <span className="ml-auto shrink-0 pl-3 text-xs text-muted-foreground">
                   {t('command_palette.space.selection.accounts_count', {
                     count: space.accountUids.length
                   })}
@@ -107,8 +120,9 @@ const SpaceSelectionPage: React.FC<SpaceSelectionPageProps> = ({
           </CommandGroup>
         )}
 
-        {/* Create New Space option */}
-        {!filteredSpaces.find((space) => space.name === spaceName) && (
+        {/* Create New Space option — only once there's a name, and never a
+            second "Work" next to "work". */}
+        {spaceName.trim() && !exactMatchSpace && (
           <CommandGroup heading={t('command_palette.header.create_new_space')} className="p-2">
             <CommandItem
               disabled={!spaceName.trim()}

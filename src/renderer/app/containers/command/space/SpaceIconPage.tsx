@@ -9,7 +9,14 @@ import {
 import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandInput';
 import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { AVAILABLE_ICONS } from '@/renderer/app/lib/availableIcons';
+
+// "UserGroup" → "User group", "PaintBrush" → "Paint brush".
+const humanize = (icon: string) => {
+  const words = icon.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
 
 interface SpaceIconPageProps {
   currentIcon: string;
@@ -32,11 +39,15 @@ const SpaceIconPage: React.FC<SpaceIconPageProps> = ({
   const [searchValue, setSearchValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Filter icons based on search
+  // Filter icons based on search (raw or readable name)
   const filteredIcons =
     searchValue.trim() === ''
       ? AVAILABLE_ICONS
-      : AVAILABLE_ICONS.filter((icon) => icon.toLowerCase().includes(searchValue.toLowerCase()));
+      : AVAILABLE_ICONS.filter(
+          (icon) =>
+            icon.toLowerCase().includes(searchValue.toLowerCase()) ||
+            humanize(icon).toLowerCase().includes(searchValue.toLowerCase())
+        );
 
   // Handle icon selection
   const handleSelectIcon = async (icon: string) => {
@@ -53,6 +64,7 @@ const SpaceIconPage: React.FC<SpaceIconPageProps> = ({
       onBack();
     } catch (error) {
       console.error('Failed to save icon:', error);
+      toast.error(t('command_palette.space.error.update_space'));
     } finally {
       setIsSaving(false);
     }
@@ -62,6 +74,7 @@ const SpaceIconPage: React.FC<SpaceIconPageProps> = ({
   const handleIconKeydown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && searchValue === '') {
       e.preventDefault();
+      if (e.repeat) return;
       bounce();
       onBack();
     } else {
@@ -91,10 +104,15 @@ const SpaceIconPage: React.FC<SpaceIconPageProps> = ({
               key={icon}
               variant={'raycast'}
               value={icon}
+              keywords={[humanize(icon)]}
+              disabled={isSaving}
               onSelect={() => handleSelectIcon(icon)}
             >
-              <CommandIcon type={icon as MonoIconType} className="mr-2" />
-              <span>{icon}</span>
+              <CommandIcon type={icon as MonoIconType} />
+              <span className="min-w-0 flex-1 truncate">{humanize(icon)}</span>
+              {icon === currentIcon && (
+                <MonoIcon type="Check" className="ml-2 h-4 w-4 text-muted-foreground" />
+              )}
             </CommandItem>
           ))}
         </CommandGroup>

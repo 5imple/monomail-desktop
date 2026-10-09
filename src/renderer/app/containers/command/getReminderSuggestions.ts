@@ -41,7 +41,8 @@ function getDefaultSuggestions(now: dayjs.Dayjs): Suggestion[] {
     { label: 'In 30 minutes', value: 'in 30 minutes', type: 'relative' },
     { label: 'In 2 hours', value: 'in 2 hours', type: 'relative' },
     { label: 'Tomorrow at 9 AM', value: 'tomorrow at 9am', type: 'smart' },
-    { label: 'Next Monday', value: 'next monday', type: 'smart' }
+    // A time, not chrono's implied noon for a bare day.
+    { label: 'Next Monday at 9 AM', value: 'next monday at 9am', type: 'smart' }
   ];
 }
 
@@ -54,12 +55,32 @@ function getChronoSuggestions(input: string, now: dayjs.Dayjs): Suggestion[] {
 
     for (const result of results) {
       if (result.start && result.start.date() > now.toDate()) {
-        const parsedDate = dayjs(result.start.date());
-        const label = formatNaturalDate(parsedDate, now);
+        let parsedDate = dayjs(result.start.date());
+        let value = input;
 
+        // A bare day ("friday", "tomorrow") has no time, and chrono implies
+        // noon. Use 9 AM instead — via a value that re-parses to exactly that,
+        // so the time shown is the time scheduled. Relative or explicit times
+        // ("in 2 hours", "friday 3pm") are left alone.
+        if (!result.start.isCertain('hour') && !result.start.isCertain('minute')) {
+          const nineAm = parsedDate.hour(9).minute(0).second(0).millisecond(0);
+          const adjustedValue = `${input} at 9am`;
+          const reparsed = chrono.parseDate(adjustedValue, now.toDate(), { forwardDate: true });
+          if (
+            nineAm.isAfter(now) &&
+            reparsed &&
+            Math.abs(dayjs(reparsed).diff(nineAm, 'minute')) < 1
+          ) {
+            parsedDate = nineAm;
+            value = adjustedValue;
+          }
+        }
+
+        const time =
+          parsedDate.minute() === 0 ? parsedDate.format('h A') : parsedDate.format('h:mm A');
         suggestions.push({
-          label,
-          value: input,
+          label: `${formatNaturalDate(parsedDate, now)} at ${time}`,
+          value,
           type: 'absolute'
         });
       }

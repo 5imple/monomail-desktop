@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { CommandGroup, CommandItem, CommandList } from '@/renderer/app/components/ui/command';
+import {
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList
+} from '@/renderer/app/components/ui/command';
 import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandInput';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 interface SpaceColorPageProps {
   currentColor: string;
@@ -53,6 +59,7 @@ const SpaceColorPage: React.FC<SpaceColorPageProps> = ({
       onBack();
     } catch (error) {
       console.error('Failed to save color:', error);
+      toast.error(t('command_palette.space.error.update_space'));
     } finally {
       setIsSaving(false);
     }
@@ -62,6 +69,7 @@ const SpaceColorPage: React.FC<SpaceColorPageProps> = ({
   const handleColorKeydown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && searchValue === '') {
       e.preventDefault();
+      if (e.repeat) return;
       bounce();
       onBack();
     } else {
@@ -72,7 +80,8 @@ const SpaceColorPage: React.FC<SpaceColorPageProps> = ({
   return (
     <>
       <EnhancedCommandInput
-        placeholder={t('command_palette.space.color.placeholder')}
+        // Custom colours aren't supported, so this only searches the list.
+        placeholder={t('command_palette.space.color.search_placeholder', 'Search colors')}
         value={searchValue}
         onValueChange={setSearchValue}
         autoFocus
@@ -80,6 +89,9 @@ const SpaceColorPage: React.FC<SpaceColorPageProps> = ({
       />
 
       <CommandList>
+        <CommandEmpty>{t('command_palette.no_result')}</CommandEmpty>
+        {/* One list: typing used to add a second copy of the matches in
+            another style. The hex stays searchable as a keyword. */}
         <CommandGroup
           className="p-2"
           heading={t('command_palette.space.color.select_color_for', { name: spaceName })}
@@ -89,46 +101,24 @@ const SpaceColorPage: React.FC<SpaceColorPageProps> = ({
               key={color.hex}
               variant={'raycast'}
               value={color.name}
+              keywords={[color.hex]}
+              disabled={isSaving}
               onSelect={() => handleSelectColor(color.hex)}
             >
-              <div
-                className="ml-1 mr-2 h-2 w-2 rounded-full"
-                style={{ backgroundColor: color.hex }}
-              />
+              <div aria-hidden className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center">
+                <span
+                  className="h-4 w-4 rounded-full ring-1 ring-border"
+                  style={{ backgroundColor: color.hex }}
+                />
+              </div>
               <span className="mr-2 font-medium">{t(`colors.${color.name.toLowerCase()}`)}</span>
               <span className="text-muted-foreground">{color.hex}</span>
+              {color.hex === currentColor && (
+                <MonoIcon type="Check" className="ml-auto h-4 w-4 text-muted-foreground" />
+              )}
             </CommandItem>
           ))}
         </CommandGroup>
-
-        {/* Custom color input - Only allow from our predefined list */}
-        {searchValue.trim() !== '' && (
-          <CommandGroup className="p-2">
-            {COLOR_PALETTE.filter(
-              (color) =>
-                color.name.toLowerCase().includes(searchValue.toLowerCase()) ||
-                color.hex.toLowerCase().includes(searchValue.toLowerCase())
-            ).map((color) => (
-              <CommandItem
-                key={`search-${color.hex}`}
-                variant={'raycast'}
-                onSelect={() => handleSelectColor(color.hex)}
-                disabled={isSaving}
-              >
-                <div className="flex items-center">
-                  <div
-                    className="mr-2 h-6 w-6 rounded-full"
-                    style={{ backgroundColor: color.hex }}
-                  />
-                  <div className="flex flex-col">
-                    <span>{t(`colors.${color.name.toLowerCase()}`)}</span>
-                    <span className="text-xs text-muted-foreground">{color.hex}</span>
-                  </div>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
       </CommandList>
     </>
   );

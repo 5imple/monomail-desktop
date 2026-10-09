@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next';
 interface SpaceCommandPageProps {
   selectedSpaceId?: string;
   onClose: () => void;
+  /** Reset and close the palette (onClose only reset it, leaving it open). */
+  closePalette?: () => void;
   bounce: () => void;
   onKeydown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
 }
@@ -21,6 +23,7 @@ type SpaceStep = 'selection' | 'options' | 'accounts' | 'name' | 'icon' | 'color
 const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
   selectedSpaceId: initialSpaceId,
   onClose,
+  closePalette,
   bounce,
   onKeydown
 }) => {
@@ -31,8 +34,15 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
   const [spaceName, setSpaceName] = useState('');
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
-  const [step, setStep] = useState<SpaceStep>('selection');
+  const [step, setStepState] = useState<SpaceStep>('selection');
   const [searchValue, setSearchValue] = useState('');
+  // Each step starts with an empty filter: "man" typed to find Manage
+  // Accounts opened the account list filtered by "man".
+  const setStep = useCallback((next: SpaceStep) => {
+    setSearchValue('');
+    setStepState(next);
+  }, []);
+  const finish = closePalette ?? onClose;
 
   // Auto-select space if initialSpaceId is provided
   React.useEffect(() => {
@@ -101,10 +111,10 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
     try {
       await deleteSpace(selectedSpaceId);
       toast.success(t('toast.space.delete_success'));
-      onClose();
+      finish();
     } catch (error) {
       console.error('Failed to delete space:', error);
-      toast.error('Failed to delete space');
+      toast.error(t('command_palette.space.error.delete_space'));
     }
   };
 
@@ -151,12 +161,12 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
   // Handle creation or update of a space
   const handleSaveSpace = useCallback(async () => {
     if (!spaceName.trim()) {
-      toast.error('Please enter a space name');
+      toast.error(t('command_palette.space.error.enter_space_name'));
       return;
     }
 
     if (selectedAccountIds.length === 0) {
-      toast.error('Please select at least one account');
+      toast.error(t('command_palette.space.error.select_account'));
       return;
     }
 
@@ -195,10 +205,14 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
       }
 
       // Close the command palette
-      onClose();
+      finish();
     } catch (error) {
       console.error('Failed to save space:', error);
-      toast.error(selectedSpaceId ? 'Failed to update space' : 'Failed to create space');
+      toast.error(
+        selectedSpaceId
+          ? t('command_palette.space.error.update_space')
+          : t('command_palette.space.error.create_space')
+      );
     }
   }, [
     spaceName,
@@ -210,13 +224,14 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
     updateSpace,
     updateAccountToSpace,
     switchSpace,
-    onClose
+    finish,
+    t
   ]);
 
   // Handle saving account changes and return to options
   const handleSaveAccounts = useCallback(async () => {
     if (selectedAccountIds.length === 0) {
-      toast.error('Please select at least one account');
+      toast.error(t('command_palette.space.error.select_account'));
       return;
     }
 
@@ -230,7 +245,7 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
         setStep('options');
       } catch (error) {
         console.error('Failed to update accounts:', error);
-        toast.error('Failed to update accounts');
+        toast.error(t('command_palette.space.error.update_accounts'));
       }
     } else {
       // For new space, continue with space creation
@@ -242,13 +257,17 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
     selectedAccountIds,
     updateAccountToSpace,
     handleSaveSpace,
-    bounce
+    bounce,
+    setStep,
+    t
   ]);
 
   // Page-specific key handling
   const handleAccountPageKeydown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && searchValue === '') {
       e.preventDefault();
+      // A held key steps back at most once.
+      if (e.repeat) return;
       bounce();
       // Go back to appropriate page based on if we're editing or creating
       setStep(selectedSpaceId ? 'options' : 'selection');
@@ -261,6 +280,7 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
   const handleOptionsPageKeydown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && searchValue === '') {
       e.preventDefault();
+      if (e.repeat) return;
       bounce();
       setSpaceName('');
       setStep('selection');
@@ -289,6 +309,11 @@ const SpaceCommandPage: React.FC<SpaceCommandPageProps> = ({
         <SpaceOptionsPage
           selectedSpaceId={selectedSpaceId}
           spaceName={spaceName}
+          onSwitchToSpace={() => {
+            if (!selectedSpaceId) return;
+            switchSpace(selectedSpaceId);
+            finish();
+          }}
           onGoToAccounts={handleGoToAccounts}
           onGoToName={handleGoToName}
           onGoToIcon={handleGoToIcon}

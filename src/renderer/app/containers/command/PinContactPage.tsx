@@ -1,5 +1,5 @@
-import MonoIcon from '@/renderer/app/components/icons/icons';
 import {
+  CommandEmpty,
   CommandGroup,
   CommandIcon,
   CommandItem,
@@ -10,13 +10,13 @@ import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { Contact } from '@/renderer/app/lib/db/contact';
 import { ellipsisEmailString, ellipsisString } from '@/renderer/app/lib/minimizeEmail';
-import { cn } from '@/renderer/app/lib/utils';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSpacePinAtom } from '@/renderer/app/store/space/pin/useSpacePinAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 interface PinContactPageProps {
   pinContact: string;
@@ -26,6 +26,27 @@ interface PinContactPageProps {
   onKeydown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   bounce: () => void;
 }
+
+const COMPLETE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Name in the foreground, the address muted after it — or just the address
+// when there's no name (it rendered " (a@b.com)" or the address twice).
+const ContactLabel = ({ contact }: { contact: Contact }) => {
+  const name = contact.displayName?.trim();
+  const hasName = !!name && name.toLowerCase() !== contact.emailAddress.toLowerCase();
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline">
+      <span className="truncate">
+        {hasName ? ellipsisString(name) : ellipsisEmailString(contact.emailAddress)}
+      </span>
+      {hasName && (
+        <span className="ml-2 truncate text-xs text-muted-foreground">
+          {ellipsisEmailString(contact.emailAddress)}
+        </span>
+      )}
+    </span>
+  );
+};
 
 const PinContactPage: React.FC<PinContactPageProps> = ({
   pinContact,
@@ -46,18 +67,18 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [currentQueryPart, setCurrentQueryPart] = useState('');
   const commandListRef = useRef<HTMLDivElement>(null);
-  const [listHeight, setListHeight] = useState(300); // Initial height is 300px
+  const [listHeight, setListHeight] = useState<number | undefined>(undefined);
 
   const pinnedEmails = activeSpace?.pinnedEmails || [];
-  // Get unpinned contacts (emails)
-  const unpinnedContacts = useMemo(() => {
-    return contactArray.filter((contact) => !pinnedEmails.includes(contact.emailAddress));
-  }, [activeSpace?.pinnedEmails, contactArray]);
 
   useEffect(() => {
     const queryParts = pinContact.split(/[ ,]+/);
     setCurrentQueryPart(queryParts[queryParts.length - 1]);
   }, [pinContact]);
+
+  // Pinned-at-open, so a toggle doesn't re-sort the row out from under the
+  // cursor; the pin indicator and grouping below stay live.
+  const [pinnedAtOpen] = useState(() => new Set(pinnedEmails));
 
   // Sort and ensure uniqueness of contacts (by emailAddress)
   const sortedUniqueContacts = useMemo(() => {
@@ -71,9 +92,8 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
 
     // Sort contacts using a balanced approach with multiple factors
     return Array.from(uniqueContacts.values()).sort((a, b) => {
-      if (pinnedEmails.includes(a.emailAddress) && !pinnedEmails.includes(b.emailAddress))
-        return -1;
-      if (!pinnedEmails.includes(a.emailAddress) && pinnedEmails.includes(b.emailAddress)) return 1;
+      if (pinnedAtOpen.has(a.emailAddress) && !pinnedAtOpen.has(b.emailAddress)) return -1;
+      if (!pinnedAtOpen.has(a.emailAddress) && pinnedAtOpen.has(b.emailAddress)) return 1;
 
       // 1. Pinned contacts always come first
       if (a.pinned && !b.pinned) return -1;
@@ -111,7 +131,7 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
       // 7. Finally, sort alphabetically by name as last resort
       return (a.displayName || '').localeCompare(b.displayName || '');
     });
-  }, [unpinnedContacts]);
+  }, [contactArray, pinnedAtOpen]);
 
   // Effect to sync `pinContact` emails with `selectedEmails`
   useEffect(() => {
@@ -125,11 +145,15 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
     }
   }, [pinContact, selectedEmails]);
 
+  // Selecting a row toggles its pin — and now says which way it went (a
+  // pinned contact used to be unpinned without a word).
   const toggleContactPin = async (contact: Contact) => {
     if (pinnedEmails.includes(contact.emailAddress)) {
       await unpinEmailFromSpace(contact.emailAddress);
+      toast.success(t('toast.contact_unpinned', { email: contact.emailAddress }));
     } else {
       await pinMultipleEmailsInSpace([contact.emailAddress]);
+      toast.success(t('toast.contact_pinned', { email: contact.emailAddress }));
     }
   };
 
@@ -147,6 +171,7 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
 
     await pinMultipleEmailsInSpace(selectedEmails);
     // Pin each selected email in the active space
+    toast.success(t('toast.contacts_pinned', { count: selectedEmails.length }));
 
     setPinContact('');
     bounce();
@@ -162,6 +187,16 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
           contact.displayName.toLowerCase().includes(currentQueryPart.toLowerCase()))
     );
   }, [sortedUniqueContacts, selectedEmails, currentQueryPart]);
+  const pinnedRows = filteredContacts.filter((contact) => pinnedAtOpen.has(contact.emailAddress));
+  const otherRows = filteredContacts.filter((contact) => !pinnedAtOpen.has(contact.emailAddress));
+
+  // Typed full addresses with nothing else to pick: offer to pin them (typing
+  // jane@washcoll.edu left an empty list and no action). Only then, so Enter
+  // on a highlighted contact still pins that contact.
+  const pinTypedEmails =
+    selectedEmails.length > 0 &&
+    selectedEmails.every((email) => COMPLETE_EMAIL.test(email)) &&
+    filteredContacts.length === 0;
 
   useLayoutEffect(() => {
     if (!loading) {
@@ -177,6 +212,32 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
     setLoading(false);
   }, []);
 
+  const renderRow = (contact: Contact) => {
+    const isPinned = pinnedEmails.includes(contact.emailAddress);
+    return (
+      <CommandItem
+        key={contact.emailAddress}
+        value={pinContact + contact.emailAddress}
+        keywords={[contact.emailAddress, contact.displayName, ...contact.flags]}
+        onSelect={() => {
+          handleContactSelect(contact);
+          onSelect();
+        }}
+        variant="raycast"
+      >
+        <RecipientAvatar
+          className="mr-3"
+          recipient={{ email: contact.emailAddress, name: contact.displayName }}
+        />
+        <ContactLabel contact={contact} />
+        {/* What Enter will do on this row. */}
+        <span className="ml-3 shrink-0 text-xs text-muted-foreground">
+          {isPinned ? t('command_palette.pin.unpin') : t('command_palette.pin.pin_action')}
+        </span>
+      </CommandItem>
+    );
+  };
+
   return (
     <>
       <EnhancedCommandInput
@@ -188,12 +249,17 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
         onKeyDown={onKeydown}
       />
       <CommandList
-        className={cn('h-[300px] transition-all duration-200 ease-bouncy-in-out')}
-        style={{ transition: 'height 300ms', height: `${listHeight}px` }}
+        className="transition-all duration-200 ease-bouncy-in-out"
+        style={
+          listHeight === undefined
+            ? { transition: 'height 300ms' }
+            : { transition: 'height 300ms', height: `${listHeight}px` }
+        }
       >
         <div ref={commandListRef}>
-          {/* {selectedEmails.length > 0 && (
-            <CommandGroup heading="Actions" className="p-2">
+          {!pinTypedEmails && <CommandEmpty>{t('command_palette.pin.empty')}</CommandEmpty>}
+          {pinTypedEmails && (
+            <CommandGroup heading={t('command_palette.header.actions')} className="p-2">
               <CommandItem
                 value={pinContact + '_action'}
                 onSelect={handlePinContact}
@@ -206,37 +272,18 @@ const PinContactPage: React.FC<PinContactPageProps> = ({
                   : t('command_palette.pin.emails')}
               </CommandItem>
             </CommandGroup>
-          )} */}
-          {filteredContacts.length > 0 && (
+          )}
+          {pinnedRows.length > 0 && (
+            <CommandGroup heading={t('command_palette.header.pinned')} className="p-2">
+              {pinnedRows.map(renderRow)}
+            </CommandGroup>
+          )}
+          {otherRows.length > 0 && (
             <CommandGroup
               heading={t('command_palette.header.contacts')}
               className="p-2 transition-all duration-300"
             >
-              {filteredContacts.map((contact) => (
-                <CommandItem
-                  key={contact.emailAddress}
-                  value={pinContact + contact.emailAddress}
-                  keywords={[contact.emailAddress, contact.displayName, ...contact.flags]}
-                  onSelect={() => {
-                    handleContactSelect(contact);
-                    onSelect();
-                  }}
-                  variant="raycast"
-                >
-                  <RecipientAvatar
-                    recipient={{ email: contact.emailAddress, name: contact.displayName }}
-                  />
-                  <span className="ml-2">
-                    {ellipsisString(contact.displayName)} (
-                    {ellipsisEmailString(contact.emailAddress)})
-                  </span>
-                  {pinnedEmails.includes(contact.emailAddress) && (
-                    <div className="ml-auto mr-2 text-foreground">
-                      <MonoIcon type="Pin" />
-                    </div>
-                  )}
-                </CommandItem>
-              ))}
+              {otherRows.map(renderRow)}
             </CommandGroup>
           )}
         </div>

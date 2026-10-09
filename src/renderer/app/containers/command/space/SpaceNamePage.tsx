@@ -7,8 +7,8 @@ import {
   CommandIcon
 } from '@/renderer/app/components/ui/command';
 import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandInput';
-import MonoIcon from '@/renderer/app/components/icons/icons';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 interface SpaceNamePageProps {
   currentName: string;
@@ -26,7 +26,9 @@ const SpaceNamePage: React.FC<SpaceNamePageProps> = ({
   onKeydown
 }) => {
   const { t } = useTranslation();
-  const [newName, setNewName] = useState('');
+  // Start from the current name (selected, so typing replaces it) instead of
+  // an empty field and a 'Change name to ""' row.
+  const [newName, setNewName] = useState(currentName);
   const [isSaving, setIsSaving] = useState(false);
 
   // Handle save action
@@ -45,6 +47,7 @@ const SpaceNamePage: React.FC<SpaceNamePageProps> = ({
       onBack();
     } catch (error) {
       console.error('Failed to save name:', error);
+      toast.error(t('command_palette.space.error.update_space'));
     } finally {
       setIsSaving(false);
     }
@@ -57,6 +60,8 @@ const SpaceNamePage: React.FC<SpaceNamePageProps> = ({
       handleSave();
     } else if (e.key === 'Backspace' && newName === '') {
       e.preventDefault();
+      // A held key steps back at most once.
+      if (e.repeat) return;
       bounce();
       onBack();
     } else {
@@ -71,6 +76,7 @@ const SpaceNamePage: React.FC<SpaceNamePageProps> = ({
         value={newName}
         onValueChange={setNewName}
         autoFocus
+        onFocus={(e) => e.currentTarget.select()}
         onKeyDown={handleNameKeydown}
       />
 

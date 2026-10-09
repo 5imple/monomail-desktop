@@ -12,6 +12,7 @@ import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 interface BookmarkNamePageProps {
   searchQuery: string;
@@ -22,6 +23,8 @@ interface BookmarkNamePageProps {
   bounce: () => void;
   onKeydown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   pushPage: (value: string[]) => void;
+  /** No account chosen and several to choose from: go pick one. */
+  onChooseAccount?: () => void;
 }
 
 const BookmarkNamePage: React.FC<BookmarkNamePageProps> = ({
@@ -32,7 +35,8 @@ const BookmarkNamePage: React.FC<BookmarkNamePageProps> = ({
   onClose,
   bounce,
   onKeydown,
-  pushPage
+  pushPage,
+  onChooseAccount
 }) => {
   const { t } = useTranslation();
   const { closeDialog } = useDialogs();
@@ -41,15 +45,23 @@ const BookmarkNamePage: React.FC<BookmarkNamePageProps> = ({
   const { getUidFromEmail } = useAuth();
 
   const handleSaveBookmark = async () => {
-    if (!selectedAccountId || !bookmarkName) {
+    // The ⌘D path arrives here without an account: send the user to choose
+    // one instead of a Save that only wobbled.
+    if (!selectedAccountId) {
+      bounce();
+      onChooseAccount?.();
+      return;
+    }
+    if (!bookmarkName.trim()) {
       bounce();
       return;
     }
 
     addOrUpdateBookmark(selectedAccountId, {
       query: searchQuery,
-      title: bookmarkName
+      title: bookmarkName.trim()
     });
+    toast.success(t('toast.bookmark_saved', { name: bookmarkName.trim() }));
 
     searchNewQuery(searchQuery, undefined, false);
     bounce();
@@ -71,15 +83,23 @@ const BookmarkNamePage: React.FC<BookmarkNamePageProps> = ({
       <CommandList>
         <CommandEmpty>{t('command_palette.no_result')}</CommandEmpty>
         <CommandGroup heading={t('command_palette.header.save_bookmark')} className="p-2">
-          <CommandItem variant={'raycast'} onSelect={handleSaveBookmark}>
-            <CommandIcon type={'Bookmark'} />
-            <span>
-              {t('command_palette.bookmark.name.save_as', {
-                query: searchQuery,
-                name: bookmarkName
-              })}
-            </span>
-          </CommandItem>
+          {bookmarkName.trim() ? (
+            <CommandItem variant={'raycast'} onSelect={handleSaveBookmark}>
+              <CommandIcon type={'Bookmark'} />
+              <span className="truncate">
+                {t('command_palette.bookmark.name.save_as', {
+                  query: searchQuery,
+                  name: bookmarkName
+                })}
+              </span>
+            </CommandItem>
+          ) : (
+            // Not 'Save "…" as ""': say what's missing.
+            <div className="flex items-center px-2.5 py-2.5 text-sm text-muted-foreground">
+              <CommandIcon type={'Bookmark'} />
+              <span>{t('command_palette.bookmark.name.hint')}</span>
+            </div>
+          )}
           {bookmarkName.length > 0 && (
             <CommandItem
               variant={'raycast'}

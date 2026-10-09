@@ -1,7 +1,8 @@
-import MonoIcon from '@/renderer/app/components/icons/icons';
+import { MonoIconType } from '@/renderer/app/components/icons/icons';
 import {
   CommandEmpty,
   CommandGroup,
+  CommandIcon,
   CommandItem,
   CommandList
 } from '@/renderer/app/components/ui/command';
@@ -11,8 +12,10 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
 import { generateUUID } from '@/main/utils';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
+import { threadExitIntentAtom, ThreadExitIntent } from '@/renderer/app/store/thread/exitIntentAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
+import { useSetAtom } from 'jotai';
 import React, { useCallback, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -26,6 +29,22 @@ interface MoveCommandPageProps {
   onKeydown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   onOpenChange: (isOpen: boolean) => void;
 }
+
+// System destinations, with the same icons as the root "Go to …" commands.
+// Starred isn't one: starring is S, and "Move to Starred" actually archived.
+const SYSTEM_DESTINATIONS: Array<{ id: string; nameKey: string; icon: MonoIconType }> = [
+  { id: 'INBOX', nameKey: 'command_palette.move.destination.inbox', icon: 'Inbox' },
+  { id: 'DONE', nameKey: 'command_palette.move.destination.done', icon: 'CheckCircle' },
+  { id: 'TRASH', nameKey: 'command_palette.move.destination.trash', icon: 'Trash' },
+  { id: 'SPAM', nameKey: 'command_palette.move.destination.spam', icon: 'AlertCircle' }
+];
+
+// Is the thread already where this destination would put it?
+const isAtDestination = (labelIds: string[], destinationId: string) =>
+  destinationId === 'DONE'
+    ? // Done = out of the Inbox (and not in Trash/Spam)
+      !labelIds.includes('INBOX') && !labelIds.includes('TRASH') && !labelIds.includes('SPAM')
+    : labelIds.includes(destinationId);
 
 const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
   moveValue,
@@ -41,9 +60,10 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
   const { updateLabelFromThread } = useThreadLabelAtom();
   const { addUndoAction } = useUndoManager();
   const { accounts } = useAuth();
+  const setExitIntents = useSetAtom(threadExitIntentAtom);
 
   const commandListRef = useRef<HTMLDivElement>(null);
-  const [listHeight, setListHeight] = useState(300);
+  const [listHeight, setListHeight] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(false);
 
   // Get selected threads data
@@ -76,23 +96,14 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
     return emailMap;
   }, [selectedAccountIds, accounts]);
 
-  // Get thread counts per account
-  const accountThreadCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    selectedThreadsData.forEach((thread) => {
-      if (thread.accountId) {
-        counts[thread.accountId] = (counts[thread.accountId] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [selectedThreadsData]);
-
   // Get move destination options (labels that can be moved to)
   const moveDestinations = useMemo(() => {
     const destinations = new Map<
       string,
       {
         label: any;
+        displayName: string;
+        icon?: MonoIconType;
         accountIds: string[];
         accountsInfo: Array<{
           accountId: string;
@@ -102,67 +113,34 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
       }
     >();
 
-    // Get current labels across all selected threads to filter out destinations they're already in
-    const currentLabels = new Set<string>();
-    selectedThreadsData.forEach((thread) => {
-      thread.labelIds.forEach((labelId) => {
-        currentLabels.add(labelId);
-      });
-    });
+    // Only hide a destination when every target is already there: with the
+    // union, one Inbox thread hid "Move to Inbox" for all the others too.
+    const everyThreadAt = (destinationId: string) =>
+      selectedThreadsData.length > 0 &&
+      selectedThreadsData.every((thread) => isAtDestination(thread.labelIds, destinationId));
 
-    // Helper function to check if a destination should be excluded based on current labels
-    const shouldExcludeDestination = (destinationId: string, destinationName: string) => {
-      // For system labels, check direct label ID match
-      if (
-        destinationId === 'INBOX' ||
-        destinationId === 'STARRED' ||
-        destinationId === 'TRASH' ||
-        destinationId === 'SPAM'
-      ) {
-        return currentLabels.has(destinationId);
-      }
-
-      // For "Done", check if threads are already done (don't have INBOX label)
-      if (destinationName === 'Done') {
-        // If any thread has INBOX, then moving to Done makes sense
-        // If no threads have INBOX, they're already done
-        return !currentLabels.has('INBOX');
-      }
-
-      // For custom labels, check if the label ID is already present
-      if (destinationId.startsWith('Label_')) {
-        return currentLabels.has(destinationId);
-      }
-
-      return false;
-    };
-
-    // System labels that can be moved to (excluding Sent and Draft)
-    const systemLabels = [
-      { name: 'Inbox', id: 'INBOX', color: { backgroundColor: '#1976D250', textColor: '#FFFFFF' } },
-      { name: 'Done', id: 'DONE', color: { backgroundColor: '#388E3C50', textColor: '#FFFFFF' } },
-      {
-        name: 'Starred',
-        id: 'STARRED',
-        color: { backgroundColor: '#F57C0050', textColor: '#FFFFFF' }
-      },
-      { name: 'Trash', id: 'TRASH', color: { backgroundColor: '#D32F2F50', textColor: '#FFFFFF' } },
-      { name: 'Spam', id: 'SPAM', color: { backgroundColor: '#E64A1950', textColor: '#FFFFFF' } }
-    ];
+    // Threads that would actually move, counted per account.
+    const accountsInfoFor = (destinationId: string, accountIds: string[]) =>
+      accountIds.map((accountId) => ({
+        accountId,
+        email: accountEmailMap[accountId],
+        threadCount: selectedThreadsData.filter(
+          (thread) =>
+            thread.accountId === accountId && !isAtDestination(thread.labelIds, destinationId)
+        ).length
+      }));
 
     // Add system labels (available for all accounts) - but only if not already there
-    systemLabels.forEach((label) => {
-      if (!shouldExcludeDestination(label.id, label.name)) {
-        destinations.set(label.name, {
-          label,
-          accountIds: selectedAccountIds,
-          accountsInfo: selectedAccountIds.map((accountId) => ({
-            accountId,
-            email: accountEmailMap[accountId],
-            threadCount: accountThreadCounts[accountId] || 0
-          }))
-        });
-      }
+    SYSTEM_DESTINATIONS.forEach((destination) => {
+      if (everyThreadAt(destination.id)) return;
+      const name = t(destination.nameKey);
+      destinations.set(destination.id, {
+        label: { id: destination.id, name },
+        displayName: name,
+        icon: destination.icon,
+        accountIds: selectedAccountIds,
+        accountsInfo: accountsInfoFor(destination.id, selectedAccountIds)
+      });
     });
 
     // Add custom labels
@@ -178,11 +156,6 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
 
     allLabelNames.forEach((labelName) => {
       const accountsWithLabel: string[] = [];
-      const accountsInfoWithLabel: Array<{
-        accountId: string;
-        email: string;
-        threadCount: number;
-      }> = [];
 
       selectedAccountIds.forEach((accountId) => {
         const accountLabels = labelsMapByAccount[accountId] || {};
@@ -192,11 +165,6 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
 
         if (hasLabel) {
           accountsWithLabel.push(accountId);
-          accountsInfoWithLabel.push({
-            accountId,
-            email: accountEmailMap[accountId],
-            threadCount: accountThreadCounts[accountId] || 0
-          });
         }
       });
 
@@ -205,115 +173,129 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
           (l) => l.name === labelName
         );
 
-        if (label && !shouldExcludeDestination(label.id, label.name)) {
-          destinations.set(labelName, {
+        if (label && !everyThreadAt(label.id)) {
+          destinations.set(`label:${labelName}`, {
             label,
+            displayName: labelName.replace('Mono/', ''),
             accountIds: accountsWithLabel,
-            accountsInfo: accountsInfoWithLabel
+            accountsInfo: accountsInfoFor(label.id, accountsWithLabel)
           });
         }
       }
     });
 
     return Array.from(destinations.values());
-  }, [
-    labelsMapByAccount,
-    selectedAccountIds,
-    accountEmailMap,
-    accountThreadCounts,
-    selectedThreadsData
-  ]);
+  }, [labelsMapByAccount, selectedAccountIds, accountEmailMap, selectedThreadsData, t]);
+
+  const markExit = useCallback(
+    (threadIds: string[], intent: ThreadExitIntent | null) =>
+      setExitIntents((prev) => {
+        const next = { ...prev };
+        threadIds.forEach((id) => {
+          if (intent) next[id] = intent;
+          else delete next[id];
+        });
+        return next;
+      }),
+    [setExitIntents]
+  );
 
   // Handle moving conversations to a destination
   const handleMoveToDestination = useCallback(
     async (
-      destinationLabel: any,
+      destinationLabel: { id: string; name: string },
+      destinationName: string,
       accountsInfo: Array<{ accountId: string; threadCount: number }>
     ) => {
       bounce();
 
-      const totalThreads = accountsInfo.reduce((sum, info) => sum + info.threadCount, 0);
+      const isDone = destinationLabel.id === 'DONE';
+      // Only threads not already there move (and are counted, and undone).
+      const movingThreads = selectedThreadsData.filter(
+        (thread) =>
+          accountsInfo.some((info) => info.accountId === thread.accountId) &&
+          !isAtDestination(thread.labelIds, destinationLabel.id)
+      );
+      const totalThreads = movingThreads.length;
       if (totalThreads === 0) return;
+
+      // Store original thread states for undo — per thread: using the first
+      // thread's labels for a whole account left other threads' labels in
+      // place on move and re-added labels they never had on undo.
+      const originalThreadStates = movingThreads.map((currentThread) => {
+        const originalLabels = [...currentThread.labelIds];
+        const labelToAdd = isDone ? '' : destinationLabel.id;
+
+        // Remove organizational labels but keep status labels (STARRED, UNREAD, …)
+        const labelsToRemove: string[] = [];
+        const organizationalLabels = ['INBOX', 'SENT', 'DRAFT', 'TRASH', 'SPAM'];
+        organizationalLabels.forEach((label) => {
+          if (currentThread.labelIds.includes(label) && label !== labelToAdd) {
+            labelsToRemove.push(label);
+          }
+        });
+
+        // Remove custom labels (Label_*), never the one being added
+        currentThread.labelIds.forEach((labelId) => {
+          if (labelId.startsWith('Label_') && labelId !== labelToAdd) {
+            labelsToRemove.push(labelId);
+          }
+        });
+
+        // For "Done", we remove INBOX instead of adding DONE
+        if (isDone && !labelsToRemove.includes('INBOX')) {
+          labelsToRemove.push('INBOX');
+        }
+
+        return {
+          accountId: currentThread.accountId as string,
+          threadIds: [currentThread.id],
+          originalLabels,
+          labelsToAdd: labelToAdd ? [labelToAdd] : [],
+          labelsToRemove
+        };
+      });
+
+      // The same swipe as the Done / Trash buttons: trash and spam leave
+      // left, everything else (archive, labels) right; back to Inbox fades.
+      const exitIntent: ThreadExitIntent | null =
+        destinationLabel.id === 'TRASH' || destinationLabel.id === 'SPAM'
+          ? 'trash'
+          : destinationLabel.id === 'INBOX'
+            ? null
+            : 'archive';
+      const movingIds = movingThreads.map((thread) => thread.id);
 
       let undoFunction: (() => Promise<void>) | undefined;
 
       // Define the promise that will handle the move operation
       const movePromise = async () => {
-        // Store original thread states for undo
-        const originalThreadStates: Array<{
-          accountId: string;
-          threadIds: string[];
-          originalLabels: string[];
-          labelsToAdd: string[];
-          labelsToRemove: string[];
-        }> = [];
-
-        // Process each account
-        for (const { accountId, threadCount } of accountsInfo) {
-          if (threadCount === 0) continue;
-
-          // Labels are computed per thread: using the first thread's labels for
-          // the whole account left other threads' labels in place on move and
-          // re-added labels they never had (e.g. INBOX) on undo.
-          const accountThreads = selectedThreadsData.filter(
-            (thread) => thread.accountId === accountId
+        if (exitIntent) markExit(movingIds, exitIntent);
+        try {
+          // All at once, so the rows leave together (one after another, each
+          // waited for its own server round trip).
+          await Promise.all(
+            originalThreadStates.map((state) =>
+              updateLabelFromThread(
+                state.accountId,
+                state.threadIds,
+                state.labelsToAdd,
+                state.labelsToRemove,
+                true,
+                true, // shouldRemoveThread - remove from current view
+                false, // shouldRestoreThread
+                undefined // afterStateUpdate - don't close yet, wait for promise to resolve
+              )
+            )
           );
-
-          for (const currentThread of accountThreads) {
-            // Store original labels for undo
-            const originalLabels = [...currentThread.labelIds];
-
-            // Remove organizational labels but keep status labels (STARRED, UNREAD, …)
-            const labelsToRemove: string[] = [];
-            const organizationalLabels = ['INBOX', 'SENT', 'DRAFT', 'TRASH', 'SPAM'];
-            organizationalLabels.forEach((label) => {
-              if (currentThread.labelIds.includes(label)) {
-                labelsToRemove.push(label);
-              }
-            });
-
-            // Remove custom labels (Label_*)
-            currentThread.labelIds.forEach((labelId) => {
-              if (labelId.startsWith('Label_')) {
-                labelsToRemove.push(labelId);
-              }
-            });
-
-            // Special handling for system labels
-            let labelToAdd = destinationLabel.id;
-            if (destinationLabel.name === 'Done') {
-              // For "Done", we remove INBOX instead of adding DONE
-              labelToAdd = '';
-              if (!labelsToRemove.includes('INBOX')) {
-                labelsToRemove.push('INBOX');
-              }
-            }
-
-            // Store state for undo
-            originalThreadStates.push({
-              accountId,
-              threadIds: [currentThread.id],
-              originalLabels,
-              labelsToAdd: labelToAdd ? [labelToAdd] : [],
-              labelsToRemove
-            });
-
-            // Perform the move
-            await updateLabelFromThread(
-              accountId,
-              [currentThread.id],
-              labelToAdd ? [labelToAdd] : [],
-              labelsToRemove,
-              true,
-              true, // shouldRemoveThread - remove from current view
-              false, // shouldRestoreThread
-              undefined // afterStateUpdate - don't close yet, wait for promise to resolve
-            );
-          }
+        } catch (error) {
+          markExit(movingIds, null);
+          throw error;
         }
 
         // Define undo function
         undoFunction = async () => {
+          markExit(movingIds, null);
           for (const state of originalThreadStates) {
             // Calculate what labels to add back and remove to restore original state
             const currentLabels = state.originalLabels.filter(
@@ -341,7 +323,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
           }
         };
 
-        return { count: totalThreads, destinationName: destinationLabel.name };
+        return { count: totalThreads, destinationName };
       };
 
       const uuid = generateUUID();
@@ -351,10 +333,10 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
         id: uuid,
         loading:
           totalThreads === 1
-            ? t('toast.thread.moving_to', { destination: destinationLabel.name })
+            ? t('toast.thread.moving_to', { destination: destinationName })
             : t('toast.thread.moving_to_multiple', {
                 count: totalThreads,
-                destination: destinationLabel.name
+                destination: destinationName
               }),
         success: (data) => {
           if (undoFunction) {
@@ -375,19 +357,28 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
         action: {
           label: (
             <span className="inline-flex items-end gap-1">
-              Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
+              {t('toast.undo')} <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
             </span>
           ),
           onClick: () => undoFunction && undoFunction()
         },
-        error: t('toast.thread.move_error', { destination: destinationLabel.name })
+        error: t('toast.thread.move_error', { destination: destinationName })
       });
 
       // Close the command panel after successful move
       onClose();
       onOpenChange(false);
     },
-    [selectedThreadsData, updateLabelFromThread, bounce, onClose, addUndoAction, t]
+    [
+      selectedThreadsData,
+      updateLabelFromThread,
+      bounce,
+      onClose,
+      onOpenChange,
+      addUndoAction,
+      markExit,
+      t
+    ]
   );
 
   useLayoutEffect(() => {
@@ -405,8 +396,8 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
   const filteredDestinations =
     moveValue.trim() === ''
       ? moveDestinations
-      : moveDestinations.filter(({ label }) =>
-          label.name.toLowerCase().includes(moveValue.toLowerCase())
+      : moveDestinations.filter(({ displayName }) =>
+          displayName.toLowerCase().includes(moveValue.toLowerCase())
         );
 
   return (
@@ -420,41 +411,53 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
       />
 
       <CommandList
-        className={cn(
-          'h-[0px] origin-top transition-all duration-200 ease-bouncy-in-out',
-          loading ? '' : `h-[${listHeight}px]`
-        )}
-        style={{ transition: 'height 300ms', height: `${listHeight}px` }}
+        className="origin-top transition-all duration-200 ease-bouncy-in-out"
+        style={
+          listHeight === undefined
+            ? { transition: 'height 300ms' }
+            : { transition: 'height 300ms', height: `${listHeight}px` }
+        }
       >
         <div ref={commandListRef}>
           <CommandEmpty>{t('command_palette.move.no_destinations_found')}</CommandEmpty>
 
           {selectedThreadsData.length > 0 && filteredDestinations.length > 0 && (
-            <CommandGroup className="p-2">
-              {filteredDestinations.map(({ label, accountIds, accountsInfo }) => {
-                const totalThreads = accountsInfo.reduce((sum, info) => sum + info.threadCount, 0);
-
-                return (
+            <CommandGroup heading={t('command_palette.header.move_to')} className="p-2">
+              {filteredDestinations.map(
+                ({ label, displayName, icon, accountIds, accountsInfo }) => (
                   <CommandItem
                     key={`${label.name}-${accountIds.join('-')}`}
                     variant={'raycast'}
                     value={label.name}
-                    onSelect={() => handleMoveToDestination(label, accountsInfo)}
+                    onSelect={() => handleMoveToDestination(label, displayName, accountsInfo)}
                   >
                     <div className="flex w-full items-center">
-                      <div
-                        className="ml-2 mr-4 flex h-[20px] w-[5.5px] items-center justify-center rounded-sm"
-                        style={{ backgroundColor: label.color.backgroundColor }}
-                      ></div>
-                      <div className="flex w-full flex-col">
-                        <span>
-                          {t('command_palette.header.move_to')} {label.name.replace('Mono/', '')}
-                        </span>
-                      </div>
+                      {icon ? (
+                        <CommandIcon type={icon} />
+                      ) : (
+                        // Custom label: its colour as a dot (muted when it has none).
+                        <div
+                          aria-hidden
+                          className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center"
+                        >
+                          <span
+                            className={cn(
+                              'h-2.5 w-2.5 rounded-full',
+                              !label.color?.backgroundColor && 'bg-muted-foreground/40'
+                            )}
+                            style={
+                              label.color?.backgroundColor
+                                ? { backgroundColor: label.color.backgroundColor }
+                                : undefined
+                            }
+                          />
+                        </div>
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{displayName}</span>
                     </div>
                   </CommandItem>
-                );
-              })}
+                )
+              )}
             </CommandGroup>
           )}
         </div>

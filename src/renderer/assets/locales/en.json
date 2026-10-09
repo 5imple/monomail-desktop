@@ -792,20 +792,25 @@
       "create_new_space": "Create new Space",
       "labels": "Labels",
       "create_labels": "Create Labels",
-      "move_to": "Move to"
+      "move_to": "Move to",
+      "actions": "Actions",
+      "pinned": "Pinned",
+      "recent_searches": "Recent searches"
     },
     "ai": {
       "loading": "AI is thinking..."
     },
     "bookmark": {
       "icon": {
-        "placeholder": ""
+        "placeholder": "",
+        "search_placeholder": "Search icons…"
       },
       "name": {
         "placeholder": "Enter bookmark name...",
         "set_icon": "Set Icon for",
         "save_as": "Save \"{{query}}\" as \"{{name}}\"",
-        "set_icon_for": "Set Icon for \"{{name}}\""
+        "set_icon_for": "Set Icon for \"{{name}}\"",
+        "hint": "Type a name for this bookmark"
       },
       "account": {
         "placeholder": "Choose an account...",
@@ -819,23 +824,37 @@
       "create_in_accounts_other": "Create in {{count}} accounts",
       "will_affect_conversations": "Will affect {{count}} conversation",
       "will_affect_conversations_other": "Will affect {{count}} conversations in {{accountCount}} account",
-      "will_affect_conversations_plural_accounts": "Will affect {{count}} conversations in {{accountCount}} accounts"
+      "will_affect_conversations_plural_accounts": "Will affect {{count}} conversations in {{accountCount}} accounts",
+      "unsupported_provider": "Labels aren’t available for Microsoft 365 accounts yet. You can move the conversation to a folder instead.",
+      "go_to_move": "Move to…",
+      "create_label": "Create label “{{name}}”",
+      "some_unsupported": "Labels apply to Gmail conversations only; Microsoft 365 ones are left as they are."
     },
     "move": {
       "placeholder": "Search destinations...",
       "no_destinations_found": "No destinations found.",
       "will_move_conversations": "Will move {{count}} conversation",
-      "will_move_conversations_other": "Will move {{count}} conversations"
+      "will_move_conversations_other": "Will move {{count}} conversations",
+      "destination": {
+        "inbox": "Inbox",
+        "done": "Done",
+        "trash": "Trash",
+        "spam": "Spam"
+      }
     },
     "pin": {
       "placeholder": "Type contact names or emails...",
       "pin": "Pin",
       "contacts": "contacts",
       "email": "email",
-      "emails": "emails"
+      "emails": "emails",
+      "unpin": "Unpin",
+      "pin_action": "Pin",
+      "empty": "No matching contacts — type a full email address to pin it"
     },
     "reminder": {
-      "placeholder": "Type 'Tomorrow', '5 pm', or 'Next Monday'..."
+      "placeholder": "Type 'Tomorrow', '5 pm', or 'Next Monday'...",
+      "no_suggestions": "No matching times — try “tomorrow 9am” or “in 2 hours”"
     },
     "search": {
       "query_search": "Query search: {{query}}",
@@ -968,7 +987,10 @@
       },
       "is:muted": {
         "description": "Search for messages you muted"
-      }
+      },
+      "placeholder_v2": "Search mail",
+      "search_for": "Search for “{{query}}”",
+      "remove_history": "Remove from search history"
     },
     "space": {
       "selection": {
@@ -987,7 +1009,10 @@
         "change_color": "Change Space Color",
         "delete_space": "Delete Space",
         "delete_confirmation": "Are you sure you want to delete \"{{name}}\"?",
-        "edit_space": "Edit \"{{name}}\" Space"
+        "edit_space": "Edit \"{{name}}\" Space",
+        "switch_to": "Switch to “{{name}}”",
+        "delete_disabled_hint": "Switch to another space to delete this one",
+        "delete_confirm_again": "Press Enter again to delete “{{name}}”"
       },
       "name": {
         "placeholder": "Enter space name",
@@ -1000,7 +1025,8 @@
       },
       "color": {
         "placeholder": "Enter a color or select below",
-        "select_color_for": "Select color for \"{{name}}\""
+        "select_color_for": "Select color for \"{{name}}\"",
+        "search_placeholder": "Search colors"
       },
       "accounts": {
         "create_space": "Create \"{{name}}\" Space",
@@ -1023,6 +1049,27 @@
         "delete_space": "Failed to delete space",
         "update_accounts": "Failed to update accounts"
       }
+    },
+    "title": "Command palette",
+    "search_mail_for": "Search mail for “{{query}}”",
+    "group": {
+      "conversation": "Conversation",
+      "compose": "Compose",
+      "go_to": "Go to",
+      "settings": "Settings",
+      "appearance": "Appearance"
+    },
+    "context": {
+      "label_one": "Label 1 conversation",
+      "label_other": "Label {{count}} conversations",
+      "move_one": "Move 1 conversation",
+      "move_other": "Move {{count}} conversations",
+      "reminder_one": "Remind me about 1 conversation",
+      "reminder_other": "Remind me about {{count}} conversations",
+      "space": "Spaces",
+      "pin": "Pin contacts",
+      "bookmark": "Save this search",
+      "back": "Back"
     }
   },
   "dialog": {
@@ -1671,7 +1718,18 @@
       "error": "Couldn't snooze this email.",
       "undo_error": "Couldn't undo the snooze."
     },
-    "undo": "Undo"
+    "undo": "Undo",
+    "label": {
+      "apply_error": "Couldn’t update the label “{{name}}”",
+      "create_error": "Couldn’t create the label “{{name}}”"
+    },
+    "reminder_set_for": "Reminder set for {{when}}",
+    "reminder_no_target": "Open or select a conversation first",
+    "contact_pinned": "Pinned {{email}}",
+    "contact_unpinned": "Unpinned {{email}}",
+    "contacts_pinned_one": "Pinned 1 contact",
+    "contacts_pinned_other": "Pinned {{count}} contacts",
+    "bookmark_saved": "Bookmark “{{name}}” saved"
   },
   "offline": {
     "working_offline": "Working offline",

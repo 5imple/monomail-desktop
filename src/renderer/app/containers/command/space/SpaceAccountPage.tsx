@@ -89,17 +89,31 @@ const SpaceAccountPage: React.FC<SpaceAccountPageProps> = ({
                 key={account.uid}
                 variant={'raycast'}
                 value={account.email}
+                aria-checked={isSelected}
                 onSelect={() => toggleAccountSelection(account.uid)}
               >
                 <div className="flex w-full items-center justify-between">
-                  <div className="flex items-center">
+                  <div className="flex min-w-0 items-center">
                     <RecipientAvatar
-                      className="mr-2"
+                      className="mr-3"
                       recipient={{ email: account.email, name: account.displayName }}
                     />
-                    <span>{account.email}</span>
+                    <span className="truncate">{account.email}</span>
                   </div>
-                  {isSelected && <MonoIcon type={'Check'} className="ml-2" />}
+                  {/* Fixed 16px slot: an empty ring, or the blue selection check. */}
+                  {isSelected ? (
+                    <span
+                      aria-hidden
+                      className="ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-selection text-selection-foreground"
+                    >
+                      <MonoIcon type={'Check'} className="h-3 w-3" />
+                    </span>
+                  ) : (
+                    <span
+                      aria-hidden
+                      className="ml-2 h-4 w-4 shrink-0 rounded-full border border-border"
+                    />
+                  )}
                 </div>
               </CommandItem>
             );
