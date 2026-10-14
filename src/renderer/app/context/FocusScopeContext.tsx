@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import { createContext } from 'react';
 
 export interface FocusScopeContextProps {
   currentScope: string;

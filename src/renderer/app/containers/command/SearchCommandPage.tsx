@@ -1,5 +1,4 @@
 import {
-  CommandEmpty,
   CommandGroup,
   CommandIcon,
   CommandItem,

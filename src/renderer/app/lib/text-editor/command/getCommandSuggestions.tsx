@@ -1,6 +1,5 @@
 import { Editor } from '@tiptap/core';
 import { IMonoTemplate } from '@/main/api/template/types';
-import MonoIcon from '@/renderer/app/components/icons/icons';
 import { ReactNode } from 'react';
 
 interface GetCommandSuggestionsOptions {

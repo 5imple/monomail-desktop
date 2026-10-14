@@ -1,19 +1,17 @@
 import { Button } from '@/renderer/app/components/ui/button';
 import { Input } from '@/renderer/app/components/ui/input';
 import { Badge } from '@/renderer/app/components/ui/badge';
-import { Checkbox } from '@/renderer/app/components/ui/checkbox';
-import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
+import MonoIcon from '@/renderer/app/components/icons/icons';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { animated, useSpring, useTrail } from '@react-spring/web';
-import { FC, useState, useEffect, useMemo, useRef } from 'react';
+import { FC, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useSpacePinAtom } from '@/renderer/app/store/space/pin/useSpacePinAtom';
 import { Contact } from '@/renderer/app/lib/db/contact';
 import { ellipsisString, ellipsisEmailString } from '@/renderer/app/lib/minimizeEmail';
 import { cn } from '@/renderer/app/lib/utils';
-import Loader from '@/renderer/app/components/ui/loader';
 
 interface OnBoardingPinContactsProps {
   onContinue: () => void;

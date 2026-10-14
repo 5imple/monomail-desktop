@@ -1,7 +1,6 @@
 import * as React from 'react';
 
 import { cn } from '@/renderer/app/lib/utils';
-import { ringVariants } from '@/renderer/app/components/ui/constants';
 
 export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   autoResize?: boolean; // Add autoResize as an optional prop

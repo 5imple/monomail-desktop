@@ -2,7 +2,6 @@ import * as React from 'react';
 import { format } from 'date-fns';
 
 import { Input } from '@/renderer/app/components/ui/input';
-import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { cn } from '@/renderer/app/lib/utils';
 
 export interface TimeInputProps

@@ -3,7 +3,6 @@ import { DBGetAttachmentBlob } from '@/renderer/app/lib/db/draftAttachment';
 import { MonoAttachment } from '@/main/models/types';
 import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
-import { useAuth } from '@/renderer/app/context/AuthContext';
 import { getAttachmentIcon, isPreviewableAttachment } from '@/renderer/app/lib/getAttachmentIcon';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';

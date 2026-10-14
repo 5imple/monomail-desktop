@@ -1,5 +1,5 @@
 import React, { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
-import { HotkeysProvider, useHotkeysContext } from 'react-hotkeys-hook';
+import { useHotkeysContext } from 'react-hotkeys-hook';
 
 /** Defines the structure of the Hotkey Scope Context */
 interface HotkeyScopeContextType {

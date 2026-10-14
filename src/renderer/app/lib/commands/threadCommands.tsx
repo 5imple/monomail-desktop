@@ -1,4 +1,3 @@
-import React from 'react';
 import { generateUUID, isComposeDraftId } from '@/main/utils';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { CommandType } from '@/renderer/app/types';

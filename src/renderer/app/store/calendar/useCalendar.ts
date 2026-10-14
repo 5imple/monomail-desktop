@@ -28,8 +28,6 @@ import {
   type CalendarEvent,
   type CalendarEventID,
   type CalendarEventDraft,
-  type CalendarEventStatus,
-  type CalendarViewMode,
   type CalendarAccountUID,
 
   // Utilities

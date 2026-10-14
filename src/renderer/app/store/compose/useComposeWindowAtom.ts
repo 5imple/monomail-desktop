@@ -1,5 +1,5 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import { atom, useAtom, useSetAtom } from 'jotai';
+import { atom, useAtom } from 'jotai';
 
 export const globalDraftWindowsAtom = atom<MonoDraft[]>([]);
 export const handleCloseButtonAtom = atom<((onComplete?: () => void) => Promise<void>) | null>(

@@ -1,7 +1,6 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoIconType } from '@/renderer/app/components/icons/icons';
-import { CommandType } from '@/renderer/app/types';
 
 export type CommandScope =
   | 'GLOBAL'

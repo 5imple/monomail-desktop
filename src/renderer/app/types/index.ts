@@ -1,6 +1,3 @@
-import { UniqueIdentifier } from '@dnd-kit/core';
-import { UUID } from 'crypto';
-
 export type CommandType =
   | 'SEARCH'
   | 'PIN_CONTACT'

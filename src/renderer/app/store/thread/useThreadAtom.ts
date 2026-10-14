@@ -7,10 +7,8 @@ import {
   threadsMapAtom
 } from './atoms';
 
-import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { useCallback } from 'react';
 import { useThreadFilter } from './useThreadFilter';
-import { useThreadOperationAtom } from './useThreadOperations';
 
 export function useThreadAtom() {
   const [selectedThreads, setSelectedThreads] = useAtom(selectedThreadsAtom);

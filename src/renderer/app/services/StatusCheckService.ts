@@ -2,7 +2,6 @@ import { atom, useAtom } from 'jotai';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import electronApi from '@/renderer/app/lib/electronApi';
 
 // Status types
 export type ServiceStatus = 'operational' | 'degraded' | 'outage';

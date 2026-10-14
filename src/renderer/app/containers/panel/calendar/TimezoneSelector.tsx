@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { cn } from '@/renderer/app/lib/utils';
 import { formatInTimeZone } from 'date-fns-tz';
-import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
+import { Popover, PopoverContent } from '@/renderer/app/components/ui/popover';
 import {
   Command,
   CommandEmpty,

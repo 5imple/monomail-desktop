@@ -2,7 +2,6 @@ import { AppUpdater, autoUpdater, CancellationToken } from 'electron-updater';
 import { app, dialog } from 'electron';
 import log from 'electron-log';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
-import { compareVersions } from '@/main/services/updater/utils';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
 
 export class UpdateManager {

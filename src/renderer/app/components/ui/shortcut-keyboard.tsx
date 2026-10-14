@@ -1,5 +1,5 @@
 import { cn } from '@/renderer/app/lib/utils';
-import React, { FC, useMemo } from 'react';
+import { FC, useMemo } from 'react';
 import { Keys } from 'react-hotkeys-hook';
 import { cva } from 'class-variance-authority';
 

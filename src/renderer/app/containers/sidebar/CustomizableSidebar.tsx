@@ -33,7 +33,6 @@ import {
   getDefaultNavItemProperties,
   isDefaultNavItem
 } from '@/renderer/app/store/space/useCustomSidebarAtom';
-import { useSidebarMigration } from '@/renderer/app/store/space/migrateSidebarAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import {
   closestCenter,
@@ -53,11 +52,9 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  arrayMove,
   AnimateLayoutChanges,
   defaultAnimateLayoutChanges
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { Children, FC, useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -67,7 +64,6 @@ import { DBGetThreadCountsByLabelSets, ValidLabel } from '@/renderer/app/lib/db/
 import { restoreSidebarSubtree } from '@/renderer/app/lib/sidebarRestore';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
-import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
 // Special drop zone component

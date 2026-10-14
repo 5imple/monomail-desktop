@@ -1,9 +1,8 @@
 import MonoLogo from '@/renderer/app/components/common/MonoLogo';
 import { useTheme } from '@/renderer/app/components/ThemeProvider';
 import { Button } from '@/renderer/app/components/ui/button';
-import { cn } from '@/renderer/app/lib/utils';
-import { animated, easings, useSpring, useTrail, config } from '@react-spring/web';
-import { FC, useState, useMemo, useCallback } from 'react';
+import { animated, easings, useSpring, useTrail } from '@react-spring/web';
+import { FC, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const OnboardingWelcome: FC<{ onContinue: () => void }> = ({ onContinue }) => {

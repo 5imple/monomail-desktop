@@ -1,4 +1,3 @@
-import { apiClient } from '@/main/api/apiClient';
 import bookmarkApi from '@/main/api/bookmark/bookmarkApi';
 import { SearchBookmark, SearchBookmarkResponse } from '@/main/api/bookmark/types';
 import { searchBookmarkAtom } from '@/renderer/app/store/bookmark/atoms';

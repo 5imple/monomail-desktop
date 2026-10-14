@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { Button } from '@/renderer/app/components/ui/button';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';

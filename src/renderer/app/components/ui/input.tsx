@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/renderer/app/lib/utils';
-import { ringVariants } from '@/renderer/app/components/ui/constants';
 
 // Wrapper variants for when elements are inside the input
 const inputWrapperVariants = cva(

@@ -6,7 +6,6 @@ import {
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
   DropdownMenuSeparator
 } from '@/renderer/app/components/ui/dropdown-menu';
 import MonoIcon from '@/renderer/app/components/icons/icons';

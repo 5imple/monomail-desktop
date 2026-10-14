@@ -2,7 +2,6 @@ import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 
 import { cn } from '@/renderer/app/lib/utils';
-import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { buttonVariants } from '@/renderer/app/components/ui/button';
 
 const Tabs = TabsPrimitive.Root;

@@ -10,14 +10,12 @@ import {
   app,
   BrowserWindow,
   BrowserWindowConstructorOptions,
-  dialog,
   globalShortcut,
   nativeTheme,
   screen,
   shell
 } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
 
 export interface IAppWindowOptions {
   route?: string;

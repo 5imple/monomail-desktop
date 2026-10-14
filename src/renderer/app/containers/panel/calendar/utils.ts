@@ -1,4 +1,4 @@
-import { differenceInMinutes, endOfDay, format, startOfDay } from 'date-fns';
+import { endOfDay, format, startOfDay } from 'date-fns';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { CalendarEvent } from '@/renderer/app/store/calendar/calendarAtoms';
 

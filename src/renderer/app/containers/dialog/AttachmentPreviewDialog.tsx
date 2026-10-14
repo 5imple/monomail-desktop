@@ -1,4 +1,3 @@
-import { apiClient } from '@/main/api/apiClient';
 import mailApi from '@/main/api/mail/mailApi';
 import { DBGetAttachmentBlob } from '@/renderer/app/lib/db/draftAttachment';
 import { MonoAttachment } from '@/main/models/types';

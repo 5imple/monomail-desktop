@@ -1,5 +1,3 @@
-import { Contact } from '@/renderer/app/lib/db/contact';
-
 export interface GoogleContactResponse {
   email: string;
   names: {

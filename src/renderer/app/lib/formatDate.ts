@@ -1,4 +1,4 @@
-import { format, isToday, isYesterday } from 'date-fns';
+import { isToday } from 'date-fns';
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 
 const DEFAULT_TIME_ZONE = 'America/Los_Angeles';

@@ -1,4 +1,3 @@
-import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { initDB } from '../db';
 import { fetchAndConstructThread } from './utils';

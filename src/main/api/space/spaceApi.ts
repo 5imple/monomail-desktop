@@ -15,11 +15,6 @@ import {
   MoveCustomSidebarItemRequest,
   CustomNavItem
 } from '@/main/api/space/types';
-import {
-  networkFirstCache,
-  CACHE_KEYS,
-  CACHE_TTL
-} from '@/renderer/app/lib/cache/networkFirstCache';
 
 /**
  * Fetch all spaces.

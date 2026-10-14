@@ -1,5 +1,5 @@
 import trackingApi from '@/main/api/tracking/trackingApi';
-import { TrackingHistory, TrackingHistoriesResponse } from '@/main/api/tracking/types';
+import { TrackingHistory } from '@/main/api/tracking/types';
 import { trackingHistoriesAtom } from '@/renderer/app/store/tracking/atoms';
 import { useAtom } from 'jotai';
 

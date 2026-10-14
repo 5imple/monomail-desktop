@@ -9,7 +9,6 @@ import {
 } from '@/renderer/app/components/ui/resizable';
 import { DisplayPanel } from '@/renderer/app/containers/panel/DisplayPanel';
 import ListPanel from '@/renderer/app/containers/panel/ListPanel';
-import CalendarPanel from '@/renderer/app/containers/panel/CalendarPanel';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
@@ -19,7 +18,6 @@ import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useThreadListAtom } from '@/renderer/app/store/layout/threadList/useThreadListAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpacePinAtom } from '@/renderer/app/store/space/pin/useSpacePinAtom';
-import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import {
   Active,

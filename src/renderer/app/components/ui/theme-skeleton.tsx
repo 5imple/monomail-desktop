@@ -1,6 +1,6 @@
 import { Separator } from '@/renderer/app/components/ui/separator';
 import { cn } from '@/renderer/app/lib/utils';
-import React, { FC } from 'react';
+import { FC } from 'react';
 
 interface ThemeSkeletonProps {
   className?: string;

@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Input } from '@/renderer/app/components/ui/input';
 import { Calendar } from '@/renderer/app/components/ui/calendar';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';

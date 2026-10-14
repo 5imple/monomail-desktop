@@ -6,7 +6,7 @@ import { threadHasFileAttachments } from '@/renderer/app/lib/threadAttachments';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useAtom } from 'jotai';
 import { useCallback, useMemo } from 'react';
-import { activeFiltersAtom, isThreadFilteredAtom, threadsMapAtom } from './atoms';
+import { activeFiltersAtom, threadsMapAtom } from './atoms';
 
 export function useThreadFilter() {
   const [activeFilters, setActiveFilters] = useAtom(activeFiltersAtom);

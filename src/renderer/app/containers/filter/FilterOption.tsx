@@ -11,7 +11,7 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadFilter } from '@/renderer/app/store/thread/useThreadFilter';
 import { FilterCriteria, FilterType } from '@/renderer/app/types';
-import React, { FC, useMemo } from 'react';
+import { FC, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface FilterOptionProps {

@@ -1,4 +1,3 @@
-import signatureApi from '@/main/api/signature/signatureApi';
 import { atom, useAtom } from 'jotai';
 
 export interface IMonoSignature {

@@ -1,6 +1,5 @@
 // src/renderer/app/lib/db/sync.ts
 
-import { MonoThread } from '@/main/models/thread/MonoThread';
 import { initDB } from '../db';
 
 // Interface for storing account sync metadata

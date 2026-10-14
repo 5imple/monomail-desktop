@@ -4,7 +4,6 @@ import {
   LoadingStatus,
   useThreadListAtom
 } from '@/renderer/app/store/layout/threadList/useThreadListAtom';
-import { useSyncHistory } from '@/renderer/app/context/SyncHistoryContext';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 
 interface ThreadListContextType {

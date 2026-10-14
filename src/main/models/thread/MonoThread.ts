@@ -4,7 +4,6 @@ import { IMonoMessage, MonoMessage } from '@/main/models/message/MonoMessage';
 import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
 import { parseGmailThread } from '@/main/models/thread/utils';
 import { MonoAttachment, MonoRecipient } from '@/main/models/types';
-import { MonoThreadRecord } from '@/renderer/app/lib/db/types/index';
 
 export interface IMonoThread {
   accountId: string;

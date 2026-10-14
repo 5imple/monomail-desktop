@@ -16,7 +16,6 @@ import { Input } from '@/renderer/app/components/ui/input';
 import { Label } from '@/renderer/app/components/ui/label';
 import Loader from '@/renderer/app/components/ui/loader';
 import DirectHTMLSignatureEditor from '@/renderer/app/containers/editor/DirectHTMLSignatureEditor';
-import TextEditor from '@/renderer/app/containers/editor/TextEditor';
 import { IconPickerButton } from '@/renderer/app/containers/dialog/IconPickerButton';
 import { AVAILABLE_ICONS } from '@/renderer/app/lib/availableIcons';
 import { cn } from '@/renderer/app/lib/utils';

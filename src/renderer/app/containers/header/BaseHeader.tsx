@@ -1,5 +1,5 @@
 import { cn } from '@/renderer/app/lib/utils';
-import React, { FC, HTMLAttributes } from 'react';
+import React, { FC } from 'react';
 
 interface BaseHeaderProps {
   className?: string;

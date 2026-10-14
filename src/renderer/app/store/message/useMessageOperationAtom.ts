@@ -1,4 +1,3 @@
-import { apiClient } from '@/main/api/apiClient';
 import mailApi from '@/main/api/mail/mailApi';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';

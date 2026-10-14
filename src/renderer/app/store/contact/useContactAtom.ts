@@ -1,5 +1,5 @@
 import { apiClient } from '@/main/api/apiClient';
-import { MonoAccount, MonoMember } from '@/main/api/auth/types';
+import { MonoAccount } from '@/main/api/auth/types';
 import contactApi from '@/main/api/contact/contactApi';
 import spaceApi from '@/main/api/space/spaceApi';
 import { Contact, DBCreateContact, DBGetContacts } from '@/renderer/app/lib/db/contact';
@@ -8,7 +8,6 @@ import {
   lastGoogleContactSyncDateAtom,
   selectedContactAtoms
 } from '@/renderer/app/store/contact/atoms';
-import { format } from 'date-fns';
 import { useAtom } from 'jotai';
 
 export function useContactAtom() {

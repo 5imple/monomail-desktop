@@ -4,11 +4,9 @@ import ThemeSkeleton from '@/renderer/app/components/ui/theme-skeleton';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
-import { animated, useTrail, useSpring, config } from '@react-spring/web';
+import { animated, useTrail, useSpring } from '@react-spring/web';
 import { FC, useEffect, useState, useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import MonoIcon from '@/renderer/app/components/icons/icons';
 
 const OnBoardingAppearance: FC<{
   activeTheme: 'light' | 'dark';

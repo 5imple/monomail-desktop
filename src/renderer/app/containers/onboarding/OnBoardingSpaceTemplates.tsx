@@ -4,7 +4,6 @@ import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { animated, useSpring, useTrail } from '@react-spring/web';
 import { FC, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/renderer/app/lib/utils';
 
 interface SpaceTemplate {
   id: string;

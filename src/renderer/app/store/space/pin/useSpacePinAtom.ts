@@ -1,6 +1,6 @@
 import spaceApi from '@/main/api/space/spaceApi';
 import { AddPinRequest } from '@/main/api/space/types';
-import { DBGetContactByEmail, DBUpdateContactPinStatus } from '@/renderer/app/lib/db/contact';
+import { DBGetContactByEmail } from '@/renderer/app/lib/db/contact';
 import { activeSpaceAtom, spacesAtom } from '@/renderer/app/store/space/atom';
 import { useAtom } from 'jotai';
 import { useCallback } from 'react';

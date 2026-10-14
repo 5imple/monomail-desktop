@@ -1,7 +1,6 @@
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
-import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
 import { MonoAttachment, MonoRecipient } from '@/main/models/types';
 import { MonoCacheDB } from '@/renderer/app/lib/db/db';
 import { MonoThreadRecord } from '@/renderer/app/lib/db/types/index';

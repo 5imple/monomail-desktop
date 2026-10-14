@@ -10,7 +10,6 @@ import { setMailAccountProviders } from '@/main/api/mail/providerRegistry';
 import signatureApi from '@/main/api/signature/signatureApi';
 import templateApi from '@/main/api/template/templateApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
-import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { auth, MonoUser as User, onAuthStateChanged } from '@/renderer/app/lib/monoAuth';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';

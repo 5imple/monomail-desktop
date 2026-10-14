@@ -2,7 +2,6 @@ import spaceApi from '@/main/api/space/spaceApi';
 import {
   CustomNavItem,
   CustomSidebarState,
-  UpdateCustomSidebarRequest,
   AddCustomSidebarItemRequest,
   CreateCustomSidebarFolderRequest,
   ReorderCustomSidebarRequest,

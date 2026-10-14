@@ -1,11 +1,7 @@
 import { Button } from '@/renderer/app/components/ui/button';
 import Loader from '@/renderer/app/components/ui/loader';
 import electronApi from '@/renderer/app/lib/electronApi';
-import {
-  PWA_UPDATE_EVENT,
-  handlePWAUpdate,
-  handlePWAUpdateWithManualActivation
-} from '@/renderer/app/lib/pwa';
+import { PWA_UPDATE_EVENT, handlePWAUpdate } from '@/renderer/app/lib/pwa';
 import { animated, useSpring } from '@react-spring/web';
 import { FC, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';

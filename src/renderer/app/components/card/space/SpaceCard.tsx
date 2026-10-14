@@ -1,4 +1,4 @@
-import React, { FC, forwardRef, useEffect, useRef } from 'react';
+import React, { forwardRef, useRef } from 'react';
 import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { NotificationBadge } from '@/renderer/app/components/ui/notification-badge';
@@ -15,7 +15,6 @@ import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { useFocusScope } from '@/renderer/app/hooks/useFocusScope';
 import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
 import { isBackendConfigured } from '@/main/api/apiClient';
 

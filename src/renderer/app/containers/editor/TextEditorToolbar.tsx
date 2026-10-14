@@ -1,9 +1,8 @@
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Popover, PopoverContent } from '@/renderer/app/components/ui/popover';
 import { Separator } from '@/renderer/app/components/ui/separator';
-import { Toggle, toggleVariants } from '@/renderer/app/components/ui/toggle';
+import { Toggle } from '@/renderer/app/components/ui/toggle';
 import { isMac } from '@/renderer/app/lib/platform';
-import { cn } from '@/renderer/app/lib/utils';
 import { PopoverTrigger } from '@radix-ui/react-popover';
 import { type Editor } from '@tiptap/react';
 import { useState } from 'react';

@@ -37,7 +37,6 @@ import './global.css';
 import RouteLogger from './middlewares/RouteLogger';
 import { KeyboardNavigationProvider } from '@/renderer/app/context/KeyboardNavigationContext';
 import { SyncThreadProvider } from '@/renderer/app/context/SyncThreadContext';
-import { isDevelopment } from '@/renderer/app/lib/accessManagement';
 import { initializeServiceWorker, initializeNetworkMonitoring } from '@/renderer/app/lib/pwa';
 
 // Initialize Service Worker for Network First caching strategy

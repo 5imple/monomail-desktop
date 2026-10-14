@@ -34,7 +34,6 @@ import { buildReplyAllRecipients, replySubject } from '@/renderer/app/lib/replyR
 import { payloadHasBodyData } from '@/renderer/app/lib/threadBodyPrefetch';
 import { cn } from '@/renderer/app/lib/utils';
 import i18n from '@/renderer/assets/locales';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useTransition } from '@react-spring/web';

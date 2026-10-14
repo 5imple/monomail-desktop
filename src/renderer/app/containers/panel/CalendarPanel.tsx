@@ -6,7 +6,6 @@ import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/app/components/ui/tabs';
 import { TooltipProvider } from '@/renderer/app/components/ui/tooltip';
 import CalendarEventEditor from '@/renderer/app/containers/panel/calendar/CalendarEventEditor';
-import AccountSelector from '@/renderer/app/components/calendar/AccountSelector';
 import type { CalendarEvent } from '@/renderer/app/store/calendar/calendarAtoms';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';

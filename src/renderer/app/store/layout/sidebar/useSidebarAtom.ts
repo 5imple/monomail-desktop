@@ -1,8 +1,7 @@
 import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
 import { atom, useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
-import { useMemo, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useEffect } from 'react';
 
 export const sidebarCollapsedAtom = atomWithStorage<boolean>(
   'layout:sidebar:collapsed',

@@ -6,7 +6,7 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
-import React, { FC, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { FC, useEffect, useRef, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { isBackendConfigured } from '@/main/api/apiClient';

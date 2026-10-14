@@ -1,5 +1,3 @@
-import { cn } from '@/renderer/app/lib/utils';
-
 // One 2px ring. The extra outline-2 / outline-ring/50 re-enabled the outline
 // that outline-none clears, drawing a second ring 2px outside the first.
 export const ringVariants =

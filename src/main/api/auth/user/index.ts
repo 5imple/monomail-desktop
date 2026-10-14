@@ -1,10 +1,5 @@
 import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import { MonoMember, GetMonoAccountResponse, UserPreference } from '@/main/api/auth/types';
-import {
-  networkFirstCache,
-  CACHE_KEYS,
-  CACHE_TTL
-} from '@/renderer/app/lib/cache/networkFirstCache';
 
 /**
  * Fetches user profile by email.

@@ -2,10 +2,9 @@
 import Loader from '@/renderer/app/components/ui/loader';
 import BaseHeader from '@/renderer/app/containers/header/BaseHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { cn } from '@/renderer/app/lib/utils';
 
