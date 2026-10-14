@@ -26,37 +26,3 @@ export type ValidRendererChannel = (typeof validRendererChannel)[number];
 export const isValidRendererChannel = (channel: string): channel is ValidRendererChannel => {
   return (validRendererChannel as readonly string[]).includes(channel);
 };
-
-export const validMainChannel = [
-  'main:auth:get-state',
-  'main:auth:sign-out',
-  'main:auth:refresh',
-  'main:auth:initiate-sign-in',
-  'main:auth:initiate-add-account',
-  'main:auth:initiate-microsoft-sign-in',
-  'main:auth:initiate-microsoft-add-account',
-  'main:auth:get-google-account-token',
-  'main:auth:get-mail-account-token',
-  'main:auth:remove-mail-account',
-  'main:gmail:request',
-  'main:graph:request',
-  'main:graph:batch',
-  'main:system:set-online-status',
-  'main:system:set-alert-sound',
-  'main:system:set-window-fullsize-on-creation',
-  'main:system:set-strict-pubsub',
-  'main:window:open',
-  'main:window:close',
-  'main:system:theme-toggle',
-  'main:dark-mode:system',
-  'main:notification:native:show',
-  'main:notification:custom:show',
-  'main:notification:custom:clicked',
-  'main:notification:custom:close',
-  'main:compose:create',
-  'main:renderer:ready',
-  'main:renderer:version',
-  'main:renderer:trigger-command',
-  'main:toast:show'
-] as const;
-export type ValidMainChannel = (typeof validMainChannel)[number];

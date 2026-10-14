@@ -16,8 +16,3 @@ export const LABEL_COLORS: Record<string, LabelColor> = {
   PINK: { textColor: '#711a36', backgroundColor: '#fcdee8' },
   BLACK: { textColor: '#f3f3f3', backgroundColor: '#000000' }
 };
-
-export interface MonoLabelTemplate {
-  name: string;
-  color: LabelColor;
-}

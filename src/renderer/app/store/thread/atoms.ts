@@ -10,5 +10,4 @@ export const filteredThreadIdsAtom = atom<string[]>([]);
 export const threadIdsAtom = atom<string[]>([]);
 export const threadsMapAtom = atom<Record<string, MonoThread>>({});
 
-export const isThreadFilteredAtom = atomWithStorage<boolean>('global:filter:active', false);
 export const activeFiltersAtom = atomWithStorage<FilterCriteria[]>('global:filter:list', []);

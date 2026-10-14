@@ -36,7 +36,7 @@ This is an **Electron app** with three separate process bundles built by `electr
 - `src/main/services/app-events/index.ts` — `app.whenReady()` wiring: CSP headers, custom scheme (`monomail-app://`), deep-link protocol registration, IPC handler registration.
 - `src/main/api/apiClient.ts` — singleton `fetch`-based client; base URL is `${MONO_ENV_API_URL}/api/v1`; handles retries, request dedup, and token injection. Also exports `gmailApiClient` (base: `https://gmail.googleapis.com/gmail/v1/users/me`) which routes through the IPC bridge via `electronBridge.gmailRequest` to avoid CORS.
 
-**Preload** (`src/preload/index.ts`) — Runs in renderer context with Node access. Exposes `window.electronBridge` via `contextBridge`. All IPC channel names are declared in `src/main/validChannels.ts` and validated before use. Async callbacks passed to `api.on()` must be wrapped so Promise rejections are caught.
+**Preload** (`src/preload/index.ts`) — Runs in renderer context with Node access. Exposes `window.electronBridge` via `contextBridge`. Main → renderer event channels are declared in `src/main/validChannels.ts`; the preload checks a channel against that list before attaching a listener. Async callbacks passed to `api.on()` must be wrapped so Promise rejections are caught.
 
 **Renderer** (`src/renderer/`) — React 18 SPA. Accesses Electron IPC only through `src/renderer/app/lib/electronApi.ts` (which reads `window.electronBridge`). The `isElectron` flag in that module gates code that should only run inside Electron.
 
