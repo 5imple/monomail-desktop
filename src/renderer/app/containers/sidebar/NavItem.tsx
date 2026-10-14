@@ -163,9 +163,15 @@ const NavItem = React.memo<NavItemProps>(
       [onClick]
     );
 
-    if (hotkey && onClick) {
-      useHotkeys(hotkey, onClickHotkey, { preventDefault: true }, [onClickHotkey, hotkey]);
-    }
+    // Always called, and switched off without a hotkey: a hook inside an `if`
+    // breaks React's hook order when a mounted item gains or loses one (the
+    // sidebar re-renders with its stored items after the defaults).
+    useHotkeys(
+      hotkey ?? '',
+      onClickHotkey,
+      { preventDefault: true, enabled: !!(hotkey && onClick) },
+      [onClickHotkey, hotkey, onClick]
+    );
 
     const handleEditConfirm = useCallback(() => {
       if (settledRef.current) return;
