@@ -507,7 +507,10 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
           // (no horizontal translate). 280ms matches MailLayout's close timer so
           // the exit fade completes before the panel unmounts. Header stays put
           // (this wrapper is a sibling of DisplayPanelHeader). motion-reduce off.
-          'duration-[280ms] transition-[opacity,transform] ease-out motion-reduce:transition-none',
+          // An arbitrary transition-duration: the `duration-` utility with a
+          // 280ms value is ambiguous next to tailwindcss-animate's animation
+          // duration, so Tailwind emitted nothing and the fade ran at 150ms.
+          'transition-[opacity,transform] ease-out [transition-duration:280ms] motion-reduce:transition-none',
           readerPhase === 'open' ? 'scale-100 opacity-100' : 'scale-[0.985] opacity-0'
         )}
       >
