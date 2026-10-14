@@ -32,7 +32,6 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
   const [isCollapsed, setIsCollapsed] = useState(collapsed);
   const { getUidFromEmail } = useAuth();
   const executeCommand = useExecuteCommand();
-  const [showQuotedContent] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { draftsMapByAccount, sendDraftQueue } = useDraftAtom();
@@ -73,7 +72,7 @@ const DraftCard: FC<DraftCardProps> = ({ item, cardClassName, className, collaps
 
   useEffect(() => {
     requestAnimationFrame(updateHeight);
-  }, [isCollapsed, showQuotedContent, contentRef.current, draftsMapByAccount]);
+  }, [isCollapsed, contentRef.current, draftsMapByAccount]);
 
   useEffect(() => {
     if (contentRef.current) {

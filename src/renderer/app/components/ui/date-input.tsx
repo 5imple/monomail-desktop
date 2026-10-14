@@ -13,13 +13,6 @@ export interface DateInputProps
   keepDropdownAttr?: boolean;
 }
 
-const formatDate = (d: Date): string => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-};
-
 export const DateInput: React.FC<DateInputProps> = ({
   value,
   onValueChange,
@@ -30,12 +23,6 @@ export const DateInput: React.FC<DateInputProps> = ({
   ...rest
 }) => {
   const [open, setOpen] = React.useState(false);
-  const [, setInternal] = React.useState<string>(formatDate(value));
-
-  React.useEffect(() => {
-    setInternal(formatDate(value));
-  }, [value]);
-
   const commonKeep = keepDropdownAttr ? { 'data-calendar-keep-popover': 'true' } : {};
 
   return (

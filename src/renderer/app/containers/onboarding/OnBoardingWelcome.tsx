@@ -1,12 +1,11 @@
 import MonoLogo from '@/renderer/app/components/common/MonoLogo';
 import { Button } from '@/renderer/app/components/ui/button';
 import { animated, easings, useSpring, useTrail } from '@react-spring/web';
-import { FC, useState, useMemo } from 'react';
+import { FC, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const OnboardingWelcome: FC<{ onContinue: () => void }> = ({ onContinue }) => {
   const { t } = useTranslation();
-  const [isTransitioning] = useState(false);
 
   // Memoize translation strings to prevent re-renders
   const translations = useMemo(
@@ -39,12 +38,12 @@ const OnboardingWelcome: FC<{ onContinue: () => void }> = ({ onContinue }) => {
         {translations.description}
       </p>,
       <div key="button" className="mt-4 flex justify-center">
-        <Button sizeVariant="xl" onClick={onContinue} disabled={isTransitioning}>
+        <Button sizeVariant="xl" onClick={onContinue}>
           {translations.button}
         </Button>
       </div>
     ],
-    [translations, onContinue, isTransitioning]
+    [translations, onContinue]
   );
 
   // Optimized trail animation

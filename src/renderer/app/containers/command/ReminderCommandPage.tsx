@@ -55,7 +55,6 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
 
   const commandListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading] = useState(false);
   const targetThreadIds = useMemo(
     () => (activeThreadId ? [activeThreadId] : selectedThreads),
     [activeThreadId, selectedThreads]
@@ -213,14 +212,12 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
   };
 
   useLayoutEffect(() => {
-    if (!loading) {
-      setTimeout(() => {
-        if (commandListRef.current) {
-          const computedHeight = commandListRef.current.scrollHeight;
-          setListHeight(computedHeight < 300 ? computedHeight : 300);
-        }
-      }, 0);
-    }
+    setTimeout(() => {
+      if (commandListRef.current) {
+        const computedHeight = commandListRef.current.scrollHeight;
+        setListHeight(computedHeight < 300 ? computedHeight : 300);
+      }
+    }, 0);
   }, [reminderValue]);
 
   return (

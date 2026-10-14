@@ -209,7 +209,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const itemRef = useRef<HTMLDivElement | null>(null);
     const messageContentRef = useRef<HTMLDivElement>(null);
     const quotedContentRef = useRef<HTMLDivElement>(null);
-    const [aiSuggestions] = useState<string[]>([]);
     const [isUnsubscribed, setIsUnsubscribed] = useState(false);
     const [unsubscribedLoading, setUnsubscribedLoading] = useState(true);
 
@@ -598,7 +597,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       showQuotedContent,
       contentRef.current,
       parsedPayload,
-      aiSuggestions,
       showQuotedContent,
       showBccDropdown,
       showCcDropdown,

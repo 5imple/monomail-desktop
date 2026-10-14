@@ -249,23 +249,20 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   const commandListRef = useRef<HTMLDivElement>(null);
   const commandScrollListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     onKeydown(e);
   };
 
   useLayoutEffect(() => {
-    if (!loading) {
-      setTimeout(() => {
-        if (commandListRef.current) {
-          const computedHeight = commandListRef.current.scrollHeight;
-          setListHeight(computedHeight < 300 ? computedHeight : 300);
-          // Reset scroll position to top when content changes
-        }
-      }, 0);
-    }
-  }, [searchState, filteredOperators, filteredContacts, loading]);
+    setTimeout(() => {
+      if (commandListRef.current) {
+        const computedHeight = commandListRef.current.scrollHeight;
+        setListHeight(computedHeight < 300 ? computedHeight : 300);
+        // Reset scroll position to top when content changes
+      }
+    }, 0);
+  }, [searchState, filteredOperators, filteredContacts]);
 
   // Additional effect to ensure scroll position stays at top when search query changes
   useEffect(() => {

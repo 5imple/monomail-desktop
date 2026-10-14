@@ -295,24 +295,21 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   // Unmeasured → natural height (capped by max-h): starting at a fixed 300px
   // made every page open tall and then collapse.
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading] = useState(false);
   // The root list gets more room in the full palette (about 5 rows showed);
   // onboarding's inline palette keeps 300px.
   const rootListCap = overlay ? 440 : 300;
 
   useLayoutEffect(() => {
-    if (!loading) {
-      setTimeout(() => {
-        if (commandListRef.current) {
-          const computedHeight = commandListRef.current.scrollHeight;
-          const cap = overlay
-            ? Math.min(rootListCap, Math.round(window.innerHeight * 0.5))
-            : rootListCap;
-          setListHeight(Math.min(computedHeight, cap)); // Limit to max height
-        }
-      }, 0);
-    }
-  }, [commandInput, loading]);
+    setTimeout(() => {
+      if (commandListRef.current) {
+        const computedHeight = commandListRef.current.scrollHeight;
+        const cap = overlay
+          ? Math.min(rootListCap, Math.round(window.innerHeight * 0.5))
+          : rootListCap;
+        setListHeight(Math.min(computedHeight, cap)); // Limit to max height
+      }
+    }, 0);
+  }, [commandInput]);
 
   /*
     Helper logic for paired commands.

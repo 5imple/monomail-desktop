@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { format } from 'date-fns';
 
 import { Input } from '@/renderer/app/components/ui/input';
 import { cn } from '@/renderer/app/lib/utils';
@@ -8,45 +7,24 @@ export interface TimeInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
   value: string; // HH:mm (24h)
   onValueChange: (value: string) => void; // HH:mm (24h)
-  stepMinutes?: number; // dropdown granularity, default 15
   sizeVariant?: 'default' | 'sm' | 'lg';
   keepPopoverAttr?: boolean;
 }
 
-const toLabel = (hh: number, mm: number): string => {
-  const date = new Date(2000, 0, 1, hh, mm, 0, 0);
-  return format(date, mm === 0 ? 'h a' : 'h:mm a');
-};
-
 export const TimeInput: React.FC<TimeInputProps> = ({
   value,
   onValueChange,
-  stepMinutes = 15,
   sizeVariant = 'sm',
   className,
   disabled,
   keepPopoverAttr = false,
   ...rest
 }) => {
-  const [, setOpen] = React.useState(false);
   const [internal, setInternal] = React.useState(value);
-  const listRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     setInternal(value);
   }, [value]);
-
-  // Flat list of time options (only times, no extra buttons)
-  const options = React.useMemo(() => {
-    const list: Array<{ label: string; value: string }> = [];
-    for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += stepMinutes) {
-        const v = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        list.push({ label: toLabel(h, m), value: v });
-      }
-    }
-    return list;
-  }, [stepMinutes]);
 
   const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
   const parseText = (raw: string): { valid: boolean; hh: number; mm: number } => {
@@ -92,20 +70,6 @@ export const TimeInput: React.FC<TimeInputProps> = ({
     const raw = e.target.value || '';
     setInternal(raw);
     commit(raw);
-    setTimeout(() => {
-      // scroll to nearest option
-      const idx = options.findIndex(
-        (o) =>
-          o.value ===
-          (parseText(raw).valid
-            ? `${String(parseText(raw).hh).padStart(2, '0')}:${String(parseText(raw).mm).padStart(2, '0')}`
-            : value)
-      );
-      if (idx >= 0 && listRef.current) {
-        const itemH = 32; // approximate row height
-        listRef.current.scrollTop = Math.max(idx * itemH - 64, 0);
-      }
-    }, 0);
   };
 
   const commonKeep = keepPopoverAttr ? { 'data-calendar-keep-popover': 'true' } : {};
@@ -132,16 +96,7 @@ export const TimeInput: React.FC<TimeInputProps> = ({
         type="time"
         className={cn('w-[140px] appearance-none bg-background', className)}
         value={internal}
-        onChange={(e) => {
-          handleNativeChange(e);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false);
-          if (e.key === 'Enter') setOpen(false);
-        }}
+        onChange={handleNativeChange}
         // Minutes are the finest unit; a step under 60 adds a seconds field.
         step={60}
         disabled={disabled}

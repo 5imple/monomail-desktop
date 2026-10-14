@@ -64,7 +64,6 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     state: 'loading' | 'error';
   } | null>(null);
   const [bodyFetchAttempt, setBodyFetchAttempt] = useState(0);
-  const [spacerHeight] = useState(0);
   const { inlineDrafts } = useComposeInlineAtom();
   const { trackEvent } = useUserTrackingData();
 
@@ -640,7 +639,6 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
                       />
                     </div>
                   ))}
-                  <div style={{ height: spacerHeight }} />
                 </div>
               </div>
             </ScrollArea>

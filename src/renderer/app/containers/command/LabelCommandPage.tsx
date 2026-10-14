@@ -70,7 +70,6 @@ const LabelCommandPage: React.FC<LabelCommandPageProps> = ({
 
   const commandListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading] = useState(false);
 
   // Get selected threads data
   // Same target as the thread commands: the open thread, else the selection.
@@ -369,15 +368,13 @@ const LabelCommandPage: React.FC<LabelCommandPageProps> = ({
   );
 
   useLayoutEffect(() => {
-    if (!loading) {
-      setTimeout(() => {
-        if (commandListRef.current) {
-          const computedHeight = commandListRef.current.scrollHeight;
-          setListHeight(computedHeight < 300 ? computedHeight : 300); // Limit to max height
-        }
-      }, 0);
-    }
-  }, [labelValue, loading]);
+    setTimeout(() => {
+      if (commandListRef.current) {
+        const computedHeight = commandListRef.current.scrollHeight;
+        setListHeight(computedHeight < 300 ? computedHeight : 300); // Limit to max height
+      }
+    }, 0);
+  }, [labelValue]);
 
   // Filter labels based on search input
   const filteredLabels =
