@@ -16,7 +16,9 @@ function get<T>(key: string): T | null {
 function set(key: string, value: unknown): void {
   try {
     window.localStorage.setItem(PREFIX + key, JSON.stringify(value));
-  } catch {}
+  } catch {
+    // Storage can be full or blocked (a private window); this is only a cache.
+  }
 }
 
 export const localDataStore = { get, set };

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { ICustomNotificationOptions } from '@/main/services/notification/INotificationOptions';
-import { BrowserWindow, BrowserWindowConstructorOptions, shell } from 'electron';
+import { BrowserWindow, BrowserWindowConstructorOptions, screen, shell } from 'electron';
 import EventEmitter from 'events';
 import * as path from 'path';
 // import NotificationHtml from '@/renderer/notification.html?asset';
@@ -15,7 +15,7 @@ class CustomNotification extends EventEmitter {
     super();
     this.id = options.id; // Store the notification's id
 
-    const display = require('electron').screen.getPrimaryDisplay();
+    const display = screen.getPrimaryDisplay();
     const displayWidth = display.workArea.x + display.workAreaSize.width;
 
     const windowOptions: BrowserWindowConstructorOptions = {
@@ -85,7 +85,7 @@ class CustomNotification extends EventEmitter {
   }
 
   public dispose() {
-    this.window && this.window.close();
+    this.window?.close();
   }
 }
 

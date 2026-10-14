@@ -17,6 +17,7 @@ const utf8ToBase64 = (input: string): string => bytesToBase64(new TextEncoder().
 const toBase64Url = (input: string): string =>
   utf8ToBase64(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+// eslint-disable-next-line no-control-regex -- the range is all of ASCII, NUL included
 const isNonAscii = (value: string): boolean => /[^\x00-\x7F]/.test(value);
 
 // RFC 2047 "encoded-word" for non-ASCII header values (Subject, display names).

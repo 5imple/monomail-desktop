@@ -182,6 +182,7 @@ const CommandEmpty = forwardRef<
     <div
       ref={forwardedRef}
       className={cn('py-2 text-center text-sm text-muted-foreground', className)}
+      // eslint-disable-next-line react/no-unknown-property -- cmdk's empty-state hook
       cmdk-empty=""
       role="presentation"
       {...props}

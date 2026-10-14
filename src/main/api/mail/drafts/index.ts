@@ -14,12 +14,12 @@ const getDrafts = async (signal?: AbortSignal) => {
 const createDraft = (uid: string, draftData: IMonoDraft, signal?: AbortSignal) => {
   const formData = new FormData();
   formData.append('to', draftData.to.join(','));
-  draftData.cc.length > 0 && formData.append('cc', draftData.cc.join(','));
-  draftData.bcc.length > 0 && formData.append('bcc', draftData.bcc.join(','));
+  if (draftData.cc.length > 0) formData.append('cc', draftData.cc.join(','));
+  if (draftData.bcc.length > 0) formData.append('bcc', draftData.bcc.join(','));
   formData.append('subject', draftData.subject);
   formData.append('body', draftData.body);
-  draftData.messageId && formData.append('messageId', draftData.messageId);
-  draftData.threadId && formData.append('threadId', draftData.threadId);
+  if (draftData.messageId) formData.append('messageId', draftData.messageId);
+  if (draftData.threadId) formData.append('threadId', draftData.threadId);
 
   return apiClient.post<MailDraftCreateResponse>('/mail/drafts', formData, {
     signal,

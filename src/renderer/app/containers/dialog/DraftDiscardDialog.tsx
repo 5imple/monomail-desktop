@@ -48,7 +48,7 @@ const DraftDiscardDialog: FC<DraftDiscardDialogProps> = ({
             <div className="flex w-full flex-col gap-2">
               <Button
                 onClick={() => {
-                  onSave && onSave();
+                  onSave?.();
                   onOpenChange(false);
                 }}
                 variant={'default'}
@@ -58,7 +58,7 @@ const DraftDiscardDialog: FC<DraftDiscardDialogProps> = ({
               </Button>
               <Button
                 onClick={() => {
-                  onDiscard && onDiscard();
+                  onDiscard?.();
                   onOpenChange(false);
                 }}
                 variant={'secondary'}

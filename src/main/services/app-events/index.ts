@@ -363,6 +363,7 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
       // URL handler can't smuggle scripts into renderer autocomplete UI.
       const mailtoUrl = new URL(url);
       const emailRaw = decodeURIComponent(mailtoUrl.pathname);
+      // eslint-disable-next-line no-control-regex -- control characters are what it strips
       const email = emailRaw.replace(/[\x00-\x1f\x7f<>]/g, '').slice(0, 320);
       const queryParams = new URLSearchParams(mailtoUrl.search);
       const paramsObject: Record<string, string> = {};
@@ -371,6 +372,7 @@ async function handleDeepLinkingUrl(url: string, mainWindow: BrowserWindow | nul
         // Strip control chars from params too. The renderer is expected to
         // treat them as text, but defensive trimming is cheap.
         paramsObject[key] = String(value)
+          // eslint-disable-next-line no-control-regex -- control characters are what it strips
           .replace(/[\x00-\x1f\x7f]/g, '')
           .slice(0, 4096);
       });

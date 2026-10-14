@@ -227,6 +227,6 @@ if (process.contextIsolated) {
     console.error(error);
   }
 } else {
-  // @ts-ignore (define in dts)
+  // @ts-expect-error -- declared for the renderer in index.d.ts, not in this build
   window.electronBridge = api;
 }

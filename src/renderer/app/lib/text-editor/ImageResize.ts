@@ -73,7 +73,7 @@ export const ImageResize = Image.extend({
       $container.addEventListener('click', (e) => {
         //remove remaining dots and position controller
         const isMobile = document.documentElement.clientWidth < 768;
-        isMobile && (document.querySelector('.ProseMirror-focused') as HTMLElement)?.blur();
+        if (isMobile) (document.querySelector('.ProseMirror-focused') as HTMLElement)?.blur();
 
         removeResizeDots();
 
@@ -124,7 +124,7 @@ export const ImageResize = Image.extend({
           $dot.addEventListener(
             'touchstart',
             (e) => {
-              e.cancelable && e.preventDefault();
+              if (e.cancelable) e.preventDefault();
               isResizing = true;
               startX = e.touches[0].clientX;
               startWidth = $container.offsetWidth;

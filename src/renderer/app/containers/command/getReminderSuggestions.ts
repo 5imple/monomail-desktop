@@ -341,8 +341,8 @@ function getDatePatternSuggestions(normalized: string, now: dayjs.Dayjs): Sugges
 
   // Handle various date formats
   const patterns = [
-    /(\d{1,2})[\/\-](\d{1,2})/, // 5/6, 5-6
-    /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/, // 5/6/24, 5-6-2024
+    /(\d{1,2})[/-](\d{1,2})/, // 5/6, 5-6
+    /(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/, // 5/6/24, 5-6-2024
     /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{1,2})/i, // may 6, march 15
     /(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i // 6 may, 15 march
   ];
@@ -421,8 +421,8 @@ function matchesPattern(input: string, patterns: string[]): boolean {
 
 function isDatePattern(input: string): boolean {
   const datePatterns = [
-    /\d{1,2}[\/\-]\d{1,2}/, // 5/6, 5-6
-    /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/, // 5/6/24
+    /\d{1,2}[/-]\d{1,2}/, // 5/6, 5-6
+    /\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/, // 5/6/24
     /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}/i, // may 6
     /\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i // 6 may
   ];

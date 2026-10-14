@@ -103,6 +103,9 @@ class GoogleOAuthServer {
       let settled = false;
       let port = 0;
       let server: ReturnType<typeof createServer> | null = null;
+      // `let` on purpose: finish() clears it and can run before it's set below
+      // (a const there would throw instead).
+      // eslint-disable-next-line prefer-const
       let timeout: NodeJS.Timeout;
 
       const finish = (err: Error | null, tokens?: GoogleOAuthTokens) => {
