@@ -28,7 +28,17 @@ export default [
   {
     rules: {
       'react/prop-types': 'off', // Disable prop-types as we use TypeScript for type checking
-      '@typescript-eslint/no-unused-vars': 'warn',
+      // `_name` and rest siblings mark a value left out on purpose
+      // (`const { [id]: _removed, ...rest } = map`).
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true
+        }
+      ],
       'no-empty-pattern': 'off',
       '@typescript-eslint/no-empty-interface': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
