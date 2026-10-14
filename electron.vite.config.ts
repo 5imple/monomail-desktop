@@ -124,26 +124,15 @@ export default defineConfig({
               '@radix-ui/react-dialog',
               '@radix-ui/react-scroll-area'
             ],
-            'radix-navigation': [
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-navigation-menu',
-              '@radix-ui/react-menubar',
-              '@radix-ui/react-context-menu'
-            ],
+            'radix-navigation': ['@radix-ui/react-dropdown-menu', '@radix-ui/react-context-menu'],
             'radix-inputs': [
               '@radix-ui/react-checkbox',
               '@radix-ui/react-radio-group',
               '@radix-ui/react-select',
               '@radix-ui/react-switch'
             ],
-            'radix-overlays': [
-              '@radix-ui/react-popover',
-              '@radix-ui/react-hover-card',
-              '@radix-ui/react-tooltip',
-              '@radix-ui/react-toast'
-            ],
+            'radix-overlays': ['@radix-ui/react-popover', '@radix-ui/react-tooltip'],
             'radix-layout': [
-              '@radix-ui/react-accordion',
               '@radix-ui/react-collapsible',
               '@radix-ui/react-separator',
               '@radix-ui/react-tabs'
@@ -165,18 +154,15 @@ export default defineConfig({
             // TipTap editor - Combine into one chunk
             tiptap: ['@tiptap/react', '@tiptap/starter-kit'],
 
-            // Utility libraries - Split into smaller chunks
+            // Utility libraries - Split into smaller chunks. Only packages the
+            // renderer imports: a listed package is bundled even when unused.
             'utils-core': ['lodash'],
-            'utils-id': ['uuid'],
-            'utils-state': ['immer', 'jotai'],
-            'utils-dom': ['dompurify', 'sanitize-html'],
-            'utils-markdown': ['marked', 'remark-gfm', 'rehype-raw'],
+            'utils-state': ['jotai'],
+            'utils-dom': ['dompurify'],
+            'utils-markdown': ['remark-gfm', 'rehype-raw'],
 
             // PDF and document handling
             'document-handling': ['react-pdf', 'react-to-print'],
-
-            // Virtualization and performance
-            virtualization: ['react-window', 'react-virtualized-auto-sizer'],
 
             // Internationalization
             'i18n-core': ['i18next', 'react-i18next']
