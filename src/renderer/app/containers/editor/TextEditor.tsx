@@ -177,8 +177,6 @@ const TextEditor = React.forwardRef(
           event.preventDefault();
 
           // Get link position data
-          const href = target.getAttribute('href');
-          const linkText = target.textContent;
 
           // Find the closest ProseMirror position to the clicked element
           const domPosNear = editor.view.posAtDOM(target, 0);
@@ -199,52 +197,7 @@ const TextEditor = React.forwardRef(
       };
     }, [editor]);
 
-    const replaceSkeletonImage = React.useCallback(
-      (skeletonId: string, finalUrl: string, fileName: string) => {
-        if (!editor) return;
-
-        // Search through all images in the document. If `title===skeletonId`, replace.
-        const { state, view } = editor;
-        const tr = state.tr;
-
-        state.doc.descendants((node, pos) => {
-          if (node.type.name === 'image' && node.attrs.title === skeletonId) {
-            // Update node attributes
-            tr.setNodeMarkup(pos, undefined, {
-              ...node.attrs,
-              src: finalUrl,
-              title: fileName, // or keep it empty
-              alt: fileName
-            });
-          }
-        });
-
-        if (tr.docChanged) {
-          view.dispatch(tr);
-        }
-      },
-      [editor]
-    );
-
     // Helper: remove skeleton if the upload fails
-    const removeSkeletonImage = React.useCallback(
-      (skeletonId: string) => {
-        if (!editor) return;
-        const { state, view } = editor;
-        const tr = state.tr;
-
-        state.doc.descendants((node, pos) => {
-          if (node.type.name === 'image' && node.attrs.title === skeletonId) {
-            tr.delete(pos, pos + node.nodeSize);
-          }
-        });
-
-        if (tr.docChanged) {
-          view.dispatch(tr);
-        }
-      },
-      [editor]
-    );
 
     React.useImperativeHandle(ref, () => ({
       setContent: (content: string) => {

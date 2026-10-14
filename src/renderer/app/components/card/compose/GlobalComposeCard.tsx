@@ -1,7 +1,6 @@
 // Updated GlobalComposeCard.tsx
 import { apiClient } from '@/main/api/apiClient';
 import mailApi from '@/main/api/mail/mailApi';
-import { IMonoTemplate } from '@/main/api/template/types';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoAttachment } from '@/main/models/types';
@@ -44,8 +43,6 @@ import {
   useComposeWindowAtom
 } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
-import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
-import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useStore } from 'jotai';
@@ -164,11 +161,9 @@ const EditorLoadingFallback = () => (
 
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
   const { preference, getUidFromEmail, accounts, updatePreference } = useAuth();
-  const { templates } = useTemplateAtom();
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
-  const { signatures, getSignatureById } = useSignatureAtom();
-  const { contactArray } = useContactAtom();
+  const { signatures } = useSignatureAtom();
   const { openDialog } = useDialogs();
   const { updateDraft, sendDraft, removeDraft, getDraftsForAccount } = useDraftAtom();
   const discardDraftWithUndo = useDiscardDraftWithUndo();
@@ -351,9 +346,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   }, []);
 
   // Memoize heavy computations
-  const memoizedSignatures = useMemo(() => signatures, [signatures]);
-  const memoizedTemplates = useMemo(() => templates, [templates]);
-  const memoizedContactArray = useMemo(() => contactArray, [contactArray]);
 
   // Optimize debounced update function with useCallback
   const debouncedUpdateDraft = useMemo(
@@ -994,43 +986,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         updateMessage(updatedDraft);
         return updatedDraft;
       });
-    },
-    [updateMessage]
-  );
-
-  const onTemplateChange = useCallback(
-    (template: IMonoTemplate) => {
-      setComposeDraft((prevDraft) => {
-        const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
-
-        updatedDraft.update({
-          body: template.body.length > 0 ? template.body : undefined,
-          subject: template.subject && template.subject.length > 0 ? template.subject : undefined
-        });
-        updateMessage(updatedDraft);
-        if (editorRef.current) {
-          editorRef.current.setContent(template.body);
-        }
-        return updatedDraft;
-      });
-    },
-    [updateMessage]
-  );
-
-  const onBodyChange = useCallback(
-    (body: string) => {
-      setComposeDraft((prevDraft) => {
-        const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
-
-        updatedDraft.update({
-          body: body.length > 0 ? body : undefined
-        });
-        updateMessage(updatedDraft);
-        return updatedDraft;
-      });
-      if (editorRef.current && body.length > 0) {
-        editorRef.current.setContent(body);
-      }
     },
     [updateMessage]
   );

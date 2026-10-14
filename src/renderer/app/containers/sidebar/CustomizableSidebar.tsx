@@ -177,7 +177,7 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
   isSpringOpen = false,
   append
 }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transition, isDragging } = useSortable({
     id: item.id,
     animateLayoutChanges,
     disabled: isEditing // Disable dragging when in editing mode to prevent focus interference
@@ -712,7 +712,6 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   // Remove local state - use atom instead
   const sidebarState = getCurrentSidebarState();
   const [activeItem, setActiveItem] = useState<CustomNavItem | null>(null);
-  const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [dropLinePosition, setDropLinePosition] = useState<{
@@ -915,12 +914,6 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   const folderRenamePendingRef = useRef(false);
 
   // Toggle account expansion in the dropdown
-  const toggleAccountExpansion = useCallback((accountId: string) => {
-    setExpandedAccounts((prev) => ({
-      ...prev,
-      [accountId]: !prev[accountId]
-    }));
-  }, []);
 
   // Handle navigation click for unified inbox (all accounts)
   const handleNavClick = useCallback(
@@ -1863,13 +1856,6 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   }, []);
 
   // Handle adding new item (legacy, kept for folder creation)
-  const handleAddItem = useCallback(
-    async (item: CustomNavItem) => {
-      // Atom updated automatically
-      await addNavItem(item);
-    },
-    [addNavItem]
-  );
 
   // Handle creating new folder
   const handleCreateFolder = useCallback(async () => {

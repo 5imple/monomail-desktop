@@ -37,13 +37,13 @@ const useThreadFetchHandler = () => {
   // Track last timestamp per query for pagination
   const [lastTimestamps, setLastTimestamps] = useState<Record<string, number | undefined>>({});
   // Track which queries have finished loading
-  const [queriesLoaded, setQueriesLoaded] = useState<Record<string, boolean>>({});
+  const [, setQueriesLoaded] = useState<Record<string, boolean>>({});
   const [lastQuery, setLastQuery] = useState('');
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const { globalSearchQuery } = useGlobalAtom();
   const { loadingStatus, setLoadingStatus } = useThreadListAtom();
   const { filteredThreadIds: threadIds, setThreadIds, setThreadsMap, threadsMap } = useThreadAtom();
-  const { setThreads, resetThreadsMap } = useThreadOperationAtom();
+  const { setThreads } = useThreadOperationAtom();
   const [hasMore, setHasMore] = useState(true);
   const { activeSpace } = useSpaceAtom();
   // Payment-free build — no plan gates.
@@ -92,7 +92,7 @@ const useThreadFetchHandler = () => {
   }, [pageTokens]);
   const prevActiveAccountUidsRef = useRef<string[]>([]);
 
-  const [needsFullSync, setNeedsFullSync] = useState<Record<string, boolean>>({});
+  const [, setNeedsFullSync] = useState<Record<string, boolean>>({});
 
   const [historySyncInitialized, setHistorySyncInitialized] = useState<Record<string, boolean>>({});
 
@@ -1370,7 +1370,6 @@ const useThreadFetchHandler = () => {
                 const rateLimitedAccounts = accountsResults.filter(
                   (result) => result.status === 'rate_limited'
                 );
-                const errorAccounts = accountsResults.filter((result) => result.status === 'error');
                 const successfulAccounts = accountsResults.filter(
                   (result) => result.status === 'success'
                 );
@@ -1454,7 +1453,6 @@ const useThreadFetchHandler = () => {
             }
           } catch (error: any) {
             if (!abortController.signal.aborted) {
-              const statusCode = error?.status || 500;
               console.error('Error fetching threads:', error?.data?.message);
 
               // Even if there was an error, try to show whatever threads we could get
@@ -1550,16 +1548,8 @@ const useThreadFetchHandler = () => {
     (accountId: string) => {
       enqueueOperation(
         async () => {
-          // Check if this is a valid query that can use cache
-          const currentQuery = globalSearchQueryRef.current;
-          const { field, label } = parseQueryFieldLabel(currentQuery, true);
-
-          const isValidQuery =
-            (field === 'in' || field === 'is' || field === 'category') &&
-            (validLabels.includes(label.toUpperCase() as ValidLabel) ||
-              label.toLowerCase() === 'all');
-
-          // Only reset cache and fetch if it's NOT a valid query
+          // A limited account still in its first 100 threads: reset this
+          // query's cache and refetch it.
           const limitedAccountUids = getLimitedAccountUids();
           if (limitedAccountUids.includes(accountId) && cacheOffsetRef.current < 100) {
             // Reset cache for the current query

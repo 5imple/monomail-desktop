@@ -17,7 +17,6 @@ import { setSelectionAnchor } from '@/renderer/app/store/thread/threadRangeSelec
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
-import { useDraggable } from '@dnd-kit/core';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
@@ -146,20 +145,6 @@ export const ThreadListCozyItem = React.memo(
       useEffect(() => {
         if (opacity === 100) hasBeenVisibleRef.current = true;
       }, [opacity]);
-
-      const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: 'thread-contact-' + threadId,
-        attributes: {
-          tabIndex: -1
-        },
-        data: {
-          thread: currentThread
-        }
-      });
-
-      const style = {
-        opacity: isDragging ? 0.5 : 1
-      };
 
       const handleClick = useCallback(
         (e: React.MouseEvent | React.KeyboardEvent) => {

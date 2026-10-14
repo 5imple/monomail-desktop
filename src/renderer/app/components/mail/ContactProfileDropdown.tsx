@@ -14,8 +14,6 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { Contact, DBGetContact } from '@/renderer/app/lib/db/contact';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
-import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
-import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -40,8 +38,6 @@ const ContactProfileDropdownMenu = React.forwardRef<
   const { searchNewQuery } = useGlobalAtom();
   const executeCommand = useExecuteCommand();
   const { globalDraftWindows, handleCloseButton } = useComposeWindowAtom();
-  const { openDialog } = useDialogs();
-  const { updateDraft } = useDraftAtom();
   const getContact = async () => {
     if (!member) return;
 
@@ -95,9 +91,6 @@ const ContactProfileDropdownMenu = React.forwardRef<
     const composeExpanded = !!document.querySelector('[data-compose-expanded="true"]');
     if (composeExpanded && handleCloseButton) void handleCloseButton(search);
     else search();
-  };
-  const handlePinContact = () => {
-    if (contact) executeCommand('PIN_CONTACT');
   };
 
   const handleNewEmail = async () => {

@@ -292,8 +292,7 @@ export function useThreadOperationAtom() {
     ) => {
       const {
         shouldRemoveThreads = false,
-        shouldRestoreThreads = false,
-        skipUIUpdate = false
+        shouldRestoreThreads = false
       } = options;
 
       // Use functional state update to work with current state
@@ -445,12 +444,6 @@ export function useThreadOperationAtom() {
     },
     [threadsMap, setThreadsMap, setThreadIds, setFilteredThreadIds]
   );
-
-  const sortThreadsByDate = (threads: Record<string, MonoThread>) => {
-    return Object.fromEntries(
-      Object.entries(threads).sort(([, a], [, b]) => b.timestamp - a.timestamp)
-    );
-  };
 
   return {
     setThreads,

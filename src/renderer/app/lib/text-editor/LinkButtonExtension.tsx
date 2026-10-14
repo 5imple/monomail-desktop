@@ -402,7 +402,7 @@ export const LinkButtonPopover: React.FC<LinkButtonPopoverProps> = ({ editor }) 
 
     // Handle clicks on link buttons
     const handleLinkButtonClick = (event: CustomEvent) => {
-      const { href, text, start, end, button, view } = event.detail;
+      const { href, text, start, end, button } = event.detail;
 
       // Store the current link position
       currentLinkPos = { start, end };

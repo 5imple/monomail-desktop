@@ -15,8 +15,6 @@ function isImageFile(file: File): boolean {
   );
 }
 
-const SKELETON_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-
 function insertSkeletonImage(editor: Editor, pos: number): string {
   const skeletonId = `skeleton-${generateUUID()}`;
   editor

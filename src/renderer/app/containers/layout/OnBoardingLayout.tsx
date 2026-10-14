@@ -19,8 +19,6 @@ import confetti from 'canvas-confetti';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useTheme } from '@/renderer/app/components/ThemeProvider';
 
-interface OnBoardingLayoutProps {}
-
 export interface SelectedSpace {
   name: string;
   icon: string;

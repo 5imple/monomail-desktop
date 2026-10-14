@@ -9,7 +9,6 @@ export class UpdateManager {
   private autoUpdater: AppUpdater;
   private cancellationToken: CancellationToken | null = null;
   private updateAvailable = false;
-  private isOffline = false;
   // True when no feed URL is configured; we skip checkForUpdates rather
   // than letting electron-updater fall through to the (possibly missing)
   // app-update.yml and crash with ENOENT.
@@ -135,7 +134,6 @@ export class UpdateManager {
         err.message.includes('ECONNREFUSED') ||
         err.message.includes('ECONNRESET')
       ) {
-        this.isOffline = true;
         log.info('Network error detected, proceeding in offline mode');
 
         // Close update window if open

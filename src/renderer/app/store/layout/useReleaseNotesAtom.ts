@@ -113,23 +113,6 @@ export function useReleaseNotesAtom() {
     setCurrentReleaseNote(nextNote);
   }, [releaseNotes, currentReleaseNote]);
 
-  const showPreviousReleaseNote = useCallback(() => {
-    if (!releaseNotes.length) return;
-
-    // Find current index
-    const currentIndex = releaseNotes.findIndex((note) => note.uid === currentReleaseNote?.uid);
-
-    if (currentIndex === -1 || currentIndex === releaseNotes.length - 1) {
-      // If at the beginning or not found, close the modal
-      setIsReleaseNoteVisible(false);
-      closeDialog('releaseNote');
-      return;
-    }
-
-    // Show previous note
-    const prevNote = releaseNotes[currentIndex + 1];
-    setCurrentReleaseNote(prevNote);
-  }, [releaseNotes, currentReleaseNote]);
   // Helper function to show a specific release note by UID
   const showReleaseNoteByUID = (uid: string) => {
     const note = releaseNotes.find((note) => note.uid === uid);

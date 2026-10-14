@@ -18,13 +18,6 @@ interface VariablePosition {
   end: number;
 }
 
-// Type for variable preview
-interface VariablePreview {
-  start: number;
-  end: number;
-  value: string;
-}
-
 // Extension to detect and highlight variables
 export const VariableExtension = Extension.create({
   name: 'variables',
@@ -178,11 +171,6 @@ const VariablePopoverContent: React.FC<VariablePopoverContentProps> = ({
   );
 };
 
-// Type for the ref to access methods from the React component
-interface VariablePopoverRef {
-  onKeyDown: (props: { event: KeyboardEvent }) => boolean;
-}
-
 // Editor Variable Popover Component with Tippy integration
 interface VariableEditorPopoverProps {
   editor: any; // You might want to use a more specific type here
@@ -216,7 +204,7 @@ export const VariableEditorPopover: React.FC<VariableEditorPopoverProps> = ({ ed
     let currentVariablePos: VariablePosition | null = null;
 
     const handleVariableClick = (event: CustomEvent) => {
-      const { variable, start, end, button, view } = event.detail;
+      const { variable, start, end, button } = event.detail;
 
       // Store the current variable position
       currentVariablePos = { start, end };

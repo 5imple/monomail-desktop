@@ -70,7 +70,7 @@ const LabelCommandPage: React.FC<LabelCommandPageProps> = ({
 
   const commandListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
 
   // Get selected threads data
   // Same target as the thread commands: the open thread, else the selection.
@@ -474,10 +474,6 @@ const LabelCommandPage: React.FC<LabelCommandPageProps> = ({
                     ({ label, accountIds, accountsInfo, missingInAccounts }) => {
                       const missingAccountsWithThreads = missingInAccounts.filter(
                         (a) => a.threadCount > 0
-                      );
-                      const totalMissingThreads = missingAccountsWithThreads.reduce(
-                        (sum, info) => sum + info.threadCount,
-                        0
                       );
 
                       // Only show if there are threads that would be affected

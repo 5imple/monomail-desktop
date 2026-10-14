@@ -1,6 +1,5 @@
 import { atom, useAtom } from 'jotai';
 import { useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 
 // Status types
@@ -90,17 +89,8 @@ const CHECK_INTERVALS = {
   server: 1 * 60 * 1000 // 1 minute
 };
 
-const initialGCPHealthState: GCPHealthState = {
-  cloudRun: { status: 'operational', lastIncident: null },
-  cloudStorage: { status: 'operational', lastIncident: null },
-  firebaseAuth: { status: 'operational', lastIncident: null },
-  computeEngine: { status: 'operational', lastIncident: null },
-  lastChecked: Date.now()
-};
-
 export const useStatusCheck = () => {
   const [statusState, setStatusState] = useAtom(statusStateAtom);
-  const { t } = useTranslation();
   const { accounts } = useAuth();
 
   const checkGCPStatus = async () => {

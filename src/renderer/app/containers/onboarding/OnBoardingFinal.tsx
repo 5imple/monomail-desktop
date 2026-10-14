@@ -2,7 +2,6 @@ import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
-import { isElectron } from '@/renderer/app/lib/electronApi';
 import { animated, useTrail } from '@react-spring/web';
 import React, { FC } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,11 +20,6 @@ const OnBoardingFinal: FC<OnBoardingFinalProps> = ({ onContinue }) => {
     config: { tension: 200, friction: 20 },
     delay: 400
   });
-
-  const handleSignIn = () => {
-    const client = isElectron ? 'web-electron' : 'web';
-    window.open(`${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/sign-in?client=${client}`);
-  };
 
   const features = [
     {

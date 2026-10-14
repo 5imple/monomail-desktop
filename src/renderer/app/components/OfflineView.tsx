@@ -1,5 +1,4 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import { cn } from '@/renderer/app/lib/utils';
 import BaseHeader from '@/renderer/app/containers/header/BaseHeader';
 
@@ -8,8 +7,6 @@ interface OfflineViewProps {
 }
 
 const OfflineView: React.FC<OfflineViewProps> = ({ className }) => {
-  const { t } = useTranslation();
-
   return (
     <div className={cn('no-drag h-screen', className)}>
       <BaseHeader />

@@ -14,7 +14,7 @@ interface AuthGuardProps {
 }
 
 const AuthGuard: React.FC<AuthGuardProps> = ({ children, to }) => {
-  const { isLoggedIn, isLoading, member, idToken } = useAuth();
+  const { isLoggedIn, isLoading, idToken } = useAuth();
   const { spaces, isLoadingSpaces } = useSpaceAtom();
   const { sidebarCollapsed } = useSidebarAtom();
 

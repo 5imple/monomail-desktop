@@ -175,7 +175,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   const { activeScopes } = useHotkeyScope();
   const commands = useCommands();
   const { preference } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
   const executeCommand = useExecuteCommand();
   const { spaces, activeSpace } = useSpaceAtom();
 
@@ -295,7 +295,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   // Unmeasured → natural height (capped by max-h): starting at a fixed 300px
   // made every page open tall and then collapse.
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   // The root list gets more room in the full palette (about 5 rows showed);
   // onboarding's inline palette keeps 300px.
   const rootListCap = overlay ? 440 : 300;

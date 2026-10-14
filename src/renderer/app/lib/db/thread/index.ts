@@ -95,7 +95,7 @@ export async function DBSaveThread(uid: string, thread: MonoThread) {
   // Existing implementation...
   const db = await initDB(uid);
 
-  const { id: threadId, timestamp, items } = thread;
+  const { id: threadId, items } = thread;
 
   const tx = db.transaction(['threads', 'contacts', 'messages', 'drafts'], 'readwrite');
   const threadsStore = tx.objectStore('threads');

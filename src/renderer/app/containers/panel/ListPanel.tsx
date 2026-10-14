@@ -11,7 +11,7 @@ interface ListPanelProps {}
 
 const ListPanel: FC<ListPanelProps> = ({}) => {
   const { globalSearchQuery } = useGlobalAtom();
-  const { notificationAlert, setNotificationAlert, dismissAlert } = useThreadListAtom();
+  const { notificationAlert, dismissAlert } = useThreadListAtom();
   const threadListHeaderRef = useRef<HTMLDivElement | null>(null);
   const alertRef = useRef<HTMLDivElement | null>(null);
 

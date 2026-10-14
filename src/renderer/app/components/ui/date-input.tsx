@@ -30,7 +30,7 @@ export const DateInput: React.FC<DateInputProps> = ({
   ...rest
 }) => {
   const [open, setOpen] = React.useState(false);
-  const [internal, setInternal] = React.useState<string>(formatDate(value));
+  const [, setInternal] = React.useState<string>(formatDate(value));
 
   React.useEffect(() => {
     setInternal(formatDate(value));

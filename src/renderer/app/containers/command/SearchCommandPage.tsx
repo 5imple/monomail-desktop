@@ -249,7 +249,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
   const commandListRef = useRef<HTMLDivElement>(null);
   const commandScrollListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     onKeydown(e);

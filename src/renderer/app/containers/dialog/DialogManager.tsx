@@ -11,8 +11,7 @@ import { useEffect } from 'react';
 
 const DialogManager = () => {
   const { dialogState, setDialogState, closeDialog } = useDialogs();
-  const { isLoaded, initVisibleReleaseNote, fetchReleaseNotes, showNextReleaseNote } =
-    useReleaseNotesAtom();
+  const { isLoaded, initVisibleReleaseNote, fetchReleaseNotes } = useReleaseNotesAtom();
 
   useEffect(() => {
     if (isLoaded) {

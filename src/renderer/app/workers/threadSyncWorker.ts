@@ -22,20 +22,6 @@ import { SplitCategoryPreferences } from '@/main/api/auth/types';
 
 export type UserPlan = 'free' | 'plus' | 'plus_onetime' | 'pro';
 
-interface SyncWorkerMessage {
-  type:
-    | 'SYNC_START'
-    | 'SYNC_PROGRESS'
-    | 'SYNC_COMPLETE'
-    | 'SYNC_ERROR'
-    | 'SYNC_ABORT'
-    | 'SYNC_PAUSE'
-    | 'SYNC_RESUME'
-    | 'SYNC_PAUSED'
-    | 'SYNC_RESUMED';
-  payload?: any;
-}
-
 interface SyncRequest {
   uid: string;
   requestId: string;
@@ -88,7 +74,6 @@ async function handleSyncStart(request: SyncRequest) {
     query,
     nextPageToken,
     interval = 10000,
-    shouldPause = false,
     userPlan = 'free',
     categoryPreferences = {
       showUpdates: true,

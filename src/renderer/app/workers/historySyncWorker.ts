@@ -18,12 +18,6 @@ import {
   clearOutlookWatermark
 } from '@/renderer/app/lib/db/outlookWatermark';
 
-// Enhanced message types with authentication
-interface SyncWorkerMessage {
-  type: 'SYNC_START' | 'SYNC_PROGRESS' | 'SYNC_COMPLETE' | 'SYNC_ERROR' | 'SYNC_ABORT';
-  payload?: any;
-}
-
 interface SyncRequest {
   uid: string;
   requestId: string;

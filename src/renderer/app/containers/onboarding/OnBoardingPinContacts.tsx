@@ -18,38 +18,6 @@ interface OnBoardingPinContactsProps {
 }
 
 // Enhanced video preview component with better visual feedback
-const VideoPreview: FC<{ isPlaying: boolean }> = ({ isPlaying }) => {
-  const [currentFrame, setCurrentFrame] = useState(0);
-
-  const playButtonSpring = useSpring({
-    scale: isPlaying ? 0 : 1,
-    opacity: isPlaying ? 0 : 1,
-    config: { tension: 300, friction: 25 }
-  });
-
-  return (
-    <div className="relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-muted/50 to-muted">
-      <div className="absolute inset-0 flex items-center justify-center">
-        <animated.div
-          style={playButtonSpring}
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 backdrop-blur-sm transition-colors hover:bg-primary/30"
-        >
-          <MonoIcon type="Mono" className="h-8 w-8 text-primary" />
-        </animated.div>
-      </div>
-
-      {/* Simulated preview content */}
-      <div className="absolute bottom-4 left-4 right-4">
-        <div className="rounded-lg bg-background/80 p-3 backdrop-blur-sm">
-          <div className="mb-2 text-sm font-medium">Quick tip: Pin frequently contacted people</div>
-          <div className="text-xs text-muted-foreground">
-            Pinned contacts appear at the top for easy access
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Enhanced contact item with better visual hierarchy and interactions
 const ContactItem: FC<{
@@ -59,7 +27,7 @@ const ContactItem: FC<{
   isPinned?: boolean;
   isDisabled?: boolean;
 }> = ({ contact, isSelected, onToggle, isPinned = false, isDisabled = false }) => {
-  const [isHovered, setIsHovered] = useState(false);
+  const [, setIsHovered] = useState(false);
 
   // React Spring animation for the pin icon
   const pinIconSpring = useSpring({
@@ -68,20 +36,7 @@ const ContactItem: FC<{
     config: { tension: 300, friction: 25 }
   });
 
-  const initials =
-    contact.displayName
-      ?.split(' ')
-      .map((name) => name[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2) || contact.emailAddress.slice(0, 2).toUpperCase();
-
   // Calculate recent activity indicator
-  const mostRecentActivity = Math.max(
-    contact.lastSentMessageTimestamp || 0,
-    contact.lastReceivedMessageTimestamp || 0
-  );
-  const isRecentlyActive = mostRecentActivity > Date.now() - 30 * 24 * 60 * 60 * 1000;
 
   return (
     <div
@@ -254,13 +209,6 @@ const OnBoardingPinContacts: FC<OnBoardingPinContactsProps> = ({ onContinue }) =
     delay: 300
   });
 
-  const sidebarSpring = useSpring({
-    from: { opacity: 0, transform: 'translateX(20px)' },
-    to: { opacity: 1, transform: 'translateX(0px)' },
-    config: { tension: 200, friction: 20 },
-    delay: 800
-  });
-
   const handleContactToggle = (contact: Contact) => {
     setSelectedContacts((prev) => {
       const isSelected = prev.some((c) => c.contactId === contact.contactId);
@@ -293,12 +241,6 @@ const OnBoardingPinContacts: FC<OnBoardingPinContactsProps> = ({ onContinue }) =
       setIsProcessing(false);
     }
   };
-
-  const allVisibleSelected =
-    filteredContacts.length > 0 &&
-    filteredContacts.every((contact) =>
-      selectedContacts.some((sc) => sc.contactId === contact.contactId)
-    );
 
   return (
     <div className="mx-auto max-w-xl p-6">

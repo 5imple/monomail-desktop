@@ -1,22 +1,17 @@
 import { isBackendConfigured } from '@/main/api/apiClient';
-import draftApi from '@/main/api/draft/draftApi';
-import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Alert, AlertDescription } from '@/renderer/app/components/ui/alert';
 import InboxFilterTabs from '@/renderer/app/containers/filter/InboxFilterTabs';
 import PinHeader from '@/renderer/app/containers/header/PinHeader';
 import ThreadSelectionToast from '@/renderer/app/containers/list/ThreadSelectionToast';
 import SidebarCollapseButton from '@/renderer/app/containers/sidebar/SidebarCollapseButton';
-import { useThreadList } from '@/renderer/app/context/ThreadListContext';
 import { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
-import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 
 interface ListPanelHeaderProps {
   isScrolled: boolean;
@@ -28,34 +23,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     const { globalSearchQuery } = useGlobalAtom();
     const { t } = useTranslation();
 
-    const { fetchAndSetTrackingHistories } = useTrackingAtom();
     // Use our context hook to get fetchThreadsHandler and isLoading
-    const { fetchThreadsHandler, resetThreadsArray } = useThreadList();
-    const { updateDraft } = useDraftAtom();
-    const handleRefresh = async () => {
-      resetThreadsArray();
-      fetchThreadsHandler(); // Force refresh
-      fetchAndSetTrackingHistories();
-      try {
-        const response = await draftApi.getDrafts();
-        // The response now contains drafts organized by account ID
-        // e.g., response = { drafts: { "account-id-1": [...drafts], "account-id-2": [...drafts] } }
-
-        // Process drafts for all accounts in the response
-        if (response?.drafts) {
-          // Iterate through each account's drafts
-          for (const [accountId, drafts] of Object.entries(response.drafts)) {
-            // Process each draft for this account
-            for await (const draft of drafts) {
-              const responseDraft = MonoDraft.fromPlainObject(draft);
-              await updateDraft(accountId, responseDraft, false, true);
-            }
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
 
     // Newton-style header: hero title at text-2xl tracking-tight,
     // a quiet mono uppercase scope label above, calm muted-foreground

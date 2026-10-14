@@ -20,7 +20,7 @@ export interface EditorCommandListItemProps {
 
 // Use forwardRef to pass refs from parent components
 const EditorCommandListItem = forwardRef<any, EditorCommandListItemProps>((props, ref) => {
-  const { items, command, label } = props;
+  const { items, command } = props;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const { trackEvent } = useUserTrackingData(); // Now using hook properly in function component
   const scrollContainerRef = useRef<HTMLDivElement>(null);

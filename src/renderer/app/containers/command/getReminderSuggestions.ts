@@ -30,7 +30,7 @@ export function getReminderSuggestions(input: string): Suggestion[] {
   suggestions.push(...numericSuggestions);
 
   // Handle partial weekdays and time units
-  const partialSuggestions = getPartialSuggestions(normalized, now);
+  const partialSuggestions = getPartialSuggestions(normalized);
   suggestions.push(...partialSuggestions);
 
   return sortAndDeduplicateSuggestions(suggestions, input);
@@ -222,7 +222,7 @@ function getNumericSuggestions(normalized: string, now: dayjs.Dayjs): Suggestion
   return suggestions;
 }
 
-function getPartialSuggestions(normalized: string, now: dayjs.Dayjs): Suggestion[] {
+function getPartialSuggestions(normalized: string): Suggestion[] {
   const suggestions: Suggestion[] = [];
   const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   const months = [
@@ -243,7 +243,6 @@ function getPartialSuggestions(normalized: string, now: dayjs.Dayjs): Suggestion
   // Partial weekday matching
   weekdays.forEach((day) => {
     if (day.startsWith(normalized) && normalized.length >= 2) {
-      const nextOccurrence = getNextWeekday(now, weekdays.indexOf(day));
       suggestions.push(
         { label: `${capitalize(day)} at 9 AM`, value: `${day} at 9am`, type: 'smart' },
         { label: `${capitalize(day)} at 2 PM`, value: `${day} at 2pm`, type: 'smart' }
@@ -252,9 +251,8 @@ function getPartialSuggestions(normalized: string, now: dayjs.Dayjs): Suggestion
   });
 
   // Partial month matching
-  months.forEach((month, index) => {
+  months.forEach((month) => {
     if (month.startsWith(normalized) && normalized.length >= 3) {
-      const monthNum = index + 1;
       suggestions.push({
         label: `${capitalize(month)} 1`,
         value: `${month} 1`,
@@ -475,12 +473,6 @@ function formatNaturalDate(date: dayjs.Dayjs, now: dayjs.Dayjs): string {
   if (date.year() === now.year()) return date.format('MMM D'); // Mar 15
 
   return date.format('MMM D, YYYY'); // Mar 15, 2024
-}
-
-function getNextWeekday(now: dayjs.Dayjs, targetDay: number): dayjs.Dayjs {
-  const currentDay = now.day();
-  const daysUntil = targetDay >= currentDay ? targetDay - currentDay : 7 - (currentDay - targetDay);
-  return now.add(daysUntil, 'day');
 }
 
 function capitalize(str: string): string {

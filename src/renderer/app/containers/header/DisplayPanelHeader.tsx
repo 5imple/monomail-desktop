@@ -45,7 +45,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     const { setActiveThreadId } = useThreadAtom();
     const { removeLabelFromThread, addLabelToThread } = useThreadLabelAtom();
     const { t } = useTranslation();
-    const { setFullscreenDisplayPanel, fullscreenDisplayPanel } = useGlobalAtom();
+    const { fullscreenDisplayPanel } = useGlobalAtom();
     const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
     const { openDialog } = useDialogs();
     const executeCommand = useExecuteCommand();
@@ -192,14 +192,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
         setActiveThreadId(null);
         trackEvent('panel_closed', { thread_id: thread.id });
       }
-    };
-
-    const togglePanelFullscreen = () => {
-      setFullscreenDisplayPanel((prev) => {
-        const newState = !prev;
-        trackEvent('panel_fullscreen_toggled', { fullscreen: newState });
-        return newState;
-      });
     };
 
     // Get the appropriate labels based on thread's account ID

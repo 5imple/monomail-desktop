@@ -36,7 +36,6 @@ import { cn } from '@/renderer/app/lib/utils';
 import i18n from '@/renderer/assets/locales';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
-import { useTransition } from '@react-spring/web';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Forward, Reply, ReplyAll } from 'lucide-react';
@@ -210,7 +209,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const itemRef = useRef<HTMLDivElement | null>(null);
     const messageContentRef = useRef<HTMLDivElement>(null);
     const quotedContentRef = useRef<HTMLDivElement>(null);
-    const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+    const [aiSuggestions] = useState<string[]>([]);
     const [isUnsubscribed, setIsUnsubscribed] = useState(false);
     const [unsubscribedLoading, setUnsubscribedLoading] = useState(true);
 
@@ -240,7 +239,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       };
     }, [trackingHistory]);
     const { registerItem, unregisterItem } = useKeyboardNavigationContext();
-    const [copySuccess, setCopySuccess] = useState(false);
     const [showTrackerPrevention, setShowTrackerPrevention] = useState(false);
     const [trackingLoading, setTrackingLoading] = useState(false);
 
@@ -756,13 +754,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         cleanups.forEach((cleanup) => cleanup());
       };
     }, [parsedPayload?.content, showQuotedContent]);
-
-    const transitions = useTransition(aiSuggestions, {
-      from: { opacity: 0, transform: 'translateY(20px)' },
-      enter: { opacity: 1, transform: 'translateY(0px)' },
-      leave: { opacity: 0, transform: 'translateY(-20px)' },
-      config: { tension: 200, friction: 20 }
-    });
 
     /**
      * Expand on hover only if the message was collapsed.

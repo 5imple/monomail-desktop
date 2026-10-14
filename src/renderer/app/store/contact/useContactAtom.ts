@@ -3,17 +3,12 @@ import { MonoAccount } from '@/main/api/auth/types';
 import contactApi from '@/main/api/contact/contactApi';
 import spaceApi from '@/main/api/space/spaceApi';
 import { Contact, DBCreateContact, DBGetContacts } from '@/renderer/app/lib/db/contact';
-import {
-  contactArrayAtom,
-  lastGoogleContactSyncDateAtom,
-  selectedContactAtoms
-} from '@/renderer/app/store/contact/atoms';
+import { contactArrayAtom, selectedContactAtoms } from '@/renderer/app/store/contact/atoms';
 import { useAtom } from 'jotai';
 
 export function useContactAtom() {
   const [contactArray, setContactArray] = useAtom(contactArrayAtom);
   const [selectedContacts, setSelectedContacts] = useAtom(selectedContactAtoms);
-  const [lastSyncDates, setLastSyncDates] = useAtom(lastGoogleContactSyncDateAtom);
 
   /**
    * Get pinned contacts based on an array of contact IDs

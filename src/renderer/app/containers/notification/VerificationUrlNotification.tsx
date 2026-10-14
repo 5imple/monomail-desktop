@@ -6,7 +6,6 @@ import {
   NotificationSubtitle,
   NotificationTitle
 } from '@/renderer/app/components/ui/notification';
-import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { extractDomainFromEmail, getFaviconFromEmail } from '@/renderer/app/lib/faviconUtils';
 import { FC, useEffect, useState } from 'react';
@@ -23,7 +22,6 @@ const capitalizeFirstLetter = (str: string) => {
 
 const VerificationUrlNotification: FC<VerificationUrlNotificationProps> = ({ id, url, from }) => {
   const [isVisible, setIsVisible] = useState(false); // Initial state for visibility
-  const { isWindowFocused } = useWindowFocus();
 
   useEffect(() => {
     // Delay the visibility change by 50ms

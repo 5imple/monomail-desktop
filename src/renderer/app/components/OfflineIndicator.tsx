@@ -6,7 +6,6 @@ import { cn } from '@/renderer/app/lib/utils';
 import { TooltipPortal } from '@radix-ui/react-tooltip';
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 
 interface OfflineIndicatorProps {
   className?: string;
@@ -18,7 +17,6 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({ className })
     isOfflineMode,
     queuedActionsCount,
     syncQueuedActions,
-    clearQueue,
     isSyncing,
     hasProAccess
   } = useOffline();
@@ -30,27 +28,6 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({ className })
       syncQueuedActions();
     }
   }, [hasProAccess, isOnline, isSyncing, queuedActionsCount, isOfflineMode, syncQueuedActions]);
-
-  const handleManualSync = () => {
-    if (!hasProAccess) {
-      toast.error('Offline sync is only available for Pro users');
-      return;
-    }
-    if (!isOnline) {
-      toast.error('Cannot sync while offline');
-      return;
-    }
-    syncQueuedActions();
-  };
-
-  const handleClearQueue = () => {
-    if (!hasProAccess) {
-      toast.error('Offline queue management is only available for Pro users');
-      return;
-    }
-    clearQueue();
-    toast.info('Offline queue cleared');
-  };
 
   // Don't show indicator for non-Pro users when offline, or when online with no queued actions
   if ((!hasProAccess && isOfflineMode) || (!isOfflineMode && queuedActionsCount === 0)) {

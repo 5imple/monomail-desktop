@@ -75,15 +75,6 @@ const AppSidebarContainer: FC<AppSidebarContainerProps> = ({ className }) => {
     }
   }, [sidebarCollapsed, clearTimeouts, setSidebarHovered]);
 
-  const handleButtonClick = () => {
-    clearTimeouts();
-    isHovering.current = false;
-    if (!sidebarCollapsed) {
-      setSidebarHovered(false);
-    }
-    setSidebarCollapsed(!sidebarCollapsed);
-  };
-
   const { registerAreaRef } = useKeyboardNavigationContext();
   const containerRef = useRef<HTMLDivElement>(null);
 

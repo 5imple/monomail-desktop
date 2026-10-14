@@ -349,7 +349,7 @@ export const SyncThreadProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   const handleSyncError = (payload: any) => {
-    const { requestId, status, nextPageToken } = payload;
+    const { requestId, status } = payload;
     const request = activeRequests.current.get(requestId);
 
     if (request) {

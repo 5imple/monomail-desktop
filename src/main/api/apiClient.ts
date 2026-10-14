@@ -138,7 +138,6 @@ class ApiClient {
   private idToken: string | null = null;
   private activeUid: string | null = null;
   private pendingRequests: Map<string, Promise<any>> = new Map();
-  private isNodeEnvironment: boolean;
 
   constructor(baseURL: string, idToken?: string, activeUid?: string) {
     this.baseURL = baseURL;
@@ -148,8 +147,6 @@ class ApiClient {
     if (activeUid) {
       this.activeUid = activeUid;
     }
-
-    this.isNodeEnvironment = !isBrowser && !isWebWorker;
 
     // Only set up browser-specific features if we're in a browser
     if (isBrowser) {

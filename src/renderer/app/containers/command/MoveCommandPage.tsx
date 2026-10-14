@@ -64,7 +64,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
 
   const commandListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
 
   // Get selected threads data
   // Same target as the thread commands: the open thread, else the selection.

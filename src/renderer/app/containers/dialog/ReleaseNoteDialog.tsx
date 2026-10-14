@@ -10,11 +10,9 @@ import {
   DialogTrigger
 } from '@/renderer/app/components/ui/dialog';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { ReleaseNote, useReleaseNotesAtom } from '@/renderer/app/store/layout/useReleaseNotesAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import React, { FC, useEffect, useMemo, useState, ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
 import Markdown, { Components } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
@@ -379,8 +377,6 @@ const ReleaseNoteDialog: FC<ReleaseNoteDialogProps> = ({
   onOpenChange,
   releaseNote: propReleaseNote
 }) => {
-  const { t } = useTranslation();
-  const { activateTour, setActivateTour } = useGlobalAtom();
   const {
     markModalAsSeen,
     currentReleaseNote: atomReleaseNote,

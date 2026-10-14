@@ -448,7 +448,6 @@ export const createThreadCommands = (
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
-        const isInStarredView = globalSearchQuery.toLowerCase().includes('starred');
         let undoFunction: (() => Promise<void>) | undefined;
 
         // Define the promise

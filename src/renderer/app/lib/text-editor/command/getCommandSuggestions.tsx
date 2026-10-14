@@ -320,14 +320,6 @@ const getCommandSuggestions = (
   );
 
   // Group commands by category
-  const groupedCommands = filteredCommands.reduce((acc, command) => {
-    const { category } = command;
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(command);
-    return acc;
-  }, {});
 
   // Don't flatten - return the filtered commands directly
   // This allows the CommandsList to handle categorization and display

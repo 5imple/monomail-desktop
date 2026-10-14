@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import { bytecodePlugin, defineConfig, externalizeDepsPlugin } from 'electron-vite';
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import { resolve } from 'path';
 import sri from 'vite-plugin-sri';
 import string from 'vite-plugin-string';

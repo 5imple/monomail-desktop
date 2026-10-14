@@ -6,7 +6,6 @@ import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWin
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { CommandType } from '@/renderer/app/types';
@@ -23,11 +22,10 @@ import { createPreferencesCommands } from './preferencesCommands';
 import { createThemeCommands } from './themeCommands';
 
 export const useCommands = (): Record<CommandType, MonoCommand> => {
-  const { member, accounts, preference, updatePreference } = useAuth();
+  const { accounts, preference, updatePreference } = useAuth();
   const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
-  const { theme, setTheme } = useTheme();
-  const { updateDraft, removeDraft } = useDraftAtom();
-  const { activeSpace, spaces } = useSpaceAtom();
+  const { setTheme } = useTheme();
+  const { removeDraft } = useDraftAtom();
   // Payment-free build — getUserPlan no longer needed.
   const { openDialog, dialogState } = useDialogs();
   const {
@@ -48,8 +46,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     selectedThreads,
     activeThreadId,
     setSelectedThreads,
-    selectNextThread,
-    selectPreviousThread
+    selectNextThread
   } = useThreadAtom();
   const { setGlobalDraftWindows } = useComposeWindowAtom();
   const { trackEvent } = useUserTrackingData();

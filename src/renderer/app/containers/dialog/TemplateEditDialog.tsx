@@ -1,5 +1,4 @@
 import { generateUUID } from '@/main/utils';
-import { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
   Dialog,
@@ -77,15 +76,13 @@ const TemplateEditDialog: FC<TemplateEditDialogProps> = ({
   });
 
   const { control, handleSubmit, reset, setValue, watch, formState } = form;
-  const { errors, isValid } = formState;
+  const { errors } = formState;
 
   // Watch the icon value for preview
-  const selectedIcon = watch('icon');
   const name = watch('name');
   const body = watch('body');
 
   // Check if the selected icon exists in available icons
-  const iconExists = AVAILABLE_ICONS.includes(selectedIcon as MonoIconType);
 
   // Determine if the submit button should be disabled
   const isSubmitDisabled = isSubmitting || !name || !body || (hasSubject && !watch('subject'));

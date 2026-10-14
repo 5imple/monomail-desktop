@@ -46,15 +46,6 @@ const AccountSelector: React.FC<AccountSelectorProps> = ({
   };
 
   // Get tooltip message for account without calendar scopes
-  const getScopeTooltip = (account: MonoAccount): string => {
-    if (account.isExpired) {
-      return t('tooltips.account_status.authentication_expired');
-    }
-    if (!hasCalendarScopes(account)) {
-      return t('tooltips.account_status.missing_calendar_permissions');
-    }
-    return '';
-  };
 
   const handleAccountToggle = (uid: string, checked: boolean) => {
     if (checked) {
@@ -130,7 +121,6 @@ const AccountSelector: React.FC<AccountSelectorProps> = ({
           {accountsWithoutCalendarScopes.map((account) => {
             const isSelected = selectedAccountUids.includes(account.uid);
             const accentColor = getAccountColor(account.uid);
-            const tooltipMessage = getScopeTooltip(account);
 
             return (
               <Tooltip key={account.uid}>

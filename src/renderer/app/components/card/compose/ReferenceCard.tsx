@@ -63,7 +63,6 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
       entries.forEach(async (entry) => {
         if (entry.isIntersecting) {
           const img = entry.target as HTMLImageElement;
-          const attachmentId = img.getAttribute('data-attachment-id');
           const cid = img.getAttribute('data-content-id');
           const imgWidth = img.getAttribute('width');
           const imgHeight = img.getAttribute('height');

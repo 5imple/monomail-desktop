@@ -119,7 +119,6 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     console.log(`Syncing ${queue.length} queued actions...`);
     let successCount = 0;
-    const failedActions: OfflineAction[] = [];
 
     for (const action of queue) {
       try {

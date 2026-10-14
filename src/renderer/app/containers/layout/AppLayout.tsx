@@ -46,7 +46,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const threadIdParam = searchParams.get('tid');
-  const { gmailStatusInvalid, calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
+  const { calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
   const { globalDraftWindows } = useComposeWindowAtom();
   const { activeThreadId, setActiveThreadId, selectedThreads, setSelectedThreads } =

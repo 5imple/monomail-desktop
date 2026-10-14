@@ -909,34 +909,3 @@ function findMatchingTerms(text: string, searchTerms: string[]): string[] {
 
   return matchingTerms;
 }
-
-/**
- * Combine local and API results, removing duplicates and maintaining good ranking
- */
-function combineAndDeduplicateResults(
-  localThreads: MonoThread[],
-  apiThreads: MonoThread[],
-  limit: number
-): MonoThread[] {
-  // Create a map to track seen thread IDs
-  const seenThreadIds = new Set<string>();
-  const combinedResults: MonoThread[] = [];
-
-  // Add local results first (they're already scored and sorted)
-  for (const thread of localThreads) {
-    if (!seenThreadIds.has(thread.id) && combinedResults.length < limit) {
-      seenThreadIds.add(thread.id);
-      combinedResults.push(thread);
-    }
-  }
-
-  // Add API results, avoiding duplicates
-  for (const thread of apiThreads) {
-    if (!seenThreadIds.has(thread.id) && combinedResults.length < limit) {
-      seenThreadIds.add(thread.id);
-      combinedResults.push(thread);
-    }
-  }
-
-  return combinedResults;
-}

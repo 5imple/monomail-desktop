@@ -1,5 +1,4 @@
 import MonoLogo from '@/renderer/app/components/common/MonoLogo';
-import { useTheme } from '@/renderer/app/components/ThemeProvider';
 import { Button } from '@/renderer/app/components/ui/button';
 import { animated, easings, useSpring, useTrail } from '@react-spring/web';
 import { FC, useState, useMemo } from 'react';
@@ -7,8 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 const OnboardingWelcome: FC<{ onContinue: () => void }> = ({ onContinue }) => {
   const { t } = useTranslation();
-  const { theme, setTheme } = useTheme();
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isTransitioning] = useState(false);
 
   // Memoize translation strings to prevent re-renders
   const translations = useMemo(

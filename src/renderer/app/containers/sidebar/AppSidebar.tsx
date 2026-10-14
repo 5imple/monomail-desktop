@@ -26,7 +26,7 @@ const AppSidebar: FC<AppSidebarProps> = ({ open }) => {
   const sidebarRef = useRef<HTMLDivElement | null>(null);
 
   const [isAtTop, setIsAtTop] = useState(true);
-  const [isAtBottom, setIsAtBottom] = useState(false);
+  const [, setIsAtBottom] = useState(false);
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget;

@@ -38,7 +38,7 @@ type PendingSend = {
 
 export function useDraftAtom() {
   const [draftsMapByAccount, setDraftsMapByAccount] = useAtom(draftsMapByAccountAtom);
-  const [selectedThreads, setSelectedThreads] = useAtom(selectedThreadsAtom);
+  const [, setSelectedThreads] = useAtom(selectedThreadsAtom);
   const [sendDraftQueue, setSendDraftQueue] = useAtom(sendDraftQueueAtom);
   const [draftsByThread, setDraftsByThread] = useAtom(draftByThreadAtom);
   const { setThreadsMap } = useThreadAtom();

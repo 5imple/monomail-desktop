@@ -8,7 +8,7 @@ import {
   MoveCustomSidebarItemRequest
 } from '@/main/api/space/types';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
-import { activeSpaceAtom, spacesAtom } from '@/renderer/app/store/space/atom';
+import { activeSpaceAtom } from '@/renderer/app/store/space/atom';
 import { atom, useAtom } from 'jotai';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
@@ -407,8 +407,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
 ];
 
 export function useCustomSidebarAtom() {
-  const [spaces, setSpaces] = useAtom(spacesAtom);
-  const [activeSpace, setActiveSpace] = useAtom(activeSpaceAtom);
+  const [activeSpace] = useAtom(activeSpaceAtom);
   const [sidebarsBySpace, setSidebarsBySpace] = useAtom(customSidebarBySpaceAtom);
   const { t } = useTranslation();
   const { migrateToCustomSidebar } = useSidebarMigration();

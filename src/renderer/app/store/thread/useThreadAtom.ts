@@ -30,18 +30,6 @@ export function useThreadAtom() {
     }
   }, [threadIds, filterThreadIds, activeFilters, setFilteredThreadIds]);
 
-  const focusThreadById = useCallback((threadId: string) => {
-    const threadElement = document.querySelector(
-      `[data-thread="${threadId}"] [role="button"]`
-    ) as HTMLElement;
-    if (threadElement) {
-      threadElement.focus();
-
-      // Ensure the element is in view
-      threadElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, []);
-
   const selectNextThread = useCallback(
     (keepPrevious = false) => {
       // Only consider thread IDs that exist in the threadsMap

@@ -67,25 +67,6 @@ export const initializeServiceWorker = () => {
 };
 
 // Enhanced update checking function
-const checkForUpdates = async (registration: ServiceWorkerRegistration) => {
-  try {
-    logPWA('info', 'Checking for updates...');
-
-    // Force update check by calling update() method
-    await registration.update();
-
-    // Check the registration state after update
-    if (registration.installing) {
-      logPWA('info', 'Update found and installing...');
-    } else if (registration.waiting) {
-      logPWA('info', 'Update found and waiting...');
-    } else {
-      logPWA('info', 'No updates available');
-    }
-  } catch (error) {
-    logPWA('error', 'Update check failed:', error);
-  }
-};
 
 // Monitor service worker state changes for better debugging
 const monitorServiceWorkerUpdates = (registration: ServiceWorkerRegistration) => {
@@ -136,10 +117,6 @@ const monitorServiceWorkerUpdates = (registration: ServiceWorkerRegistration) =>
 // Network status monitoring for better offline/online detection
 export const initializeNetworkMonitoring = () => {
   const logNetworkStatus = () => {
-    const status = navigator.onLine ? 'ONLINE' : 'OFFLINE';
-    const strategy = navigator.onLine
-      ? 'Network First (server → cache)'
-      : 'Cache Only (offline mode)';
     // logPWA('info', `Network Status: ${status} | Strategy: ${strategy}`);
   };
 

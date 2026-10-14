@@ -15,7 +15,6 @@ import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { shortName } from '@/renderer/app/lib/shortName';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
-import { useThreadListAtom } from '@/renderer/app/store/layout/threadList/useThreadListAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpacePinAtom } from '@/renderer/app/store/space/pin/useSpacePinAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
@@ -101,11 +100,10 @@ type ReaderPanelPhase = 'closed' | 'opening' | 'open' | 'closing';
 const READER_PANEL_TRANSITION_MS = 280;
 
 export function MailLayout({}: MailLayoutProps) {
-  const { notificationAlert, setNotificationAlert } = useThreadListAtom();
   const { pinEmailInSpace } = useSpacePinAtom();
   const { activeThreadId } = useThreadAtom();
   const { preference } = useAuth();
-  const { globalSearchQuery, fullscreenDisplayPanel, setFullscreenDisplayPanel } = useGlobalAtom();
+  const { fullscreenDisplayPanel, setFullscreenDisplayPanel } = useGlobalAtom();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
@@ -300,7 +298,6 @@ export function MailLayout({}: MailLayoutProps) {
 
   const isReaderMounted = readerPanelPhase !== 'closed';
   const isReaderFullscreen = Boolean(activeThreadId) || fullscreenDisplayPanel;
-  const isReaderSettledOpen = readerPanelPhase === 'open';
   const isResizeHandleEnabled = isGroupedPanelExpanded && !isReaderFullscreen;
 
   return (

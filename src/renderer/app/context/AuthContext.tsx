@@ -279,7 +279,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { setSignatures } = useSignatureAtom();
   const { updateDraft, resetDrafts } = useDraftAtom();
   const { resetThreadsMap } = useThreadOperationAtom();
-  const { loadShared, loadSharedForAllAccounts } = useSharedAtom();
+  const { loadSharedForAllAccounts } = useSharedAtom();
   const { loadLabels, loadCachedLabels } = useLabelAtom();
 
   // Use the space hooks
@@ -478,7 +478,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         let cachedData = await authCache.getCachedData();
 
         const cachedSpaces = await loadCachedSpaces();
-        const cachedLabels = await loadCachedLabels();
+        await loadCachedLabels();
 
         // Detect stale cache: if the token owner (Google sub) is not in cached accounts,
         // the cache belongs to a previous session. Discard it so we don't temporarily

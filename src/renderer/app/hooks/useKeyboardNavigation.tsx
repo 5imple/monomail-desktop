@@ -521,7 +521,6 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
    * Validates and updates focus position when navigation state changes
    */
   useEffect(() => {
-    const currentItemList = getItemList(focusPosition.area);
     const safeIndex = getSafeIndex(focusPosition.area, focusPosition.index);
 
     // If current area is disabled, move to the first available area

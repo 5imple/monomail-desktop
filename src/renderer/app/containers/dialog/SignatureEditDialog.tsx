@@ -19,7 +19,7 @@ import DirectHTMLSignatureEditor from '@/renderer/app/containers/editor/DirectHT
 import { IconPickerButton } from '@/renderer/app/containers/dialog/IconPickerButton';
 import { AVAILABLE_ICONS } from '@/renderer/app/lib/availableIcons';
 import { cn } from '@/renderer/app/lib/utils';
-import { IMonoSignature, useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
+import { IMonoSignature } from '@/renderer/app/store/compose/useSignatureAtom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import React, { FC, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -61,7 +61,6 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
   onSave
 }) => {
   const { t } = useTranslation();
-  const { signatures } = useSignatureAtom();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<SignatureFormValues>({
@@ -86,7 +85,6 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
   const { control, handleSubmit, reset, setValue, watch, formState } = form;
 
   // Watch values for UI updates
-  const selectedIcon = watch('icon');
   const selectedAccountUids = watch('defaultAccountUids');
 
   useEffect(() => {

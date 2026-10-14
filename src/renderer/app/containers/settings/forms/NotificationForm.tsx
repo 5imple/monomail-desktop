@@ -172,7 +172,6 @@ export function NotificationsForm() {
 
   const watchAlertSound = form.watch('alert_sound');
   const watchMarketingEmails = form.watch('marketing_emails');
-  const watchSecurityEmails = form.watch('security_emails');
   const watchNotification = form.watch('watch_notification');
 
   // Determine if settings have been modified
@@ -183,10 +182,6 @@ export function NotificationsForm() {
   const isMarketingEmailsModified = useMemo(
     () => watchMarketingEmails !== localPreference.notification.marketingEmails,
     [watchMarketingEmails, localPreference]
-  );
-  const isSecurityEmailsModified = useMemo(
-    () => watchSecurityEmails !== localPreference.notification.securityEmails,
-    [watchSecurityEmails, localPreference]
   );
   const isWatchNotificationModified = useMemo(() => {
     return Object.entries(watchNotification).some(

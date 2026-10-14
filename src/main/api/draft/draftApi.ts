@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 import { apiClient, isBackendConfigured } from '@/main/api/apiClient';
 import {
-  DraftAttachmentDownloadResponse,
   DraftUploadInlineImageResponse,
   MonoDraftGetResponse,
   MonoDraftUpdateRequest,

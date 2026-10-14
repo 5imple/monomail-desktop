@@ -7,7 +7,6 @@ import {
   getDefaultNavItems,
   clearCustomSidebarCache
 } from '@/renderer/app/store/space/useCustomSidebarAtom';
-import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
@@ -15,7 +14,6 @@ import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 // Migration utility to convert from old sidebar to new customizable sidebar
 export function useSidebarMigration() {
   const { t } = useTranslation();
-  const { activeSpace } = useSpaceAtom();
   const { accounts } = useAuth();
   const { labelsMapByAccount } = useLabelAtom();
 

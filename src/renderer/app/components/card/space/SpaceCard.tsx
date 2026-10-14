@@ -9,7 +9,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from '@/renderer/app/components/ui/context-menu';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -54,7 +53,6 @@ const SpaceCard = forwardRef<HTMLButtonElement, SpaceCardProps>(
     const { isWindowFocused } = useWindowFocus();
     const { openDialog } = useDialogs();
     const { activeSpace, deleteSpace } = useSpaceAtom();
-    const { registerItem, unregisterItem } = useKeyboardNavigationContext();
 
     const localRef = useRef<HTMLButtonElement>(null);
 
@@ -77,13 +75,6 @@ const SpaceCard = forwardRef<HTMLButtonElement, SpaceCardProps>(
     //       localRef.current;
     //   }
     // }, [forwardedRef]);
-
-    const hexToRgba = (hex: string, alpha: number) => {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    };
 
     const handleClick = (e: React.MouseEvent) => {
       if (disabled) {

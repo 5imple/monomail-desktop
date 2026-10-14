@@ -8,21 +8,15 @@ import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import DisplayPanelHeader from '@/renderer/app/containers/header/DisplayPanelHeader';
-import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
-import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { focusedElementOwnsKey } from '@/renderer/app/lib/hotkeyGuards';
 import { layoutConversation } from '@/renderer/app/lib/messageHistory';
 import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeInlineAtom } from '@/renderer/app/store/compose/useComposeInlineAtom';
-import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
-import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
-import { differenceInDays } from 'date-fns';
 import { debounce, isEqual } from 'lodash';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReactToPrint } from 'react-to-print';
@@ -43,11 +37,9 @@ interface DisplayPanelProps {
 }
 
 export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanelProps) => {
-  const { globalSearchQuery } = useGlobalAtom();
-  const { labelsMapByAccount, getAllLabels } = useLabelAtom();
   const { activeThreadId, threadsMap } = useThreadAtom();
-  const { unmarkThreadsAsUnread, addLabelToThread } = useThreadLabelAtom();
-  const { updateThread, updateThreadState } = useThreadOperationAtom();
+  const { unmarkThreadsAsUnread } = useThreadLabelAtom();
+  const { updateThread } = useThreadOperationAtom();
   const { t } = useTranslation();
 
   const [thread, setThread] = useState<MonoThread | null>(null);
@@ -57,11 +49,8 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
   const [displayedItems, setDisplayedMessages] = useState<ThreadItemBase[]>([]);
   const { activateScope, deactivateScope } = useHotkeyScope();
   const [isPrinting, setIsPrinting] = useState(false);
-  const [collapsed, setCollapsed] = useState<boolean>(false);
-  const { member, accounts } = useAuth();
-  const lastMessageRef = useRef<HTMLDivElement>(null);
+  const [, setCollapsed] = useState<boolean>(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const composeCardRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const promiseResolveRef = useRef<(() => void) | null>(null);
@@ -75,9 +64,7 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     state: 'loading' | 'error';
   } | null>(null);
   const [bodyFetchAttempt, setBodyFetchAttempt] = useState(0);
-  const [spacerHeight, setSpacerHeight] = useState(0);
-  const { removeDraft, sendDraftQueue } = useDraftAtom();
-  const executeCommand = useExecuteCommand();
+  const [spacerHeight] = useState(0);
   const { inlineDrafts } = useComposeInlineAtom();
   const { trackEvent } = useUserTrackingData();
 
@@ -87,14 +74,9 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
 
   // Refs for message cards & inline drafts
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const inlineDraftRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Scroll configuration
   const SCROLL_JUMP_SIZE = 450; // pixels to scroll per key press
-
-  const isOlderThan365Days = thread
-    ? differenceInDays(new Date(), new Date(thread.timestamp)) > 365
-    : false;
 
   // Smooth scroll function
   const [isScrolling, setIsScrolling] = useState(false);
@@ -336,69 +318,9 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     setCollapsed(false);
   };
 
-  const calculateSpacerHeight = useCallback(() => {
-    if (
-      lastMessageRef.current &&
-      scrollAreaRef.current &&
-      titleRef.current &&
-      composeCardRef.current
-    ) {
-      const lastMessageHeight = lastMessageRef.current.offsetHeight;
-      const scrollAreaHeight = scrollAreaRef.current.offsetHeight;
-      const titleHeight = titleRef.current.offsetHeight;
-
-      const padding = 18;
-      const newSpacerHeight = Math.max(
-        scrollAreaHeight - lastMessageHeight - titleHeight - padding,
-        0
-      );
-      setSpacerHeight(newSpacerHeight);
-    }
-  }, [lastMessageRef.current]);
-
-  const hotkeyHandlers = useMemo(() => {
-    if (!thread) return [];
-
-    const accountId = thread.accountId;
-    const accountLabels = labelsMapByAccount[accountId] || {};
-
-    const availableLabels = Object.values(accountLabels).filter((label) =>
-      label.id.startsWith('Label_')
-    );
-
-    return Array.from({ length: 9 }).map((_, index) => ({
-      key: `T+${index + 1}`,
-      handler: () => availableLabels[index] && handleLabelAdd(availableLabels[index].id),
-      enabled: index < availableLabels.length
-    }));
-  }, [labelsMapByAccount, thread]);
-
   // hotkeyHandlers.forEach(({ key, handler, enabled }) => {
   //   useHotkeys(key, handler, { enabled, preventDefault: true, scopes: ['CONVERSATION_DISPLAY'] });
   // });
-
-  const handleLabelAdd = async (labelId: string) => {
-    if (!thread) return;
-
-    const accountId = thread.accountId;
-    if (!accountId) {
-      console.error('No accountId found for thread', thread.id);
-      return;
-    }
-
-    if (thread.labelIds.includes(labelId)) return;
-    try {
-      updateThreadState(accountId, thread.id, [labelId], [], true);
-      await addLabelToThread(accountId, [thread.id], labelId);
-
-      const accountLabels = labelsMapByAccount[accountId] || {};
-      const labelName = accountLabels[labelId]?.name || 'Unknown Label';
-
-      toast.success(`Added label: ${labelName}`);
-    } catch (error) {
-      console.error(`Failed to add label ${labelId} to thread ${thread.id}`, error);
-    }
-  };
 
   const orderedItems = useMemo(() => {
     const messages: ThreadItemBase[] = [];

@@ -88,7 +88,7 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
   onBack,
   isCreatingSpace = false
 }) => {
-  const { member, accounts } = useAuth();
+  const { accounts } = useAuth();
   const { t } = useTranslation();
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
 
@@ -150,17 +150,6 @@ const OnBoardingAddAccounts: FC<OnBoardingAddAccountsProps> = ({
     )
       return 'Mail';
     return 'Envelope';
-  };
-
-  const getProviderColor = (email: string) => {
-    if (email.includes('@gmail.com') || email.includes('@googlemail.com')) return '#ea4335';
-    if (
-      email.includes('@outlook.com') ||
-      email.includes('@hotmail.com') ||
-      email.includes('@live.com')
-    )
-      return '#0078d4';
-    return '#6b7280';
   };
 
   const renderProviderButton = (provider: any, springStyle: any) => {

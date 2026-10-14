@@ -55,7 +55,7 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
 
   const commandListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const targetThreadIds = useMemo(
     () => (activeThreadId ? [activeThreadId] : selectedThreads),
     [activeThreadId, selectedThreads]

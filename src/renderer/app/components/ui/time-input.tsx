@@ -28,7 +28,7 @@ export const TimeInput: React.FC<TimeInputProps> = ({
   keepPopoverAttr = false,
   ...rest
 }) => {
-  const [open, setOpen] = React.useState(false);
+  const [, setOpen] = React.useState(false);
   const [internal, setInternal] = React.useState(value);
   const listRef = React.useRef<HTMLDivElement | null>(null);
 

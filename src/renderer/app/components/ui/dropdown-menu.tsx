@@ -83,7 +83,7 @@ const DropdownMenuItem = React.forwardRef<
     inset?: boolean;
   }
 >(({ className, inset, ...props }, ref) => {
-  const { activeScopes, activateScope, deactivateScope } = useHotkeyScope();
+  const { activateScope, deactivateScope } = useHotkeyScope();
 
   React.useEffect(() => {
     activateScope('DROPDOWN_MENU');

@@ -429,18 +429,6 @@ class AppWindow extends BrowserWindow {
     }
   }
 
-  // Helper method to load content from local filesystem
-  private loadLocalContent(route: string = '/'): void {
-    const localPath = path.join(__dirname, '../renderer', 'index_offline.html');
-
-    // Use Electron's loadFile method with proper options for query parameters
-    this.loadFile(localPath, {
-      query: {
-        appUrl: `https://${import.meta.env.MONO_ENV_FIREBASE_AUTH_DOMAIN}${route}`
-      }
-    });
-  }
-
   private throttleSaveBounds() {
     if (!this.isDestroyed()) {
       // Clear existing timeout

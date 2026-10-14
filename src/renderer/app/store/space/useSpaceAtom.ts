@@ -1,7 +1,6 @@
 import spaceApi from '@/main/api/space/spaceApi';
 import { CreateSpaceRequest, UpdateSpaceRequest } from '@/main/api/space/types';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
-import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import {
   activeSpaceAtom,
   isLoadingSpacesAtom,
@@ -82,7 +81,6 @@ export function useSpaceAtom() {
 
   const [activeSpace, setActiveSpace] = useAtom(activeSpaceAtom);
   const [isLoadingSpaces, setIsLoadingSpaces] = useAtom(isLoadingSpacesAtom);
-  const { fetchContactsForSpace } = useContactAtom();
 
   // Load cached spaces when offline
   const loadCachedSpaces = useCallback(async (): Promise<boolean> => {

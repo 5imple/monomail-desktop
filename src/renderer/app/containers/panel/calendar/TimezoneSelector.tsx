@@ -42,7 +42,7 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { time: currentTime, abbreviation } = getCurrentTimeWithAbbreviation(selectedTimeZone);
+  const { abbreviation } = getCurrentTimeWithAbbreviation(selectedTimeZone);
   const timezonesByRegion = getTimezonesByRegion();
 
   const filteredTimezones = useMemo(() => {

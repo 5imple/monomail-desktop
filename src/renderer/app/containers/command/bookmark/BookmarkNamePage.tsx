@@ -6,7 +6,6 @@ import {
   CommandList
 } from '@/renderer/app/components/ui/command';
 import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandInput';
-import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useBookmarkAtom } from '@/renderer/app/store/bookmark/useBookmarkAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
@@ -42,7 +41,6 @@ const BookmarkNamePage: React.FC<BookmarkNamePageProps> = ({
   const { closeDialog } = useDialogs();
   const { addOrUpdateBookmark } = useBookmarkAtom();
   const { searchNewQuery } = useGlobalAtom();
-  const { getUidFromEmail } = useAuth();
 
   const handleSaveBookmark = async () => {
     // The ⌘D path arrives here without an account: send the user to choose

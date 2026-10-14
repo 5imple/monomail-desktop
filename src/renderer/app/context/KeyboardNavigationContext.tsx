@@ -9,7 +9,6 @@ import {
   NavigationPivotContext,
   DisabledAreasMap
 } from '@/renderer/app/hooks/useKeyboardNavigation';
-import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -79,10 +78,7 @@ export const useKeyboardNavigationContext = () => {
  * Hook to create pivot context based on your app's atoms
  */
 function useNavigationPivotContext(): NavigationPivotContext {
-  const { globalSearchQuery } = useGlobalAtom();
-  const { globalDraftWindows } = useComposeWindowAtom();
   const { activeThreadId, filteredThreadIds } = useThreadAtom();
-  const { activeSpace } = useSpaceAtom();
 
   const getPivotIndex = useCallback((area: FocusableArea): number => {
     // This is now just a fallback - the real logic is in the provider's useEffect
