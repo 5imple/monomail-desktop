@@ -19,7 +19,11 @@ import electronApi from '@/renderer/app/lib/electronApi';
 import { toast } from 'sonner';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Badge } from '@/renderer/app/components/ui/badge';
+import {
+  SETTINGS_SECTION_TITLE,
+  SettingsChangeDot
+} from '@/renderer/app/containers/settings/SettingsPageHeader';
+import { cn } from '@/renderer/app/lib/utils';
 
 const GeneralFormSchema = z.object({
   theme: z.enum(['light', 'dark', 'black', 'pure-light', 'system'], {
@@ -31,6 +35,9 @@ const GeneralFormSchema = z.object({
 });
 
 type GeneralFormValues = z.infer<typeof GeneralFormSchema>;
+
+// Radio option labels read as choices, not as disabled grey text.
+const OPTION_LABEL = 'cursor-pointer font-normal text-foreground';
 
 export function GeneralForm() {
   const { theme, setTheme } = useTheme();
@@ -55,6 +62,8 @@ export function GeneralForm() {
     [watchDensity, preference.appearance.density]
   );
 
+  const isModified = isThemeModified || isDensityModified;
+
   const density = [
     { value: 'compact', label: t('settings.general.density.compact') },
     { value: 'cozy', label: t('settings.general.density.cozy') }
@@ -65,7 +74,9 @@ export function GeneralForm() {
     setTheme(data.theme);
     electronApi.changeAppearance(data.theme);
     try {
-      updatePreference({
+      // Awaited: "Preferences updated" used to show before anything was saved,
+      // and a failed save never reached the catch below.
+      await updatePreference({
         appearance: { theme: data.theme, density: data.density }
       });
       toast.success(t('toast.preferences.updated'));
@@ -77,7 +88,7 @@ export function GeneralForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div className="space-y-8">
           {/* Theme Selection */}
           <FormField
@@ -85,12 +96,9 @@ export function GeneralForm() {
             name="theme"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel className="flex items-center gap-2 text-foreground">
-                  {t('settings.general.theme.title')}{' '}
-                  <Badge sizeVariant={'xs'} className="rounded-sm">
-                    New
-                  </Badge>
-                  {isThemeModified && <div className="h-2 w-2 rounded-full bg-accent" />}
+                <FormLabel className={cn('flex items-center gap-2', SETTINGS_SECTION_TITLE)}>
+                  {t('settings.general.theme.title')}
+                  {isThemeModified && <SettingsChangeDot />}
                 </FormLabel>
                 <FormDescription>{t('settings.general.theme.description')}</FormDescription>
                 <FormMessage />
@@ -103,35 +111,45 @@ export function GeneralForm() {
                     <FormControl>
                       <RadioGroupItem value="light" />
                     </FormControl>
-                    <FormLabel className="">{t('settings.general.theme.light')}</FormLabel>
+                    <FormLabel className={OPTION_LABEL}>
+                      {t('settings.general.theme.light')}
+                    </FormLabel>
                   </FormItem>
 
                   <FormItem className="flex items-center space-x-3 space-y-0">
                     <FormControl>
                       <RadioGroupItem value="pure-light" />
                     </FormControl>
-                    <FormLabel className="">{t('settings.general.theme.pure_light')}</FormLabel>
+                    <FormLabel className={OPTION_LABEL}>
+                      {t('settings.general.theme.pure_light')}
+                    </FormLabel>
                   </FormItem>
 
                   <FormItem className="flex items-center space-x-3 space-y-0">
                     <FormControl>
                       <RadioGroupItem value="dark" />
                     </FormControl>
-                    <FormLabel className="">{t('settings.general.theme.dark')}</FormLabel>{' '}
+                    <FormLabel className={OPTION_LABEL}>
+                      {t('settings.general.theme.dark')}
+                    </FormLabel>{' '}
                   </FormItem>
 
                   <FormItem className="flex items-center space-x-3 space-y-0">
                     <FormControl>
                       <RadioGroupItem value="black" />
                     </FormControl>
-                    <FormLabel className="">{t('settings.general.theme.black')}</FormLabel>
+                    <FormLabel className={OPTION_LABEL}>
+                      {t('settings.general.theme.black')}
+                    </FormLabel>
                   </FormItem>
 
                   <FormItem className="flex items-center space-x-3 space-y-0">
                     <FormControl>
                       <RadioGroupItem value="system" />
                     </FormControl>
-                    <FormLabel className="">{t('settings.general.theme.system')}</FormLabel>
+                    <FormLabel className={OPTION_LABEL}>
+                      {t('settings.general.theme.system')}
+                    </FormLabel>
                   </FormItem>
                 </RadioGroup>
               </FormItem>
@@ -144,22 +162,22 @@ export function GeneralForm() {
             name="density"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel className="flex items-center gap-2 text-foreground">
+                <FormLabel className={cn('flex items-center gap-2', SETTINGS_SECTION_TITLE)}>
                   {t('settings.general.density.title')}
-                  {isDensityModified && <div className="h-2 w-2 rounded-full bg-accent" />}
+                  {isDensityModified && <SettingsChangeDot />}
                 </FormLabel>
                 <FormDescription>{t('settings.general.density.description')}</FormDescription>
                 <FormMessage />
                 <RadioGroup
                   onValueChange={field.onChange}
                   defaultValue={field.value}
-                  className="grid grid-rows-3 pt-2"
+                  className="grid grid-rows-2 pt-2"
                 >
                   <FormItem className="flex items-center space-x-3 space-y-0">
                     <FormControl>
                       <RadioGroupItem value={'compact'} />
                     </FormControl>
-                    <FormLabel className="">
+                    <FormLabel className={OPTION_LABEL}>
                       {density.find((d) => d.value === 'compact')?.label}
                     </FormLabel>
                   </FormItem>
@@ -168,7 +186,7 @@ export function GeneralForm() {
                     <FormControl>
                       <RadioGroupItem value={'cozy'} />
                     </FormControl>
-                    <FormLabel className="">
+                    <FormLabel className={OPTION_LABEL}>
                       {density.find((d) => d.value === 'cozy')?.label}
                     </FormLabel>
                   </FormItem>
@@ -177,7 +195,11 @@ export function GeneralForm() {
             )}
           />
         </div>
-        <Button type="submit">{t('settings.buttons.save_changes')}</Button>
+        <Button type="submit" disabled={!isModified || form.formState.isSubmitting}>
+          {form.formState.isSubmitting
+            ? t('settings.buttons.saving', 'Saving…')
+            : t('settings.buttons.save_changes')}
+        </Button>
       </form>
     </Form>
   );

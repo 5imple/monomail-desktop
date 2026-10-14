@@ -1,10 +1,19 @@
 import authApi from '@/main/api/auth/authApi';
 import { UserPreference } from '@/main/api/auth/types';
-import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
-import { Form, FormControl, FormField, FormItem } from '@/renderer/app/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel
+} from '@/renderer/app/components/ui/form';
 import { Switch } from '@/renderer/app/components/ui/switch';
-import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
+import {
+  SETTINGS_SECTION_TITLE,
+  SettingsPageHeader
+} from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
@@ -84,9 +93,9 @@ export function ThreadListDisplayForm() {
 
       setLocalPreference(updatedPreference);
 
-      // Update global preference state
+      // Update global preference state (awaited, so a failure reaches the catch)
       if (updatePreference) {
-        updatePreference({
+        await updatePreference({
           display: {
             inbox: localPreference.display.inbox,
             threadList: updatedThreadListPrefs
@@ -165,11 +174,8 @@ export function ThreadListDisplayForm() {
 
         <div className="space-y-4">
           <div className="space-y-0.5">
-            <h4 className="font-medium text-foreground">
+            <h4 className={SETTINGS_SECTION_TITLE}>
               {t('settings.display.threadlist.display_options')}
-              <Badge sizeVariant={'xs'} className="ml-2 rounded-sm">
-                New
-              </Badge>
             </h4>
             <p className="text-sm text-muted-foreground">
               {t('settings.display.threadlist.display_options_description')}
@@ -185,11 +191,13 @@ export function ThreadListDisplayForm() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between">
                     <div className="space-y-0.5">
-                      <h4 className="text-sm text-foreground">{setting.title}</h4>
-                      <p className="text-sm text-muted-foreground">{setting.description}</p>
+                      <FormLabel className="cursor-pointer text-sm font-normal text-foreground">
+                        {setting.title}
+                      </FormLabel>
+                      <FormDescription>{setting.description}</FormDescription>
                     </div>
                     <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} size={'sm'} />
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -198,8 +206,13 @@ export function ThreadListDisplayForm() {
           </div>
         </div>
 
-        <Button type="submit" disabled={!isThreadListModified}>
-          {t('settings.buttons.save_changes')}
+        <Button
+          type="submit"
+          disabled={!isThreadListModified || threadListForm.formState.isSubmitting}
+        >
+          {threadListForm.formState.isSubmitting
+            ? t('settings.buttons.saving', 'Saving…')
+            : t('settings.buttons.save_changes')}
         </Button>
       </form>
     </Form>

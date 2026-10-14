@@ -187,7 +187,7 @@
     "description": "Manage your account preferences and email preferences.",
     "general": {
       "title": "General",
-      "description": "Manage your account preferences and email preferences.",
+      "description": "Theme and layout density for the app.",
       "theme": {
         "title": "Theme",
         "description": "Select between light, dark, black, pure light, or system theme.",
@@ -214,16 +214,17 @@
         "description": "Automatically start the application when you log in to your computer."
       },
       "cache": {
-        "info": "Resetting the cache will clear all locally stored emails and they will be re-downloaded when you next access them.",
+        "info": "Resetting the cache clears the emails stored on this device; they download again from the server. Drafts and contacts are kept.",
         "description": "Manage local cache for emails and messages",
         "reset_button": "Reset Email Cache",
         "reset_confirm_title": "Reset Email Cache",
-        "reset_confirm_description": "This will delete all cached conversations, messages, and related data from your local storage. Your emails will remain on the server and will be re-downloaded when you next access them. Continue?",
+        "reset_confirm_description": "This clears the conversations and messages stored on this device. Your email stays on the server and downloads again. Drafts and contacts are kept.",
         "reset_confirm": "Yes, Reset Cache",
         "resetting": "Resetting...",
         "reset_success": "Email cache has been successfully reset",
         "reset_error": "Failed to reset email cache",
-        "reset_error_no_user": "Cannot reset cache: no user is logged in"
+        "reset_error_no_user": "Cannot reset cache: no user is logged in",
+        "title": "Storage"
       }
     },
     "notifications": {
@@ -240,17 +241,18 @@
           "ping": "Ping",
           "swipe": "Swipe",
           "ripple": "Ripple"
-        }
+        },
+        "preview": "Preview sound"
       },
       "watch_notification": {
-        "title": "Watch Notification",
-        "description": "Choose which emails trigger notifications.",
+        "title": "Desktop notifications",
+        "description": "Choose which new mail shows a notification, for each account.",
         "account": "Account",
         "options": {
-          "inbox": "All emails",
+          "inbox": "All inbox mail",
           "important": "Important emails",
-          "primary": "Inbox emails",
-          "off": "None"
+          "primary": "Primary only",
+          "off": "Off"
         }
       },
       "marketing_emails": {
@@ -260,17 +262,36 @@
       "security_emails": {
         "title": "Security Emails",
         "description": "Receive security-related emails."
-      }
+      },
+      "choose": "Choose…",
+      "no_accounts": "No accounts connected"
     },
     "shortcut": {
-      "title": "Shortcut",
-      "description": "Manage keyboard shortcuts for efficient navigation."
+      "title": "Keyboard Shortcuts",
+      "description": "The keys for getting around and acting on mail.",
+      "or": "or",
+      "scopes": {
+        "navigation": "Navigation",
+        "global": "General",
+        "conversation_display": "Open conversation",
+        "conversation_selected": "Selected conversations",
+        "sidebar": "Sidebar"
+      },
+      "navigation": {
+        "move": "Move up / down the list",
+        "extend": "Extend the selection",
+        "select": "Select or deselect",
+        "open": "Open; Reply all in the reader",
+        "back": "Back, or clear the selection",
+        "undo": "Undo",
+        "palette": "Command palette"
+      }
     },
     "email": {
       "title": "Email"
     },
     "account": {
-      "title": "Accent",
+      "title": "Account Colors",
       "description": "Manage your email account accent colors."
     },
     "filter": {
@@ -359,15 +380,18 @@
     },
     "profile": {
       "title": "Profile",
-      "description": "Update your personal information and account preferences.",
+      "description": "Your account details, as your email provider has them.",
       "display_name": "Display Name",
       "change_photo": "Change Photo",
       "update_profile": "Update profile",
       "your_name": "Your name",
       "primary_account": {
-        "tooltip": "Account to log in to Mono",
-        "title": "Primary Account"
-      }
+        "tooltip": "The account you first signed in with.",
+        "title": "Primary Account",
+        "about": "About the primary account"
+      },
+      "synced_note": "Your name and photo come from your Google or Microsoft account.",
+      "version": "Version {{version}}"
     },
     "billing": {
       "title": "Billing",
@@ -515,7 +539,8 @@
           "updates": "Updates",
           "updates_description": "Include system updates and notifications in your inbox",
           "forums": "Forums",
-          "forums_description": "Include forum discussions and community posts in your inbox"
+          "forums_description": "Include forum discussions and community posts in your inbox",
+          "gmail_only": "Inbox categories are a Gmail feature. Microsoft 365 accounts aren't split into categories."
         }
       },
       "threadlist": {
@@ -584,13 +609,15 @@
       "cancel": "Cancel",
       "delete": "Delete",
       "remove": "Remove",
-      "edit": "Edit"
+      "edit": "Edit",
+      "saving": "Saving…"
     },
     "footer": {
       "terms": "Terms",
       "privacy": "Privacy",
       "version": "Version"
-    }
+    },
+    "unsaved_change": "Unsaved change"
   },
   "onboarding": {
     "welcome": {

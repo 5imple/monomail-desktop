@@ -1,163 +1,67 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Avatar, AvatarFallback, AvatarImage } from '@/renderer/app/components/ui/avatar';
-import { Button } from '@/renderer/app/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/renderer/app/components/ui/form';
-import { Input } from '@/renderer/app/components/ui/input';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
+import { SETTINGS_SECTION_TITLE } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const profileFormSchema = z.object({
-  displayName: z
-    .string()
-    .min(2, {
-      message: 'Username must be at least 2 characters.'
-    })
-    .max(30, {
-      message: 'Username must not be longer than 30 characters.'
-    }),
-  primary_email: z
-    .string({
-      required_error: 'Please select an email to display.'
-    })
-    .email()
-});
-
-type ProfileFormValues = z.infer<typeof profileFormSchema>;
-
+// Display name and primary account come from the connected account (Google or
+// Microsoft); there is nothing to edit or save here. They're shown as plain
+// read-only rows: an always-read-only text field and a disabled menu made the
+// page look editable, and broken.
 export function ProfileForm() {
-  const { member, accounts } = useAuth();
-
-  const [appVersion, setAppVersion] = useState(import.meta.env.MONO_ENV_APP_VERSION);
+  const { member } = useAuth();
   const { t } = useTranslation();
-  const form = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileFormSchema),
-    defaultValues: {
-      displayName: member?.displayName ?? undefined,
-      primary_email: member?.email
-    },
-    mode: 'onChange'
-  });
-
-  // Display name and primary account are sourced from the connected Google
-  // account in Gmail-direct mode; there is no backend to persist edits to.
-  // The fields are shown read-only — a Save button here reported success
-  // while discarding the edit.
-  async function onSubmit(_data: ProfileFormValues) {}
+  const appVersion = import.meta.env.MONO_ENV_APP_VERSION;
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <div className="flex items-center gap-3">
-          <div className="group relative flex flex-col items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Avatar className="h-16 w-16 rounded-full">
-                  <AvatarImage src={member?.profileImageUrl ?? undefined} />
-                  <AvatarFallback>{member?.displayName![0] ?? 'E'}</AvatarFallback>
-                </Avatar>
-              </TooltipTrigger>
-              {/* <TooltipContent side={'bottom'} className="dark">
-                Change photo
-              </TooltipContent> */}
-            </Tooltip>
-            {/* <Button
-              className="absolute -right-1 -top-1 hidden items-center justify-center rounded-full group-hover:flex"
-              type="button"
-              variant={'outline'}
-              typeVariant={'icon'}
-              sizeVariant={'xs'}
-            >
-              <MonoIcon type={'X'} className="h-3 w-3" />
-            </Button> */}
-          </div>
-          <FormField
-            control={form.control}
-            name="displayName"
-            render={({ field }) => (
-              <FormItem className="flex-1">
-                <FormLabel>@{member?.memberName}</FormLabel>
-                <FormControl>
-                  <Input placeholder={t('settings.profile.your_name')} readOnly {...field} />
-                </FormControl>
-                {/* <FormDescription>
-                This is your public display name. It can be your real name or a pseudonym. You can
-                only change this once every 30 days.
-              </FormDescription> */}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <FormField
-          control={form.control}
-          name="primary_email"
-          render={({ field }) => (
-            <FormItem className="flex flex-col">
-              <FormLabel className="inline-flex items-center gap-2">
-                {t('settings.profile.primary_account.title')}
-                <Tooltip>
-                  <TooltipTrigger type={'button'}>
-                    <MonoIcon type={'HelpCircle'} className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent side={'right'}>
-                    {t('settings.profile.primary_account.tooltip')}
-                  </TooltipContent>
-                </Tooltip>
-              </FormLabel>
-              <FormControl>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="secondary" className="w-[200px] justify-between" disabled>
-                      {field.value
-                        ? accounts.find((account) => account.email === field.value)?.email
-                        : ''}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="min-w-[200px]">
-                    <DropdownMenuGroup>
-                      {accounts.map((account) => (
-                        <DropdownMenuCheckboxItem
-                          key={account.email}
-                          checked={field.value === account.email}
-                          onClick={() => form.setValue('primary_email', account.email)}
-                        >
-                          {account.email}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+    <div className="space-y-8">
+      <div className="flex items-center gap-3">
+        <Avatar className="h-16 w-16 rounded-full">
+          <AvatarImage src={member?.profileImageUrl ?? undefined} />
+          <AvatarFallback>{member?.displayName?.[0] ?? 'E'}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 space-y-1">
+          <div className="text-xs text-muted-foreground">{t('settings.profile.display_name')}</div>
+          <p className="truncate text-sm text-foreground">{member?.displayName}</p>
+          {member?.memberName && (
+            <p className="truncate text-xs text-muted-foreground">@{member.memberName}</p>
           )}
-        />
-        <Separator />
-        <div className="flex justify-end gap-3 text-end">
-          <span className="text-xs text-muted-foreground">{appVersion}</span>
         </div>
-      </form>
-    </Form>
+      </div>
+
+      <div className="space-y-1">
+        <div className={`inline-flex items-center gap-2 ${SETTINGS_SECTION_TITLE}`}>
+          {t('settings.profile.primary_account.title')}
+          <Tooltip>
+            <TooltipTrigger
+              type={'button'}
+              aria-label={t('settings.profile.primary_account.about', 'About the primary account')}
+            >
+              <MonoIcon type={'HelpCircle'} className="h-4 w-4 text-muted-foreground" />
+            </TooltipTrigger>
+            <TooltipContent side={'right'}>
+              {t('settings.profile.primary_account.tooltip')}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <p className="text-sm text-foreground">{member?.email}</p>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        {t(
+          'settings.profile.synced_note',
+          'Your name and photo come from your Google or Microsoft account.'
+        )}
+      </p>
+
+      <Separator />
+      <div className="flex justify-end gap-3 text-end">
+        <span className="text-xs text-muted-foreground">
+          {t('settings.profile.version', 'Version {{version}}', { version: appVersion })}
+        </span>
+      </div>
+    </div>
   );
 }

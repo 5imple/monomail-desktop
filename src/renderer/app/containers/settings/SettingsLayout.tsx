@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 
 import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
-import { Label } from '@/renderer/app/components/ui/label';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { Separator } from '@/renderer/app/components/ui/separator';
 import SettingsAccountPage from '@/renderer/app/containers/settings/account/SettingsAccountPage';
@@ -51,7 +50,9 @@ const visibleSettingsPages = new Set([
   'template',
   'account',
   'inbox',
-  'threadlist',
+  // 'threadlist' (Conversation Display) is hidden: none of its toggles reach
+  // the inbox rows yet, so they did nothing. Its page and stored settings stay
+  // in place; deep links to it open General.
   'profile',
   'system'
 ]);
@@ -72,13 +73,16 @@ export function SidebarNav({
       {items.map((item, index) => {
         if (item.type === 'label') {
           // Newton section label: mono uppercase tracked, subtle muted tone.
+          // A heading, not a <label> (it labels no control).
           return (
-            <Label
-              className="block px-2 pb-1 pt-5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground"
+            <p
+              role="heading"
+              aria-level={3}
+              className="block px-2 pb-1 pt-5 font-mono text-[10px] font-medium uppercase leading-none tracking-[0.18em] text-muted-foreground"
               key={index}
             >
               {item.title}
-            </Label>
+            </p>
           );
         } else if (item.type === 'separator') {
           return <Separator key={index} />;
@@ -88,6 +92,8 @@ export function SidebarNav({
             <Button
               key={item.id}
               onClick={() => onItemClick(item.id!)}
+              data-active={isActive || undefined}
+              aria-current={isActive ? 'page' : undefined}
               variant={'ghost'}
               sizeVariant={'sm'}
               className={cn(
@@ -97,11 +103,10 @@ export function SidebarNav({
                   : 'hover:bg-muted-low/60'
               )}
             >
-              {/* Newton red leading bar marks the active item — matches the
-                  unread-thread treatment so the whole app reads as one
-                  consistent system. */}
+              {/* Leading bar marking the active item (bg-accent, a near-white
+                  neutral, made it invisible on the pill it marked). */}
               {isActive && (
-                <span className="absolute inset-y-1 left-0 w-[2px] rounded-r bg-accent" />
+                <span className="absolute inset-y-1 left-0 w-[2px] rounded-r bg-foreground" />
               )}
               {item.icon && (
                 <MonoIcon
@@ -134,8 +139,7 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
       type: 'item',
       title: t('settings.general.title'),
       id: 'general',
-      icon: 'Cog',
-      badge: 'New'
+      icon: 'Cog'
     },
     {
       type: 'item',
@@ -193,8 +197,8 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
     {
       type: 'item',
       title: t('settings.account.title'),
-
-      icon: 'UserCircle',
+      // Account colors: a swatch, not a third person icon.
+      icon: 'Swatch',
       id: 'account'
     },
     {
@@ -202,13 +206,6 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
       id: 'inbox',
       icon: 'Inbox',
       title: t('settings.display.inbox.title')
-    },
-    {
-      type: 'item',
-      id: 'threadlist',
-      icon: 'List',
-      title: t('settings.display.threadlist.title'),
-      badge: 'New'
     },
 
     //PROFILE
@@ -226,7 +223,8 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
       type: 'item',
       title: t('settings.system.title'),
       id: 'system',
-      icon: 'Cog'
+      // General already uses the cog.
+      icon: 'Computer'
     }
   ];
   useEffect(() => {
@@ -272,7 +270,9 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
     <>
       <div className="space-y-6">
         <div className="flex flex-row space-y-0">
-          <aside className="w-[240px] shrink-0 border-r border-border/60 bg-muted/40 p-3 dark:bg-card">
+          {/* Both columns fit short windows: the dialog was a fixed 720px tall,
+              so on a small window its top (with the close button) went off-screen. */}
+          <aside className="max-h-[min(720px,calc(100vh-6rem))] w-[240px] shrink-0 overflow-y-auto border-r border-border/60 bg-muted/40 p-3 dark:bg-card">
             <SidebarNav
               className="w-full"
               items={sidebarNavItems}
@@ -281,7 +281,12 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
             />
           </aside>
           <div className="flex-1">
-            <ScrollArea className="h-[720px] w-full" viewportClassName="p-8">
+            {/* Keyed by page so each one opens scrolled to its top. */}
+            <ScrollArea
+              key={activeItem}
+              className="h-[min(720px,calc(100vh-6rem))] w-full"
+              viewportClassName="p-8"
+            >
               {renderPage()}
             </ScrollArea>
           </div>

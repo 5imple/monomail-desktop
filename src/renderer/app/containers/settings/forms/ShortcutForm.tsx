@@ -21,6 +21,25 @@ const shortcutFormSchema = z.object({});
 
 type ShortcutFormValues = z.infer<typeof shortcutFormSchema>;
 
+// Keys handled outside the command list (keyboard navigation, the reader,
+// undo, the palette), so they were missing from this page. Names are
+// react-hotkeys-hook keys, which ShortcutKeyboard draws.
+const NAVIGATION_SHORTCUTS: Array<{ key: string; title: string; hotkeys: string[] }> = [
+  { key: 'move', title: 'Move up / down the list', hotkeys: ['up', 'down'] },
+  { key: 'extend', title: 'Extend the selection', hotkeys: ['shift+up', 'shift+down'] },
+  { key: 'select', title: 'Select or deselect', hotkeys: ['space'] },
+  { key: 'open', title: 'Open; Reply all in the reader', hotkeys: ['enter'] },
+  { key: 'back', title: 'Back, or clear the selection', hotkeys: ['esc'] },
+  { key: 'undo', title: 'Undo', hotkeys: ['Z'] },
+  { key: 'palette', title: 'Command palette', hotkeys: ['MOD+K'] }
+];
+
+const titleCase = (scope: string) =>
+  scope
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 export function ShortcutForm() {
   const commands = useCommands();
   const { t } = useTranslation();
@@ -46,7 +65,7 @@ export function ShortcutForm() {
     }
   }
 
-  const groupedCommands = Object.values(commands).reduce(
+  const commandsByTitle = Object.values(commands).reduce(
     (acc, command) => {
       if (!command.hotkeys || command.hotkeys.length === 0) return acc;
 
@@ -64,46 +83,87 @@ export function ShortcutForm() {
     {} as Record<string, Record<string, string[]>>
   );
 
+  // One row per key: commands that share the same keys (Mark as Read and Mark
+  // as Unread on U, Star and Unstar on S…) were listed twice.
+  const groupedCommands = Object.fromEntries(
+    Object.entries(commandsByTitle).map(([scope, byTitle]) => {
+      const rows = new Map<string, { titles: string[]; hotkeys: string[] }>();
+      Object.entries(byTitle).forEach(([title, hotkeys]) => {
+        const key = hotkeys.join('|');
+        const row = rows.get(key);
+        if (row) row.titles.push(title);
+        else rows.set(key, { titles: [title], hotkeys });
+      });
+      return [
+        scope,
+        [...rows.values()].map(({ titles, hotkeys }) => ({ title: titles.join(' / '), hotkeys }))
+      ];
+    })
+  ) as Record<string, Array<{ title: string; hotkeys: string[] }>>;
+
+  const listed = new Set(
+    Object.values(groupedCommands).flatMap((rows) => rows.map((row) => row.hotkeys.join('|')))
+  );
+  const navigationRows = NAVIGATION_SHORTCUTS.filter(
+    (row) => !listed.has(row.hotkeys.join('|'))
+  ).map((row) => ({
+    title: t(`settings.shortcut.navigation.${row.key}`, row.title),
+    hotkeys: row.hotkeys
+  }));
+  const sections: Array<[string, string, Array<{ title: string; hotkeys: string[] }>]> = [
+    ['navigation', t('settings.shortcut.scopes.navigation', 'Navigation'), navigationRows],
+    ...Object.entries(groupedCommands).map(
+      ([scope, rows]) =>
+        [scope, t(`settings.shortcut.scopes.${scope.toLowerCase()}`, titleCase(scope)), rows] as [
+          string,
+          string,
+          Array<{ title: string; hotkeys: string[] }>
+        ]
+    )
+  ];
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        {Object.entries(groupedCommands).map(([scope, commands]) => (
-          <React.Fragment key={scope}>
-            <div className="overflow-hidden rounded-md border shadow-sm">
-              <Table className="">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead colSpan={3} className="bg-muted text-muted-foreground">
-                      {scope
-                        .toLowerCase()
-                        .replace(/_/g, ' ')
-                        .replace(/\b\w/g, (char) => char.toUpperCase())}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {Object.entries(commands).map(([title, hotkeys]) => (
-                    <TableRow key={title}>
-                      <TableCell>{title}</TableCell>
-                      <TableCell className="w-32">
-                        <div className="flex gap-2">
-                          {hotkeys.map((hotkey, index) => (
-                            <React.Fragment key={hotkey}>
-                              <ShortcutKeyboard className="" shortcut={hotkey} />
-                              {index < hotkeys.length - 1 && (
-                                <span className="text-xs text-muted-foreground"> or </span>
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      </TableCell>
+        {sections
+          .filter(([, , rows]) => rows.length > 0)
+          .map(([scope, heading, rows]) => (
+            <React.Fragment key={scope}>
+              <div className="overflow-hidden rounded-md border shadow-sm">
+                <Table className="">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead colSpan={2} className="bg-muted text-muted-foreground">
+                        {heading}
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </React.Fragment>
-        ))}
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map(({ title, hotkeys }) => (
+                      // A reference table: rows don't react to hover.
+                      <TableRow key={title} className="hover:bg-transparent">
+                        <TableCell>{title}</TableCell>
+                        <TableCell className="w-32">
+                          <div className="flex items-center gap-2">
+                            {hotkeys.map((hotkey, index) => (
+                              <React.Fragment key={hotkey}>
+                                <ShortcutKeyboard className="" shortcut={hotkey} />
+                                {index < hotkeys.length - 1 && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {t('settings.shortcut.or', 'or')}
+                                  </span>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </React.Fragment>
+          ))}
       </form>
     </Form>
   );

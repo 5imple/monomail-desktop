@@ -1,9 +1,19 @@
 import authApi from '@/main/api/auth/authApi';
 import { UserPreference } from '@/main/api/auth/types';
 import { Button, buttonVariants } from '@/renderer/app/components/ui/button';
-import { Form, FormControl, FormField, FormItem } from '@/renderer/app/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel
+} from '@/renderer/app/components/ui/form';
 import { Switch } from '@/renderer/app/components/ui/switch';
-import { SettingsPageHeader } from '@/renderer/app/containers/settings/SettingsPageHeader';
+import {
+  SETTINGS_SECTION_TITLE,
+  SettingsPageHeader
+} from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
@@ -38,8 +48,13 @@ export function DisplayInboxForm() {
   // Local copy of preference so we can reflect fresh updates immediately
   const [localPreference, setLocalPreference] = useState(preference);
 
-  // Account handling (similar to LabelForm)
-  const accountUids = useMemo(() => accounts.map((acc) => acc.uid), [accounts]);
+  // Account handling (similar to LabelForm). Categories are Gmail's: for a
+  // Microsoft 365 account these toggles built Gmail-only search terms that
+  // Outlook ignores, so only Google accounts are listed.
+  const accountUids = useMemo(
+    () => accounts.filter((acc) => acc.provider === 'google').map((acc) => acc.uid),
+    [accounts]
+  );
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accountUids[0] ?? '');
 
   // If accounts load later, ensure a default is selected
@@ -127,9 +142,9 @@ export function DisplayInboxForm() {
 
       setLocalPreference(updatedPreference);
 
-      // Update global preference state
+      // Update global preference state (awaited, so a failure reaches the catch)
       if (updatePreference) {
-        updatePreference({ display: updatedPreference.display });
+        await updatePreference({ display: updatedPreference.display });
       }
 
       // Update electron with the new category preferences
@@ -150,12 +165,14 @@ export function DisplayInboxForm() {
 
   // Determine if settings have been modified
   const isModified = useMemo(() => {
+    // Same defaults as the form (everything shown), so an untouched form
+    // doesn't count as modified.
     const currentPrefs = localPreference.display.inbox?.category?.[selectedAccountId] ?? {
       showPromotions:
-        preference.display.inbox.category?.[selectedAccountId]?.showPromotions ?? false,
-      showSocial: preference.display.inbox.category?.[selectedAccountId]?.showSocial ?? false,
+        preference.display.inbox.category?.[selectedAccountId]?.showPromotions ?? true,
+      showSocial: preference.display.inbox.category?.[selectedAccountId]?.showSocial ?? true,
       showUpdates: preference.display.inbox.category?.[selectedAccountId]?.showUpdates ?? true,
-      showForums: preference.display.inbox.category?.[selectedAccountId]?.showForums ?? false
+      showForums: preference.display.inbox.category?.[selectedAccountId]?.showForums ?? true
     };
 
     return (
@@ -212,7 +229,7 @@ export function DisplayInboxForm() {
                     className={cn(buttonVariants({ variant: 'secondary' }))}
                   />
                 </SelectTrigger>
-                <SelectContent className="dark">
+                <SelectContent>
                   {accountUids.map((accountId) => (
                     <SelectItem key={accountId} value={accountId}>
                       {accountEmailMap[accountId]}
@@ -223,48 +240,61 @@ export function DisplayInboxForm() {
             ) : undefined
           }
         />
-        <div>
-          <div className="space-y-4">
-            {/* Master toggle for category splitting */}
-            {/* Individual category toggles - only show when category splitting is enabled */}
+        {accountUids.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t(
+              'settings.display.inbox.category.gmail_only',
+              "Inbox categories are a Gmail feature. Microsoft 365 accounts aren't split into categories."
+            )}
+          </p>
+        ) : (
+          <>
+            <div>
+              <div className="space-y-4">
+                {/* Master toggle for category splitting */}
+                {/* Individual category toggles - only show when category splitting is enabled */}
 
-            <div className="space-y-0.5">
-              <h4 className="font-medium text-foreground">
-                {t('settings.display.inbox.category.title')}
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                {t('settings.display.inbox.category.enable_splitting_description')}
-              </p>
+                <div className="space-y-0.5">
+                  <h4 className={SETTINGS_SECTION_TITLE}>
+                    {t('settings.display.inbox.category.title')}
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    {t('settings.display.inbox.category.enable_splitting_description')}
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  {categorySettings.map((category) => (
+                    <FormField
+                      key={category.name}
+                      control={form.control}
+                      name={category.name as keyof InboxCategoryFormValues}
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between">
+                          {/* A real label and description for the switch (they were
+                          bare text), at the same switch size as other pages. */}
+                          <div className="space-y-0.5">
+                            <FormLabel className="cursor-pointer text-sm font-normal text-foreground">
+                              {category.title}
+                            </FormLabel>
+                            <FormDescription>{category.description}</FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="space-y-4">
-              {categorySettings.map((category) => (
-                <FormField
-                  key={category.name}
-                  control={form.control}
-                  name={category.name as keyof InboxCategoryFormValues}
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between">
-                      <div className="space-y-0.5">
-                        <h4 className="text-sm text-foreground">{category.title}</h4>
-                        <p className="text-sm text-muted-foreground">{category.description}</p>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          size={'sm'}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-        <Button type="submit" disabled={!isModified}>
-          {t('settings.buttons.save_changes')}
-        </Button>
+            <Button type="submit" disabled={!isModified || form.formState.isSubmitting}>
+              {form.formState.isSubmitting
+                ? t('settings.buttons.saving', 'Saving…')
+                : t('settings.buttons.save_changes')}
+            </Button>
+          </>
+        )}
       </form>
     </Form>
   );
