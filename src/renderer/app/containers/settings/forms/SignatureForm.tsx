@@ -10,7 +10,12 @@ import {
   FormLabel
 } from '@/renderer/app/components/ui/form';
 import { Switch } from '@/renderer/app/components/ui/switch';
+import {
+  SETTINGS_SECTION_TITLE,
+  SettingsChangeDot
+} from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { cn } from '@/renderer/app/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -71,8 +76,9 @@ function SignatureForm() {
       setLocalPreference(updatedPreference);
 
       // Also update the global preference if updatePreference is available
+      // (awaited, so a failure reaches the catch below)
       if (updatePreference) {
-        updatePreference({
+        await updatePreference({
           signature: {
             includeInReplies: data.include_in_replies,
             includeInForwards: data.include_in_forwards,
@@ -120,20 +126,20 @@ function SignatureForm() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <div className="space-y-6">
             <div className="pt-6">
-              <h4 className="mb-4 font-medium">{t('settings.signature.inclusion_settings')}</h4>
+              <h4 className={cn('mb-4', SETTINGS_SECTION_TITLE)}>
+                {t('settings.signature.inclusion_settings')}
+              </h4>
 
               <div className="space-y-4">
                 <FormField
                   control={form.control}
                   name="include_in_new_messages"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between">
+                    <FormItem className="flex flex-row items-center justify-between space-y-0">
                       <div className="space-y-0.5">
                         <FormLabel className="flex items-center gap-2 text-foreground">
                           {t('settings.signature.include_in_new_messages')}
-                          {isIncludeInNewMessagesModified && (
-                            <div className="h-2 w-2 rounded-full bg-accent" />
-                          )}
+                          {isIncludeInNewMessagesModified && <SettingsChangeDot />}
                         </FormLabel>
                         <FormDescription>
                           {t('settings.signature.include_in_new_messages_description', {
@@ -152,13 +158,11 @@ function SignatureForm() {
                   control={form.control}
                   name="include_in_replies"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between">
+                    <FormItem className="flex flex-row items-center justify-between space-y-0">
                       <div className="space-y-0.5">
                         <FormLabel className="flex items-center gap-2 text-foreground">
                           {t('settings.signature.include_in_replies')}
-                          {isIncludeInRepliesModified && (
-                            <div className="h-2 w-2 rounded-full bg-accent" />
-                          )}
+                          {isIncludeInRepliesModified && <SettingsChangeDot />}
                         </FormLabel>
                         <FormDescription>
                           {t('settings.signature.include_in_replies_description', {
@@ -177,13 +181,11 @@ function SignatureForm() {
                   control={form.control}
                   name="include_in_forwards"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between">
+                    <FormItem className="flex flex-row items-center justify-between space-y-0">
                       <div className="space-y-0.5">
                         <FormLabel className="flex items-center gap-2 text-foreground">
                           {t('settings.signature.include_in_forwards')}
-                          {isIncludeInForwardsModified && (
-                            <div className="h-2 w-2 rounded-full bg-accent" />
-                          )}
+                          {isIncludeInForwardsModified && <SettingsChangeDot />}
                         </FormLabel>
                         <FormDescription>
                           {t('settings.signature.include_in_forwards_description', {
@@ -201,8 +203,10 @@ function SignatureForm() {
             </div>
           </div>
 
-          <Button type="submit" disabled={!hasModifications}>
-            {t('settings.buttons.save_changes')}
+          <Button type="submit" disabled={!hasModifications || form.formState.isSubmitting}>
+            {form.formState.isSubmitting
+              ? t('settings.buttons.saving', 'Saving…')
+              : t('settings.buttons.save_changes')}
           </Button>
         </form>
       </Form>

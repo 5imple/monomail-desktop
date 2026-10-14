@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import MonoIcon from '@/renderer/app/components/icons/icons';
 import AccountList from '@/renderer/app/components/ui/account-list';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
@@ -12,21 +13,16 @@ import {
   DropdownMenuCheckboxItem
 } from '@/renderer/app/components/ui/dropdown-menu';
 import { Form } from '@/renderer/app/components/ui/form';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/renderer/app/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/renderer/app/components/ui/table';
+import { SettingsChangeDot } from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 
-// Change indicator component
-const ChangeIndicator = () => <div className="ml-1 h-2 w-2 rounded-full bg-accent" />;
+// Swatches big enough to tell apart, with an edge so Silver shows on the light
+// button and Gray on the dark menu.
+const SWATCH = 'h-3 w-3 shrink-0 rounded-full ring-1 ring-inset ring-foreground/15';
 
 const COLOR_PALETTE = [
   { hex: '#035ddf', name: 'Blue' },
@@ -111,9 +107,9 @@ export function AccountForm() {
 
       setLocalPreference(updatedPreference);
 
-      // Also update the global preference
+      // Also update the global preference (awaited, so a failure reaches the catch)
       if (updatePreference) {
-        updatePreference({
+        await updatePreference({
           account: {
             ...localPreference.account,
             accentColor: data.accentColor
@@ -133,6 +129,16 @@ export function AccountForm() {
     return COLOR_PALETTE.find((color) => color.hex === hex)?.name || 'Custom';
   };
 
+  // Primary account first, as a copy: sorting the context's array in place
+  // reordered it for everyone.
+  const sortedAccounts = useMemo(
+    () =>
+      [...accounts].sort(
+        (a, b) => Number(b.uid === member?.primaryUid) - Number(a.uid === member?.primaryUid)
+      ),
+    [accounts, member?.primaryUid]
+  );
+
   if (!member || accounts.length === 0) return null;
 
   return (
@@ -140,77 +146,73 @@ export function AccountForm() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         {/* Account Colors Section */}
         <div>
+          {/* No table header: it only repeated the page title. */}
           <div className="overflow-hidden rounded-md border shadow-sm">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead colSpan={2} className="bg-muted">
-                    {t('settings.account.title', 'Account Colors')}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
               <TableBody>
-                {accounts
-                  .sort((a) => (a.uid === member?.primaryUid ? -1 : 1))
-                  .map((account) => (
-                    <TableRow key={account.email}>
-                      <TableCell className="h-12 p-4">
-                        <AccountList accounts={[account]} />
-                      </TableCell>
-                      <TableCell className="h-full gap-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="secondary" className="w-36 justify-between">
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="h-2 w-2 rounded-full"
-                                  style={{
-                                    backgroundColor: watchValues.accentColor[account.uid]
-                                  }}
-                                />
-                                {getColorNameOrDefault(watchValues.accentColor[account.uid])}
-                              </div>
+                {sortedAccounts.map((account) => (
+                  <TableRow key={account.email}>
+                    <TableCell className="h-12 p-4">
+                      <AccountList accounts={[account]} />
+                    </TableCell>
+                    {/* Right-aligned like the Accounts page's actions. */}
+                    <TableCell className="h-12 text-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="secondary" className="w-40 justify-between">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={SWATCH}
+                                style={{
+                                  backgroundColor: watchValues.accentColor[account.uid]
+                                }}
+                              />
+                              {getColorNameOrDefault(watchValues.accentColor[account.uid])}
+                            </div>
+                            <div className="flex items-center gap-1.5">
                               {isFieldModified(
                                 'accentColor',
                                 account.uid,
                                 preference.account?.accentColor?.[account.uid] || '#035ddf'
-                              ) && <ChangeIndicator />}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuGroup>
-                              {COLOR_PALETTE.map((color) => (
-                                <DropdownMenuCheckboxItem
-                                  key={color.hex}
-                                  checked={watchValues.accentColor[account.uid] === color.hex}
-                                  onClick={() =>
-                                    form.setValue(`accentColor.${account.uid}`, color.hex)
-                                  }
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      className="h-2 w-2 rounded-full"
-                                      style={{ backgroundColor: color.hex }}
-                                    />
-                                    {color.name}
-                                  </div>
-                                </DropdownMenuCheckboxItem>
-                              ))}
-                            </DropdownMenuGroup>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              ) && <SettingsChangeDot />}
+                              <MonoIcon type="ChevronDown" className="h-4 w-4 opacity-50" />
+                            </div>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuGroup>
+                            {COLOR_PALETTE.map((color) => (
+                              <DropdownMenuCheckboxItem
+                                key={color.hex}
+                                checked={watchValues.accentColor[account.uid] === color.hex}
+                                onClick={() =>
+                                  form.setValue(`accentColor.${account.uid}`, color.hex)
+                                }
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className={SWATCH} style={{ backgroundColor: color.hex }} />
+                                  {color.name}
+                                </div>
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
 
           {/* Add more account settings sections as needed */}
 
-          <div className="mt-4 flex justify-end">
-            <Button type="submit" disabled={!isFormModified}>
-              {t('settings.buttons.save_changes', 'Save Changes')}
+          {/* Left-aligned, like Save on every other page. */}
+          <div className="mt-4">
+            <Button type="submit" disabled={!isFormModified || form.formState.isSubmitting}>
+              {form.formState.isSubmitting
+                ? t('settings.buttons.saving', 'Saving…')
+                : t('settings.buttons.save_changes', 'Save Changes')}
             </Button>
           </div>
         </div>

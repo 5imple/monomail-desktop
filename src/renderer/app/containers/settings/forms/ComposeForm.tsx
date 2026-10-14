@@ -5,12 +5,12 @@ import { useMemo } from 'react';
 
 import { Button } from '@/renderer/app/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/renderer/app/components/ui/select';
 import {
   Form,
   FormControl,
@@ -21,7 +21,12 @@ import {
   FormMessage
 } from '@/renderer/app/components/ui/form';
 import { Switch } from '@/renderer/app/components/ui/switch';
+import {
+  SETTINGS_SECTION_TITLE,
+  SettingsChangeDot
+} from '@/renderer/app/containers/settings/SettingsPageHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { cn } from '@/renderer/app/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 
@@ -62,8 +67,10 @@ export function ComposeForm() {
     [watchCancelWindow, preference.compose.cancelWindow]
   );
 
+  // Unset counts as off (as the form reads it), or Fullscreen showed as
+  // changed, and Save enabled, before anything was touched.
   const isFullscreenModified = useMemo(
-    () => watchFullscreen !== preference.compose.fullscreen,
+    () => watchFullscreen !== (preference.compose.fullscreen ?? false),
     [watchFullscreen, preference.compose.fullscreen]
   );
 
@@ -95,34 +102,37 @@ export function ComposeForm() {
               name={`cancel_window`}
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel className="flex items-center gap-2 text-foreground">
+                  <FormLabel className={cn('flex items-center gap-2', SETTINGS_SECTION_TITLE)}>
                     {t('settings.compose.undo_send.title')}
-                    {isCancelWindowModified && <div className="h-2 w-2 rounded-full bg-accent" />}
+                    {isCancelWindowModified && <SettingsChangeDot />}
                   </FormLabel>
                   <FormDescription>{t('settings.compose.undo_send.description')}</FormDescription>
-                  <FormControl>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="secondary" className="w-[150px] justify-between">
-                          {cancelWindow.find((window) => window.value === field.value)?.label ||
-                            'Select label'}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuGroup>
-                          {cancelWindow.map((window) => (
-                            <DropdownMenuCheckboxItem
-                              key={window.value}
-                              checked={field.value === window.value}
-                              onClick={() => form.setValue(`cancel_window`, window.value)}
-                            >
-                              {window.label}
-                            </DropdownMenuCheckboxItem>
-                          ))}
-                        </DropdownMenuGroup>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </FormControl>
+                  {/* A select, tied to its label (FormControl on a menu root reached
+                      no element), with a chevron saying it opens. An unknown stored
+                      value shows the placeholder rather than a wrong option. */}
+                  <Select
+                    value={
+                      cancelWindow.some((window) => window.value === field.value)
+                        ? String(field.value)
+                        : ''
+                    }
+                    onValueChange={(value) => field.onChange(Number(value))}
+                  >
+                    <FormControl>
+                      <SelectTrigger variant="secondary" className="w-[150px]">
+                        <SelectValue
+                          placeholder={t('settings.compose.undo_send.placeholder', 'Choose…')}
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {cancelWindow.map((window) => (
+                        <SelectItem key={window.value} value={String(window.value)}>
+                          {window.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -133,11 +143,12 @@ export function ComposeForm() {
               control={form.control}
               name="fullscreen"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between">
+                // space-y-0: FormItem's spacing pushed the switch ~4px below its label.
+                <FormItem className="flex flex-row items-center justify-between space-y-0">
                   <div className="space-y-0.5">
-                    <FormLabel className="flex items-center gap-2 text-sm text-foreground">
+                    <FormLabel className={cn('flex items-center gap-2', SETTINGS_SECTION_TITLE)}>
                       {t('settings.compose.fullscreen.title')}
-                      {isFullscreenModified && <div className="h-2 w-2 rounded-full bg-accent" />}
+                      {isFullscreenModified && <SettingsChangeDot />}
                     </FormLabel>
                     <FormDescription>
                       {t('settings.compose.fullscreen.description')}
@@ -150,7 +161,16 @@ export function ComposeForm() {
               )}
             />
           </div>
-          <Button type="submit">{t('settings.buttons.save_changes')}</Button>
+          <Button
+            type="submit"
+            disabled={
+              (!isCancelWindowModified && !isFullscreenModified) || form.formState.isSubmitting
+            }
+          >
+            {form.formState.isSubmitting
+              ? t('settings.buttons.saving', 'Saving…')
+              : t('settings.buttons.save_changes')}
+          </Button>
         </div>
       </form>
     </Form>

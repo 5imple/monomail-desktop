@@ -16,7 +16,6 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useTemplateAtom } from '@/renderer/app/store/compose/useTemplateAtom';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Form } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const TemplateForm = () => {
@@ -65,14 +64,32 @@ const TemplateForm = () => {
     } catch (error) {
       console.error('Error saving template:', error);
       toast.error(t('settings.template.template_save_error'));
+      // Rethrown so the editor stays open with what was typed (it closed and
+      // lost it).
+      throw error;
     }
   };
 
-  const handleDeleteTemplate = async (id) => {
+  // Deleting is instant, with Undo in the toast (templates are local, so
+  // putting one back is cheap). It used to be gone on the first click.
+  const handleDeleteTemplate = async (template: IMonoTemplate) => {
     try {
-      await templateApi.deleteTemplate({ templateId: id });
-      removeTemplateById(id);
-      toast.success(t('settings.template.template_deleted'));
+      await templateApi.deleteTemplate({ templateId: template.id });
+      removeTemplateById(template.id);
+      toast.success(t('settings.template.template_deleted'), {
+        action: {
+          label: t('toast.undo'),
+          onClick: async () => {
+            try {
+              await templateApi.addTemplate({ template });
+              addTemplate(template);
+            } catch (error) {
+              console.error('Error restoring template:', error);
+              toast.error(t('settings.template.template_save_error'));
+            }
+          }
+        }
+      });
     } catch (error) {
       console.error('Error deleting template:', error);
       toast.error(t('settings.template.template_delete_error'));
@@ -92,6 +109,11 @@ const TemplateForm = () => {
             </Button>
           }
         />
+
+        {/* How templates are used: nothing on the page said so. */}
+        <p className="-mt-4 text-sm text-muted-foreground">
+          {t('settings.template.slash_hint', 'Type / in any message to insert a template.')}
+        </p>
 
         <div className="overflow-hidden rounded-md border shadow-sm">
           <div className="flex gap-1 border-b bg-muted px-2 py-2">
@@ -114,25 +136,32 @@ const TemplateForm = () => {
                 key={template.id}
                 className="flex items-center gap-1 overflow-hidden border-b p-2 py-1 last:border-0"
               >
-                {/* Icon column */}
-                <div
-                  className={cn('mx-3 flex basis-10 items-center justify-start text-primary/80')}
+                {/* The row opens the editor (it took the small "…" menu). */}
+                <button
+                  type="button"
+                  onClick={() => openEditDialog(template)}
+                  className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-1 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {template.icon && <MonoIcon type={template.icon as MonoIconType} />}
-                </div>
+                  {/* Icon column */}
+                  <div
+                    className={cn('mx-3 flex basis-10 items-center justify-start text-primary/80')}
+                  >
+                    {template.icon && <MonoIcon type={template.icon as MonoIconType} />}
+                  </div>
 
-                <div className="basis-32 overflow-hidden text-ellipsis text-sm">
-                  <span className="whitespace-nowrap">
-                    <span className="text-muted-foreground">/ </span>
-                    {template.name}
-                  </span>
-                </div>
+                  <div className="basis-32 overflow-hidden text-ellipsis text-sm">
+                    <span className="whitespace-nowrap">
+                      <span className="text-muted-foreground">/ </span>
+                      {template.name}
+                    </span>
+                  </div>
 
-                <div className="flex-1 overflow-hidden text-ellipsis">
-                  <span className="line-clamp-1 text-sm text-muted-foreground">
-                    {getPlainTextSnippet(template.body) || t('settings.template.no_body')}
-                  </span>
-                </div>
+                  <div className="flex-1 overflow-hidden text-ellipsis">
+                    <span className="line-clamp-1 text-sm text-muted-foreground">
+                      {getPlainTextSnippet(template.body) || t('settings.template.no_body')}
+                    </span>
+                  </div>
+                </button>
                 <div className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -141,9 +170,12 @@ const TemplateForm = () => {
                         sizeVariant="sm"
                         typeVariant="icon"
                         className="h-8 w-8 p-0"
+                        aria-label={t('settings.template.actions_for', {
+                          name: template.name,
+                          defaultValue: 'Actions for {{name}}'
+                        })}
                       >
                         <MonoIcon type="MoreHorizontal" className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -153,7 +185,7 @@ const TemplateForm = () => {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                        onClick={() => handleDeleteTemplate(template.id)}
+                        onClick={() => handleDeleteTemplate(template)}
                       >
                         <MonoIcon type="Trash" className="mr-2 h-4 w-4" />
                         <span>{t('settings.template.remove_template')}</span>

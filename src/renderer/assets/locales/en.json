@@ -347,8 +347,12 @@
       "disconnect": "Disconnect",
       "reconnect": "Reconnect",
       "upgrade_plan": "Upgrade Plan",
-      "no_accounts": "No user found",
-      "add_account": "Add Account"
+      "no_accounts": "No accounts connected",
+      "add_account": "Add Account",
+      "waiting_for_sign_in": "Waiting for browser sign-in…",
+      "sign_in_hint": "Finish signing in in your browser. If you closed it, this resets after 5 minutes.",
+      "disconnect_confirm_title": "Disconnect {{email}}?",
+      "disconnect_confirm_body": "Its mail stops showing in this app. Nothing is deleted from the mailbox, and you can add the account again any time."
     },
     "compose": {
       "title": "Compose",
@@ -362,7 +366,8 @@
           "15": "15 seconds",
           "20": "20 seconds",
           "30": "30 seconds"
-        }
+        },
+        "placeholder": "Choose…"
       },
       "fullscreen": {
         "title": "Fullscreen Compose",
@@ -376,7 +381,12 @@
       "no_labels": "No labels found",
       "label_name": "Label Name",
       "delete": "Delete label",
-      "confirm_delete": "Delete the label \"{{name}}\"? Emails keep their other labels."
+      "confirm_delete": "Delete the label \"{{name}}\"? Emails keep their other labels.",
+      "color": "Label color",
+      "saved": "Labels saved",
+      "name_required": "Give the label a name",
+      "select_account": "Please select an account",
+      "unsupported_provider": "Labels aren't available for Microsoft 365 accounts yet."
     },
     "profile": {
       "title": "Profile",
@@ -459,7 +469,7 @@
       "signatures_tab": "Signatures",
       "signature_updated": "Signature updated successfully",
       "signature_added": "New signature added successfully",
-      "signature_deleted": "Signature deleted successfully",
+      "signature_deleted": "Signature deleted",
       "signature_save_error": "Failed to save signature",
       "signature_delete_error": "Failed to delete signature",
       "default_signature_set": "Default signature updated",
@@ -469,7 +479,10 @@
       "set_as_default": "Set as default",
       "default_for_accounts": "Default for these accounts",
       "current_account": "Current account",
-      "multiple_defaults": "Default for {{count}} accounts"
+      "multiple_defaults": "Default for {{count}} accounts",
+      "deleted_default_one": "It was the default signature for 1 account.",
+      "deleted_default_other": "It was the default signature for {{count}} accounts.",
+      "actions_for": "Actions for {{name}}"
     },
     "template": {
       "title": "Templates",
@@ -489,12 +502,14 @@
       "no_body": "No content",
       "template_added": "Template added successfully",
       "template_updated": "Template updated successfully",
-      "template_deleted": "Template deleted successfully",
+      "template_deleted": "Template deleted",
       "template_save_error": "Error saving template",
       "template_delete_error": "Error deleting template",
       "name_required": "Template name is required",
       "save_changes": "Save Changes",
-      "save": "Save"
+      "save": "Save",
+      "actions_for": "Actions for {{name}}",
+      "slash_hint": "Type / in any message to insert a template."
     },
     "display": {
       "title": "Display",
