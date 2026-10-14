@@ -5,6 +5,9 @@ import pluginReact from 'eslint-plugin-react';
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
+  // Flat config doesn't read .eslintignore: build output and generated test
+  // bundles are ignored here.
+  { ignores: ['dist/**', 'out/**', 'scripts/__tests__/m365/.build/**'] },
   { files: ['**/*.{js,mjs,cjs,ts,jsx,tsx}'] },
   { languageOptions: { globals: globals.browser } },
   pluginJs.configs.recommended,
@@ -36,5 +39,11 @@ export default [
   },
   {
     settings: {}
+  },
+  // Node-side scripts and the CommonJS config files at the root.
+  {
+    files: ['scripts/**/*.{js,mjs,cjs}', '*.config.{js,cjs,mjs}'],
+    languageOptions: { globals: globals.node },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
   }
 ];
