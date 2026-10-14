@@ -184,15 +184,10 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
   });
   const { t } = useTranslation();
   const { isKeyboardMode } = useKeyboardNavigationContext();
-  const elementRef = useRef<HTMLDivElement | null>(null);
-
   // Combined ref function to handle both sortable and keyboard navigation
   const combinedRef = useCallback(
     (node: HTMLDivElement | null) => {
-      // Set the sortable ref
       setNodeRef(node);
-      // Set our internal ref
-      elementRef.current = node;
     },
     [setNodeRef]
   );

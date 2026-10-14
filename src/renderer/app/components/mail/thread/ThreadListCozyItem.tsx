@@ -46,7 +46,6 @@ export const ThreadListCozyItem = React.memo(
       const containerRef = useRef<HTMLDivElement | null>(null);
       // Last measured height; the default approximates a rendered row.
       const placeholderHeightRef = useRef<number | null>(null);
-      const hasBeenVisibleRef = useRef(false);
       const lastThreadRef = useRef<MonoThread | null>(null);
 
       // No memo on currentThread to ensure it always has the latest data
@@ -141,10 +140,6 @@ export const ThreadListCozyItem = React.memo(
           setTimeout(() => setOpacity(100), 0);
         }
       }, [isRendering]);
-
-      useEffect(() => {
-        if (opacity === 100) hasBeenVisibleRef.current = true;
-      }, [opacity]);
 
       const handleClick = useCallback(
         (e: React.MouseEvent | React.KeyboardEvent) => {

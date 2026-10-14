@@ -106,7 +106,6 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
   const hoveredThreadIdRef = useRef<string | null>(null);
 
   // Track if we're currently applying programmatic focus to prevent loops
-  const isProgrammaticFocus = useRef(false);
 
   // Store which areas are disabled
   const [disabledAreas, setDisabledAreas] = useState<DisabledAreasMap>({
@@ -962,16 +961,9 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
 
     if (currentRef && isFocusable(currentRef)) {
       try {
-        // Set flag to prevent focus event loop
-        isProgrammaticFocus.current = true;
         currentRef.focus();
-        // Reset flag after a brief delay to allow the focus event to process
-        setTimeout(() => {
-          isProgrammaticFocus.current = false;
-        }, 0);
       } catch (error) {
         console.warn('Failed to focus element:', error);
-        isProgrammaticFocus.current = false;
         return;
       }
 
@@ -1274,18 +1266,6 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
 
       if (activeElement !== currentRef && !currentRef.contains(activeElement)) {
         // The navigation system's tracked element is not the currently focused element
-        // Focus our tracked element first
-        // try {
-        //   isProgrammaticFocus.current = true;
-        //   currentRef.focus();
-        //   setTimeout(() => {
-        //     isProgrammaticFocus.current = false;
-        //   }, 0);
-        // } catch (error) {
-        //   console.warn('Failed to focus element before activation:', error);
-        //   isProgrammaticFocus.current = false;
-        //   return;
-        // }
         return;
       }
 

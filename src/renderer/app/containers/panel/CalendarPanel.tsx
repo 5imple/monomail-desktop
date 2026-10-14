@@ -165,10 +165,6 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
   // Abort controllers per month
   const abortControllersRef = useRef<Record<string, AbortController>>({});
 
-  // Track an active popover's re-render function so we can update content without closing
-  const activePopoverRerenderRef = useRef<null | (() => void)>(null);
-  const activePopoverEventIdRef = useRef<string | null>(null);
-
   const { activeSpace } = useSpaceAtom();
   const { accounts, preference } = useAuth();
 
@@ -587,10 +583,6 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       );
 
     renderEditor();
-
-    // allow external refresh when draftChanges changes
-    activePopoverRerenderRef.current = renderEditor;
-    activePopoverEventIdRef.current = eventId || null;
 
     // Capture an initial rect and then stick to the last known rect to avoid flicker to (0,0)
     const computeInitialRect = (): DOMRect => {

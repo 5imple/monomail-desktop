@@ -1,9 +1,5 @@
-import { zodResolver } from '@hookform/resolvers/zod';
 import React from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
 
-import { Form } from '@/renderer/app/components/ui/form';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import {
   Table,
@@ -15,11 +11,6 @@ import {
 } from '@/renderer/app/components/ui/table';
 import { useCommands } from '@/renderer/app/lib/commands/useCommands';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-
-const shortcutFormSchema = z.object({});
-
-type ShortcutFormValues = z.infer<typeof shortcutFormSchema>;
 
 // Keys handled outside the command list (keyboard navigation, the reader,
 // undo, the palette), so they were missing from this page. Names are
@@ -43,27 +34,6 @@ const titleCase = (scope: string) =>
 export function ShortcutForm() {
   const commands = useCommands();
   const { t } = useTranslation();
-
-  const form = useForm<ShortcutFormValues>({
-    resolver: zodResolver(shortcutFormSchema),
-    mode: 'onChange'
-  });
-
-  function onSubmit(data: ShortcutFormValues) {
-    try {
-      toast(
-        <div>
-          <div>You submitted the following values:</div>
-          <pre className="mt-2 w-full rounded-md bg-slate-950 p-4">
-            <code className="text-white">{JSON.stringify(data, null, 2)}</code>
-          </pre>
-        </div>
-      );
-    } catch (error) {
-      console.error('Error updating shortcut:', error);
-      toast.error(t('toast.error.shortcut_update'));
-    }
-  }
 
   const commandsByTitle = Object.values(commands).reduce(
     (acc, command) => {
@@ -123,48 +93,48 @@ export function ShortcutForm() {
   ];
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        {sections
-          .filter(([, , rows]) => rows.length > 0)
-          .map(([scope, heading, rows]) => (
-            <React.Fragment key={scope}>
-              <div className="overflow-hidden rounded-md border shadow-sm">
-                <Table className="">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead colSpan={2} className="bg-muted text-muted-foreground">
-                        {heading}
-                      </TableHead>
+    // Read-only page: a plain container (the form around it had no fields
+    // and only a template debug submit).
+    <div className="space-y-8">
+      {sections
+        .filter(([, , rows]) => rows.length > 0)
+        .map(([scope, heading, rows]) => (
+          <React.Fragment key={scope}>
+            <div className="overflow-hidden rounded-md border shadow-sm">
+              <Table className="">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead colSpan={2} className="bg-muted text-muted-foreground">
+                      {heading}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map(({ title, hotkeys }) => (
+                    // A reference table: rows don't react to hover.
+                    <TableRow key={title} className="hover:bg-transparent">
+                      <TableCell>{title}</TableCell>
+                      <TableCell className="w-32">
+                        <div className="flex items-center gap-2">
+                          {hotkeys.map((hotkey, index) => (
+                            <React.Fragment key={hotkey}>
+                              <ShortcutKeyboard className="" shortcut={hotkey} />
+                              {index < hotkeys.length - 1 && (
+                                <span className="text-xs text-muted-foreground">
+                                  {t('settings.shortcut.or', 'or')}
+                                </span>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map(({ title, hotkeys }) => (
-                      // A reference table: rows don't react to hover.
-                      <TableRow key={title} className="hover:bg-transparent">
-                        <TableCell>{title}</TableCell>
-                        <TableCell className="w-32">
-                          <div className="flex items-center gap-2">
-                            {hotkeys.map((hotkey, index) => (
-                              <React.Fragment key={hotkey}>
-                                <ShortcutKeyboard className="" shortcut={hotkey} />
-                                {index < hotkeys.length - 1 && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {t('settings.shortcut.or', 'or')}
-                                  </span>
-                                )}
-                              </React.Fragment>
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </React.Fragment>
-          ))}
-      </form>
-    </Form>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </React.Fragment>
+        ))}
+    </div>
   );
 }

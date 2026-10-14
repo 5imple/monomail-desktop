@@ -24,7 +24,6 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
   const BASIC_SPACE_LIMIT = 2;
 
   // Ref for the container area
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Refs for individual space cards and add button
   const spaceRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -53,7 +52,6 @@ const AppSpaceContainer: FC<AppSpaceContainerProps> = ({}) => {
   // first and appear later (a second space in-session).
   const setContainerRef = useCallback(
     (element: HTMLDivElement | null) => {
-      containerRef.current = element;
       if (element) registerAreaRef('space-nav', element);
     },
     [registerAreaRef]

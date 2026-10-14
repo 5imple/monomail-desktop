@@ -45,8 +45,6 @@ export const ThreadListDenseItem = React.memo(
       const containerRef = useRef<HTMLDivElement | null>(null);
       // Last measured height; the default approximates a rendered row.
       const placeholderHeightRef = useRef<number | null>(null);
-      const itemRef = useRef<HTMLDivElement | null>(null);
-      const hasBeenVisibleRef = useRef(false);
       const lastThreadRef = useRef<MonoThread | null>(null);
 
       // Use direct access to thread instead of memoizing to ensure we always have latest data
@@ -100,8 +98,6 @@ export const ThreadListDenseItem = React.memo(
       // Combine refs to handle both forwarded ref and internal ref
       const setRefs = useCallback(
         (node: HTMLDivElement | null) => {
-          itemRef.current = node;
-
           // Handle forwarded ref
           if (typeof forwardedRef === 'function') {
             forwardedRef(node);
@@ -164,10 +160,6 @@ export const ThreadListDenseItem = React.memo(
           requestAnimationFrame(() => setOpacity(100));
         }
       }, [isRendering]);
-
-      useEffect(() => {
-        if (opacity === 100) hasBeenVisibleRef.current = true;
-      }, [opacity]);
 
       const handleClick = useCallback(
         (e: React.MouseEvent | React.KeyboardEvent) => {
