@@ -2,17 +2,18 @@ import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogOverlay,
   DialogPortal,
+  DialogTitle,
   DialogTrigger
 } from '@/renderer/app/components/ui/dialog';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { ReleaseNote, useReleaseNotesAtom } from '@/renderer/app/store/layout/useReleaseNotesAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
-import { DialogTitle } from '@radix-ui/react-dialog';
-import React, { FC, useEffect, useState, ReactNode } from 'react';
+import React, { FC, useEffect, useMemo, useState, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown, { Components } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
@@ -391,16 +392,12 @@ const ReleaseNoteDialog: FC<ReleaseNoteDialogProps> = ({
   // Use the prop release note if provided, otherwise fall back to the one from the atom
   const releaseNote = propReleaseNote || atomReleaseNote;
 
-  // Determine current note index
-  const [currentIndex, setCurrentIndex] = useState<number>(-1);
-
-  useEffect(() => {
-    if (releaseNote && releaseNotes.length > 0) {
-      // Find current note index
-      const index = releaseNotes.findIndex((note) => note.uid === releaseNote.uid);
-      setCurrentIndex(index);
-    }
-  }, [releaseNote, releaseNotes]);
+  // Determine current note index. Derived, not set in an effect: the first
+  // render had -1 and flashed a Previous button that did nothing.
+  const currentIndex = useMemo(
+    () => (releaseNote ? releaseNotes.findIndex((note) => note.uid === releaseNote.uid) : -1),
+    [releaseNote, releaseNotes]
+  );
 
   useEffect(() => {
     if (releaseNote) {
@@ -413,7 +410,7 @@ const ReleaseNoteDialog: FC<ReleaseNoteDialogProps> = ({
   const content = releaseNote.content || '';
 
   // Check if we have previous or next notes
-  const hasPreviousNote = currentIndex < releaseNotes.length - 1;
+  const hasPreviousNote = currentIndex >= 0 && currentIndex < releaseNotes.length - 1;
   const hasNextNote = currentIndex > 0;
 
   // Handle navigation within the component
@@ -477,13 +474,22 @@ const ReleaseNoteDialog: FC<ReleaseNoteDialogProps> = ({
                   Changelog <MonoIcon type={'ExternalLink'} className="ml-1 mt-1" />
                 </a>
               </Button>
+              {/* The newest note (shown after an update) had no way to close
+                  but Escape: Next only exists on older notes. */}
+              <DialogClose asChild>
+                <Button variant="ghost" typeVariant="icon" sizeVariant="sm" tooltip="Close">
+                  <MonoIcon type="X" />
+                </Button>
+              </DialogClose>
             </div>
           </div>
           <div className="space-y-0">
             <ScrollArea viewportClassName="max-h-[80vh] p-6">
               <div>
                 <div className="space-y-4">
-                  <h1 className="text-xl font-medium">Release note v{releaseNote.version}</h1>
+                  <DialogTitle asChild>
+                    <h1 className="text-xl font-medium">Release note v{releaseNote.version}</h1>
+                  </DialogTitle>
                   <div className="markdown-content text-left">
                     <RenderContent content={content} />
                   </div>

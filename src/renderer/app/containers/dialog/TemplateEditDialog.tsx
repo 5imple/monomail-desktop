@@ -1,5 +1,5 @@
 import { generateUUID } from '@/main/utils';
-import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
+import { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
   Dialog,
@@ -11,17 +11,12 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/renderer/app/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
 import { Input } from '@/renderer/app/components/ui/input';
 import { Label } from '@/renderer/app/components/ui/label';
 import Loader from '@/renderer/app/components/ui/loader';
 import { Switch } from '@/renderer/app/components/ui/switch';
 import TextEditor from '@/renderer/app/containers/editor/TextEditor';
+import { IconPickerButton } from '@/renderer/app/containers/dialog/IconPickerButton';
 import { AVAILABLE_ICONS } from '@/renderer/app/lib/availableIcons';
 import { cn } from '@/renderer/app/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -157,29 +152,7 @@ const TemplateEditDialog: FC<TemplateEditDialogProps> = ({
                     control={control}
                     name="icon"
                     render={({ field }) => (
-                      <div className="flex items-center space-x-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-md border shadow-sm">
-                              <MonoIcon type={field.value as MonoIconType} className="h-5 w-5" />
-                            </div>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="max-h-48 w-48 overflow-scroll">
-                            {AVAILABLE_ICONS.map((icon) => (
-                              <DropdownMenuItem
-                                key={icon}
-                                onClick={() => field.onChange(icon)}
-                                className="flex items-center"
-                              >
-                                <div className="flex items-center">
-                                  <MonoIcon type={icon} className="mr-2 h-4 w-4" />
-                                  <span>{icon}</span>
-                                </div>
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                      <IconPickerButton value={field.value} onChange={field.onChange} />
                     )}
                   />
                 </div>
@@ -203,14 +176,45 @@ const TemplateEditDialog: FC<TemplateEditDialogProps> = ({
                             placeholder={t('settings.template.template_shortcut')}
                           />
                         </div>
+                        {fieldState.error ? (
+                          <p className="mt-1 text-xs text-destructive">
+                            {fieldState.error.message}
+                          </p>
+                        ) : (
+                          // What the name is for: it's the shortcut after "/".
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {name.trim()
+                              ? t('settings.template.name_hint', {
+                                  name: name.trim(),
+                                  defaultValue:
+                                    'Type /{{name}} in a message to insert this template.'
+                                })
+                              : t(
+                                  'settings.template.name_hint_empty',
+                                  'You type this name after / in a message to insert the template.'
+                                )}
+                          </p>
+                        )}
                       </>
                     )}
                   />
                 </div>
               </div>
 
-              {/* Subject toggle using local state */}
+              {/* Subject toggle using local state, next to what it controls (it
+                  sat in the footer beside Save, labelled just "Subject"). */}
               <div className="space-y-2">
+                <div className="flex items-center justify-end gap-2">
+                  <Switch
+                    checked={hasSubject}
+                    size={'sm'}
+                    onCheckedChange={setHasSubject}
+                    id="subject-toggle"
+                  />
+                  <Label htmlFor="subject-toggle" className="cursor-pointer text-sm">
+                    {t('settings.template.include_subject')}
+                  </Label>
+                </div>
                 <div className="relative rounded-md border shadow-sm">
                   {/* Only show subject field if hasSubject is true */}
                   {hasSubject && (
@@ -231,35 +235,35 @@ const TemplateEditDialog: FC<TemplateEditDialogProps> = ({
                   <Controller
                     control={control}
                     name="body"
-                    render={({ field, fieldState }) => (
+                    render={({ field }) => (
                       <>
+                        {/* overflow-auto: overflow-scroll drew empty scrollbar tracks. */}
                         <TextEditor
-                          className="max-h-[300px] min-h-[200px] overflow-scroll"
+                          className="max-h-[300px] min-h-[200px] overflow-auto"
                           value={field.value || ''}
-                          onChange={(value) => setValue('body', value)}
+                          // Revalidated once a save was tried (never on the
+                          // editor's first onChange when the dialog opens).
+                          onChange={(value) =>
+                            setValue('body', value, {
+                              shouldDirty: true,
+                              shouldValidate: formState.isSubmitted
+                            })
+                          }
                         />
                       </>
                     )}
                   />
                 </div>
+                {errors.body?.message && (
+                  <p className="text-xs text-destructive">{errors.body.message}</p>
+                )}
               </div>
             </div>
 
             <DialogFooter>
-              <div className="mr-auto flex items-center space-x-2">
-                <Switch
-                  checked={hasSubject}
-                  size={'sm'}
-                  onCheckedChange={setHasSubject}
-                  id="subject-toggle"
-                />
-                <Label htmlFor="subject-toggle" className="text-sm">
-                  {t('settings.template.include_subject')}
-                </Label>
-              </div>
               <Button type="submit" disabled={isSubmitDisabled}>
                 {isSubmitting && <Loader className="mr-2" />}
-                {t('settings.buttons.save_changes')}
+                {template?.id ? t('settings.buttons.save_changes') : t('settings.buttons.save')}
               </Button>
             </DialogFooter>
           </form>

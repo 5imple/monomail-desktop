@@ -1,40 +1,20 @@
-import { Clock, Paperclip, RotateCcw, Send, Star, X } from 'lucide-react';
+import { forwardRef, useRef, useState } from 'react';
+import MonoIcon, { type InboxIconType } from '@/renderer/app/components/icons/InboxIcon';
+import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
+import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { cn } from '@/renderer/app/lib/utils';
 import type { SchedulePreset } from '@/renderer/app/containers/queue/schedulePresets';
 import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
-
-const AVATAR_HUES = [
-  'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
-  'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-  'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
-  'bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300'
-] as const;
-
-function hueFor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return AVATAR_HUES[Math.abs(hash) % AVATAR_HUES.length];
-}
-
-export function initialsFor(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-}
+import { CustomDateTimePicker } from '@/renderer/app/containers/queue/CustomDateTimePicker';
 
 export type QueueVariant = 'snoozed' | 'scheduled';
 
 interface QueueRowProps {
   variant: QueueVariant;
   itemId: string;
+  accountId: string;
   primaryName: string;
-  primaryHueId: string;
-  primaryInitials: string;
+  primaryEmail: string;
   subject: string;
   snippet: string;
   timeLabel: string;
@@ -45,20 +25,22 @@ interface QueueRowProps {
   reschedulePresets: SchedulePreset[];
   isRescheduling: boolean;
 
-  onOpen?: () => void;
   onPrimaryAction?: () => void;
   onCancel?: () => void;
-  onClickTime?: () => void;
+  onOpenReschedule?: () => void;
   onCloseReschedule?: () => void;
   onPickReschedule?: (preset: SchedulePreset) => void;
-  onPickCustomReschedule?: () => void;
 }
+
+// The inbox rows' hover-action button: neutral, 28px, the same icon set.
+const ACTION_BUTTON_CLASS =
+  'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
 export function QueueRow({
   variant,
+  accountId,
   primaryName,
-  primaryHueId,
-  primaryInitials,
+  primaryEmail,
   subject,
   snippet,
   timeLabel,
@@ -67,184 +49,219 @@ export function QueueRow({
   attachmentCount,
   reschedulePresets,
   isRescheduling,
-  onOpen,
   onPrimaryAction,
   onCancel,
-  onClickTime,
+  onOpenReschedule,
   onCloseReschedule,
-  onPickReschedule,
-  onPickCustomReschedule
+  onPickReschedule
 }: QueueRowProps) {
   const primaryActionLabel = variant === 'snoozed' ? 'Bring back now' : 'Send now';
-  const PrimaryActionIcon = variant === 'snoozed' ? RotateCcw : Send;
+  const primaryActionIcon: InboxIconType = variant === 'snoozed' ? 'RotateCcw' : 'Send';
+  const rescheduleHeading = variant === 'snoozed' ? 'Reschedule snooze' : 'Reschedule send';
+  // "Pick a date…" swaps the presets for the calendar (it used to be filtered
+  // out, with nothing to pick from).
+  const [customMode, setCustomMode] = useState(false);
+  const rescheduleButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div className="group relative">
+    // Not a button: the rows open nothing (they looked clickable, with a
+    // pointer and Enter, and did nothing). Their actions are the buttons.
+    <div
+      className={cn(
+        'group relative mx-[10%] rounded-md transition-colors pointer-hover:bg-foreground/[0.045] dark:pointer-hover:bg-foreground/[0.07]',
+        isRescheduling && 'bg-foreground/[0.045] dark:bg-foreground/[0.07]'
+      )}
+    >
+      {/* Due within the hour */}
       {isUrgent && (
         <span
           aria-hidden
-          className="absolute inset-y-0 left-0 w-[3px] bg-amber-400 dark:bg-amber-500"
+          className="absolute inset-y-[3px] left-0 w-[3px] rounded-r-full bg-secondary-accent"
         />
       )}
 
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpen}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onOpen?.();
-        }}
-        className="flex cursor-pointer items-center gap-6 bg-background px-8 py-3.5 transition-colors hover:bg-muted/40 sm:px-12"
-      >
+      <div className="flex items-center gap-4 px-3 py-2">
         <div className="flex w-44 shrink-0 items-center gap-2.5">
-          <span
-            className={cn(
-              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold tracking-tight',
-              hueFor(primaryHueId)
-            )}
-            aria-hidden
-          >
-            {primaryInitials}
-          </span>
-          <span className="truncate text-[14px] font-medium tracking-tight text-foreground">
-            {primaryName}
-          </span>
+          <RecipientAvatar
+            className="h-6 w-6 shrink-0"
+            recipient={{ email: primaryEmail, name: primaryName }}
+            accountId={accountId}
+          />
+          <span className="truncate text-[13px] font-medium text-foreground">{primaryName}</span>
         </div>
 
-        <div className="flex min-w-0 flex-1 items-baseline gap-3">
-          <span className="shrink-0 max-w-[42%] truncate text-[14px] font-semibold tracking-tight text-foreground">
-            {subject}
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="max-w-[42%] shrink-0 truncate text-[13px] font-medium text-foreground">
+            {subject || '(No subject)'}
           </span>
-          <span aria-hidden className="shrink-0 text-stone-300 dark:text-stone-700">
-            ·
-          </span>
-          <span className="hidden min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground sm:inline">
-            {snippet}
-          </span>
+          {/* No separator without a snippet (it was left dangling). */}
+          {snippet && (
+            <>
+              <span aria-hidden className="hidden shrink-0 text-muted-foreground/40 sm:inline">
+                –
+              </span>
+              <span className="hidden min-w-0 flex-1 truncate text-[13px] text-muted-foreground sm:inline">
+                {snippet}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
           {isStarred && (
-            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" strokeWidth={1.5} />
+            <MonoIcon type="Star" fill size={14} weight={300} className="text-secondary-accent" />
           )}
           {attachmentCount !== undefined && attachmentCount > 0 && (
             <span className="flex items-center gap-0.5 text-[11px] tabular-nums text-muted-foreground">
-              <Paperclip className="h-3 w-3" strokeWidth={1.75} />
+              <MonoIcon type="Paperclip" size={13} weight={300} />
               {attachmentCount}
             </span>
           )}
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClickTime?.();
-            }}
-            className={cn(
-              'group/time relative inline-flex items-center gap-1 rounded text-right text-[12px] tracking-tight tabular-nums transition-colors',
-              isUrgent
-                ? 'font-medium text-amber-600 dark:text-amber-400'
-                : 'text-muted-foreground',
-              !isRescheduling && 'group-hover:hidden',
-              isRescheduling && 'text-foreground'
-            )}
-            aria-label="Reschedule"
-          >
-            <Clock
-              className="h-3 w-3 opacity-0 transition-opacity group-hover/time:opacity-100"
-              strokeWidth={1.75}
-            />
-            {timeLabel}
-          </button>
+          {/* The time and the actions share one slot, as in the inbox: the
+              time fades out and the actions fade in over it, so nothing beside
+              them shifts on hover. */}
+          <div className="relative flex min-w-[96px] items-center justify-end">
+            <Popover
+              open={isRescheduling}
+              onOpenChange={(open) => {
+                // Close-only: opening goes through onOpenReschedule.
+                if (!open) {
+                  setCustomMode(false);
+                  onCloseReschedule?.();
+                }
+              }}
+            >
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  // Keyboard users reach Reschedule through the action bar;
+                  // this label fades out whenever the bar shows.
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isRescheduling) onOpenReschedule?.();
+                  }}
+                  className={cn(
+                    'whitespace-nowrap rounded text-right text-[12px] tabular-nums transition-opacity',
+                    isUrgent ? 'font-medium text-foreground' : 'text-muted-foreground',
+                    isRescheduling
+                      ? 'text-foreground opacity-100'
+                      : 'group-focus-within:opacity-0 group-pointer-hover:opacity-0'
+                  )}
+                  aria-label={`Reschedule, now ${timeLabel}`}
+                >
+                  {timeLabel}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                sideOffset={6}
+                className="w-auto border-none bg-transparent p-0 shadow-none"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                // Back to a control that's visible: the time label is hidden
+                // while the row has focus.
+                onCloseAutoFocus={(e) => {
+                  e.preventDefault();
+                  rescheduleButtonRef.current?.focus({ preventScroll: true });
+                }}
+              >
+                {customMode ? (
+                  <CustomDateTimePicker
+                    heading={rescheduleHeading}
+                    confirmLabel="Reschedule"
+                    onBack={() => setCustomMode(false)}
+                    onConfirm={(iso) => {
+                      setCustomMode(false);
+                      onPickReschedule?.({ id: 'custom', label: 'Custom', scheduledFor: iso });
+                    }}
+                  />
+                ) : (
+                  <ReschedulePopover
+                    presets={reschedulePresets}
+                    heading={rescheduleHeading}
+                    onPickPreset={(preset) => onPickReschedule?.(preset)}
+                    onPickCustom={() => setCustomMode(true)}
+                  />
+                )}
+              </PopoverContent>
+            </Popover>
 
-          {!isRescheduling && (
-            <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+            <div
+              className={cn(
+                'absolute right-0 flex items-center gap-0.5 transition-opacity',
+                isRescheduling
+                  ? 'pointer-events-none opacity-0'
+                  : 'opacity-0 group-focus-within:opacity-100 group-pointer-hover:opacity-100'
+              )}
+            >
               <RowActionButton
+                ref={rescheduleButtonRef}
                 ariaLabel="Reschedule"
-                icon={Clock}
+                icon="Clock"
+                tabIndex={isRescheduling ? -1 : 0}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onClickTime?.();
+                  onOpenReschedule?.();
                 }}
               />
               <RowActionButton
                 ariaLabel={primaryActionLabel}
-                icon={PrimaryActionIcon}
+                icon={primaryActionIcon}
+                tabIndex={isRescheduling ? -1 : 0}
                 onClick={(e) => {
                   e.stopPropagation();
                   onPrimaryAction?.();
                 }}
-                accent="primary"
               />
-              <RowActionButton
-                ariaLabel="Cancel"
-                icon={X}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCancel?.();
-                }}
-                accent="danger"
-              />
+              {/* Snoozed rows had a second, red X that did the same as Bring
+                  back. Cancelling a scheduled send deletes it, so it keeps a
+                  destructive cue. */}
+              {variant === 'scheduled' && (
+                <RowActionButton
+                  ariaLabel="Cancel send"
+                  icon="X"
+                  destructive
+                  tabIndex={isRescheduling ? -1 : 0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCancel?.();
+                  }}
+                />
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
-
-      {isRescheduling && (
-        <>
-          <button
-            type="button"
-            aria-label="Close reschedule popover"
-            onClick={onCloseReschedule}
-            className="fixed inset-0 z-10 cursor-default"
-          />
-          <div className="absolute right-8 top-full z-20 mt-1 sm:right-12">
-            <ReschedulePopover
-              presets={reschedulePresets}
-              heading={variant === 'snoozed' ? 'Reschedule snooze' : 'Reschedule send'}
-              onPickPreset={(preset) => {
-                onPickReschedule?.(preset);
-              }}
-              onPickCustom={() => {
-                onPickCustomReschedule?.();
-              }}
-            />
-          </div>
-        </>
-      )}
     </div>
   );
 }
 
 interface RowActionButtonProps {
   ariaLabel: string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  icon: InboxIconType;
   onClick: (e: React.MouseEvent) => void;
-  accent?: 'neutral' | 'primary' | 'danger';
+  destructive?: boolean;
+  tabIndex?: number;
 }
 
-function RowActionButton({
-  ariaLabel,
-  icon: Icon,
-  onClick,
-  accent = 'neutral'
-}: RowActionButtonProps) {
-  return (
+const RowActionButton = forwardRef<HTMLButtonElement, RowActionButtonProps>(
+  ({ ariaLabel, icon, onClick, destructive = false, tabIndex }, ref) => (
     <button
+      ref={ref}
       type="button"
       aria-label={ariaLabel}
       title={ariaLabel}
+      tabIndex={tabIndex}
       onClick={onClick}
       className={cn(
-        'flex h-7 w-7 items-center justify-center rounded-md transition-colors',
-        accent === 'primary'
-          ? 'text-muted-foreground hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
-          : accent === 'danger'
-            ? 'text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400'
-            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        ACTION_BUTTON_CLASS,
+        destructive && 'hover:bg-destructive/10 hover:text-destructive'
       )}
     >
-      <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+      <MonoIcon type={icon} size={18} weight={300} />
     </button>
-  );
-}
+  )
+);
+RowActionButton.displayName = 'RowActionButton';

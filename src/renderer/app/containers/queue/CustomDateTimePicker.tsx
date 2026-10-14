@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Calendar } from '@/renderer/app/components/ui/calendar';
 import { Button } from '@/renderer/app/components/ui/button';
+import { Input } from '@/renderer/app/components/ui/input';
 
 /**
  * Custom date + time picker shown when the user chooses "Pick a date…" in the
@@ -43,40 +44,47 @@ export function CustomDateTimePicker({
   const isPast = when.getTime() <= Date.now();
 
   return (
-    <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-[0_18px_40px_-12px_rgba(0,0,0,0.18)] dark:border-stone-800 dark:bg-stone-950">
-      <div className="flex items-center gap-2 border-b border-stone-100 px-3 py-2.5 dark:border-stone-900">
+    // The presets' width (300px), so the popover doesn't jump narrower when
+    // this opens, and theme tokens instead of raw white/stone.
+    <div className="w-[300px] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
+      <div className="flex items-center gap-2 border-b px-3 py-2">
         <button
           type="button"
           onClick={onBack}
           aria-label="Back to presets"
-          className="text-muted-foreground transition-colors hover:text-foreground"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+          <MonoIcon type="ChevronLeft" size={16} weight={300} />
         </button>
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          {heading}
-        </p>
+        <p className="text-xs font-medium text-muted-foreground">{heading}</p>
       </div>
       <Calendar
         mode="single"
         selected={date}
         onSelect={(d) => d && setDate(d)}
         disabled={{ before: new Date() }}
+        className="mx-auto w-fit"
         initialFocus
       />
-      <div className="flex items-center gap-2 border-t border-stone-100 p-3 dark:border-stone-900">
-        <input
+      <div className="flex items-center gap-2 border-t p-3">
+        {/* The shared input: same height as the button beside it, and the
+            native clock drawn for the theme (it was black on the dark field). */}
+        <Input
           type="time"
+          sizeVariant="sm"
+          aria-label="Time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-[13px] tabular-nums text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !isPast) {
+              e.preventDefault();
+              onConfirm(when.toISOString());
+            }
+          }}
+          className="flex-1 tabular-nums [color-scheme:light] focus-visible:ring-1 focus-visible:ring-ring dark:[color-scheme:dark]"
         />
-        <Button
-          sizeVariant="sm"
-          disabled={isPast}
-          onClick={() => onConfirm(when.toISOString())}
-        >
-          {isPast ? 'Future time' : confirmLabel}
+        <Button sizeVariant="sm" disabled={isPast} onClick={() => onConfirm(when.toISOString())}>
+          {isPast ? 'Pick a later time' : confirmLabel}
         </Button>
       </div>
     </div>

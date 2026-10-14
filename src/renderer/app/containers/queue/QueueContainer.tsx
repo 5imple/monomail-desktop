@@ -1,6 +1,18 @@
 import { FC, useEffect, useMemo, useState } from 'react';
-import { Inbox, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import MonoIcon, { type InboxIconType } from '@/renderer/app/components/icons/InboxIcon';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
+  AlertDialogPortal,
+  AlertDialogTitle
+} from '@/renderer/app/components/ui/alert-dialog';
+import { Button } from '@/renderer/app/components/ui/button';
 import { cn } from '@/renderer/app/lib/utils';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import type { ScheduledItem, SnoozedItem } from '@/renderer/app/store/queue/useQueueAtom';
@@ -8,7 +20,7 @@ import {
   buildSchedulePresets,
   type SchedulePreset
 } from '@/renderer/app/containers/queue/schedulePresets';
-import { QueueRow, initialsFor } from '@/renderer/app/containers/queue/QueueRow';
+import { QueueRow } from '@/renderer/app/containers/queue/QueueRow';
 
 /**
  * Piece 2 of P8 — Later Queue UI.
@@ -27,7 +39,8 @@ type BucketKey = 'in-30-min' | 'later-today' | 'tomorrow' | 'this-week' | 'later
 const BUCKET_ORDER: BucketKey[] = ['in-30-min', 'later-today', 'tomorrow', 'this-week', 'later'];
 
 const BUCKET_LABELS: Record<BucketKey, string> = {
-  'in-30-min': 'In 30 min',
+  // Holds everything due within 60 minutes (it said "In 30 min").
+  'in-30-min': 'Within the hour',
   'later-today': 'Later today',
   tomorrow: 'Tomorrow',
   'this-week': 'This week',
@@ -89,6 +102,22 @@ function formatRelativeTime(targetIso: string, now: Date): string {
   return `${monthDay} · ${time}`;
 }
 
+// Under the "Tomorrow" header the row doesn't need to repeat "Tomorrow".
+function rowTimeLabel(targetIso: string, now: Date, bucket: BucketKey): string {
+  const label = formatRelativeTime(targetIso, now);
+  return bucket === 'tomorrow' ? label.replace(/^Tomorrow · /, '') : label;
+}
+
+// "Tue, Oct 13, 8:00 AM", as the snooze toast writes it.
+const formatWhen = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+
 function recipientLabel(recipients: { name: string }[]): string {
   if (recipients.length === 0) return 'No recipient';
   if (recipients.length === 1) return recipients[0].name;
@@ -108,9 +137,7 @@ function groupByBucket<T>(items: T[], getIso: (item: T) => string, now: Date) {
     out[bucketFor(getIso(item), now)].push(item);
   }
   for (const key of Object.keys(out) as BucketKey[]) {
-    out[key].sort(
-      (a, b) => new Date(getIso(a)).getTime() - new Date(getIso(b)).getTime()
-    );
+    out[key].sort((a, b) => new Date(getIso(a)).getTime() - new Date(getIso(b)).getTime());
   }
   return out;
 }
@@ -126,8 +153,26 @@ const QueueContainer: FC = () => {
     sendScheduledNow
   } = useQueueAtom();
 
-  const [activeTab, setActiveTab] = useState<LaterQueueTab>('snoozed');
+  // Chosen once, when Later opens: Scheduled when only it has items, or when
+  // a send was just scheduled (Send later opens this view right after). It
+  // always opened on Snoozed. Never switched afterwards under the user.
+  const [activeTab, setActiveTab] = useState<LaterQueueTab>(() => {
+    if (snoozedItems.length === 0 && scheduledItems.length > 0) return 'scheduled';
+    const newestSnoozed = Math.max(
+      0,
+      ...snoozedItems.map((item) => Date.parse(item.createdAt) || 0)
+    );
+    const newestScheduled = Math.max(
+      0,
+      ...scheduledItems.map((item) => Date.parse(item.createdAt) || 0)
+    );
+    return newestScheduled > newestSnoozed && Date.now() - newestScheduled < 15_000
+      ? 'scheduled'
+      : 'snoozed';
+  });
   const [reschedulingItemId, setReschedulingItemId] = useState<string | null>(null);
+  // A scheduled send waiting on the cancel confirmation.
+  const [pendingCancel, setPendingCancel] = useState<ScheduledItem | null>(null);
   // `now` was frozen at mount: left open for a couple of hours, the relative
   // times went stale and "In 1 hour" rescheduled into the past. Tick it, and
   // refresh whenever a reschedule popover opens.
@@ -139,11 +184,7 @@ const QueueContainer: FC = () => {
   useEffect(() => {
     if (reschedulingItemId) setNow(new Date());
   }, [reschedulingItemId]);
-  // No date picker exists in this popover, so "Pick a date…" only closed it.
-  const presets = useMemo(
-    () => buildSchedulePresets(now).filter((preset) => preset.id !== 'custom'),
-    [now]
-  );
+  const presets = useMemo(() => buildSchedulePresets(now), [now]);
 
   const subtitle =
     activeTab === 'snoozed'
@@ -152,35 +193,31 @@ const QueueContainer: FC = () => {
 
   return (
     <div className="h-full w-full overflow-auto bg-background">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/80 px-6 pt-10 pb-0 backdrop-blur-md sm:px-10">
-        <div className="flex items-end justify-between gap-6">
-          <div>
-            <h2 className="font-sans text-3xl font-medium tracking-tight text-foreground">
-              Later
-            </h2>
-            <p className="mt-1 text-[13px] text-muted-foreground">{subtitle}</p>
-          </div>
+      <header className="sticky top-0 z-10 border-b border-border bg-background/80 px-[10%] backdrop-blur-md">
+        {/* The titlebar tab already names the view; the big title only took
+            room above the list. */}
+        <h2 className="sr-only">Later</h2>
+        <div className="flex items-center gap-4">
+          <nav aria-label="Later queue tabs" className="-mb-px flex items-center gap-1 text-sm">
+            <TabButton
+              active={activeTab === 'snoozed'}
+              count={snoozedItems.length}
+              onClick={() => setActiveTab('snoozed')}
+            >
+              Snoozed
+            </TabButton>
+            <TabButton
+              active={activeTab === 'scheduled'}
+              count={scheduledItems.length}
+              onClick={() => setActiveTab('scheduled')}
+            >
+              Scheduled
+            </TabButton>
+          </nav>
+          <p className="ml-auto hidden truncate text-xs text-muted-foreground sm:block">
+            {subtitle}
+          </p>
         </div>
-
-        <nav
-          aria-label="Later queue tabs"
-          className="mt-4 -mb-px flex items-center gap-1 text-sm"
-        >
-          <TabButton
-            active={activeTab === 'snoozed'}
-            count={snoozedItems.length}
-            onClick={() => setActiveTab('snoozed')}
-          >
-            Snoozed
-          </TabButton>
-          <TabButton
-            active={activeTab === 'scheduled'}
-            count={scheduledItems.length}
-            onClick={() => setActiveTab('scheduled')}
-          >
-            Scheduled
-          </TabButton>
-        </nav>
       </header>
 
       {activeTab === 'snoozed' ? (
@@ -193,15 +230,14 @@ const QueueContainer: FC = () => {
           onBringBackNow={async (id) => {
             const res = await unsnooze(id);
             if (!res.ok) toast.error(`Couldn't bring back: ${res.error}`);
-          }}
-          onCancelSnooze={async (id) => {
-            const res = await unsnooze(id);
-            if (!res.ok) toast.error(`Couldn't cancel snooze: ${res.error}`);
+            else toast.success('Moved back to Inbox');
           }}
           onRescheduleSnooze={async (id, until) => {
-            const res = await rescheduleSnooze(id, until);
+            // Closed first: a second pick while this one ran rescheduled twice.
             setReschedulingItemId(null);
+            const res = await rescheduleSnooze(id, until);
             if (!res.ok) toast.error(`Couldn't reschedule: ${res.error}`);
+            else toast.success(`Snoozed until ${formatWhen(until)}`);
           }}
         />
       ) : (
@@ -217,18 +253,60 @@ const QueueContainer: FC = () => {
             // the cache too, but we drop it optimistically on success.
             const res = await sendScheduledNow(id);
             if (!res.ok) toast.error(`Couldn't send now: ${res.error}`);
+            else toast.success('Sent');
           }}
-          onCancelSchedule={async (id) => {
-            const res = await cancelSchedule(id);
-            if (!res.ok) toast.error(`Couldn't cancel: ${res.error}`);
+          onCancelSchedule={(id) => {
+            const item = scheduledItems.find((scheduled) => scheduled.id === id);
+            if (item) setPendingCancel(item);
           }}
           onRescheduleSend={async (id, when) => {
-            const res = await rescheduleSend(id, when);
             setReschedulingItemId(null);
+            const res = await rescheduleSend(id, when);
             if (!res.ok) toast.error(`Couldn't reschedule: ${res.error}`);
+            else toast.success(`Scheduled for ${formatWhen(when)}`);
           }}
         />
       )}
+
+      {/* Cancelling deletes the message for good: the draft was removed when
+          it was scheduled, so ask first (it acted on one click). */}
+      <AlertDialog
+        open={!!pendingCancel}
+        onOpenChange={(open) => {
+          if (!open) setPendingCancel(null);
+        }}
+      >
+        <AlertDialogPortal>
+          <AlertDialogOverlay className="dark" />
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-lg">
+                Cancel this scheduled message?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                It won&apos;t be sent and is removed from Later. No copy of it is kept.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep it</AlertDialogCancel>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={async () => {
+                  const item = pendingCancel;
+                  setPendingCancel(null);
+                  if (!item) return;
+                  const res = await cancelSchedule(item.id);
+                  if (!res.ok) toast.error(`Couldn't cancel: ${res.error}`);
+                  else toast.success('Scheduled send cancelled');
+                }}
+              >
+                Cancel send
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogPortal>
+      </AlertDialog>
     </div>
   );
 };
@@ -245,8 +323,9 @@ function TabButton({ active, count, onClick, children }: TabButtonProps) {
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        'relative px-1 py-3 font-medium tracking-tight transition-colors',
+        'relative rounded-sm px-1 py-3 font-medium tracking-tight transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
         active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
       )}
     >
@@ -254,14 +333,15 @@ function TabButton({ active, count, onClick, children }: TabButtonProps) {
         {children}
         <span
           className={cn(
-            'font-mono text-[11px] tabular-nums',
+            'text-[11px] tabular-nums',
             active ? 'text-muted-foreground' : 'text-muted-foreground/60'
           )}
         >
           {count}
         </span>
       </span>
-      {active && <span className="absolute inset-x-0 -bottom-px h-px bg-red-500" />}
+      {/* A neutral underline (red is the compose accent). */}
+      {active && <span className="absolute inset-x-0 -bottom-px h-px bg-foreground" />}
     </button>
   );
 }
@@ -273,7 +353,6 @@ interface SnoozedTabProps {
   reschedulingItemId: string | null;
   onOpenRescheduleFor: (id: string | null) => void;
   onBringBackNow: (id: string) => void;
-  onCancelSnooze: (id: string) => void;
   onRescheduleSnooze: (id: string, snoozeUntil: string) => void;
 }
 
@@ -284,7 +363,6 @@ function SnoozedTab({
   reschedulingItemId,
   onOpenRescheduleFor,
   onBringBackNow,
-  onCancelSnooze,
   onRescheduleSnooze
 }: SnoozedTabProps) {
   const grouped = useMemo(() => groupByBucket(items, (i) => i.snoozeUntil, now), [items, now]);
@@ -292,9 +370,9 @@ function SnoozedTab({
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={Inbox}
+        icon="Inbox"
         title="Nothing snoozed"
-        body="Inbox is quiet. Anything you snooze will appear here, grouped by when it returns."
+        body="Snoozed emails will show up here, grouped by when they come back."
       />
     );
   }
@@ -307,32 +385,28 @@ function SnoozedTab({
         return (
           <section key={bucket} aria-labelledby={`bucket-${bucket}`}>
             <BucketHeader id={`bucket-${bucket}`} label={BUCKET_LABELS[bucket]} />
-            <ul className="divide-y divide-border/60">
+            <ul>
               {bucketItems.map((item) => (
                 <li key={item.id}>
                   <QueueRow
                     variant="snoozed"
                     itemId={item.id}
+                    accountId={item.accountId}
                     primaryName={item.sender.name}
-                    primaryHueId={item.sender.id}
-                    primaryInitials={initialsFor(item.sender.name)}
+                    primaryEmail={item.sender.email}
                     subject={item.subject}
                     snippet={item.snippet}
-                    timeLabel={formatRelativeTime(item.snoozeUntil, now)}
+                    timeLabel={rowTimeLabel(item.snoozeUntil, now, bucket)}
                     isUrgent={bucket === 'in-30-min'}
                     isStarred={item.isStarred}
                     reschedulePresets={presets}
                     isRescheduling={reschedulingItemId === item.id}
                     onPrimaryAction={() => onBringBackNow(item.id)}
-                    onCancel={() => onCancelSnooze(item.id)}
-                    onClickTime={() =>
-                      onOpenRescheduleFor(reschedulingItemId === item.id ? null : item.id)
-                    }
+                    onOpenReschedule={() => onOpenRescheduleFor(item.id)}
                     onCloseReschedule={() => onOpenRescheduleFor(null)}
                     onPickReschedule={(preset) => {
                       if (preset.scheduledFor) onRescheduleSnooze(item.id, preset.scheduledFor);
                     }}
-                    onPickCustomReschedule={() => onOpenRescheduleFor(null)}
                   />
                 </li>
               ))}
@@ -365,15 +439,12 @@ function ScheduledTab({
   onCancelSchedule,
   onRescheduleSend
 }: ScheduledTabProps) {
-  const grouped = useMemo(
-    () => groupByBucket(items, (i) => i.scheduledFor, now),
-    [items, now]
-  );
+  const grouped = useMemo(() => groupByBucket(items, (i) => i.scheduledFor, now), [items, now]);
 
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={Send}
+        icon="Send"
         title="No scheduled messages"
         body="Anything you choose to send later will land here. Reschedule, send now, or cancel."
       />
@@ -388,35 +459,31 @@ function ScheduledTab({
         return (
           <section key={bucket} aria-labelledby={`bucket-${bucket}`}>
             <BucketHeader id={`bucket-${bucket}`} label={BUCKET_LABELS[bucket]} />
-            <ul className="divide-y divide-border/60">
+            <ul>
               {bucketItems.map((item) => {
                 const primaryName = recipientLabel(item.recipients);
-                const hueAnchor = item.recipients[0]?.id ?? item.id;
                 return (
                   <li key={item.id}>
                     <QueueRow
                       variant="scheduled"
                       itemId={item.id}
+                      accountId={item.accountId}
                       primaryName={`To ${primaryName}`}
-                      primaryHueId={hueAnchor}
-                      primaryInitials={initialsFor(item.recipients[0]?.name ?? '?')}
+                      primaryEmail={item.recipients[0]?.email ?? ''}
                       subject={item.subject}
                       snippet={item.bodySnippet}
-                      timeLabel={formatRelativeTime(item.scheduledFor, now)}
+                      timeLabel={rowTimeLabel(item.scheduledFor, now, bucket)}
                       isUrgent={bucket === 'in-30-min'}
                       attachmentCount={item.attachmentCount}
                       reschedulePresets={presets}
                       isRescheduling={reschedulingItemId === item.id}
                       onPrimaryAction={() => onSendNow(item.id)}
                       onCancel={() => onCancelSchedule(item.id)}
-                      onClickTime={() =>
-                        onOpenRescheduleFor(reschedulingItemId === item.id ? null : item.id)
-                      }
+                      onOpenReschedule={() => onOpenRescheduleFor(item.id)}
                       onCloseReschedule={() => onOpenRescheduleFor(null)}
                       onPickReschedule={(preset) => {
                         if (preset.scheduledFor) onRescheduleSend(item.id, preset.scheduledFor);
                       }}
-                      onPickCustomReschedule={() => onOpenRescheduleFor(null)}
                     />
                   </li>
                 );
@@ -434,11 +501,12 @@ interface BucketHeaderProps {
   label: string;
 }
 
+// The inbox's group header (the tracked mono label style was dropped).
 function BucketHeader({ id, label }: BucketHeaderProps) {
   return (
     <h3
       id={id}
-      className="px-8 pt-8 pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:px-12"
+      className="px-[10%] pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
     >
       {label}
     </h3>
@@ -446,19 +514,18 @@ function BucketHeader({ id, label }: BucketHeaderProps) {
 }
 
 interface EmptyStateProps {
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  icon: InboxIconType;
   title: string;
   body: string;
 }
 
-function EmptyState({ icon: Icon, title, body }: EmptyStateProps) {
+// The inbox's empty state: muted icon and text, no ringed badge or big title.
+function EmptyState({ icon, title, body }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center px-6 pt-24 pb-32 text-center sm:px-10">
-      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-border">
-        <Icon className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
-      </div>
-      <h3 className="text-[20px] font-medium tracking-tight text-foreground">{title}</h3>
-      <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-muted-foreground">{body}</p>
+    <div className="flex flex-col items-center px-[10%] py-24 text-center">
+      <MonoIcon type={icon} size={32} weight={300} className="mb-3 text-muted-foreground/40" />
+      <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+      <p className="mt-1 max-w-sm text-xs text-muted-foreground/60">{body}</p>
     </div>
   );
 }

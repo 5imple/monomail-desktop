@@ -1,6 +1,5 @@
 import { MonoAccount } from '@/main/api/auth/types';
 import { generateUUID } from '@/main/utils';
-import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Checkbox } from '@/renderer/app/components/ui/checkbox';
 import {
@@ -13,17 +12,12 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/renderer/app/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/renderer/app/components/ui/dropdown-menu';
 import { Input } from '@/renderer/app/components/ui/input';
 import { Label } from '@/renderer/app/components/ui/label';
 import Loader from '@/renderer/app/components/ui/loader';
 import DirectHTMLSignatureEditor from '@/renderer/app/containers/editor/DirectHTMLSignatureEditor';
 import TextEditor from '@/renderer/app/containers/editor/TextEditor';
+import { IconPickerButton } from '@/renderer/app/containers/dialog/IconPickerButton';
 import { AVAILABLE_ICONS } from '@/renderer/app/lib/availableIcons';
 import { cn } from '@/renderer/app/lib/utils';
 import { IMonoSignature, useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
@@ -90,7 +84,7 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
         }
   });
 
-  const { control, handleSubmit, reset, setValue, watch } = form;
+  const { control, handleSubmit, reset, setValue, watch, formState } = form;
 
   // Watch values for UI updates
   const selectedIcon = watch('icon');
@@ -173,29 +167,7 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
                     control={control}
                     name="icon"
                     render={({ field }) => (
-                      <div className="flex items-center space-x-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-md border shadow-sm">
-                              <MonoIcon type={field.value as MonoIconType} className="h-5 w-5" />
-                            </div>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="max-h-48 w-48 overflow-scroll">
-                            {AVAILABLE_ICONS.map((icon) => (
-                              <DropdownMenuItem
-                                key={icon}
-                                onClick={() => field.onChange(icon)}
-                                className="flex items-center"
-                              >
-                                <div className="flex items-center">
-                                  <MonoIcon type={icon} className="mr-2 h-4 w-4" />
-                                  <span>{icon}</span>
-                                </div>
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                      <IconPickerButton value={field.value} onChange={field.onChange} />
                     )}
                   />
                 </div>
@@ -214,6 +186,12 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
                           )}
                           placeholder={t('settings.signature.signature_name_placeholder')}
                         />
+                        {/* The reason, not only a red border. */}
+                        {fieldState.error && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {fieldState.error.message}
+                          </p>
+                        )}
                       </>
                     )}
                   />
@@ -227,19 +205,34 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
                   control={control}
                   name="content"
                   render={({ field, fieldState }) => (
-                    <div
-                      className={cn(
-                        'rounded-md border shadow-sm',
-                        fieldState.error && 'border-destructive'
-                      )}
-                    >
-                      <DirectHTMLSignatureEditor
+                    <div>
+                      <div
                         className={cn(
-                          'mono-signature max-h-[300px] min-h-[200px] overflow-scroll rounded-md'
+                          'rounded-md border shadow-sm',
+                          fieldState.error && 'border-destructive'
                         )}
-                        value={field.value || ''}
-                        onChange={(value) => setValue('content', value)}
-                      />
+                      >
+                        {/* overflow-auto: overflow-scroll drew empty scrollbar
+                            tracks, and wide signatures still need to scroll. */}
+                        <DirectHTMLSignatureEditor
+                          className={cn(
+                            'mono-signature max-h-[300px] min-h-[200px] overflow-auto rounded-md'
+                          )}
+                          value={field.value || ''}
+                          // Revalidated once a save was tried, so the error
+                          // clears as you type (never on the editor's first
+                          // onChange when the dialog opens).
+                          onChange={(value) =>
+                            setValue('content', value, {
+                              shouldDirty: true,
+                              shouldValidate: formState.isSubmitted
+                            })
+                          }
+                        />
+                      </div>
+                      {fieldState.error && (
+                        <p className="mt-1 text-xs text-destructive">{fieldState.error.message}</p>
+                      )}
                     </div>
                   )}
                 />
@@ -281,7 +274,7 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
             <DialogFooter>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader className="mr-2" />}
-                {t('settings.buttons.save_changes')}
+                {signature?.id ? t('settings.buttons.save_changes') : t('settings.buttons.save')}
               </Button>
             </DialogFooter>
           </form>

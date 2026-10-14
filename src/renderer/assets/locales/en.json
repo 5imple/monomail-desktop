@@ -493,7 +493,7 @@
       "template_name": "Name",
       "template_shortcut": "Shortcut",
       "template_command": "Command",
-      "include_subject": "Subject",
+      "include_subject": "Include subject",
       "subject": "Subject",
       "icon": "Icon",
       "body": "Content",
@@ -509,7 +509,9 @@
       "save_changes": "Save Changes",
       "save": "Save",
       "actions_for": "Actions for {{name}}",
-      "slash_hint": "Type / in any message to insert a template."
+      "slash_hint": "Type / in any message to insert a template.",
+      "name_hint": "Type /{{name}} in a message to insert this template.",
+      "name_hint_empty": "You type this name after / in a message to insert the template."
     },
     "display": {
       "title": "Display",
@@ -632,7 +634,8 @@
       "privacy": "Privacy",
       "version": "Version"
     },
-    "unsaved_change": "Unsaved change"
+    "unsaved_change": "Unsaved change",
+    "change_icon": "Change icon"
   },
   "onboarding": {
     "welcome": {

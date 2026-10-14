@@ -45,9 +45,14 @@ export function buildSchedulePresets(now: Date = new Date()): SchedulePreset[] {
     return setTime(d, 8);
   })();
 
-  return [
+  // On a Saturday or Sunday the weekend preset is next Saturday.
+  const isWeekend = now.getDay() === 6 || now.getDay() === 0;
+
+  const presets = [
     { id: 'in-1-hour', label: 'In 1 hour', scheduledFor: inOneHour.toISOString() },
-    laterToday > now
+    // Only when clearly after "In 1 hour": late in the afternoon 6 PM was
+    // minutes away, or listed after "In 1 hour" while being earlier.
+    laterToday.getTime() - now.getTime() >= 90 * 60 * 1000
       ? { id: 'later-today', label: 'Later today', scheduledFor: laterToday.toISOString() }
       : null,
     {
@@ -55,8 +60,21 @@ export function buildSchedulePresets(now: Date = new Date()): SchedulePreset[] {
       label: 'Tomorrow morning',
       scheduledFor: tomorrowMorning.toISOString()
     },
-    { id: 'this-weekend', label: 'This weekend', scheduledFor: weekend.toISOString() },
+    {
+      id: 'this-weekend',
+      label: isWeekend ? 'Next weekend' : 'This weekend',
+      scheduledFor: weekend.toISOString()
+    },
     { id: 'next-week', label: 'Next Monday', scheduledFor: nextMonday(now).toISOString() },
     { id: 'custom', label: 'Pick a date…', sublabel: 'Open the calendar', scheduledFor: null }
   ].filter(Boolean) as SchedulePreset[];
+
+  // Two presets can be the same moment (on Friday "Tomorrow morning" is the
+  // weekend; on Sunday it's next Monday): keep the first. The custom entry
+  // has no time and always stays.
+  return presets.filter(
+    (preset, index) =>
+      !preset.scheduledFor ||
+      presets.findIndex((other) => other.scheduledFor === preset.scheduledFor) === index
+  );
 }

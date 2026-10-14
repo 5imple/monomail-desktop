@@ -227,14 +227,25 @@ export function useQueueAtom() {
 
   const unsnooze = useCallback(
     async (snoozeId: string) => {
-      // Optimistic — drop from cache immediately. Server-side delete is
-      // best-effort; if it fails the next hydrate will restore the row.
+      // Optimistic — drop from cache immediately, and put it back if the
+      // server refuses (it stayed gone until the next hydrate, i.e. restart).
+      let removed: SnoozedItem | undefined;
       setState((raw) => {
         const prev = resolveQueueState(raw);
-        const { [snoozeId]: _removed, ...rest } = prev.snoozed;
+        const { [snoozeId]: item, ...rest } = prev.snoozed;
+        removed = item;
         return { ...prev, snoozed: rest };
       });
       const res = await electronApi.queueUnsnooze(snoozeId);
+      if (!res.ok && removed) {
+        const item = removed;
+        setState((raw) => {
+          const prev = resolveQueueState(raw);
+          // Unless a push or hydrate has put it back (or changed it) meanwhile.
+          if (prev.snoozed[item.id]) return prev;
+          return { ...prev, snoozed: { ...prev.snoozed, [item.id]: item } };
+        });
+      }
       return res.ok ? { ok: true as const } : { ok: false as const, error: res.error };
     },
     [setState]
@@ -269,12 +280,23 @@ export function useQueueAtom() {
 
   const cancelSchedule = useCallback(
     async (scheduleId: string) => {
+      // Optimistic, restored if the server refuses (see unsnooze).
+      let removed: ScheduledItem | undefined;
       setState((raw) => {
         const prev = resolveQueueState(raw);
-        const { [scheduleId]: _removed, ...rest } = prev.scheduled;
+        const { [scheduleId]: item, ...rest } = prev.scheduled;
+        removed = item;
         return { ...prev, scheduled: rest };
       });
       const res = await electronApi.queueCancelSchedule(scheduleId);
+      if (!res.ok && removed) {
+        const item = removed;
+        setState((raw) => {
+          const prev = resolveQueueState(raw);
+          if (prev.scheduled[item.id]) return prev;
+          return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } };
+        });
+      }
       return res.ok ? { ok: true as const } : { ok: false as const, error: res.error };
     },
     [setState]
@@ -293,12 +315,23 @@ export function useQueueAtom() {
 
   const sendScheduledNow = useCallback(
     async (scheduleId: string) => {
+      // Optimistic, restored if the server refuses (see unsnooze).
+      let removed: ScheduledItem | undefined;
       setState((raw) => {
         const prev = resolveQueueState(raw);
-        const { [scheduleId]: _removed, ...rest } = prev.scheduled;
+        const { [scheduleId]: item, ...rest } = prev.scheduled;
+        removed = item;
         return { ...prev, scheduled: rest };
       });
       const res = await electronApi.queueSendNow(scheduleId);
+      if (!res.ok && removed) {
+        const item = removed;
+        setState((raw) => {
+          const prev = resolveQueueState(raw);
+          if (prev.scheduled[item.id]) return prev;
+          return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } };
+        });
+      }
       return res.ok ? { ok: true as const } : { ok: false as const, error: res.error };
     },
     [setState]
