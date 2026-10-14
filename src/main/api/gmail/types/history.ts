@@ -1,9 +1,3 @@
-export interface GmailHistoryListResponse {
-  history: GmailHistory[] | null;
-  nextPageToken?: string;
-  historyId: string;
-}
-
 export interface GmailHistory {
   messagesAdded: GmailHistoryMessage[];
   messagesDeleted: GmailHistoryMessage[];

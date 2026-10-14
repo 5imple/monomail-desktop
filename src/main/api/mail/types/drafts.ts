@@ -19,8 +19,3 @@ export interface MailDraftUpdateResponse {
   messageId: string;
   draftId: string;
 }
-
-export interface MailDraftSendResponse {
-  id: string;
-  threadId: string;
-}

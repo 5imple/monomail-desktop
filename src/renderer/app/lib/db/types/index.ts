@@ -19,14 +19,6 @@ export interface MonoThreadRecord {
   items: string[];
 }
 
-export interface SyncHistoryMetaRecord {
-  key: string; // 'accountMeta' or other key identifier
-  accountId: string;
-  historyId: string;
-  lastUpdatedAt: number; // timestamp
-  lastSyncQuery?: string;
-}
-
 // Locally-held bytes for a draft's attachments and inline images. In standalone
 // (no-backend) mode the file bytes live here in IndexedDB until the draft is
 // sent, at which point buildRawMessage encodes them into the MIME message.

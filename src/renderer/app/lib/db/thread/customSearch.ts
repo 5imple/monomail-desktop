@@ -912,59 +912,6 @@ function findMatchingTerms(text: string, searchTerms: string[]): string[] {
 }
 
 /**
- * Hybrid search that combines local search results with API results
- * This provides the best of both worlds - fast local results with comprehensive API results
- */
-export async function hybridSearchThreadsMultiUser(
-  uids: string[],
-  query: string,
-  apiSearchFunction: (query: string) => Promise<MonoThread[]>,
-  options: SearchOptions = {}
-): Promise<{
-  localResults: CustomSearchResponse;
-  apiResults: MonoThread[];
-  combinedResults: MonoThread[];
-  strategy: 'local-only' | 'api-only' | 'hybrid';
-}> {
-  const { limit = 50 } = options;
-
-  // First, try local search
-  const localResults = await DBCustomSearchThreadsMultiUser(uids, query, {
-    ...options,
-    limit: Math.ceil(limit * 0.7) // Reserve 70% for local results
-  });
-
-  // Determine search strategy based on local results
-  let strategy: 'local-only' | 'api-only' | 'hybrid' = 'local-only';
-  let apiResults: MonoThread[] = [];
-
-  if (localResults.totalLocalMatches < limit * 0.5) {
-    // If we don't have enough local results, supplement with API
-    strategy = localResults.hasLocalResults ? 'hybrid' : 'api-only';
-
-    try {
-      apiResults = await apiSearchFunction(query);
-      // Limit API results to fill the gap
-      const apiLimit = limit - localResults.threads.length;
-      apiResults = apiResults.slice(0, Math.max(apiLimit, Math.ceil(limit * 0.3)));
-    } catch (error) {
-      console.warn('API search failed, falling back to local results only:', error);
-      strategy = 'local-only';
-    }
-  }
-
-  // Combine and deduplicate results
-  const combinedResults = combineAndDeduplicateResults(localResults.threads, apiResults, limit);
-
-  return {
-    localResults,
-    apiResults,
-    combinedResults,
-    strategy
-  };
-}
-
-/**
  * Combine local and API results, removing duplicates and maintaining good ranking
  */
 function combineAndDeduplicateResults(

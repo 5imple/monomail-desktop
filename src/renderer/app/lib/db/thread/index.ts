@@ -161,37 +161,6 @@ export async function DBGetThread(uid: string, threadId: string): Promise<MonoTh
   return fetchAndConstructThread(tx, threadData, uid);
 }
 
-export async function DBGetTargetThread(uid: string, targetEmail?: string): Promise<MonoThread[]> {
-  // Existing implementation...
-  const db = await initDB(uid);
-  const tx = db.transaction(['threads', 'messages', 'drafts'], 'readonly');
-  const threadsStore = tx.objectStore('threads');
-
-  const threadData = await threadsStore.getAll();
-  let filteredThreadData = threadData;
-
-  if (targetEmail) {
-    filteredThreadData = threadData.filter(
-      (v: MonoThread) =>
-        v.from
-          .concat(v.cc, v.bcc)
-          .map((v) => v.email)
-          .filter((email) => email.includes(targetEmail)).length > 0
-    );
-  }
-
-  // Construct the threads with full message objects
-  const threads = await Promise.all(
-    filteredThreadData.map(async (threadData) => {
-      if (!threadData || threadData.labelIds.includes('TRASH')) return null;
-      // Use the utility function to construct the thread
-      return fetchAndConstructThread(tx, threadData, uid);
-    })
-  );
-
-  return threads.filter((thread): thread is MonoThread => thread !== null);
-}
-
 export async function DBRemoveThread(uid: string, threadId: string) {
   // Existing implementation...
   const db = await initDB(uid);
@@ -349,37 +318,6 @@ export async function DBReconcileInboxMembership(
   }
   await tx.done;
   return pruned;
-}
-
-export async function DBGetThreadsByLabel(
-  uid: string,
-  label: ValidLabel | string,
-  limit: number = 50,
-  offset: number = 0
-): Promise<MonoThread[]> {
-  // Existing implementation...
-  const db = await initDB(uid);
-  const tx = db.transaction(['threads', 'messages', 'drafts'], 'readonly');
-  const threadsStore = tx.objectStore('threads');
-
-  // Use the multiEntry index `byLabelIds` to fetch threads with the specified label
-  const threadsMatchingLabel = await threadsStore.index('byLabelIds').getAll(label.toUpperCase());
-
-  // Sort by timestamp in descending order
-  const sortedThreads = threadsMatchingLabel
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(offset, offset + limit);
-
-  // Construct the threads
-  const threads = await Promise.all(
-    sortedThreads.map(async (threadData) => {
-      if (!threadData || threadData.labelIds.includes('TRASH')) return null;
-      // Use the utility function to construct the thread
-      return fetchAndConstructThread(tx, threadData, uid);
-    })
-  );
-
-  return threads.filter((thread): thread is MonoThread => thread !== null);
 }
 
 /**

@@ -66,18 +66,3 @@ export async function DBGetSyncHistoryMeta(
     return null;
   }
 }
-
-/**
- * Update the historyId for an account based on the most recent thread
- */
-export async function updateHistoryIdFromThread(
-  accountId: string,
-  thread: MonoThread
-): Promise<void> {
-  if (!thread || !thread.historyId) return;
-
-  await DBSaveSyncHistoryMeta(accountId, {
-    historyId: thread.historyId,
-    lastUpdatedAt: Date.now()
-  });
-}

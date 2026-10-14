@@ -6,7 +6,6 @@ import electronApi from '@/renderer/app/lib/electronApi';
 
 // Status types
 export type ServiceStatus = 'operational' | 'degraded' | 'outage';
-export type ServiceType = 'gmail' | 'gcp' | 'server';
 
 interface ServiceStatusState {
   status: ServiceStatus;
@@ -99,8 +98,6 @@ const initialGCPHealthState: GCPHealthState = {
   computeEngine: { status: 'operational', lastIncident: null },
   lastChecked: Date.now()
 };
-
-export const gcpHealthStateAtom = atom<GCPHealthState>(initialGCPHealthState);
 
 export const useStatusCheck = () => {
   const [statusState, setStatusState] = useAtom(statusStateAtom);

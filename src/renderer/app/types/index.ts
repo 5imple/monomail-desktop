@@ -1,8 +1,6 @@
 import { UniqueIdentifier } from '@dnd-kit/core';
 import { UUID } from 'crypto';
 
-export type MonoUUID = UUID | string | number | UniqueIdentifier;
-
 export type CommandType =
   | 'SEARCH'
   | 'PIN_CONTACT'

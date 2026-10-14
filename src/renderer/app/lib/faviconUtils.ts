@@ -1,14 +1,3 @@
-export const generalEmailDomains = [
-  'gmail.com',
-  'yahoo.com',
-  'outlook.com',
-  'hotmail.com',
-  'aol.com',
-  'icloud.com',
-  'mail.com',
-  'yandex.com'
-];
-
 // Function to extract the main domain from an email
 export const extractDomainFromEmail = (email: string): string => {
   const emailRegex = /@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/;
@@ -19,12 +8,6 @@ export const extractDomainFromEmail = (email: string): string => {
     return domainParts.slice(-2).join('.');
   }
   return '';
-};
-
-// Function to get the favicon from the domain
-export const getFaviconFromDomain = (domain: string): string => {
-  const faviconUrl = `${import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN}/api/favicon?domain=${domain}`;
-  return faviconUrl;
 };
 
 // Function to get the favicon from the domain

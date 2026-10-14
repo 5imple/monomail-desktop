@@ -38,12 +38,6 @@ export interface MailMessage {
   hasAttachments?: boolean;
 }
 
-export interface MailMessageSendResponse {
-  id: string;
-  threadId: string;
-  labelIds: string[];
-}
-
 export interface MailMessageAttachmentResponse {
   attachmentId: string;
   size: number;

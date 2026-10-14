@@ -115,53 +115,6 @@ export const VariableExtension = Extension.create({
   }
 });
 
-// Enhanced Plugin for handling variable previews with better styling
-export const VariablePreviewPlugin = () => {
-  interface PluginState {
-    preview: VariablePreview | null;
-  }
-
-  return new Plugin<PluginState>({
-    key: new PluginKey('variable-preview'),
-    state: {
-      init(): PluginState {
-        return {
-          preview: null
-        };
-      },
-      apply(tr, prev) {
-        const preview = tr.getMeta('variable-preview') as VariablePreview | null;
-        if (preview === undefined) return prev;
-        return { preview };
-      }
-    },
-    props: {
-      decorations(state) {
-        const pluginState = this.getState(state);
-        if (!pluginState || !pluginState.preview) return null;
-
-        const { start, end, value } = pluginState.preview;
-
-        return DecorationSet.create(state.doc, [
-          // Use two decorations to achieve the effect:
-          // 1. A widget decoration to show the preview
-          Decoration.widget(start, () => {
-            const span = document.createElement('span');
-            span.textContent = value || '';
-            span.className =
-              'variable-preview inline-block rounded bg-muted px-1 py-0.5 text-foreground ring-1 ring-border';
-            return span;
-          }),
-          // 2. An inline decoration to hide the original text
-          Decoration.inline(start, end, {
-            class: 'variable-text-hidden'
-          })
-        ]);
-      }
-    }
-  });
-};
-
 // Component for the Tippy popover content
 interface VariablePopoverContentProps {
   variableValue: string;

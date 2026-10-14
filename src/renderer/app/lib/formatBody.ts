@@ -111,27 +111,3 @@ export function formatForwardedMessage(emailData: MonoMessage) {
 
   return formattedBody;
 }
-
-export function formatReplyMessage(emailData: MonoMessage) {
-  // Destructure the email data
-  const { from } = emailData;
-  const body = emailData.getParsedBody();
-
-  // Format the sender and timestamp
-  const formattedFrom = formatRecipient(from);
-  const formattedDate = formatMessageDate(emailData);
-
-  // Add the reply prefix line
-  const replyHeader = `On ${formattedDate}, ${formattedFrom} wrote:\n`;
-
-  // Indent the original email body for the quoted reply format
-  const quotedBody = body
-    .split('\n')
-    .map((line) => `> ${line}`) // Prefix each line with ">"
-    .join('\n');
-
-  // Combine the reply header with the quoted original email
-  const replyMessage = `${replyHeader}${quotedBody}`;
-
-  return replyMessage;
-}

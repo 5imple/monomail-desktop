@@ -36,18 +36,3 @@ export interface GmailMessage {
   attachments: Record<string, MonoAttachment>;
   payload: GmailMessagePayload;
 }
-
-// Interface for the response of Send Message
-export interface GmailMessageSendResponse {
-  id: string;
-  threadId: string;
-  labelIds: string[];
-}
-
-// Interface for the response of Get Attachment
-export interface GmailMessageAttachmentResponse {
-  attachmentId: string;
-  size: number;
-  data: string;
-  mimeType: string;
-}

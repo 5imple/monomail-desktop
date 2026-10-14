@@ -1,9 +1,6 @@
 import { IMonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoAttachment } from '@/main/models/types';
 
-// Draft request for creation
-export interface MonoDraftCreateRequest extends IMonoDraft {}
-
 // Draft request for update
 export interface MonoDraftUpdateRequest extends Omit<IMonoDraft, 'id'> {}
 

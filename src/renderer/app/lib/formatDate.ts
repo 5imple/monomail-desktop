@@ -17,15 +17,6 @@ export const formatDate = (
   return formattedDate;
 };
 
-export const formatMessageHeaderDate = (
-  timestamp: number,
-  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone
-): string => {
-  const date = toZonedTime(new Date(timestamp), timeZone);
-
-  return formatInTimeZone(date, timeZone, 'eee, MMM d');
-};
-
 /**
  * Message header date in the reader: "Fri, Oct 2" — plus the time for today's
  * mail ("3:01 PM", like the inbox list) and the year for older years, so a

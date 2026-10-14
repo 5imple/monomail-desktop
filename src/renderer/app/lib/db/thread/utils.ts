@@ -240,38 +240,6 @@ export async function updateThreadLabels(
   await threadsStore.put(threadData);
 }
 
-export async function calculateThreadFlags(
-  tx: IDBPTransaction<MonoCacheDB, string[], 'readwrite'>,
-  threadId: string
-) {
-  const messagesStore = tx.objectStore('messages');
-  const draftsStore = tx.objectStore('drafts');
-
-  // Fetch all messages and drafts associated with the thread
-  const threadMessages = await messagesStore.index('byThreadId').getAll(threadId);
-  const threadDrafts = await draftsStore.index('byThreadId').getAll(threadId);
-
-  // Initialize a Set to accumulate unique labels
-  const accumulatedLabels = new Set<string>();
-
-  // Add labels from messages
-  threadMessages.forEach((message) => {
-    if (message.labelIds) {
-      message.labelIds.forEach((label) => accumulatedLabels.add(label));
-    }
-  });
-
-  // Add 'DRAFT' label for each draft
-  if (threadDrafts.length > 0) {
-    accumulatedLabels.add('DRAFT');
-  }
-
-  // Convert accumulated labels to flags
-  const flags = Array.from(accumulatedLabels);
-
-  return flags;
-}
-
 export async function fetchAndConstructThread(
   tx: IDBPTransaction<MonoCacheDB, string[], 'readwrite' | 'readonly'>,
   threadData: MonoThreadRecord | null,

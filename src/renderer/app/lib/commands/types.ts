@@ -3,10 +3,6 @@ import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoIconType } from '@/renderer/app/components/icons/icons';
 import { CommandType } from '@/renderer/app/types';
 
-export type CommandOptions = {
-  [key: string]: any;
-};
-
 export type CommandScope =
   | 'GLOBAL'
   | 'CONVERSATION_SELECTED'

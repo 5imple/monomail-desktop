@@ -144,41 +144,6 @@ export async function DBUpdateMessageLabels(
   await tx.done;
 }
 
-export async function DBOverrideMessageLabels(
-  uid: string,
-  messageId: string,
-  newLabelIds: string[]
-) {
-  const db = await initDB(uid);
-  const tx = db.transaction(['messages', 'threads', 'drafts'], 'readwrite');
-  const messagesStore = tx.objectStore('messages');
-
-  const messageData = await messagesStore.get(messageId);
-  if (!messageData) {
-    console.warn(`Message ${messageId} not found`);
-    return;
-  }
-
-  const message = MonoMessage.fromPlainObject(messageData);
-  const oldLabelIds = [...message.labelIds]; // Store old labels for thread update
-
-  // Replace all labels with the new ones
-  message.labelIds = [...newLabelIds];
-
-  await messagesStore.put(message.toPlainObject());
-
-  // Calculate which labels were added and removed for thread update
-  const addedLabels = newLabelIds.filter((label) => !oldLabelIds.includes(label));
-  const removedLabels = oldLabelIds.filter((label) => !newLabelIds.includes(label));
-
-  // Update thread-category flags if labels impact categorization
-  if (addedLabels.length > 0 || removedLabels.length > 0) {
-    await updateThreadLabels(tx, message.threadId, addedLabels, removedLabels);
-  }
-
-  await tx.done;
-}
-
 export async function DBRemoveMessage(uid: string, messageId: string) {
   const db = await initDB(uid);
 

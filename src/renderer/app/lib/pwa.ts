@@ -158,49 +158,9 @@ export const initializeNetworkMonitoring = () => {
   });
 };
 
-// Force refresh with bypass cache (for debugging)
-export const forceAppUpdate = async () => {
-  if (import.meta.env.DEV) {
-    logPWA('info', 'Force updating app (bypass cache)...');
-
-    // Clear all caches
-    if ('caches' in window) {
-      const cacheNames = await caches.keys();
-      await Promise.all(cacheNames.map((name) => caches.delete(name)));
-      logPWA('info', 'All caches cleared');
-    }
-
-    // Reload with hard refresh
-    window.location.reload();
-  } else {
-    logPWA('warn', 'Force update only available in development mode');
-  }
-};
-
 // Simple utility to check if service worker is available
 export const isServiceWorkerSupported = (): boolean => {
   return 'serviceWorker' in navigator;
-};
-
-// Get service worker registration info (for debugging)
-export const getServiceWorkerInfo = async () => {
-  if (!isServiceWorkerSupported()) return null;
-
-  try {
-    const registration = await navigator.serviceWorker.getRegistration();
-    if (registration) {
-      return {
-        active: !!registration.active,
-        installing: !!registration.installing,
-        waiting: !!registration.waiting,
-        scope: registration.scope,
-        updateViaCache: registration.updateViaCache
-      };
-    }
-  } catch (error) {
-    logPWA('error', 'Failed to get service worker info:', error);
-  }
-  return null;
 };
 
 // Export the event name for components to use

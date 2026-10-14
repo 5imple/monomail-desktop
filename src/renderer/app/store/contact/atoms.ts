@@ -5,9 +5,6 @@ import { atomWithStorage } from 'jotai/utils';
 
 export const contactArrayAtom = atom<Contact[]>([]);
 
-export const pinnedContactArrayAtom = atom<Contact[]>([]);
-export const unPinnedContactArrayAtom = atom<Contact[]>([]);
-
 export const selectedContactAtoms = atom<Contact[]>([]);
 export const lastGoogleContactSyncDateAtom = atomWithStorage<Record<string, string>>(
   'lgc-sync',

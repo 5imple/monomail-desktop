@@ -75,14 +75,3 @@ export function getAttachmentIcon(mimeType: string, className?: string, fileName
   // A plain document rather than the question-mark file, which read as an error.
   return <MonoIcon type="draft" className={cls} />;
 }
-
-export function getAttachmentTypeName(mimeType: string) {
-  switch (mimeType) {
-    case 'application/octet-stream':
-      return 'document';
-    case 'application/x-rar-compressed':
-      return 'rar';
-    default:
-      return mimeType.split('/')[1];
-  }
-}

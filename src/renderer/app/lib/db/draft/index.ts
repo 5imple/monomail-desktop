@@ -67,21 +67,6 @@ export async function DBSaveDraft(uid: string, draft: MonoDraft): Promise<void> 
 }
 
 /**
- * Get drafts by thread ID.
- * @param uid - User ID for the database namespace.
- * @param threadId - Thread ID to fetch drafts for.
- * @returns Array of MonoDraft
- */
-export async function DBGetDraftsByThreadId(uid: string, threadId: string): Promise<MonoDraft[]> {
-  const db = await initDB(uid);
-  const draftsStore = db.transaction(['drafts'], 'readonly').objectStore('drafts');
-  const index = draftsStore.index('byThreadId');
-
-  const drafts = await index.getAll(threadId);
-  return drafts.map((draft) => MonoDraft.fromPlainObject(draft));
-}
-
-/**
  * Get a specific draft by its ID.
  * @param uid - User ID for the database namespace.
  * @param draftId - Draft ID to fetch.
@@ -124,49 +109,6 @@ export async function DBRemoveDraft(uid: string, draftId: string): Promise<void>
   } finally {
     await tx.done;
   }
-}
-
-/**
- * Get all threads with drafts, returning full thread objects with message details.
- * If a thread ID doesn't exist in the database, create an empty thread for each draft.
- * @param uid - User ID for the database namespace.
- * @param limit - Number of drafts to process.
- * @param offset - Offset for pagination.
- * @returns Array of MonoThread objects.
- */
-export async function DBGetAllDraftThreads(
-  uid: string,
-  label: string,
-  limit: number = 50,
-  offset: number = 0
-): Promise<MonoThread[]> {
-  const db = await initDB(uid);
-  const tx = db.transaction(['drafts', 'threads', 'messages'], 'readonly');
-  const draftsStore = tx.objectStore('drafts');
-  const threadsStore = tx.objectStore('threads');
-
-  // Fetch all draft records
-  const draftRecords = await draftsStore.getAll();
-
-  // Apply pagination
-  const paginatedDrafts = draftRecords.slice(offset, offset + limit);
-
-  const threads = await Promise.all(
-    paginatedDrafts.map(async (draft) => {
-      if (draft.threadId) {
-        const threadData = await threadsStore.get(draft.threadId);
-
-        if (threadData && !threadData.labelIds.includes('TRASH')) {
-          // If the thread exists, construct it using fetchAndConstructThread
-          return await fetchAndConstructThread(tx, threadData, uid);
-        }
-      }
-      return null;
-    })
-  );
-
-  const results = threads.filter(Boolean);
-  return results as MonoThread[];
 }
 
 /**

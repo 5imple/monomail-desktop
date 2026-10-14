@@ -60,7 +60,3 @@ export const validMainChannel = [
   'main:toast:show'
 ] as const;
 export type ValidMainChannel = (typeof validMainChannel)[number];
-
-export const isValidMainChannel = (channel: string): channel is ValidMainChannel => {
-  return (validMainChannel as readonly string[]).includes(channel);
-};

@@ -261,8 +261,3 @@ export function parsePayloadPartWithHighlight(
 
   return result;
 }
-
-// Clear cache when needed (e.g., when memory usage is high)
-export function clearParsePayloadPartCache() {
-  parsedContentCache.clear();
-}

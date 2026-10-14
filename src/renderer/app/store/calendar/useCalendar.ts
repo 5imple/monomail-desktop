@@ -40,10 +40,6 @@ import {
 
 // Re-export for backward compatibility during transition
 export type Event = CalendarEvent;
-export type EventID = CalendarEventID;
-export type EventDraft = CalendarEventDraft;
-export type EventStatus = CalendarEventStatus;
-export type ViewMode = CalendarViewMode;
 export type AccountUID = CalendarAccountUID;
 
 import {
