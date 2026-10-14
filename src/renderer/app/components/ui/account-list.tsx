@@ -14,16 +14,18 @@ const AccountList: FC<AccountListProps> = ({ accounts }) => {
 
   const getAccountIcon = (provider: string) => {
     if (provider === 'google') {
-      return <MonoIcon type={'Gmail'} className="mr-2 h-5 w-5" />;
+      return <MonoIcon type={'Gmail'} className="h-5 w-5" />;
     } else if (provider === 'microsoft') {
-      return <MonoIcon type={'Outlook'} className="mr-2 h-5 w-5" />;
+      return <MonoIcon type={'Outlook'} className="h-5 w-5" />;
     } else {
-      return <MonoIcon type={'Mono'} className="mr-2 h-5 w-5" />;
+      return <MonoIcon type={'Mono'} className="h-5 w-5" />;
     }
   };
 
   return accounts.map((account) => {
     return (
+      // The row's gap spaces the icon (an extra mr-2 doubled it), and the
+      // address sits under the name in a quieter tone.
       <div key={account.uid} className="flex items-center gap-2">
         <div>{getAccountIcon(account.provider)}</div>
         <div>
@@ -41,7 +43,7 @@ const AccountList: FC<AccountListProps> = ({ accounts }) => {
               </Tooltip>
             )}
           </div>
-          <div>{account.email}</div>
+          <div className="text-muted-foreground">{account.email}</div>
         </div>
       </div>
     );

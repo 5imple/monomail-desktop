@@ -150,7 +150,19 @@ const SignatureEditDialog: FC<SignatureEditDialogProps> = ({
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogPortal>
         <DialogOverlay className="dark" />
-        <DialogContent className="dark:border sm:max-w-[720px]">
+        <DialogContent
+          className="dark:border sm:max-w-[720px]"
+          // Start in the name field. The icon picker came first, opened its
+          // tooltip on focus, and that tooltip took the first Escape.
+          onOpenAutoFocus={(e) => {
+            const name = (e.currentTarget as HTMLElement | null)?.querySelector<HTMLInputElement>(
+              'input[name="name"]'
+            );
+            if (!name) return;
+            e.preventDefault();
+            name.focus({ preventScroll: true });
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {signature?.id

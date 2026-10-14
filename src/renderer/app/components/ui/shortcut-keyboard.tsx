@@ -16,7 +16,10 @@ const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 // Convert keys to platform-specific symbols
 const keyToIcon = (key: string): string => {
   switch (key.toLowerCase()) {
+    // `ctrl` is the Control key on every platform (react-hotkeys-hook); only
+    // `mod` means ⌘ on a Mac. Showing both as ⌘ read "MOD+CTRL+E" as ⌘ ⌘ E.
     case 'ctrl':
+      return isMac ? '⌃' : 'Ctrl';
     case 'mod':
       return isMac ? '⌘' : 'Ctrl';
     case 'shift':
@@ -86,9 +89,19 @@ const ShortcutKeyboard: FC<ShortcutKeyboardProps> = ({
   variant,
   sizeVariant
 }) => {
-  if (!shortcut) return null;
+  // Before any early return (a hook after one breaks when `shortcut` comes
+  // and goes). Off a Mac, MOD and CTRL are both Ctrl: show it once.
+  const keys = useMemo(
+    () =>
+      shortcut
+        ? parseShortcut(shortcut)
+            .map(keyToIcon)
+            .filter((key, index, all) => all.indexOf(key) === index)
+        : [],
+    [shortcut]
+  );
 
-  const keys = useMemo(() => parseShortcut(shortcut), [shortcut]);
+  if (!shortcut) return null;
 
   return (
     <span className={cn('inline-flex items-center gap-0.5', className)}>
@@ -97,7 +110,7 @@ const ShortcutKeyboard: FC<ShortcutKeyboardProps> = ({
           key={key}
           className={cn(keyboardVariants({ variant, sizeVariant }), keyboardClassName)}
         >
-          {keyToIcon(key)}
+          {key}
         </kbd>
       ))}
     </span>

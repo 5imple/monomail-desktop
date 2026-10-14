@@ -955,6 +955,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
           <>
             <TimeInput
               keepPopoverAttr
+              aria-label="Start time"
               className="w-[100px]"
               value={timeValue(localStart)}
               onValueChange={(v) => {
@@ -969,6 +970,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
             <span className="text-sm text-muted-foreground">–</span>
             <TimeInput
               keepPopoverAttr
+              aria-label="End time"
               className="w-[100px]"
               value={timeValue(localEnd)}
               onValueChange={(v) => {

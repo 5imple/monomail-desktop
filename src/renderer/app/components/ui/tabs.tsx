@@ -26,39 +26,50 @@ const TabsList = React.forwardRef<
     height: '100%'
   });
   const tabsListRef = React.useRef<HTMLDivElement | null>(null);
+  // The first placement lands without the slide; only later moves animate
+  // (it grew in from the left edge on every mount).
+  const [animate, setAnimate] = React.useState(false);
 
   React.useEffect(() => {
+    const root = tabsListRef.current;
+    if (!root) return;
+    let frame = 0;
     const updateIndicator = () => {
-      if (tabsListRef.current) {
-        const activeTab = tabsListRef.current.querySelector<HTMLElement>('[data-state="active"]');
-
-        if (activeTab) {
-          const activeRect = activeTab.getBoundingClientRect();
-          const tabsRect = tabsListRef.current.getBoundingClientRect();
-          setIndicatorStyle({
-            left: activeRect.left - tabsRect.left,
-            top: activeRect.top - tabsRect.top,
-            width: activeRect.width,
-            height: activeRect.height,
-            opacity: 1
-          });
-        }
-      }
+      const activeTab = root.querySelector<HTMLElement>('[data-state="active"]');
+      if (!activeTab) return;
+      // Undo any scale on the way: these lists open inside zoom-in-95
+      // popovers, and a mid-animation rect left the indicator small and off
+      // until the next change. (Offsets avoid it too, but round to whole
+      // pixels.)
+      const rootRect = root.getBoundingClientRect();
+      const measured = root.offsetWidth ? rootRect.width / root.offsetWidth : 1;
+      if (!measured) return;
+      const scale = Math.abs(measured - 1) < 0.01 ? 1 : measured;
+      const tabRect = activeTab.getBoundingClientRect();
+      setIndicatorStyle({
+        left: (tabRect.left - rootRect.left) / scale,
+        top: (tabRect.top - rootRect.top) / scale,
+        width: tabRect.width / scale,
+        height: tabRect.height / scale,
+        opacity: 1
+      });
+      if (!frame) frame = requestAnimationFrame(() => setAnimate(true));
     };
 
     updateIndicator();
-    window.addEventListener('resize', updateIndicator);
     const observer = new MutationObserver(updateIndicator);
-    if (tabsListRef.current) {
-      observer.observe(tabsListRef.current, {
-        attributes: true,
-        childList: true,
-        subtree: true
-      });
-    }
+    observer.observe(root, {
+      attributes: true,
+      childList: true,
+      subtree: true
+    });
+    // Size changes (fonts loading, the panel resizing) move the tabs too.
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    resizeObserver.observe(root);
     return () => {
-      window.removeEventListener('resize', updateIndicator);
+      cancelAnimationFrame(frame);
       observer.disconnect();
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -75,7 +86,8 @@ const TabsList = React.forwardRef<
       <div
         className={cn(
           buttonVariants({ variant: 'secondary' }),
-          'absolute origin-center transition-all duration-300 ease-in-out'
+          'absolute origin-center',
+          animate && 'transition-all duration-300 ease-in-out'
         )}
         style={indicatorStyle}
       />

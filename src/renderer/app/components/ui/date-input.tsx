@@ -45,6 +45,7 @@ export const DateInput: React.FC<DateInputProps> = ({
         <Button
           variant="outline"
           className={cn('w-[140px] justify-between font-normal', className)}
+          disabled={disabled}
           {...commonKeep}
         >
           {value ? value.toLocaleDateString() : 'Select date'}
@@ -60,7 +61,9 @@ export const DateInput: React.FC<DateInputProps> = ({
             onValueChange(d);
             setOpen(false);
           }}
-          initialFocus
+          // Focus the chosen day (`initialFocus` does nothing in
+          // react-day-picker 9; focus went to the previous-month button).
+          autoFocus
         />
       </PopoverContent>
     </Popover>

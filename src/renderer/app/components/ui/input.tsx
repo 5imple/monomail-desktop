@@ -6,13 +6,13 @@ import { ringVariants } from '@/renderer/app/components/ui/constants';
 // Wrapper variants for when elements are inside the input
 const inputWrapperVariants = cva(
   cn(
-    'flex w-full rounded-lg border-input bg-background text-sm ring-offset-background transition-color focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'
+    'flex w-full rounded-md border-input bg-background text-sm ring-offset-background transition-colors focus-within:outline-none'
   ),
   {
     variants: {
       variant: {
-        default: 'border border-input bg-background shadow-sm',
-        underline: 'border-b border-input bg-background rounded-none',
+        default: 'border border-input bg-background shadow-sm focus-within:border-ring',
+        underline: 'border-b border-input bg-background rounded-none focus-within:border-ring',
         ghost: 'border-none bg-muted',
         transparent: 'border-none bg-transparent'
       },
@@ -51,13 +51,15 @@ const internalInputVariants = cva(
 // Original input variants (for when elements are outside)
 const externalInputVariants = cva(
   cn(
-    'h-10 w-full rounded-lg border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-color focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-ring focus-visible:ring-offset-0'
+    'h-10 w-full rounded-md border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-ring focus-visible:ring-offset-0'
   ),
   {
     variants: {
       variant: {
-        default: 'border border-input bg-background shadow-sm',
-        underline: 'border-b border-input bg-background rounded-none',
+        // A bordered field shows focus by darkening its border; the
+        // borderless ones (compose) stay as they are.
+        default: 'border border-input bg-background shadow-sm focus-visible:border-ring',
+        underline: 'border-b border-input bg-background rounded-none focus-visible:border-ring',
         ghost: 'border-none bg-muted',
         transparent: 'border-none bg-transparent'
       },
@@ -102,10 +104,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ) => {
     // Elements inside the input field
     if (elementsPosition === 'inside') {
+      // The side padding below keys on the size, which cva's default doesn't
+      // fill in: without a sizeVariant the field had none.
+      const size = sizeVariant ?? 'default';
       return (
         <div
           className={cn(
-            inputWrapperVariants({ variant, sizeVariant }),
+            inputWrapperVariants({ variant, sizeVariant: size }),
             'items-center',
             wrapperClassName
           )}
@@ -114,9 +119,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             <div
               className={cn(
                 'mx-1 flex items-center justify-center',
-                sizeVariant === 'default' && 'pl-3',
-                sizeVariant === 'sm' && 'pl-2',
-                sizeVariant === 'lg' && 'pl-4'
+                size === 'default' && 'pl-3',
+                size === 'sm' && 'pl-2',
+                size === 'lg' && 'pl-4'
               )}
             >
               <span className="text-muted-foreground">{prepend}</span>
@@ -125,13 +130,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             type={type}
             className={cn(
-              internalInputVariants({ sizeVariant }),
-              !prepend && sizeVariant === 'default' && 'pl-3',
-              !prepend && sizeVariant === 'sm' && 'pl-2',
-              !prepend && sizeVariant === 'lg' && 'pl-4',
-              !append && sizeVariant === 'default' && 'pr-3',
-              !append && sizeVariant === 'sm' && 'pr-2',
-              !append && sizeVariant === 'lg' && 'pr-4',
+              internalInputVariants({ sizeVariant: size }),
+              !prepend && size === 'default' && 'pl-3',
+              !prepend && size === 'sm' && 'pl-2',
+              !prepend && size === 'lg' && 'pl-4',
+              !append && size === 'default' && 'pr-3',
+              !append && size === 'sm' && 'pr-2',
+              !append && size === 'lg' && 'pr-4',
               className
             )}
             ref={ref}
@@ -141,9 +146,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             <div
               className={cn(
                 'mx-1 flex items-center justify-center',
-                sizeVariant === 'default' && 'pr-3',
-                sizeVariant === 'sm' && 'pr-2',
-                sizeVariant === 'lg' && 'pr-4'
+                size === 'default' && 'pr-3',
+                size === 'sm' && 'pr-2',
+                size === 'lg' && 'pr-4'
               )}
             >
               <span className="text-muted-foreground">{append}</span>

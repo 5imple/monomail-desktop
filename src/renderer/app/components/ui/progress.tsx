@@ -10,6 +10,8 @@ const Progress = React.forwardRef<
   <ProgressPrimitive.Root
     ref={ref}
     className={cn('relative h-2 w-full overflow-hidden rounded-full bg-muted-low', className)}
+    // Without it Radix reports the bar as indeterminate (no aria-valuenow).
+    value={isLoading ? null : value}
     {...props}
   >
     <ProgressPrimitive.Indicator

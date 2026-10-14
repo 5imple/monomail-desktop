@@ -126,6 +126,8 @@ export const TimeInput: React.FC<TimeInputProps> = ({
       `}
       </style>
       <Input
+        // Before `rest`, so a caller can name the field ("Start time").
+        aria-label="Time"
         {...rest}
         {...commonKeep}
         type="time"
@@ -141,10 +143,10 @@ export const TimeInput: React.FC<TimeInputProps> = ({
           if (e.key === 'Escape') setOpen(false);
           if (e.key === 'Enter') setOpen(false);
         }}
-        step={1}
+        // Minutes are the finest unit; a step under 60 adds a seconds field.
+        step={60}
         disabled={disabled}
         sizeVariant={sizeVariant}
-        aria-label="Time"
         data-hide-time-indicator="true"
       />
     </div>

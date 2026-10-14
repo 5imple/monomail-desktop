@@ -10,11 +10,9 @@ interface MonoLogoProps {
 
 const MonoLogo: FC<MonoLogoProps> = ({ className }) => {
   const { currentTheme } = useTheme();
-  return currentTheme === 'dark' ? (
-    <img src={MonoDark} className={cn('w-24', className)} />
-  ) : (
-    <img src={MonoLight} className={cn('w-24', className)} />
-  );
+  // Black is a dark theme too: it showed the light (white-tile) logo.
+  const isDark = currentTheme === 'dark' || currentTheme === 'black';
+  return <img src={isDark ? MonoDark : MonoLight} alt="" className={cn('w-24', className)} />;
 };
 
 export default MonoLogo;

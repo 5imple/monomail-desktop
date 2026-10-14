@@ -13,7 +13,7 @@ const sizeVariants = {
 const thumbSizeVariants = {
   sm: 'h-3 w-3 data-[state=checked]:translate-x-3', // sm thumb size
   md: 'h-5 w-5 data-[state=checked]:translate-x-5', // md thumb size (default)
-  lg: 'h-7 w-7 data-[state=checked]:translate-x-7' // lg thumb size
+  lg: 'h-7 w-7 data-[state=checked]:translate-x-6' // lg thumb size (fits the 52px inner track)
 };
 
 const Switch = React.forwardRef<
@@ -24,7 +24,7 @@ const Switch = React.forwardRef<
 >(({ className, size = 'md', ...props }, ref) => (
   <SwitchPrimitives.Root
     className={cn(
-      'peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500 data-[state=unchecked]:border-border/70 data-[state=unchecked]:bg-input',
+      'peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-selection data-[state=checked]:bg-selection data-[state=unchecked]:border-border/70 data-[state=unchecked]:bg-input',
       ringVariants,
       sizeVariants[size],
       className

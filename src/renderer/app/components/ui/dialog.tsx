@@ -77,13 +77,15 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 );
 DialogFooter.displayName = 'DialogFooter';
 
+// `text-md` isn't a size in this config, so titles rendered at body size;
+// text-lg matches the alert dialogs.
 const DialogTitle = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-md font-semibold leading-none tracking-tight', className)}
+    className={cn('text-lg font-semibold leading-tight tracking-tight', className)}
     {...props}
   />
 ));
@@ -95,7 +97,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-md font-normal text-muted-foreground sm:text-sm', className)}
+    className={cn('text-sm font-normal text-muted-foreground', className)}
     {...props}
   />
 ));

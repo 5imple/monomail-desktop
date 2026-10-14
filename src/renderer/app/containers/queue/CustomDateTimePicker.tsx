@@ -64,7 +64,7 @@ export function CustomDateTimePicker({
         onSelect={(d) => d && setDate(d)}
         disabled={{ before: new Date() }}
         className="mx-auto w-fit"
-        initialFocus
+        autoFocus
       />
       <div className="flex items-center gap-2 border-t p-3">
         {/* The shared input: same height as the button beside it, and the

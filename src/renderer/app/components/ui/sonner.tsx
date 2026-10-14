@@ -21,7 +21,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       gap={8}
       toastOptions={{
         classNames: {
-          icon: '[&>svg]:w-[1.1rem] [&>svg]:h-[1.1rem] m-0 mx-1 w-4 h-4 group-data-[type=error]:text-red-500 group-data-[type=success]:text-green-500 group-data-[type=warning]:text-amber-500 group-data-[type=info]:text-foreground',
+          icon: '[&>svg]:w-[1.1rem] [&>svg]:h-[1.1rem] m-0 mx-1 w-4 h-4 group-data-[type=error]:text-destructive group-data-[type=success]:text-chart-1 group-data-[type=warning]:text-secondary-accent group-data-[type=info]:text-foreground',
           toast:
             'group p-3 min-h-14 toast group-[.toaster]:bg-gradient-to-t from-secondary dark:from-background dark:to-secondary to-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-xl border rounded-xl group-[.toaster]:pointer-events-auto',
           description: 'group-[.toast]:text-muted-foreground',
@@ -29,8 +29,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
           cancelButton: 'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground'
         }
       }}
+      // Theme tokens for the icon colors above (rose, lime, amber), and a
+      // warning icon of ours rather than sonner's own triangle.
       icons={{
         info: <MonoIcon type={'AlertCircle'} />,
+        warning: <MonoIcon type={'AlertCircle'} />,
         error: <MonoIcon type={'AlertCircle'} />,
         success: <MonoIcon type={'CheckCircle'} />,
         loading: <Loader />

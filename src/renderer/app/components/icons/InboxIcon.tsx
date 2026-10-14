@@ -124,23 +124,29 @@ const ICON_MAP: Partial<Record<MonoIconType, MaterialSymbol>> = {
   XCircle: 'cancel'
 };
 
+// Whole class tokens only: `\bh-3\b` also matched "h-3.5" (a boundary sits
+// before the "."), and the strip pattern cut "h-0" out of "min-h-0".
+const sizeToken = (size: string) =>
+  new RegExp(`(?:^|\\s)(?:h|w)-${size.replace('.', '\\.')}(?=\\s|$)`);
+
 const SIZE_FROM_CLASS: Array<[RegExp, number]> = [
-  [/\bh-3\b|\bw-3\b/, 16],
-  [/\bh-3\.5\b|\bw-3\.5\b/, 17],
-  [/\bh-4\b|\bw-4\b/, 18],
-  [/\bh-5\b|\bw-5\b/, 20],
-  [/\bh-6\b|\bw-6\b/, 24],
-  [/\bh-8\b|\bw-8\b/, 32]
+  [sizeToken('3'), 16],
+  [sizeToken('3.5'), 17],
+  [sizeToken('4'), 18],
+  [sizeToken('5'), 20],
+  [sizeToken('6'), 24],
+  [sizeToken('8'), 32]
 ];
 
-const SIZE_CLASS_PATTERN = /\b(?:h|w)-(?:\[[^\]]+\]|[^\s]+)/g;
+const SIZE_CLASS_PATTERN = /(^|\s)(?:h|w)-(?:\[[^\]]+\]|\S+)(?=\s|$)/g;
 
 const inferSize = (className?: string) => {
   if (!className) return 18;
   return SIZE_FROM_CLASS.find(([pattern]) => pattern.test(className))?.[1] ?? 18;
 };
 
-const stripSizeClasses = (className?: string) => className?.replace(SIZE_CLASS_PATTERN, '').trim();
+const stripSizeClasses = (className?: string) =>
+  className?.replace(SIZE_CLASS_PATTERN, '$1').replace(/\s+/g, ' ').trim();
 
 const resolveSymbol = (type?: InboxIconType, symbol?: MaterialSymbol): MaterialSymbol => {
   if (symbol) return symbol;

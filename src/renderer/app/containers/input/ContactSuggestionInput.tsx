@@ -7,6 +7,7 @@ import MultipleSelector, {
 } from '@/renderer/app/components/ui/multi-selector';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { Contact } from '@/renderer/app/lib/db/contact';
+import { hasModKey } from '@/renderer/app/lib/platform';
 import { matchesAllWords, recipientLabel } from '@/renderer/app/lib/recipientLabel';
 import { cn } from '@/renderer/app/lib/utils';
 import React, { useEffect, useState } from 'react';
@@ -231,6 +232,13 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
             <button
               className="ml-1 rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={t('compose_card.remove_recipient', { name: option.label })}
+              // The chip is the contact menu's trigger, which opens on
+              // pointerdown and on Enter/Space: keep those for the ×, so it
+              // removes the chip instead of flashing (or opening) the menu.
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !hasModKey(e)) e.stopPropagation();
+              }}
               onClick={() => {
                 handleUnSelect(option);
               }}

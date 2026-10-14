@@ -4,9 +4,11 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { cn } from '@/renderer/app/lib/utils';
 
 // Create a custom Provider that fixes the re-render issue
+// 300ms, the app root's value, so nested providers (the calendar editor,
+// onboarding) don't wait over twice as long.
 const OptimizedTooltipProvider = ({
   children,
-  delayDuration = 700,
+  delayDuration = 300,
   skipDelayDuration = 300,
   disableHoverableContent = false,
   ...props

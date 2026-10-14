@@ -1756,7 +1756,8 @@
       "attachment_over_microsoft_limit": "{{name}} wasn’t attached — Microsoft 365 accounts can send up to {{limit}} of attachments per email",
       "message_too_large_microsoft": "This email is too large to send from a Microsoft 365 account. Remove some attachments or images and try again.",
       "clipboard_read": "Couldn’t read the clipboard. Use regular paste instead.",
-      "plain_paste_unsupported": "Plain-text paste isn’t available here. Use regular paste instead."
+      "plain_paste_unsupported": "Plain-text paste isn’t available here. Use regular paste instead.",
+      "copy": "Couldn’t copy to the clipboard"
     },
     "snooze": {
       "success": "Snoozed until {{time}}",
@@ -1962,7 +1963,9 @@
   },
   "common": {
     "dismiss": "Dismiss",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "error_boundary": {
     "title": "Something went wrong",

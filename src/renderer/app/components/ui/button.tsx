@@ -87,6 +87,15 @@ const buttonVariants = cva(
   }
 );
 
+// Whether any text (not just icons) is rendered among these children.
+const hasTextContent = (node: React.ReactNode): boolean =>
+  React.Children.toArray(node).some((child) =>
+    typeof child === 'string' || typeof child === 'number'
+      ? String(child).trim() !== ''
+      : React.isValidElement<{ children?: React.ReactNode }>(child) &&
+        hasTextContent(child.props.children)
+  );
+
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
@@ -117,9 +126,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     // Icon-only buttons have no text content, so a string tooltip is the only
     // name they have — expose it to assistive tech unless one was passed.
+    // Icon-only means no text anywhere inside, whatever the typeVariant: the
+    // selection bar's buttons were announced by their SVGs ("Archive icon").
     const ariaLabel =
       props['aria-label'] ??
-      (typeVariant === 'icon' && typeof tooltip === 'string' ? tooltip : undefined);
+      (typeof tooltip === 'string' &&
+      (typeVariant === 'icon' || (!asChild && !hasTextContent(props.children)))
+        ? tooltip
+        : undefined);
 
     // Memoize the button element to avoid recreating it on every render
     const buttonElement = React.useMemo(

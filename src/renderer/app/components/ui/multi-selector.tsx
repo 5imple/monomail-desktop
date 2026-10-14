@@ -11,7 +11,6 @@ import {
   CommandItem,
   CommandList
 } from '@/renderer/app/components/ui/command';
-import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { cn } from '@/renderer/app/lib/utils';
 
 export interface Option {
@@ -243,6 +242,11 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
 
     const [showValidationError, setShowValidationError] = React.useState(false);
 
+    // The list is mounted while the field has focus but hidden below
+    // minLetters and, with hideOnEmpty, while the field is empty.
+    const suggestionsVisible =
+      open && inputValue.length >= (minLetters || 0) && !(hideOnEmpty && inputValue.length === 0);
+
     React.useImperativeHandle(
       ref,
       () => ({
@@ -337,13 +341,20 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
             }
           }
 
-          // This is not a default behavior of the <input /> field
+          // Escape closes the suggestions and stays in the field; with none
+          // showing, it leaves the field (blur commits typed text).
           if (e.key === 'Escape') {
-            input.blur();
+            if (suggestionsVisible) {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(false);
+            } else {
+              input.blur();
+            }
           }
         }
       },
-      [handleUnselect, selected, minLetters, creatable, commitCreatableText]
+      [handleUnselect, selected, minLetters, creatable, commitCreatableText, suggestionsVisible]
     );
 
     useEffect(() => {
@@ -552,8 +563,9 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
       >
         <div
           className={cn(
-            'rounded-md border border-input text-sm ring-offset-background',
-            ringVariants,
+            // The wrapper never takes focus itself: show the field's focus
+            // on its border, like the text inputs.
+            'rounded-md border border-input text-sm ring-offset-background transition-colors focus-within:border-ring',
             {
               // 'px-2 py-2': selected.length !== 0,
               'cursor-text': !disabled && selected.length !== 0
@@ -614,6 +626,8 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
               disabled={disabled}
               onValueChange={(value) => {
                 setInputValue(value);
+                // Typing after Escape brings the suggestions back.
+                setOpen(true);
                 inputProps?.onValueChange?.(value);
               }}
               onBlur={(event) => {
@@ -673,8 +687,10 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
             <CommandList
               className={cn(
                 // Follows the theme (a forced `dark` made a black slab on the
-                // light compose card).
-                'absolute top-1 z-10 w-full overflow-hidden rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md outline-none animate-in',
+                // light compose card). No overflow class here: it would
+                // replace CommandList's overflow-y-auto and stop the wheel
+                // from scrolling a long list.
+                'absolute top-1 z-10 w-full rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md outline-none animate-in',
 
                 inputValue.length < (minLetters || 0) ? 'hidden' : '',
                 hideOnEmpty && inputValue.length === 0 ? 'hidden' : ''
@@ -696,12 +712,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
                   {EmptyItem()}
                   {!selectFirstItem && <CommandItem value="-" className="hidden" />}
                   {Object.entries(selectables).map(([key, dropdowns]) => (
-                    <CommandGroup
-                      key={key}
-                      value={`options:${key}`}
-                      heading={key}
-                      className="h-full overflow-auto"
-                    >
+                    <CommandGroup key={key} value={`options:${key}`} heading={key}>
                       <>
                         {dropdowns.map((option, index) => {
                           return (

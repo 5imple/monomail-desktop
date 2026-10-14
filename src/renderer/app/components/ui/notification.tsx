@@ -49,14 +49,17 @@ interface NotificationCloseButtonProps {
   onClick?: () => void;
 }
 
+// A real button, so it has a name and can be reached with Tab; hidden by
+// opacity (display:none made it unfocusable) until hover or focus.
 const NotificationCloseButton: FC<NotificationCloseButtonProps> = ({ onClick }) => {
   return (
-    <div
+    <button
       onClick={onClick}
-      className="absolute -left-2 -top-2 hidden h-6 w-6 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-lg hover:bg-background group-hover:flex"
+      aria-label="Close"
+      className="absolute -left-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 shadow-lg transition-opacity hover:bg-background focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
     >
       <MonoIcon type={'X'} className="h-4 w-4" />
-    </div>
+    </button>
   );
 };
 

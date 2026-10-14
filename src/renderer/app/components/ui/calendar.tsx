@@ -36,10 +36,15 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
           '[data-selected="true"]:opacity-100',
           '[data-today="true"]:hover:bg-destructive/80'
         ),
-        day_button: 'h-8 w-8 p-0 font-normal transition-colors rounded-md ',
+        // A visible keyboard focus ring: focus starts on the chosen day, and
+        // the arrow keys moved it unseen.
+        day_button:
+          'h-8 w-8 p-0 font-normal transition-colors rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         range_end: 'day-range-end',
+        // Dark text on the dark theme's lighter rose (white was about 2.7:1),
+        // as in the calendar panel's month.
         today:
-          'bg-destructive text-destructive-foreground hover:bg-destructive/80 hover:text-destructive-foreground',
+          'bg-destructive text-destructive-foreground hover:bg-destructive/80 hover:text-destructive-foreground dark:text-background dark:hover:text-background',
         selected: cn(
           '[&:not([data-today])]:bg-muted-low [&:not([data-today])]:text-foreground [&:not([data-today])]:hover:bg-muted-low/80',
           '[data-today="true"]:bg-destructive [data-today="true"]:text-destructive-foreground'
