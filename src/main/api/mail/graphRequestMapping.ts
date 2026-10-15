@@ -73,6 +73,77 @@ export function planMutation(addLabelIds: string[], removeLabelIds: string[]): G
   return { patch: Object.keys(patch).length ? patch : undefined, moveTo };
 }
 
+/** The well-known folders that decide which messages of a conversation move. */
+export const MOVE_FOLDERS = [
+  'inbox',
+  'archive',
+  'sentitems',
+  'drafts',
+  'outbox',
+  'deleteditems',
+  'junkemail'
+] as const;
+export type MoveFolder = (typeof MOVE_FOLDERS)[number];
+/** Their folder ids (absent for one the mailbox doesn't have). */
+export type MoveFolderIds = Partial<Record<MoveFolder, string>>;
+
+/** A conversation message and the folder it is in. */
+export interface FolderedMessage {
+  id: string;
+  parentFolderId?: string;
+}
+
+/**
+ * Which messages of a conversation a planned move (planMutation's moveTo)
+ * applies to. A conversation spans folders and Graph moves one message at a
+ * time, so moving all of them went wrong twice over: Exchange refuses to move a
+ * message into the folder it is already in (500 "The move or copy operation
+ * failed"), so Done failed whenever part of the conversation was already
+ * archived; and your own replies left Sent Items. A move takes the messages
+ * that carry the label it changes, and skips any already where it's going:
+ *  - Done (remove INBOX): the Inbox copies.
+ *  - Back to the Inbox (add INBOX): the archived and filed copies — not the
+ *    ones in Sent Items, Drafts, Outbox, Deleted Items or Junk.
+ *  - Out of Trash / Junk (remove TRASH / SPAM): the copies in there.
+ *  - To Trash, Junk or a folder: every copy not already there.
+ */
+export function selectMessagesToMove(
+  messages: FolderedMessage[],
+  moveTo: string,
+  addLabelIds: string[],
+  removeLabelIds: string[],
+  folders: MoveFolderIds
+): string[] {
+  const isIn = (message: FolderedMessage, folderId: string | undefined) =>
+    !!folderId && message.parentFolderId === folderId;
+  const destination = (MOVE_FOLDERS as readonly string[]).includes(moveTo)
+    ? folders[moveTo as MoveFolder]
+    : moveTo;
+
+  let candidates = messages;
+  if (moveTo === 'archive') {
+    candidates = messages.filter((m) => isIn(m, folders.inbox));
+  } else if (moveTo === 'inbox') {
+    const add = new Set(addLabelIds);
+    const remove = new Set(removeLabelIds);
+    const staysPut = [
+      folders.inbox,
+      folders.sentitems,
+      folders.drafts,
+      folders.outbox,
+      folders.deleteditems,
+      folders.junkemail
+    ];
+    candidates = messages.filter(
+      (m) =>
+        (remove.has('TRASH') && isIn(m, folders.deleteditems)) ||
+        (remove.has('SPAM') && isIn(m, folders.junkemail)) ||
+        (add.has('INBOX') && !staysPut.some((folderId) => isIn(m, folderId)))
+    );
+  }
+  return candidates.filter((m) => !isIn(m, destination)).map((m) => m.id);
+}
+
 /**
  * buildRawMessage emits the envelope as base64url with padding stripped; Graph's
  * MIME sendMail wants standard base64 — restore the +/ alphabet and re-pad.

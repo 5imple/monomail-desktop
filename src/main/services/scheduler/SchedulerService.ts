@@ -11,7 +11,7 @@ import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { notificationManager } from '@/main/services/notification/NotificationManager';
 import { findOrCreateLabel, modifyThread, sendRawMessage } from '@/main/services/scheduler/gmailMain';
 import {
-  moveThreadToFolder as moveMicrosoftThreadToFolder,
+  archiveThread as archiveMicrosoftThread,
   restoreThreadToInbox as restoreMicrosoftThreadToInbox
 } from '@/main/services/scheduler/microsoftMain';
 import { generateUUID } from '@/main/utils';
@@ -41,6 +41,8 @@ interface SnoozeTask {
   createdAt: string; // ISO 8601
   threadSnapshot: ThreadSnapshot;
   snoozedLabelId?: string; // the label applied, to remove on un-snooze
+  // Microsoft: the Inbox copies the snooze moved to Archive, to bring back on un-snooze.
+  snoozedMessageIds?: string[];
 }
 
 interface ReminderTask {
@@ -161,11 +163,14 @@ class SchedulerService {
     const provider = tokenManager.getMailAccounts().find((a) => a.uid === req.accountId)?.provider;
     // Gmail: remove INBOX, tag with a "Snoozed" label so restoreToInbox knows what
     // to remove again. Microsoft has no equivalent lightweight per-message label,
-    // so a snooze is just a move to Archive; restoreThreadToInbox moves the whole
-    // conversation back to Inbox regardless of which folder it's currently in.
+    // so a snooze moves the conversation's Inbox copies to Archive, and remembers
+    // them so restoreToInbox brings back just those.
     let labelId: string | undefined;
+    let snoozedMessageIds: string[] | undefined;
     if (provider === 'microsoft') {
-      await moveMicrosoftThreadToFolder(req.accountId, req.threadId, 'archive');
+      const moved = await archiveMicrosoftThread(req.accountId, req.threadId);
+      // Nothing was in the Inbox: un-snooze brings the conversation back anyway.
+      if (moved.length > 0) snoozedMessageIds = moved;
     } else {
       labelId = await this.getSnoozeLabelId(req.accountId);
       await modifyThread(req.accountId, req.threadId, [labelId], ['INBOX']);
@@ -179,7 +184,8 @@ class SchedulerService {
       snoozeUntil: req.snoozeUntil,
       createdAt: new Date().toISOString(),
       threadSnapshot: req.threadSnapshot ?? EMPTY_THREAD_SNAPSHOT,
-      snoozedLabelId: labelId
+      snoozedLabelId: labelId,
+      snoozedMessageIds
     };
     this.setSnoozes({ ...this.getSnoozes(), [task.snoozeId]: task });
     return this.toSnoozeRecord(task);
@@ -412,7 +418,7 @@ class SchedulerService {
   private async restoreToInbox(task: SnoozeTask): Promise<void> {
     const provider = tokenManager.getMailAccounts().find((a) => a.uid === task.accountId)?.provider;
     if (provider === 'microsoft') {
-      await restoreMicrosoftThreadToInbox(task.accountId, task.threadId);
+      await restoreMicrosoftThreadToInbox(task.accountId, task.threadId, task.snoozedMessageIds);
     } else {
       await modifyThread(
         task.accountId,

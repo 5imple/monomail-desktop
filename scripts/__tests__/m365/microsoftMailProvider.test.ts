@@ -307,18 +307,154 @@ test('modifyThread: mark-read fans out PATCH isRead:true to every conversation m
   }
 });
 
-test('trashThread: moves every conversation message to deleteditems', async () => {
-  routeGraph([[/conversationId/, { value: [{ id: 'm1' }] }]]);
-  let captured: any[] = [];
+// Moves first look up the well-known folder ids (one $batch of mailFolders
+// GETs; Drafts / Outbox answer 404 here, as for a mailbox without them), then
+// send the mutation batch, which onMutation records.
+const MOVE_FOLDER_IDS: Record<string, string> = {
+  inbox: 'INBOX_ID',
+  archive: 'ARCHIVE_ID',
+  sentitems: 'SENT_ID',
+  deleteditems: 'TRASH_ID',
+  junkemail: 'JUNK_ID'
+};
+function routeMoveBatches(onMutation: (reqs: any[]) => void, folderStatus = 200) {
   __setBatchHandler(async (_uid: string, reqs: any[]) => {
-    captured = reqs;
+    if (reqs.every((r) => /^\/me\/mailFolders\//.test(r.url))) {
+      return {
+        ok: true,
+        responses: reqs.map((r) => {
+          const id = MOVE_FOLDER_IDS[r.url.match(/mailFolders\/([^?]+)/)[1]];
+          if (folderStatus !== 200) return { id: r.id, status: folderStatus };
+          return id ? { id: r.id, status: 200, body: { id } } : { id: r.id, status: 404 };
+        })
+      };
+    }
+    onMutation(reqs);
     return { ok: true, responses: reqs.map((r) => ({ id: r.id, status: 201 })) };
   });
+}
+const moves = (reqs: any[]) =>
+  reqs.map((r) => `${decodeURIComponent(r.url.split('/')[3])}→${r.body.destinationId}`);
+
+test('trashThread: moves the conversation to deleteditems, skipping copies already there', async () => {
+  routeGraph([
+    [
+      /conversationId/,
+      {
+        value: [
+          { id: 'm1', parentFolderId: 'INBOX_ID' },
+          { id: 'm2', parentFolderId: 'TRASH_ID' }
+        ]
+      }
+    ]
+  ]);
+  let captured: any[] = [];
+  routeMoveBatches((reqs) => (captured = reqs));
 
   await microsoftMailProvider.trashThread('uid-trash', 'conv1');
   assert.equal(captured[0].method, 'POST');
   assert.match(captured[0].url, /\/move$/);
-  assert.deepEqual(captured[0].body, { destinationId: 'deleteditems' });
+  assert.deepEqual(moves(captured), ['m1→deleteditems']);
+});
+
+test('modifyThread: Done moves only the Inbox copies to archive', async () => {
+  // The archived copy is what Exchange refused to move again (500), failing Done;
+  // the sent reply stays in Sent Items.
+  routeGraph([
+    [
+      /conversationId/,
+      {
+        value: [
+          { id: 'in', parentFolderId: 'INBOX_ID' },
+          { id: 'arc', parentFolderId: 'ARCHIVE_ID' },
+          { id: 'sent', parentFolderId: 'SENT_ID' }
+        ]
+      }
+    ]
+  ]);
+  let captured: any[] = [];
+  routeMoveBatches((reqs) => (captured = reqs));
+
+  await microsoftMailProvider.modifyThread('uid-done', 'conv1', [], ['INBOX']);
+  assert.deepEqual(moves(captured), ['in→archive']);
+});
+
+test('modifyThread: Done on a conversation already out of the Inbox sends nothing', async () => {
+  routeGraph([[/conversationId/, { value: [{ id: 'arc', parentFolderId: 'ARCHIVE_ID' }] }]]);
+  let mutations = 0;
+  routeMoveBatches(() => mutations++);
+
+  await microsoftMailProvider.modifyThread('uid-done-twice', 'conv1', [], ['INBOX']);
+  assert.equal(mutations, 0);
+});
+
+test('modifyThread: undo Done brings back the archived copies, not the sent reply', async () => {
+  routeGraph([
+    [
+      /conversationId/,
+      {
+        value: [
+          { id: 'arc', parentFolderId: 'ARCHIVE_ID' },
+          { id: 'sent', parentFolderId: 'SENT_ID' },
+          { id: 'new', parentFolderId: 'INBOX_ID' }
+        ]
+      }
+    ]
+  ]);
+  let captured: any[] = [];
+  routeMoveBatches((reqs) => (captured = reqs));
+
+  await microsoftMailProvider.modifyThread('uid-undone', 'conv1', ['INBOX'], []);
+  assert.deepEqual(moves(captured), ['arc→inbox']);
+});
+
+test('modifyThread: undo right after Done brings back only what Done moved', async () => {
+  // A conversation whose older message was archived before: Done takes 'in';
+  // its undo returns 'in' alone, not the older archived message too.
+  let conversation = [
+    { id: 'old', parentFolderId: 'ARCHIVE_ID' },
+    { id: 'in', parentFolderId: 'INBOX_ID' }
+  ];
+  routeGraph([[/conversationId/, () => ({ value: conversation })]]);
+  let captured: any[] = [];
+  routeMoveBatches((reqs) => (captured = reqs));
+
+  await microsoftMailProvider.modifyThread('uid-undo-exact', 'conv1', [], ['INBOX']);
+  assert.deepEqual(moves(captured), ['in→archive']);
+  conversation = conversation.map((m) => ({ ...m, parentFolderId: 'ARCHIVE_ID' }));
+  await microsoftMailProvider.modifyThread('uid-undo-exact', 'conv1', ['INBOX'], []);
+  assert.deepEqual(moves(captured), ['in→inbox']);
+});
+
+test('untrashThread: restores only the Deleted Items copies', async () => {
+  routeGraph([
+    [
+      /conversationId/,
+      {
+        value: [
+          { id: 'trashed', parentFolderId: 'TRASH_ID' },
+          { id: 'sent', parentFolderId: 'SENT_ID' }
+        ]
+      }
+    ]
+  ]);
+  let captured: any[] = [];
+  routeMoveBatches((reqs) => (captured = reqs));
+
+  await microsoftMailProvider.untrashThread('uid-untrash', 'conv1');
+  assert.deepEqual(moves(captured), ['trashed→inbox']);
+});
+
+test('modifyThread: a failed folder lookup fails the move instead of guessing', async () => {
+  routeGraph([[/conversationId/, { value: [{ id: 'in', parentFolderId: 'INBOX_ID' }] }]]);
+  let mutations = 0;
+  routeMoveBatches(() => mutations++, 503);
+
+  await assert.rejects(
+    () => microsoftMailProvider.modifyThread('uid-lookup-fail', 'conv1', [], ['INBOX']),
+    /folder lookup failed/
+  );
+  assert.equal(mutations, 0);
 });
 
 test('sendMessage: POSTs the padded base64 MIME to /me/sendMail as text/plain', async () => {

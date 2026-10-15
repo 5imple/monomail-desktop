@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   translateQuery,
   planMutation,
+  selectMessagesToMove,
   base64UrlToBase64,
   classifyGraphDeltaError
 } from '@/main/api/mail/graphRequestMapping';
@@ -71,6 +72,67 @@ test('planMutation: unrecognized labels are a no-op (no patch, no move)', () => 
   const p = planMutation(['CATEGORY_PROMOTIONS'], []);
   assert.equal(p.patch, undefined);
   assert.equal(p.moveTo, undefined);
+});
+
+// One conversation spread over every kind of folder (selectMessagesToMove).
+const FOLDERS = {
+  inbox: 'INBOX_ID',
+  archive: 'ARCHIVE_ID',
+  sentitems: 'SENT_ID',
+  drafts: 'DRAFTS_ID',
+  outbox: 'OUTBOX_ID',
+  deleteditems: 'TRASH_ID',
+  junkemail: 'JUNK_ID'
+};
+const CONVERSATION = [
+  { id: 'in1', parentFolderId: 'INBOX_ID' },
+  { id: 'in2', parentFolderId: 'INBOX_ID' },
+  { id: 'arc', parentFolderId: 'ARCHIVE_ID' },
+  { id: 'sent', parentFolderId: 'SENT_ID' },
+  { id: 'draft', parentFolderId: 'DRAFTS_ID' },
+  { id: 'out', parentFolderId: 'OUTBOX_ID' },
+  { id: 'trash', parentFolderId: 'TRASH_ID' },
+  { id: 'junk', parentFolderId: 'JUNK_ID' },
+  { id: 'filed', parentFolderId: 'PROJECTS_ID' }
+];
+const select = (add: string[], remove: string[]) =>
+  selectMessagesToMove(CONVERSATION, planMutation(add, remove).moveTo!, add, remove, FOLDERS);
+
+test('selectMessagesToMove: Done takes only the Inbox copies (archived ones and sent replies stay)', () => {
+  // Re-moving the already-archived copy is what Exchange refused (500), failing Done.
+  assert.deepEqual(select([], ['INBOX']), ['in1', 'in2']);
+});
+
+test('selectMessagesToMove: back to the Inbox takes the archived and filed copies only', () => {
+  assert.deepEqual(select(['INBOX'], []), ['arc', 'filed']);
+});
+
+test('selectMessagesToMove: out of Trash / Junk takes the copies in there only', () => {
+  assert.deepEqual(select([], ['TRASH']), ['trash']);
+  assert.deepEqual(select([], ['SPAM']), ['junk']);
+  // Moved to the Inbox from Trash: the trashed copies plus the archived / filed ones.
+  assert.deepEqual(select(['INBOX'], ['TRASH']), ['arc', 'trash', 'filed']);
+});
+
+test('selectMessagesToMove: to Trash, Junk or a folder skips the copies already there', () => {
+  const all = CONVERSATION.map((m) => m.id);
+  assert.deepEqual(
+    select(['TRASH'], []),
+    all.filter((id) => id !== 'trash')
+  );
+  assert.deepEqual(
+    select(['SPAM'], []),
+    all.filter((id) => id !== 'junk')
+  );
+  assert.deepEqual(
+    select(['folder:PROJECTS_ID'], []),
+    all.filter((id) => id !== 'filed')
+  );
+});
+
+test('selectMessagesToMove: nothing left to move is an empty list (Done twice)', () => {
+  const archived = [{ id: 'arc', parentFolderId: 'ARCHIVE_ID' }];
+  assert.deepEqual(selectMessagesToMove(archived, 'archive', [], ['INBOX'], FOLDERS), []);
 });
 
 test('classifyGraphDeltaError: maps cursor failures to recovery actions', () => {

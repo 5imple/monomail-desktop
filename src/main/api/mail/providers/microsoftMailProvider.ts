@@ -16,7 +16,11 @@ import {
 import {
   base64UrlToBase64,
   classifyGraphDeltaError,
+  FolderedMessage,
+  MOVE_FOLDERS,
+  MoveFolderIds,
   planMutation,
+  selectMessagesToMove,
   translateQuery
 } from '@/main/api/mail/graphRequestMapping';
 
@@ -569,62 +573,146 @@ function assertBatchOk(result: Awaited<ReturnType<typeof graphBatch>>, action: s
   }
 }
 
-async function getConversationMessageIds(
+async function getConversationMessages(
   uid: string,
   conversationId: string,
   signal?: AbortSignal
-): Promise<string[]> {
+): Promise<FolderedMessage[]> {
   const params = new URLSearchParams({
     $filter: `conversationId eq '${conversationId.replace(/'/g, "''")}'`,
-    $select: 'id',
+    // The folder decides which messages a move takes (selectMessagesToMove).
+    $select: 'id,parentFolderId',
     $top: GRAPH_MAX_TOP
   });
   // Must collect EVERY id — an unpaged fetch (Graph default page = 10) would make
   // mutations/trash silently affect only the first 10 messages of the thread.
   const messages = await fetchAllMessages(uid, `/me/messages?${params.toString()}`, signal);
-  return messages.map((m) => m.id).filter(Boolean);
+  return messages.filter((m) => m.id).map((m) => ({ id: m.id, parentFolderId: m.parentFolderId }));
 }
 
-async function applyMutation(
-  uid: string,
-  messageIds: string[],
-  addLabelIds: string[],
-  removeLabelIds: string[]
-): Promise<void> {
-  const { patch, moveTo } = planMutation(addLabelIds, removeLabelIds);
-  if ((!patch && !moveTo) || messageIds.length === 0) return;
+// Per-uid ids of the folders selectMessagesToMove decides by. Cached once all
+// resolved (a folder the mailbox doesn't have is a 404); any other failure
+// throws, so a move never runs on a guess about where the messages are.
+const moveFolderIdsCache = new Map<string, MoveFolderIds>();
+const moveFolderIdsInflight = new Map<string, Promise<MoveFolderIds>>();
 
+async function fetchMoveFolderIds(uid: string): Promise<MoveFolderIds> {
+  const result = await graphBatch(
+    uid,
+    MOVE_FOLDERS.map((name, i) => ({
+      id: String(i),
+      method: 'GET',
+      url: `/me/mailFolders/${name}?$select=id`
+    }))
+  );
+  if (!result.ok) throw new Error(`Graph folder lookup failed: ${result.error}`);
+  const ids: MoveFolderIds = {};
+  MOVE_FOLDERS.forEach((name, i) => {
+    const response = result.responses.find((r) => r.id === String(i));
+    const id = (response?.body as { id?: string } | null | undefined)?.id;
+    if (response?.status === 200 && id) ids[name] = id;
+    else if (response?.status !== 404) {
+      throw new Error(`Graph folder lookup failed for ${name} (status ${response?.status ?? '?'})`);
+    }
+  });
+  moveFolderIdsCache.set(uid, ids);
+  return ids;
+}
+
+async function getMoveFolderIds(uid: string): Promise<MoveFolderIds> {
+  const cached = moveFolderIdsCache.get(uid);
+  if (cached) return cached;
+  const inflight = moveFolderIdsInflight.get(uid);
+  if (inflight) return inflight;
+  const promise = fetchMoveFolderIds(uid).finally(() => moveFolderIdsInflight.delete(uid));
+  moveFolderIdsInflight.set(uid, promise);
+  return promise;
+}
+
+/** PATCHes `patchIds` and moves `moveIds` to `moveTo`, in one $batch (A9). */
+async function sendMutation(
+  uid: string,
+  patchIds: string[],
+  patch: Record<string, unknown> | undefined,
+  moveIds: string[],
+  moveTo: string | undefined
+): Promise<void> {
   const requests: GraphBatchOp[] = [];
   let n = 0;
-  for (const mid of messageIds) {
-    const enc = encodeURIComponent(mid);
-    if (patch) {
-      requests.push({ id: String(n++), method: 'PATCH', url: `/me/messages/${enc}`, headers: JSON_HEADER, body: patch });
+  if (patch) {
+    for (const id of patchIds) {
+      requests.push({
+        id: String(n++),
+        method: 'PATCH',
+        url: `/me/messages/${encodeURIComponent(id)}`,
+        headers: JSON_HEADER,
+        body: patch
+      });
     }
-    if (moveTo) {
+  }
+  if (moveTo) {
+    for (const id of moveIds) {
       // A move returns the message under the SAME immutable id (A1).
       requests.push({
         id: String(n++),
         method: 'POST',
-        url: `/me/messages/${enc}/move`,
+        url: `/me/messages/${encodeURIComponent(id)}/move`,
         headers: JSON_HEADER,
         body: { destinationId: moveTo }
       });
     }
   }
+  // Nothing to change: e.g. Done on a conversation already out of the Inbox.
+  if (requests.length === 0) return;
   assertBatchOk(await graphBatch(uid, requests), 'mutation');
 }
 
-async function moveMessages(uid: string, messageIds: string[], destinationId: string): Promise<void> {
-  if (messageIds.length === 0) return;
-  const requests: GraphBatchOp[] = messageIds.map((mid, i) => ({
-    id: String(i),
-    method: 'POST',
-    url: `/me/messages/${encodeURIComponent(mid)}/move`,
-    headers: JSON_HEADER,
-    body: { destinationId }
-  }));
-  assertBatchOk(await graphBatch(uid, requests), 'move');
+// The Inbox copies Done last took out of each conversation (by uid and
+// conversation), so its undo brings back just those, not messages of the
+// conversation that had been archived before.
+const doneMovedIds = new Map<string, string[]>();
+
+/**
+ * A label change on whole conversations: read/flag on every message, a move on
+ * the ones selectMessagesToMove takes (archive / trash / junk / restore /
+ * folder), batched via $batch (A9).
+ */
+async function mutateConversations(
+  uid: string,
+  conversationIds: string[],
+  addLabelIds: string[],
+  removeLabelIds: string[],
+  signal?: AbortSignal
+): Promise<void> {
+  const { patch, moveTo } = planMutation(addLabelIds, removeLabelIds);
+  if (!patch && !moveTo) return;
+  const conversations = await Promise.all(
+    conversationIds.map((cid) => getConversationMessages(uid, cid, signal))
+  );
+  const folders = moveTo ? await getMoveFolderIds(uid) : {};
+  const keys = conversationIds.map((cid) => `${uid} ${cid}`);
+  // Back to the Inbox (not out of Trash / Junk) right after a Done: its moves.
+  const undoingDone =
+    moveTo === 'inbox' && !removeLabelIds.includes('TRASH') && !removeLabelIds.includes('SPAM');
+  const moves = conversations.map((messages, i) => {
+    if (!moveTo) return [];
+    const ids = selectMessagesToMove(messages, moveTo, addLabelIds, removeLabelIds, folders);
+    const done = undoingDone ? doneMovedIds.get(keys[i]) : undefined;
+    return done ? ids.filter((id) => done.includes(id)) : ids;
+  });
+
+  await sendMutation(
+    uid,
+    conversations.flat().map((m) => m.id),
+    patch,
+    moves.flat(),
+    moveTo
+  );
+  if (!moveTo) return;
+  keys.forEach((key, i) => {
+    if (moveTo !== 'archive') doneMovedIds.delete(key);
+    else if (moves[i].length > 0) doneMovedIds.set(key, moves[i]);
+  });
 }
 
 const modifyThread: MailProviderAdapter['modifyThread'] = async (
@@ -634,10 +722,7 @@ const modifyThread: MailProviderAdapter['modifyThread'] = async (
   removeLabelIds,
   signal
 ) => {
-  // Thread-level read/flag/move applies per cached message of the conversation,
-  // batched via $batch (A9).
-  const ids = await getConversationMessageIds(uid, id, signal);
-  await applyMutation(uid, ids, addLabelIds, removeLabelIds);
+  await mutateConversations(uid, [id], addLabelIds, removeLabelIds, signal);
 };
 
 const batchModifyThreads: MailProviderAdapter['batchModifyThreads'] = async (
@@ -647,18 +732,18 @@ const batchModifyThreads: MailProviderAdapter['batchModifyThreads'] = async (
   removeLabelIds,
   signal
 ) => {
-  const messageIds = (
-    await Promise.all(ids.map((cid) => getConversationMessageIds(uid, cid, signal)))
-  ).flat();
-  await applyMutation(uid, messageIds, addLabelIds, removeLabelIds);
+  await mutateConversations(uid, ids, addLabelIds, removeLabelIds, signal);
 };
 
+// Trash / restore are the label change they are (add / remove TRASH): restore
+// brings back the Deleted Items copies only, and neither re-moves a message
+// already there (selectMessagesToMove).
 const trashThread: MailProviderAdapter['trashThread'] = async (uid, id, signal) => {
-  await moveMessages(uid, await getConversationMessageIds(uid, id, signal), 'deleteditems');
+  await mutateConversations(uid, [id], ['TRASH'], [], signal);
 };
 
 const untrashThread: MailProviderAdapter['untrashThread'] = async (uid, id, signal) => {
-  await moveMessages(uid, await getConversationMessageIds(uid, id, signal), 'inbox');
+  await mutateConversations(uid, [id], [], ['TRASH'], signal);
 };
 
 const modifyMessage: MailProviderAdapter['modifyMessage'] = async (
@@ -667,7 +752,23 @@ const modifyMessage: MailProviderAdapter['modifyMessage'] = async (
   addLabelIds,
   removeLabelIds
 ) => {
-  await applyMutation(uid, [id], addLabelIds, removeLabelIds);
+  const { patch, moveTo } = planMutation(addLabelIds, removeLabelIds);
+  // A move depends on the folder the message is in (selectMessagesToMove).
+  const moveIds = moveTo
+    ? selectMessagesToMove(
+        [
+          await graphApiClient.get<FolderedMessage>(
+            `/me/messages/${encodeURIComponent(id)}?$select=id,parentFolderId`,
+            { uid }
+          )
+        ],
+        moveTo,
+        addLabelIds,
+        removeLabelIds,
+        await getMoveFolderIds(uid)
+      )
+    : [];
+  await sendMutation(uid, [id], patch, moveIds, moveTo);
   return { addLabelIds, removeLabelIds };
 };
 
