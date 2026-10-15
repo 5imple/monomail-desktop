@@ -81,21 +81,57 @@ export const groupHeaderVariants: Variants = {
 };
 
 /**
- * Reader content when the open email is archived / trashed and the reader
- * moves on: the outgoing email swipes the same way its row does (partially —
- * the reader is wide) while fading, then the next one fades in. Ordinary
- * thread switches just cross-fade quickly.
+ * How the reader's content changes hands (delivered through `custom`, so the
+ * outgoing email gets it too).
  */
-export const readerSwipeVariants = (threadId: string, reduceMotion: boolean): Variants => ({
-  enter: { opacity: 0 },
-  present: { opacity: 1, x: 0, transition: { duration: 0.18, ease: 'easeOut' } },
-  exit: (intents: Intents) => {
-    const intent = intents?.[threadId];
-    if (!intent || reduceMotion) return { opacity: 0, transition: { duration: 0.08 } };
-    return {
-      x: intent === 'archive' ? '35%' : '-35%',
-      opacity: 0,
-      transition: { duration: 0.22, ease: SWIPE_EASE }
-    };
-  }
+export interface ReaderTransition {
+  /** The outgoing email was archived / trashed, and the reader moved on. */
+  advance: boolean;
+  /** Where the incoming email sits in the list: 1 below the outgoing one, -1 above. */
+  direction: 1 | -1;
+}
+
+// Starts at once, under the click, and speeds up as the email goes.
+const PUT_AWAY_EASE = [0.4, 0, 1, 1] as const;
+
+// One `transform` string rather than y / scale: Motion runs transform (like
+// opacity) on the compositor, so the hand-over stays smooth while the next
+// email renders. Never animated to or from `none` (Motion zeroes it, i.e.
+// scale(0)): it starts from an explicit offset and is cleared to `none` once
+// settled, so the reader keeps no transform (which would re-anchor
+// fixed-position content inside it).
+const offset = (y: number, scale = 1) => `translateY(${y}px) scale(${scale})`;
+
+/**
+ * Reader content when the open email is archived / trashed and the reader
+ * moves on. No sideways swipe here: that's the inbox rows' motion, and across
+ * the full-width reader it read as paging sideways. The email is put away
+ * instead (it settles back a little and fades), then the next one rises into
+ * its place, as the rows below glide up to close the gap in the inbox. It
+ * comes down from above when the reader stepped up the list (the email was
+ * the last one). Ordinary thread switches just cross-fade quickly.
+ */
+export const readerVariants = (reduceMotion: boolean): Variants => ({
+  enter: ({ advance, direction }: ReaderTransition) =>
+    advance && !reduceMotion ? { opacity: 0, transform: offset(direction * 18) } : { opacity: 0 },
+  present: ({ advance }: ReaderTransition) =>
+    advance && !reduceMotion
+      ? {
+          opacity: 1,
+          transform: offset(0),
+          transitionEnd: { transform: 'none' },
+          transition: {
+            transform: { duration: 0.28, ease: SWIPE_EASE },
+            opacity: { duration: 0.18, ease: 'easeOut' }
+          }
+        }
+      : { opacity: 1, transition: { duration: 0.18, ease: 'easeOut' } },
+  exit: ({ advance, direction }: ReaderTransition) =>
+    advance && !reduceMotion
+      ? {
+          opacity: 0,
+          transform: [offset(0), offset(direction * -8, 0.97)],
+          transition: { duration: 0.14, ease: PUT_AWAY_EASE }
+        }
+      : { opacity: 0, transition: { duration: 0.08 } }
 });

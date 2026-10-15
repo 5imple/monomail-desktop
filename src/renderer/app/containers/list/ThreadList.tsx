@@ -199,7 +199,21 @@ function ThreadList({ onScroll }: ThreadListProps) {
   // Archive / trash exit motion (see threadRowMotion). Intents are recorded by
   // the label operations; once rows finish leaving, drop the entries for rows
   // no longer listed so a later, unrelated removal just fades.
+  // Rows swipe only in the inbox itself: an email archived / trashed while it's
+  // open (the list hidden behind the reader, which has its own motion) just
+  // closes its gap, settled before the reader closes on the inbox — even when
+  // the reader closes while that row is still leaving.
   const exitIntents = useAtomValue(threadExitIntentAtom);
+  const readerExitIdsRef = useRef(new Set<string>());
+  const rowExitIntents = useMemo(() => {
+    const readerExitIds = readerExitIdsRef.current;
+    readerExitIds.forEach((id) => {
+      if (!exitIntents[id]) readerExitIds.delete(id);
+    });
+    if (activeThreadId) Object.keys(exitIntents).forEach((id) => readerExitIds.add(id));
+    if (readerExitIds.size === 0) return exitIntents;
+    return Object.fromEntries(Object.entries(exitIntents).filter(([id]) => !readerExitIds.has(id)));
+  }, [exitIntents, activeThreadId]);
   const setExitIntents = useSetAtom(threadExitIntentAtom);
   const reduceMotion = useReducedMotion();
   const listedThreadIdsRef = useRef<Set<string>>(new Set());
@@ -343,7 +357,7 @@ function ThreadList({ onScroll }: ThreadListProps) {
                   away even when it was the last one in its date group. */}
               <AnimatePresence
                 initial={false}
-                custom={exitIntents}
+                custom={rowExitIntents}
                 onExitComplete={pruneExitIntents}
               >
                 {groupedThreads.flatMap((group) => [

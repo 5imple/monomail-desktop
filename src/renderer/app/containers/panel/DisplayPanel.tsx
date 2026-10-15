@@ -29,7 +29,7 @@ import { fetchFullThread, threadNeedsFullBody } from '@/renderer/app/lib/threadB
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useAtomValue } from 'jotai';
 import { threadExitIntentAtom } from '@/renderer/app/store/thread/exitIntentAtom';
-import { readerSwipeVariants } from '@/renderer/app/containers/list/threadRowMotion';
+import { ReaderTransition, readerVariants } from '@/renderer/app/containers/list/threadRowMotion';
 
 interface DisplayPanelProps {
   className?: string;
@@ -37,7 +37,7 @@ interface DisplayPanelProps {
 }
 
 export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanelProps) => {
-  const { activeThreadId, threadsMap } = useThreadAtom();
+  const { activeThreadId, threadsMap, filteredThreadIds } = useThreadAtom();
   const { unmarkThreadsAsUnread } = useThreadLabelAtom();
   const { updateThread } = useThreadOperationAtom();
   const { t } = useTranslation();
@@ -45,6 +45,19 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
   const [thread, setThread] = useState<MonoThread | null>(null);
   const exitIntents = useAtomValue(threadExitIntentAtom);
   const reduceMotion = useReducedMotion();
+  // How the content changes hands (readerVariants): whether the email going
+  // out was archived / trashed, and which way the reader moved through the
+  // list. Measured on the list as it was while that email was still in it
+  // (Done / Trash take it out before the reader moves on).
+  const [readerTransition, setReaderTransition] = useState<ReaderTransition>({
+    advance: false,
+    direction: 1
+  });
+  const listOrderRef = useRef<string[]>([]);
+  // The open email Done / Trash took out of the list, noted then: the list
+  // drops exit intents once its rows have left, possibly before the reader
+  // moves on.
+  const leavingThreadIdRef = useRef<string | null>(null);
 
   const [displayedItems, setDisplayedMessages] = useState<ThreadItemBase[]>([]);
   const { activateScope, deactivateScope } = useHotkeyScope();
@@ -172,8 +185,22 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     }
   }, []);
 
+  const changeHands = (nextThreadId: string | null) => {
+    const outgoing = thread?.id ?? null;
+    if (nextThreadId === outgoing) return;
+    const order = listOrderRef.current;
+    const from = outgoing ? order.indexOf(outgoing) : -1;
+    const to = nextThreadId ? order.indexOf(nextThreadId) : -1;
+    setReaderTransition({
+      advance: !!outgoing && (!!exitIntents[outgoing] || leavingThreadIdRef.current === outgoing),
+      direction: from !== -1 && to !== -1 && to < from ? -1 : 1
+    });
+    leavingThreadIdRef.current = null;
+  };
+
   const displayMessages = (targetThread: MonoThread) => {
     try {
+      changeHands(targetThread.id);
       setDisplayedMessages(targetThread.items);
       setThread(targetThread);
     } catch (error) {
@@ -211,11 +238,27 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
     return threadsMap[activeThreadId] || null;
   }, [activeThreadId, threadsMap]);
 
+  const handOverTimerRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
+    clearTimeout(handOverTimerRef.current);
     if (!stableThread) {
       if (readerPhase === 'closing') return;
-      setDisplayedMessages([]);
-      setThread(null);
+      const clear = () => {
+        changeHands(null);
+        setDisplayedMessages([]);
+        setThread(null);
+      };
+      // Done / Trash take the open email out of the list a moment before the
+      // reader moves on to the next one. Keep it up for that moment, so it
+      // hands over straight to that email: going through an empty reader
+      // blanked the toolbar and lost the hand-over motion. Nothing follows
+      // (e.g. moved to a folder): clear as before.
+      if (thread && thread.id === activeThreadId && exitIntents[thread.id]) {
+        leavingThreadIdRef.current = thread.id;
+        handOverTimerRef.current = setTimeout(clear, 400);
+        return;
+      }
+      clear();
       return;
     }
 
@@ -276,6 +319,10 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
       readMessages(stableThread);
     }
   }, [stableThread, readerPhase, bodyFetchAttempt]);
+
+  useEffect(() => {
+    if (thread && filteredThreadIds.includes(thread.id)) listOrderRef.current = filteredThreadIds;
+  }, [thread, filteredThreadIds]);
 
   const retryBodyFetch = useCallback(() => {
     setBodyFetch((prev) => {
@@ -514,12 +561,14 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
           readerPhase === 'open' ? 'scale-100 opacity-100' : 'scale-[0.985] opacity-0'
         )}
       >
-        {/* Swipe the email away when it's archived / trashed from the reader
-            (mode="wait": one ScrollArea at a time, so its refs stay valid). */}
-        <AnimatePresence mode="wait" initial={false} custom={exitIntents}>
+        {/* An email archived / trashed from the reader is put away and the
+            next one rises into its place (readerVariants). mode="wait": one
+            ScrollArea at a time, so its refs stay valid. */}
+        <AnimatePresence mode="wait" initial={false} custom={readerTransition}>
           <motion.div
             key={thread?.id ?? 'empty'}
-            variants={readerSwipeVariants(thread?.id ?? '', !!reduceMotion)}
+            custom={readerTransition}
+            variants={readerVariants(!!reduceMotion)}
             initial="enter"
             animate="present"
             exit="exit"
