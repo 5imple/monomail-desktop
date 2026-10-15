@@ -443,21 +443,41 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   useEffect(() => {
     setIsVisible(true); // Trigger grow animation
     let attempts = 0;
+    let frame = 0;
+    // The editor mounts a beat after the card (deferred and lazy), and its
+    // own autofocus can fire before it's in the page, which left the caret
+    // nowhere (Reply opened, typing went nowhere). Retry until it's in —
+    // unless focus is already inside compose (autofocus worked, or the user
+    // clicked another field first).
+    const focusEditorWhenMounted = () => {
+      if (closedRef.current) return;
+      const root = composeRootRef.current;
+      const editorDom = root?.querySelector('.ProseMirror');
+      if (editorDom?.isConnected && editorRef.current) {
+        const active = document.activeElement;
+        if (!root?.contains(active) || active === root) {
+          editorRef.current.focus(editorAutofocus === 'end' ? 'end' : 'start');
+        }
+        return;
+      }
+      if (attempts++ < 120) frame = requestAnimationFrame(focusEditorWhenMounted);
+    };
     const focusInitialField = () => {
       if (!focusToOnOpen) {
-        editorRef.current?.focus();
+        focusEditorWhenMounted();
         return;
       }
       const toInput =
         composeRootRef.current?.querySelector<HTMLInputElement>('[data-compose-to] input');
       if (toInput) toInput.focus();
       // The header can mount a frame or two late; never leave nothing focused.
-      else if (attempts++ < 10) requestAnimationFrame(focusInitialField);
-      else editorRef.current?.focus();
+      else if (attempts++ < 10) frame = requestAnimationFrame(focusInitialField);
+      else focusEditorWhenMounted();
     };
-    requestAnimationFrame(focusInitialField);
+    frame = requestAnimationFrame(focusInitialField);
     activateScope('GLOBAL_COMPOSE');
     return () => {
+      cancelAnimationFrame(frame);
       deactivateScope('GLOBAL_COMPOSE');
     };
   }, []);
