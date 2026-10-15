@@ -2,6 +2,7 @@ import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
+import { isComposeDraftId } from '@/main/utils';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
 import MessageCard from '@/renderer/app/components/card/MessageCard';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
@@ -323,6 +324,31 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
   useEffect(() => {
     if (thread && filteredThreadIds.includes(thread.id)) listOrderRef.current = filteredThreadIds;
   }, [thread, filteredThreadIds]);
+
+  // Load the full text of the email Done / Trash move on to (selectNextThread:
+  // the one below, or above for the last) once this one has loaded, so the
+  // hand-over lands on a complete email, not a preview that redraws when its
+  // body arrives.
+  const nextThreadId = useMemo(() => {
+    if (!activeThreadId) return null;
+    const ids = filteredThreadIds.filter((id) => threadsMap[id]);
+    const index = ids.indexOf(activeThreadId);
+    return index === -1 ? null : (ids[index + 1] ?? ids[index - 1] ?? null);
+  }, [activeThreadId, filteredThreadIds, threadsMap]);
+  const openBodyLoading = bodyFetch?.state === 'loading';
+  useEffect(() => {
+    const next = nextThreadId ? threadsMap[nextThreadId] : null;
+    const accountId = next?.accountId;
+    if (openBodyLoading || !next || !accountId) return;
+    if (isComposeDraftId(next.id) || !threadNeedsFullBody(next)) return;
+    const timer = setTimeout(() => {
+      fetchFullThread(accountId, next.id, { cached: next })
+        .then((fullThread) => updateThread(accountId, fullThread))
+        // Opening it fetches again, with its own notice on failure.
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [nextThreadId, openBodyLoading]);
 
   const retryBodyFetch = useCallback(() => {
     setBodyFetch((prev) => {
