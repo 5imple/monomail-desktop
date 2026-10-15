@@ -32,6 +32,8 @@ await build({
     '@/main/api/apiClient': join(here, 'stubs', 'apiClient.mjs'),
     '@': join(root, 'src'),
     dompurify: join(here, 'stubs', 'dompurify.mjs'),
+    // Records toasts (runUndoableAction's tests read what the user would see).
+    sonner: join(here, 'stubs', 'sonner.mjs'),
     'electron-log': join(here, 'stubs', 'electron-log.mjs')
   },
   // jsdom is CJS with dynamic requires; load it from node_modules at runtime

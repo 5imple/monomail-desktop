@@ -18,9 +18,20 @@ export interface UndoableAction {
   expirationTime?: number; // Optional per-action expiration time in milliseconds
 }
 
+// An action with a toast lives as long as the toast shows (hover pauses it,
+// and it was undoable only for a fixed 4.5s, so Z went dead while "Undo Z" was
+// still on screen); this only bounds the stack if a toast never closes.
+const TOAST_ACTION_MAX_AGE = 60_000;
+
+// Whether the toast that offers this undo is still on screen.
+const toastShowing = (toastId: string | number) =>
+  toast.getToasts().some((shown) => shown.id === toastId);
+
 // Create context
 interface UndoContextType {
   addUndoAction: (action: UndoableAction) => void;
+  /** Withdraws the undo offered by a toast (e.g. the action itself failed). */
+  removeUndoAction: (toastId: string | number) => void;
   undoLastAction: () => Promise<boolean | undefined>; // Update return type to match implementation
   hasUndoActions: boolean;
   clearUndoHistory: () => void;
@@ -53,9 +64,13 @@ export const UndoProvider = ({
   // Add an action to the undo stack
   const addUndoAction = useCallback(
     (action: UndoableAction) => {
-      // Use action's specific expiration time or the default
+      // Use action's specific expiration time, else its toast's life, else the default
       const expTime =
-        action.expirationTime !== undefined ? action.expirationTime : defaultExpirationTime;
+        action.expirationTime !== undefined
+          ? action.expirationTime
+          : action.toastId !== undefined
+            ? TOAST_ACTION_MAX_AGE
+            : defaultExpirationTime;
 
       // Create a unique identifier for this action based on timestamp
       const actionId = action.timestamp;
@@ -80,11 +95,32 @@ export const UndoProvider = ({
     [defaultExpirationTime]
   );
 
-  // Execute the most recent undo action
-  const undoLastAction = useCallback(async () => {
-    if (undoStack.length === 0) return undefined;
+  const removeUndoAction = useCallback((toastId: string | number) => {
+    setUndoStack((prev) => {
+      const removed = prev.filter((action) => action.toastId === toastId);
+      if (removed.length === 0) return prev;
+      removed.forEach((action) => {
+        clearTimeout(timeoutRefs.current[action.timestamp]);
+        delete timeoutRefs.current[action.timestamp];
+      });
+      return prev.filter((action) => action.toastId !== toastId);
+    });
+  }, []);
 
-    const lastAction = undoStack[undoStack.length - 1];
+  // Execute the most recent undo action whose toast is still on screen (the
+  // Undo it offers is what Z presses); ones whose toast closed are dropped.
+  const undoLastAction = useCallback(async () => {
+    const live = undoStack.filter(
+      (action) => action.toastId === undefined || toastShowing(action.toastId)
+    );
+    if (live.length !== undoStack.length) {
+      setUndoStack((prev) =>
+        prev.filter((action) => action.toastId === undefined || toastShowing(action.toastId))
+      );
+    }
+    if (live.length === 0) return undefined;
+
+    const lastAction = live[live.length - 1];
     try {
       console.log('Executing undo action:', lastAction);
 
@@ -103,13 +139,13 @@ export const UndoProvider = ({
       await lastAction.execute();
 
       // Remove the action from the stack after successful execution
-      setUndoStack((prev) => prev.slice(0, -1));
+      setUndoStack((prev) => prev.filter((action) => action !== lastAction));
       return true;
     } catch (error) {
       console.error('Error executing undo action:', error);
       // Still remove the action even if it fails to prevent repeatedly trying
       // a failed undo action
-      setUndoStack((prev) => prev.slice(0, -1));
+      setUndoStack((prev) => prev.filter((action) => action !== lastAction));
       throw error;
     }
   }, [undoStack]);
@@ -132,6 +168,7 @@ export const UndoProvider = ({
 
   const value = {
     addUndoAction,
+    removeUndoAction,
     undoLastAction,
     hasUndoActions: undoStack.length > 0,
     clearUndoHistory,

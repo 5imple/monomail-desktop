@@ -43,6 +43,8 @@ export interface IPerformThreadsAction {
   shouldRemoveThread?: boolean;
   shouldRestoreThread?: boolean;
   afterStateUpdate?: () => void;
+  /** An undo: the action it reverses, which the server change waits for. */
+  waitFor?: Promise<unknown>;
 }
 
 export function useThreadLabelAtom() {
@@ -74,7 +76,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread = false,
       shouldRestoreThread = false,
-      afterStateUpdate
+      afterStateUpdate,
+      waitFor
     }: IPerformThreadsAction) => {
       // Update the thread state locally
       await updateThreadsState(uid, threadIds, addLabels, removeLabels, true, {
@@ -91,6 +94,16 @@ export function useThreadLabelAtom() {
 
       // Call the API if needed
       if (callApi) {
+        // An undo shows at once but reverses on the server only after the
+        // action it undoes is through there; if that failed it was rolled back
+        // already, so there is nothing left to undo.
+        if (waitFor) {
+          try {
+            await waitFor;
+          } catch {
+            return;
+          }
+        }
         if (!isOnline) {
           // Queue the action for offline sync
           await queueAction({
@@ -142,7 +155,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) => {
       setExitIntent(threadIds, 'archive');
       return performThreadsAction({
@@ -152,7 +166,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       });
     },
     [performThreadsAction, threadsMap, setExitIntent]
@@ -165,7 +180,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) => {
       setExitIntent(threadIds, null);
       return performThreadsAction({
@@ -175,7 +191,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       });
     },
     [performThreadsAction, threadsMap, setExitIntent]
@@ -188,7 +205,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) => {
       setExitIntent(threadIds, 'trash');
       return performThreadsAction({
@@ -198,7 +216,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       });
     },
     [performThreadsAction, threadsMap, setExitIntent]
@@ -211,7 +230,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) => {
       setExitIntent(threadIds, null);
       return performThreadsAction({
@@ -221,7 +241,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       });
     },
     [performThreadsAction, threadsMap, setExitIntent]
@@ -234,7 +255,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) =>
       performThreadsAction({
         uid,
@@ -243,7 +265,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       }),
     [performThreadsAction, threadsMap]
   );
@@ -255,8 +278,9 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
-    ) => {
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
+    ) =>
       performThreadsAction({
         uid,
         threadIds,
@@ -264,9 +288,9 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
-      });
-    },
+        afterStateUpdate,
+        waitFor
+      }),
     [performThreadsAction, threadsMap]
   );
 
@@ -277,7 +301,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) => {
       setExitIntent(threadIds, 'trash');
       return performThreadsAction({
@@ -287,7 +312,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       });
     },
     [performThreadsAction, threadsMap, setExitIntent]
@@ -300,7 +326,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) => {
       setExitIntent(threadIds, null);
       return performThreadsAction({
@@ -310,7 +337,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       });
     },
     [performThreadsAction, threadsMap, setExitIntent]
@@ -323,7 +351,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) =>
       performThreadsAction({
         uid,
@@ -332,7 +361,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       }),
     [performThreadsAction, threadsMap]
   );
@@ -344,7 +374,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) =>
       performThreadsAction({
         uid,
@@ -353,7 +384,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       }),
     [performThreadsAction, threadsMap]
   );
@@ -366,7 +398,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) =>
       performThreadsAction({
         uid,
@@ -375,7 +408,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       }),
     [performThreadsAction, threadsMap]
   );
@@ -388,7 +422,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) =>
       performThreadsAction({
         uid,
@@ -397,7 +432,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       }),
     [performThreadsAction, threadsMap]
   );
@@ -411,7 +447,8 @@ export function useThreadLabelAtom() {
       callApi = true,
       shouldRemoveThread: boolean = false,
       shouldRestoreThread: boolean = false,
-      afterStateUpdate?: () => void
+      afterStateUpdate?: () => void,
+      waitFor?: Promise<unknown>
     ) =>
       performThreadsAction({
         uid,
@@ -421,7 +458,8 @@ export function useThreadLabelAtom() {
         callApi,
         shouldRemoveThread,
         shouldRestoreThread,
-        afterStateUpdate
+        afterStateUpdate,
+        waitFor
       }),
     [performThreadsAction, threadsMap]
   );

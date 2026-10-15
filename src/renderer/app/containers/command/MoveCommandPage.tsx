@@ -10,7 +10,6 @@ import EnhancedCommandInput from '@/renderer/app/components/ui/EnhancedCommandIn
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { cn } from '@/renderer/app/lib/utils';
-import { generateUUID } from '@/main/utils';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { threadExitIntentAtom, ThreadExitIntent } from '@/renderer/app/store/thread/exitIntentAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
@@ -18,8 +17,8 @@ import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels'
 import { useSetAtom } from 'jotai';
 import React, { useCallback, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
+import { runUndoableAction } from '@/renderer/app/lib/commands/undoableAction';
 
 interface MoveCommandPageProps {
   moveValue: string;
@@ -58,7 +57,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
   const { labelsMapByAccount } = useLabelAtom();
   const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
   const { updateLabelFromThread } = useThreadLabelAtom();
-  const { addUndoAction } = useUndoManager();
+  const { addUndoAction, removeUndoAction } = useUndoManager();
   const { accounts } = useAuth();
   const setExitIntents = useSetAtom(threadExitIntentAtom);
 
@@ -265,35 +264,33 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
             : 'archive';
       const movingIds = movingThreads.map((thread) => thread.id);
 
-      let undoFunction: (() => Promise<void>) | undefined;
-
-      // Define the promise that will handle the move operation
-      const movePromise = async () => {
-        if (exitIntent) markExit(movingIds, exitIntent);
-        try {
-          // All at once, so the rows leave together (one after another, each
-          // waited for its own server round trip).
-          await Promise.all(
-            originalThreadStates.map((state) =>
-              updateLabelFromThread(
-                state.accountId,
-                state.threadIds,
-                state.labelsToAdd,
-                state.labelsToRemove,
-                true,
-                true, // shouldRemoveThread - remove from current view
-                false, // shouldRestoreThread
-                undefined // afterStateUpdate - don't close yet, wait for promise to resolve
+      // The toast, and its Undo / Z, come at once (see runUndoableAction).
+      runUndoableAction({
+        perform: async () => {
+          if (exitIntent) markExit(movingIds, exitIntent);
+          try {
+            // All at once, so the rows leave together (one after another, each
+            // waited for its own server round trip).
+            await Promise.all(
+              originalThreadStates.map((state) =>
+                updateLabelFromThread(
+                  state.accountId,
+                  state.threadIds,
+                  state.labelsToAdd,
+                  state.labelsToRemove,
+                  true,
+                  true, // shouldRemoveThread - remove from current view
+                  false, // shouldRestoreThread
+                  undefined // afterStateUpdate - don't close yet, wait for promise to resolve
+                )
               )
-            )
-          );
-        } catch (error) {
-          markExit(movingIds, null);
-          throw error;
-        }
-
-        // Define undo function
-        undoFunction = async () => {
+            );
+          } catch (error) {
+            markExit(movingIds, null);
+            throw error;
+          }
+        },
+        undo: async (performed) => {
           markExit(movingIds, null);
           for (const state of originalThreadStates) {
             // Calculate what labels to add back and remove to restore original state
@@ -317,51 +314,26 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
               true,
               false, // shouldRemoveThread
               true, // shouldRestoreThread
-              undefined // afterStateUpdate
+              undefined, // afterStateUpdate
+              performed // the server half waits for the move
             );
           }
-        };
-
-        return { count: totalThreads, destinationName };
-      };
-
-      const uuid = generateUUID();
-
-      // Use toast.promise to show loading/success/error states
-      toast.promise(movePromise, {
-        id: uuid,
-        loading:
+        },
+        message:
           totalThreads === 1
-            ? t('toast.thread.moving_to', { destination: destinationName })
-            : t('toast.thread.moving_to_multiple', {
+            ? t('toast.thread.moved_to', { destination: destinationName })
+            : t('toast.thread.moved_to_multiple', {
                 count: totalThreads,
                 destination: destinationName
               }),
-        success: (data) => {
-          if (undoFunction) {
-            addUndoAction({
-              execute: undoFunction,
-              timestamp: Date.now(),
-              toastId: uuid
-            });
-          }
-
-          return data.count === 1
-            ? t('toast.thread.moved_to', { destination: data.destinationName })
-            : t('toast.thread.moved_to_multiple', {
-                count: data.count,
-                destination: data.destinationName
-              });
-        },
-        action: {
-          label: (
-            <span className="inline-flex items-end gap-1">
-              {t('toast.undo')} <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-            </span>
-          ),
-          onClick: () => undoFunction && undoFunction()
-        },
-        error: t('toast.thread.move_error', { destination: destinationName })
+        errorMessage: t('toast.thread.move_error', { destination: destinationName }),
+        undoLabel: (
+          <span className="inline-flex items-end gap-1">
+            {t('toast.undo')} <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
+          </span>
+        ),
+        addUndoAction,
+        removeUndoAction
       });
 
       // Close the command panel after successful move
@@ -375,6 +347,7 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
       onClose,
       onOpenChange,
       addUndoAction,
+      removeUndoAction,
       markExit,
       t
     ]

@@ -16,6 +16,11 @@ import {
   threadsMapAtom
 } from './atoms';
 
+// A label change, each label once: an undo can add back a label that the
+// action it reverses already restored (when that action failed and rolled back).
+const withLabels = (labelIds: string[], add: string[], remove: string[]) =>
+  Array.from(new Set([...add, ...labelIds.filter((id) => !remove.includes(id))])).sort();
+
 export function useThreadOperationAtom() {
   const [threadsMap, setThreadsMap] = useAtom(threadsMapAtom);
   const [activeThreadId, setActiveThreadId] = useAtom(activeThreadIdAtom);
@@ -330,16 +335,12 @@ export function useThreadOperationAtom() {
 
                 if (dbThread) {
                   // Apply label updates to the restored thread
-                  dbThread.labelIds = addLabelIds
-                    .concat(dbThread.labelIds.filter((id) => !removeLabelIds.includes(id)))
-                    .sort();
+                  dbThread.labelIds = withLabels(dbThread.labelIds, addLabelIds, removeLabelIds);
 
                   // Update thread items
                   dbThread.items.forEach((item) => {
                     if (isThreadItemWithLabels(item)) {
-                      item.labelIds = addLabelIds
-                        .concat(item.labelIds.filter((id) => !removeLabelIds.includes(id)))
-                        .sort();
+                      item.labelIds = withLabels(item.labelIds, addLabelIds, removeLabelIds);
 
                       // Schedule DB operations for message labels
                       if (saveToLocal && item.type === 'message') {
@@ -367,16 +368,12 @@ export function useThreadOperationAtom() {
             }
 
             // Update thread labels
-            thread.labelIds = addLabelIds
-              .concat(thread.labelIds.filter((id) => !removeLabelIds.includes(id)))
-              .sort();
+            thread.labelIds = withLabels(thread.labelIds, addLabelIds, removeLabelIds);
 
             // Update thread items
             thread.items.forEach((item) => {
               if (isThreadItemWithLabels(item)) {
-                item.labelIds = addLabelIds
-                  .concat(item.labelIds.filter((id) => !removeLabelIds.includes(id)))
-                  .sort();
+                item.labelIds = withLabels(item.labelIds, addLabelIds, removeLabelIds);
 
                 // Schedule DB operations
                 if (saveToLocal && item.type === 'message') {

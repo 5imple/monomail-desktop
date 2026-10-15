@@ -1,7 +1,7 @@
-import { generateUUID, isComposeDraftId } from '@/main/utils';
+import { isComposeDraftId } from '@/main/utils';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { CommandType } from '@/renderer/app/types';
-import { toast } from 'sonner';
+import { runUndoableAction } from '@/renderer/app/lib/commands/undoableAction';
 import { MonoCommand, ThreadCommandArgs } from './types';
 
 interface ThreadCommandDependencies {
@@ -15,6 +15,7 @@ interface ThreadCommandDependencies {
   selectNextThread: () => void;
   groupThreadsByAccount: (threadIds: string[]) => Record<string, string[]>;
   addUndoAction: (action: any) => void;
+  removeUndoAction: (toastId: string | number) => void;
   unmarkThreadAsSpam: (accountId: string, threadIds: string[], ...args: any[]) => void;
   markThreadAsDone: (accountId: string, threadIds: string[], ...args: any[]) => void;
   unmarkThreadAsDone: (accountId: string, threadIds: string[], ...args: any[]) => void;
@@ -41,6 +42,7 @@ export const createThreadCommands = (
     selectNextThread,
     groupThreadsByAccount,
     addUndoAction,
+    removeUndoAction,
     unmarkThreadAsSpam,
     markThreadAsDone,
     unmarkThreadAsDone,
@@ -53,6 +55,24 @@ export const createThreadCommands = (
     markThreadAsTrash
   } = deps;
 
+  const undoLabel = (
+    <span className="inline-flex items-end gap-1">
+      Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
+    </span>
+  );
+  // Runs `run` on each account's threads, all at once.
+  const forEachAccount = (
+    threadsByAccount: Record<string, string[]>,
+    run: (accountId: string, threadIds: string[]) => unknown
+  ) => Promise.all(Object.entries(threadsByAccount).map(([accountId, ids]) => run(accountId, ids)));
+  // The toast, and its Undo / Z, come at once (see runUndoableAction).
+  const undoable = (options: {
+    perform: () => Promise<unknown>;
+    undo: (performed: Promise<unknown>) => unknown;
+    message: string;
+    errorMessage: string;
+  }) => runUndoableAction({ ...options, undoLabel, addUndoAction, removeUndoAction });
+
   // An open thread wins over the selection: the reader is full-screen while a
   // thread is open (MailLayout), so any selection left in the hidden list —
   // e.g. a row checked by a right-click — is invisible, and acting on it
@@ -64,7 +84,7 @@ export const createThreadCommands = (
     ).filter((id) => !isComposeDraftId(id));
 
   return {
-    // THREAD_MARK_READ with promise toast
+    // THREAD_MARK_READ
     THREAD_MARK_READ: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_mark_read'),
@@ -79,64 +99,25 @@ export const createThreadCommands = (
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise that will be executed
-        const markReadPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            unmarkThreadsAsUnread(accountId, accountThreadIds)
-          );
-
-          await Promise.all(promises);
-
-          // Define the undo function
-          undoFunction = async () => {
-            const undoPromises = Object.entries(threadsByAccount).map(
-              ([accountId, accountThreadIds]) => markThreadsAsUnread(accountId, accountThreadIds)
-            );
-            await Promise.all(undoPromises);
-          };
-
-          // Return meaningful data for success message
-          return { count: threadIds.length };
-        };
-
-        const uuid = generateUUID();
-        // Use toast.promise to show loading/success/error states
-        toast.promise(markReadPromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.mark_read')
-              : t('toast.thread.mark_reads', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-
-            return data.count === 1
-              ? t('toast.thread.marked_read')
-              : t('toast.thread.marked_reads', { count: data.count });
-          },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+        undoable({
+          perform: () =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadsAsUnread(accountId, ids)
             ),
-            onClick: () => undoFunction && undoFunction()
-          },
-          error: t('toast.thread.mark_read_error')
+          undo: (performed) =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadsAsUnread(accountId, ids, true, false, false, undefined, performed)
+            ),
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.marked_read')
+              : t('toast.thread.marked_reads', { count: threadIds.length }),
+          errorMessage: t('toast.thread.mark_read_error')
         });
       }
     },
 
-    // THREAD_MARK_UNREAD with promise toast
+    // THREAD_MARK_UNREAD
     THREAD_MARK_UNREAD: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_mark_unread'),
@@ -148,64 +129,25 @@ export const createThreadCommands = (
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise that will be executed
-        const markUnreadPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            markThreadsAsUnread(accountId, accountThreadIds)
-          );
-
-          await Promise.all(promises);
-
-          // Define the undo function
-          undoFunction = async () => {
-            const undoPromises = Object.entries(threadsByAccount).map(
-              ([accountId, accountThreadIds]) => unmarkThreadsAsUnread(accountId, accountThreadIds)
-            );
-            await Promise.all(undoPromises);
-          };
-
-          // Return meaningful data for success message
-          return { count: threadIds.length };
-        };
-
-        const uuid = generateUUID();
-        // Use toast.promise to show loading/success/error states
-        toast.promise(markUnreadPromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.mark_unread')
-              : t('toast.thread.mark_reads', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-
-            return data.count === 1
-              ? t('toast.thread.marked_unread')
-              : t('toast.thread.marked_reads', { count: data.count });
-          },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+        undoable({
+          perform: () =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadsAsUnread(accountId, ids)
             ),
-            onClick: () => undoFunction && undoFunction()
-          },
-          error: t('toast.thread.mark_read_error')
+          undo: (performed) =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadsAsUnread(accountId, ids, true, false, false, undefined, performed)
+            ),
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.marked_unread')
+              : t('toast.thread.marked_reads', { count: threadIds.length }),
+          errorMessage: t('toast.thread.mark_read_error')
         });
       }
     },
 
-    // THREAD_TRASH with promise toast
+    // THREAD_TRASH
     THREAD_TRASH: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_trash'),
@@ -229,75 +171,35 @@ export const createThreadCommands = (
         const isInTrashView =
           globalSearchQuery.toLowerCase().includes('trash') &&
           !globalSearchQuery.toLowerCase().includes('-in:trash');
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise that will handle the trash operation
-        const trashPromise = async () => {
-          // Execute for each account's threads.
-          // The map arrow must return the promise (no curly-brace body) — otherwise
-          // Promise.all resolves on [undefined, …] before the Gmail call finishes,
-          // so failures never surface to the toast.
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            markThreadAsTrash(
-              accountId,
-              accountThreadIds,
-              true,
-              !isInTrashView,
-              false,
-              shouldAdvanceAfterTrash ? selectNextThread : undefined
-            )
-          );
-
-          await Promise.all(promises);
-
-          // Define undo function
-          undoFunction = async () => {
-            const undoPromises = Object.entries(threadsByAccount).map(
-              ([accountId, accountThreadIds]) =>
-                unmarkThreadAsTrash(accountId, accountThreadIds, true, false, true)
+        undoable({
+          perform: () =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadAsTrash(
+                accountId,
+                ids,
+                true,
+                !isInTrashView,
+                false,
+                shouldAdvanceAfterTrash ? selectNextThread : undefined
+              )
+            ),
+          undo: (performed) => {
+            const undone = forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsTrash(accountId, ids, true, false, true, undefined, performed)
             );
             setSelectedThreads(threadIds);
-            await Promise.all(undoPromises);
-          };
-
-          // Return meaningful data for success message
-          return { count: threadIds.length };
-        };
-        const uuid = generateUUID();
-
-        // Use toast.promise to show loading/success/error states
-        toast.promise(trashPromise, {
-          id: uuid,
-          loading:
+            return undone;
+          },
+          message:
             threadIds.length === 1
-              ? t('toast.thread.trash')
-              : t('toast.thread.trash', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-            return data.count === 1
               ? t('toast.thread.trashed')
-              : t('toast.thread.trashed', { count: data.count });
-          },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
-            ),
-            onClick: () => undoFunction && undoFunction()
-          },
-          error: t('toast.thread.trash_error')
+              : t('toast.thread.trashed', { count: threadIds.length }),
+          errorMessage: t('toast.thread.trash_error')
         });
       }
     },
 
-    // THREAD_UNTRASH with promise toast
+    // THREAD_UNTRASH
     THREAD_UNTRASH: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_untrash'),
@@ -309,64 +211,27 @@ export const createThreadCommands = (
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
         const isInTrashView = globalSearchQuery.toLowerCase().includes('trash');
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise for the untrash operation
-        const untrashPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            unmarkThreadAsTrash(accountId, accountThreadIds, true, isInTrashView, true)
-          );
-
-          await Promise.all(promises);
-          setSelectedThreads([]);
-
-          // Define undo function
-          undoFunction = async () => {
-            const undoPromises = Object.entries(threadsByAccount).map(
-              ([accountId, accountThreadIds]) =>
-                markThreadAsTrash(accountId, accountThreadIds, true, false, isInTrashView)
+        undoable({
+          perform: async () => {
+            await forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsTrash(accountId, ids, true, isInTrashView, true)
             );
-            await Promise.all(undoPromises);
-          };
-
-          return { count: threadIds.length };
-        };
-
-        const uuid = generateUUID();
-        // Use toast.promise
-        toast.promise(untrashPromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.untrash')
-              : t('toast.thread.untrash', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-            return data.count === 1
-              ? t('toast.thread.untrashed')
-              : t('toast.thread.untrashed', { count: data.count });
+            setSelectedThreads([]);
           },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+          undo: (performed) =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadAsTrash(accountId, ids, true, false, isInTrashView, undefined, performed)
             ),
-            onClick: () => undoFunction && undoFunction()
-          },
-          error: t('toast.thread.untrash_error')
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.untrashed')
+              : t('toast.thread.untrashed', { count: threadIds.length }),
+          errorMessage: t('toast.thread.untrash_error')
         });
       }
     },
 
-    // THREAD_STAR with promise toast
+    // THREAD_STAR
     THREAD_STAR: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_star'),
@@ -380,63 +245,23 @@ export const createThreadCommands = (
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise
-        const starPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            markThreadAsStar(accountId, accountThreadIds)
-          );
-
-          await Promise.all(promises);
-
-          // Define undo function
-          undoFunction = async () => {
-            const undoPromises = Object.entries(threadsByAccount).map(
-              ([accountId, accountThreadIds]) =>
-                unmarkThreadAsStar(accountId, accountThreadIds, true)
-            );
-            await Promise.all(undoPromises);
-          };
-
-          return { count: threadIds.length };
-        };
-        const uuid = generateUUID();
-
-        // Use toast.promise
-        toast.promise(starPromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.star')
-              : t('toast.thread.star', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-            return data.count === 1
-              ? t('toast.thread.starred')
-              : t('toast.thread.starred', { count: data.count });
-          },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+        undoable({
+          perform: () =>
+            forEachAccount(threadsByAccount, (accountId, ids) => markThreadAsStar(accountId, ids)),
+          undo: (performed) =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsStar(accountId, ids, true, false, false, undefined, performed)
             ),
-            onClick: () => undoFunction && undoFunction()
-          },
-          error: t('toast.thread.star_error')
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.starred')
+              : t('toast.thread.starred', { count: threadIds.length }),
+          errorMessage: t('toast.thread.star_error')
         });
       }
     },
 
-    // THREAD_UNSTAR with promise toast
+    // THREAD_UNSTAR
     THREAD_UNSTAR: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_unstar'),
@@ -448,62 +273,25 @@ export const createThreadCommands = (
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise
-        const unstarPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            unmarkThreadAsStar(accountId, accountThreadIds)
-          );
-
-          await Promise.all(promises);
-
-          // Define undo function
-          undoFunction = async () => {
-            const undoPromises = Object.entries(threadsByAccount).map(
-              ([accountId, accountThreadIds]) => markThreadAsStar(accountId, accountThreadIds)
-            );
-            await Promise.all(undoPromises);
-          };
-
-          return { count: threadIds.length };
-        };
-        const uuid = generateUUID();
-
-        // Use toast.promise
-        toast.promise(unstarPromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.unstar')
-              : t('toast.thread.unstar', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-            return data.count === 1
-              ? t('toast.thread.unstarred')
-              : t('toast.thread.unstarred', { count: data.count });
-          },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+        undoable({
+          perform: () =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsStar(accountId, ids)
             ),
-            onClick: () => undoFunction && undoFunction()
-          },
-          error: t('toast.thread.unstar_error')
+          undo: (performed) =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadAsStar(accountId, ids, true, false, false, undefined, performed)
+            ),
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.unstarred')
+              : t('toast.thread.unstarred', { count: threadIds.length }),
+          errorMessage: t('toast.thread.unstar_error')
         });
       }
     },
 
-    // THREAD_DONE with promise toast
+    // THREAD_DONE
     THREAD_DONE: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_done'),
@@ -534,64 +322,30 @@ export const createThreadCommands = (
           (globalSearchQuery.toLowerCase().includes('in:inbox') &&
             !globalSearchQuery.toLowerCase().includes('not in:inbox')) ||
           globalSearchQuery.toLowerCase().includes('category:primary');
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise
-        const donePromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            markThreadAsDone(
-              accountId,
-              accountThreadIds,
-              true,
-              isInInboxView,
-              false,
-              shouldAdvanceAfterDone ? selectNextThread : undefined
-            )
-          );
-
-          await Promise.all(promises);
-
-          // Define undo function
-          undoFunction = async () => {
-            Object.entries(threadsByAccount).forEach(([accountId, accountThreadIds]) => {
-              unmarkThreadAsDone(accountId, accountThreadIds, true, false, isInInboxView);
-            });
-            setSelectedThreads(threadIds);
-          };
-
-          return { count: threadIds.length };
-        };
-
-        const uuid = generateUUID();
-        // Use toast.promise
-        toast.promise(donePromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.done')
-              : t('toast.thread.done', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-            return data.count === 1
-              ? t('toast.thread.done_success')
-              : t('toast.thread.done_success', { count: data.count });
-          },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+        undoable({
+          perform: () =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadAsDone(
+                accountId,
+                ids,
+                true,
+                isInInboxView,
+                false,
+                shouldAdvanceAfterDone ? selectNextThread : undefined
+              )
             ),
-            onClick: () => undoFunction && undoFunction()
+          undo: (performed) => {
+            const undone = forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsDone(accountId, ids, true, false, isInInboxView, undefined, performed)
+            );
+            setSelectedThreads(threadIds);
+            return undone;
           },
-          error: t('toast.thread.done_error')
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.done_success')
+              : t('toast.thread.done_success', { count: threadIds.length }),
+          errorMessage: t('toast.thread.done_error')
         });
       }
     },
@@ -609,62 +363,28 @@ export const createThreadCommands = (
         const threadsByAccount = groupThreadsByAccount(threadIds);
         const isInDoneView = globalSearchQuery.toLowerCase().includes('not in:inbox');
 
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise
-        const donePromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            unmarkThreadAsDone(accountId, accountThreadIds, true, isInDoneView, false)
-          );
-
-          await Promise.all(promises);
-
-          // Define undo function
-          undoFunction = async () => {
-            Object.entries(threadsByAccount).forEach(([accountId, accountThreadIds]) => {
-              markThreadAsDone(accountId, accountThreadIds, true, false, isInDoneView);
-            });
-            setSelectedThreads(threadIds);
-          };
-
-          return { count: threadIds.length };
-        };
-
-        const uuid = generateUUID();
-        // Use toast.promise
-        toast.promise(donePromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.undone')
-              : t('toast.thread.undone', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-            return data.count === 1
-              ? t('toast.thread.undone_success')
-              : t('toast.thread.undone_success', { count: data.count });
-          },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+        undoable({
+          perform: () =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsDone(accountId, ids, true, isInDoneView, false)
             ),
-            onClick: () => undoFunction && undoFunction()
+          undo: (performed) => {
+            const undone = forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadAsDone(accountId, ids, true, false, isInDoneView, undefined, performed)
+            );
+            setSelectedThreads(threadIds);
+            return undone;
           },
-          error: t('toast.thread.undone_error')
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.undone_success')
+              : t('toast.thread.undone_success', { count: threadIds.length }),
+          errorMessage: t('toast.thread.undone_error')
         });
       }
     },
 
-    // THREAD_REPORT_SPAM with promise toast
+    // THREAD_REPORT_SPAM
     THREAD_REPORT_SPAM: {
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_report_spam'),
@@ -676,58 +396,22 @@ export const createThreadCommands = (
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
-        let undoFunction: (() => Promise<void>) | undefined;
-
-        // Define the promise
-        const reportSpamPromise = async () => {
-          // Execute for each account's threads
-          const promises = Object.entries(threadsByAccount).map(([accountId, accountThreadIds]) =>
-            markThreadAsSpam(accountId, accountThreadIds, true)
-          );
-
-          await Promise.all(promises);
-          setSelectedThreads([]);
-
-          // Define undo function
-          undoFunction = async () => {
-            const undoPromises = Object.entries(threadsByAccount).map(
-              ([accountId, accountThreadIds]) => unmarkThreadAsSpam(accountId, accountThreadIds)
+        undoable({
+          perform: async () => {
+            await forEachAccount(threadsByAccount, (accountId, ids) =>
+              markThreadAsSpam(accountId, ids, true)
             );
-            await Promise.all(undoPromises);
-          };
-
-          return { count: threadIds.length };
-        };
-
-        const uuid = generateUUID();
-        // Use toast.promise
-        toast.promise(reportSpamPromise, {
-          id: uuid,
-          loading:
-            threadIds.length === 1
-              ? t('toast.thread.spam')
-              : t('toast.thread.spam', { count: threadIds.length }),
-          success: (data) => {
-            if (undoFunction) {
-              addUndoAction({
-                execute: undoFunction,
-                timestamp: Date.now(),
-                toastId: uuid
-              });
-            }
-            return data.count === 1
-              ? t('toast.thread.spammed')
-              : t('toast.thread.spammed', { count: data.count });
+            setSelectedThreads([]);
           },
-          action: {
-            label: (
-              <span className="inline-flex items-end gap-1">
-                Undo <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-              </span>
+          undo: (performed) =>
+            forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsSpam(accountId, ids, true, false, false, undefined, performed)
             ),
-            onClick: () => undoFunction && undoFunction()
-          },
-          error: t('toast.thread.spam_error')
+          message:
+            threadIds.length === 1
+              ? t('toast.thread.spammed')
+              : t('toast.thread.spammed', { count: threadIds.length }),
+          errorMessage: t('toast.thread.spam_error')
         });
       }
     },

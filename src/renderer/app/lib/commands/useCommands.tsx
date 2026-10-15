@@ -51,7 +51,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
   const { setGlobalDraftWindows } = useComposeWindowAtom();
   const { trackEvent } = useUserTrackingData();
   const { t } = useTranslation();
-  const { addUndoAction } = useUndoManager();
+  const { addUndoAction, removeUndoAction } = useUndoManager();
 
   // Use helper functions
   const { getAccountEmailById, groupThreadsByAccount } = useCommandHelpers(accounts, threadsMap);
@@ -68,6 +68,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     selectNextThread,
     groupThreadsByAccount,
     addUndoAction,
+    removeUndoAction,
     unmarkThreadAsSpam,
     markThreadAsDone,
     unmarkThreadAsDone,
