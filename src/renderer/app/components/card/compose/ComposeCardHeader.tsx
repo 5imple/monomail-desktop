@@ -46,6 +46,10 @@ const toRecipientOption = (address: string, contacts: Contact[]): Option => {
 // One width for To / Cc / Bcc so the three fields start at the same x.
 const FIELD_LABEL_CLASS = 'mr-2 mt-[9px] w-8 shrink-0 text-[14px] font-semibold text-foreground';
 const WINDOW_BUTTON_CLASS = 'text-muted-foreground hover:text-foreground';
+// The add-recipient field shares the last line with the chips instead of
+// dropping to an empty line of its own when they nearly fill it; it only
+// claims room to type while it has focus.
+const RECIPIENT_INPUT_PROPS = { className: 'min-w-0 focus:min-w-[10rem]' };
 
 const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   composeDraft,
@@ -149,7 +153,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           <ContactSuggestionInput
             contacts={contactArray}
             className="z-10 min-h-0 items-start border-none px-0 py-0.5"
-            inputProps={{ className: 'p-2' }}
+            inputProps={RECIPIENT_INPUT_PROPS}
             hideClearAllButton={true}
             placeholder=""
             commandProps={{ onKeyDown }}
@@ -209,7 +213,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           <ContactSuggestionInput
             contacts={contactArray}
             className="min-h-0 flex-1 items-start border-none px-0 py-0.5"
-            inputProps={{ className: 'p-2' }}
+            inputProps={RECIPIENT_INPUT_PROPS}
             hideClearAllButton={true}
             placeholder=""
             value={composeDraft.cc.map((address) => toRecipientOption(address, contactArray))}
@@ -230,7 +234,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
           <ContactSuggestionInput
             contacts={contactArray}
             className="min-h-0 flex-1 items-start border-none px-0 py-0.5"
-            inputProps={{ className: 'p-2' }}
+            inputProps={RECIPIENT_INPUT_PROPS}
             hideClearAllButton={true}
             placeholder=""
             commandProps={{ onKeyDown }}

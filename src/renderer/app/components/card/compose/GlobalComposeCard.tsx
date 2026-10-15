@@ -147,10 +147,18 @@ const editableSnapshot = (d: MonoDraft) =>
     attachments: Object.keys(d.attachments ?? {}).sort()
   });
 
-// Matches the editor box (min-h-[210px] px-9 py-4) so the signature and quoted
-// message below don't jump when the real editor mounts.
-const EditorLoadingFallback = () => (
-  <div className="min-h-[210px] animate-pulse">
+// A new message gets a full page to write on; replies and forwards (mostly a
+// few lines) start shorter. Both grow with the text.
+const EDITOR_MIN_HEIGHT: Record<ComposeKind, string> = {
+  new: 'min-h-[210px]',
+  reply: 'min-h-[150px]',
+  forward: 'min-h-[150px]'
+};
+
+// Matches the editor box (EDITOR_MIN_HEIGHT, px-9 py-4) so the signature and
+// quoted message below don't jump when the real editor mounts.
+const EditorLoadingFallback = ({ minHeightClass }: { minHeightClass: string }) => (
+  <div className={cn(minHeightClass, 'animate-pulse')}>
     <div className="space-y-2 px-9 py-4">
       <div className="h-4 w-3/4 rounded bg-muted"></div>
       <div className="h-4 w-1/2 rounded bg-muted"></div>
@@ -222,9 +230,11 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [draftSaveStatus, setDraftSaveStatus] = useState<
     'INITIALIZED' | 'LOADING' | 'SAVED' | 'ERROR'
   >('INITIALIZED');
-  const editorRef = useRef<{ setContent: (content: string) => void; focus: () => void } | null>(
-    null
-  );
+  const editorRef = useRef<{
+    setContent: (content: string) => void;
+    focus: (position?: 'start' | 'end') => void;
+  } | null>(null);
+  const editorMinHeightClass = EDITOR_MIN_HEIGHT[composeKind];
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const composeRootRef = useRef<HTMLDivElement>(null);
@@ -1513,15 +1523,15 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   // Optimize render method for editor section
   const renderEditor = useMemo(() => {
     if (!isEditorMounted) {
-      return <EditorLoadingFallback />;
+      return <EditorLoadingFallback minHeightClass={editorMinHeightClass} />;
     }
 
     return (
-      <Suspense fallback={<EditorLoadingFallback />}>
+      <Suspense fallback={<EditorLoadingFallback minHeightClass={editorMinHeightClass} />}>
         <TextEditor
           ref={editorRef}
           autofocus={editorAutofocus}
-          className="min-h-[210px] px-9 py-4 text-[14px]"
+          className={cn(editorMinHeightClass, 'px-9 py-4 text-[14px]')}
           value={composeDraft.body}
           onChange={handleInputChange.bind(null, 'body')}
           onUploadInlineImage={handleUploadInlineImage}
@@ -1588,6 +1598,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     );
   }, [
     isEditorMounted,
+    editorMinHeightClass,
     composeDraft.body,
     composeDraft.id,
     handleInputChange,
@@ -1652,19 +1663,22 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           <div />
         </div>
       )}
+      {/* A column, so the card can shrink to a short window and the body
+          scrolls instead of the footer going off-screen. */}
       <div
         className={cn(
-          'pointer-events-none flex min-h-0 flex-1 justify-center px-8',
-          isMinimized ? 'contents' : isMaximized ? 'items-stretch pb-8' : 'items-start pb-8'
+          'pointer-events-none flex min-h-0 flex-1 flex-col items-center px-8',
+          isMinimized ? 'contents' : 'pb-8'
         )}
       >
         <Card
           className={cn(
             'pointer-events-auto flex flex-col border border-foreground/[0.06] bg-card ease-bouncy-in-out dark:border-white/[0.06]',
             'w-full min-w-0 transition-all duration-300',
-            isMaximized
-              ? 'h-full min-h-0 max-w-[960px]'
-              : 'h-full max-h-[720px] min-h-[405px] max-w-[768px]',
+            // Only as tall as what's in it, so Send sits right under the
+            // message; it grows as you write, up to the cap, then the body
+            // scrolls. Maximized fills the window.
+            isMaximized ? 'min-h-0 max-w-[960px] flex-1' : 'max-h-[720px] min-h-0 max-w-[768px]',
             isMinimized
               ? 'max-h-12 min-h-12 min-w-80 max-w-80 rounded-xl shadow-md'
               : 'rounded-md shadow-[0_1px_2px_hsl(var(--foreground)/0.04),0_10px_28px_-14px_hsl(var(--foreground)/0.14)] dark:shadow-none',
@@ -1711,9 +1725,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           {/* Kept mounted while minimized (hidden, so nothing inside can be
               tabbed to): unmounting threw away the caret, undo history and
               scroll position. */}
+          {/* flex-auto, not flex-1 or h-full, down to the scroll area: in a
+              card sized by its content those collapse or stop constraining,
+              and the body would be clipped instead of scrolling. */}
           <CardContent
             className={cn(
-              'no-drag relative min-h-0 flex-1 overflow-hidden p-0',
+              'no-drag relative flex min-h-0 flex-auto flex-col overflow-hidden p-0',
               isMinimized && 'hidden'
             )}
             onDragEnterCapture={handleAttachmentDragEnter}
@@ -1729,7 +1746,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                 </div>
               </div>
             )}
-            <div className="flex h-full min-h-0 flex-col">
+            <div className="flex min-h-0 flex-auto flex-col">
               <div className="px-9 pb-1 pt-3">
                 <Input
                   ref={subjectRef}
@@ -1752,7 +1769,21 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                   }}
                 />
               </div>
-              <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
+              <div
+                className="relative min-h-0 flex-auto overflow-y-auto overscroll-contain pb-4"
+                // Blank space below everything (a maximized card is taller
+                // than its content) writes at the end of the message, like
+                // clicking under a document's text. Not on the scrollbar.
+                onMouseDown={(event) => {
+                  const area = event.currentTarget;
+                  if (event.target !== area || event.button !== 0) return;
+                  if (event.nativeEvent.offsetX >= area.clientWidth) return;
+                  const last = area.lastElementChild;
+                  if (last && event.clientY < last.getBoundingClientRect().bottom) return;
+                  event.preventDefault();
+                  editorRef.current?.focus('end');
+                }}
+              >
                 {renderEditor}
                 <div className="px-9 text-sm">
                   <SignatureSwitcher draft={composeDraft} onSignatureChange={onSignatureChange} />

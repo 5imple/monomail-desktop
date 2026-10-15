@@ -205,9 +205,9 @@ const TextEditor = React.forwardRef(
           editor.commands.setContent(content);
         }
       },
-      focus: () => {
+      focus: (position?: 'start' | 'end') => {
         if (editor) {
-          editor.commands.focus();
+          editor.commands.focus(position);
         }
       }
     }));
