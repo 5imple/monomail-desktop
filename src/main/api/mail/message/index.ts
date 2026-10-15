@@ -40,6 +40,23 @@ const modifyMessage = async (
   );
 };
 
+// The Message-ID and References of a message, for a reply's In-Reply-To /
+// References headers (see buildRawMessage).
+const getReplyHeaders = async (
+  uid: string,
+  id: string,
+  signal?: AbortSignal
+): Promise<{ messageId?: string; references?: string }> => {
+  const raw = await gmailApiClient.get<RawGmailMessage>(
+    `/messages/${id}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`,
+    { uid, signal }
+  );
+  const headers: { name: string; value: string }[] = raw.payload?.headers ?? [];
+  const header = (name: string) =>
+    headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value;
+  return { messageId: header('Message-ID'), references: header('References') };
+};
+
 // Direct Gmail send. `raw` is a base64url-encoded RFC822 message; passing
 // `threadId` threads replies/forwards in Gmail without needing In-Reply-To.
 const sendMessage = async (
@@ -60,5 +77,6 @@ export default {
   getMessageUnsubscribe,
   postMessageUnsubscribe,
   modifyMessage,
+  getReplyHeaders,
   sendMessage,
 };

@@ -26,7 +26,11 @@ import {
   DBSaveAttachmentBlob
 } from '@/renderer/app/lib/db/draftAttachment';
 import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
-import { formatForwardedMessage } from '@/renderer/app/lib/formatBody';
+import {
+  embedQuotedImages,
+  formatForwardedMessage,
+  formatQuotedReply
+} from '@/renderer/app/lib/formatBody';
 import { getAttachmentIcon } from '@/renderer/app/lib/getAttachmentIcon';
 import { hasModKey } from '@/renderer/app/lib/platform';
 import {
@@ -642,10 +646,14 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         })
       };
     }
-    if (composeKind === 'forward' && originalStatus === 'loading') {
+    // The original goes under a reply (quoted) or a forward: wait for it.
+    if (composeKind !== 'new' && originalStatus === 'loading') {
       return {
         kind: 'forward_loading',
-        reason: t('compose_card.footer.send_disabled.loading_original')
+        reason:
+          composeKind === 'reply'
+            ? t('compose_card.footer.send_disabled.loading_reply')
+            : t('compose_card.footer.send_disabled.loading_original')
       };
     }
     return null;
@@ -682,6 +690,9 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       notifySendBlocked();
       return;
     }
+    // Claimed before the first await (the quoted pictures load), so a second
+    // Send in the meantime is ignored; released below if it can't go.
+    sendStartedRef.current = true;
 
     let updatedDraft: MonoDraft;
     try {
@@ -775,12 +786,23 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         `<style>${tailwindCSS}</style>`
       );
       const finalBody = ensureLineBreaksAfterInlining(cssParsedBody);
-      const parsedHtml = `<html><body>${finalBody}<div id="mono-signature" class="my-2">${signatureContent}</div>${historyMessage ? formatForwardedMessage(historyMessage) : ''}</body></html>`;
+      // The message answered, quoted under a reply as mail apps do (the card
+      // showed it, but it was never sent), or the forwarded one.
+      const original = replyMessage ?? historyMessage;
+      const senderUid = getUidFromEmail(updatedDraft.from);
+      let history = replyMessage
+        ? formatQuotedReply(replyMessage, isMicrosoftAccount ? 'outlook' : 'gmail')
+        : historyMessage
+          ? formatForwardedMessage(historyMessage)
+          : '';
+      if (original && senderUid) history = await embedQuotedImages(history, original, senderUid);
+      const parsedHtml = `<html><body>${finalBody}<div id="mono-signature" class="my-2">${signatureContent}</div>${history}</body></html>`;
 
       updatedDraft.update({
         body: optimizeForGmail(parsedHtml)
       });
     } catch (e) {
+      sendStartedRef.current = false;
       console.error('Error preparing message:', e);
       toast.error(t('toast.error.send_mail'));
       return;
@@ -794,12 +816,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         ...measureHtmlBody(updatedDraft.body)
       });
       if (size > MICROSOFT_MAX_ENCODED_MIME) {
+        sendStartedRef.current = false;
         toast.error(t('toast.error.message_too_large_microsoft'), { id: 'compose-send-blocked' });
         return;
       }
     }
 
-    sendStartedRef.current = true;
     setIsSending(true);
     // Don't let a queued autosave re-add the draft after sendDraft removes it.
     debouncedUpdateDraft.cancel();
@@ -871,6 +893,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     notifySendBlocked,
     signatures,
     historyMessage,
+    replyMessage,
     isMicrosoftAccount,
     attachmentBytes,
     getUidFromEmail,
@@ -1819,7 +1842,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                     <ReferenceCard accountId={accountId} type={'reply'} item={replyMessage} />
                   </div>
                 )}
-                {composeKind === 'forward' && originalStatus === 'failed' && (
+                {composeKind !== 'new' && originalStatus === 'failed' && (
                   <div className="mt-4 px-9 text-sm">
                     <div className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-[13px] text-muted-foreground">
                       <MonoIcon type="AlertCircle" className="h-4 w-4 shrink-0" />

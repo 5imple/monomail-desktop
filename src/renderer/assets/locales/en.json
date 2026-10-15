@@ -1391,7 +1391,8 @@
         "attaching": "Wait for attachments to finish",
         "attachment_failed": "Remove or retry the file that couldn’t be attached",
         "too_large_microsoft": "Attachments are over the {{limit}} limit for Microsoft 365 accounts",
-        "loading_original": "Loading the message you’re forwarding…"
+        "loading_original": "Loading the message you’re forwarding…",
+        "loading_reply": "Loading the message you’re replying to…"
       },
       "sending": "Sending…",
       "send_later": "Send later",

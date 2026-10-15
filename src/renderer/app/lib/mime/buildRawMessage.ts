@@ -122,17 +122,27 @@ const extractInlineDataImages = (html: string): { html: string; parts: MimeEntit
   return { html: doc.body.innerHTML, parts };
 };
 
+/** The Message-ID and References of the message a reply answers. */
+export interface ReplyHeaders {
+  messageId?: string;
+  references?: string;
+}
+
 /**
- * Build a base64url-encoded RFC822 message for Gmail `users.messages.send`.
+ * Build a base64url-encoded RFC822 message for Gmail `users.messages.send` and
+ * Microsoft Graph's MIME `sendMail`.
  *
  * Emits multipart/related for inline (cid:) images and multipart/mixed for file
  * attachments; collapses to a single text/html part when the draft has neither.
- * Reply threading is handled by passing `threadId` to the send API, not via
- * In-Reply-To (the raw Message-ID header isn't retained in MonoMessage).
+ * A reply carries In-Reply-To / References (RFC 5322): what recipients' mail
+ * apps and Microsoft's servers group a conversation by — without them a reply
+ * sent from a Microsoft account started a conversation of its own. Gmail
+ * also threads the sender's copy by the `threadId` passed to its send API.
  */
 export async function buildRawMessage(
   draft: MonoDraft,
-  attachments: DraftAttachmentRecord[] = []
+  attachments: DraftAttachmentRecord[] = [],
+  replyHeaders?: ReplyHeaders | null
 ): Promise<string> {
   const addressHeaders: string[] = [`From: ${formatAddress(draft.from, draft.author?.name)}`];
   const to = joinAddresses(draft.to);
@@ -142,6 +152,16 @@ export async function buildRawMessage(
   if (cc) addressHeaders.push(`Cc: ${cc}`);
   if (bcc) addressHeaders.push(`Bcc: ${bcc}`);
   addressHeaders.push(`Subject: ${encodeHeaderWord(draft.subject || '')}`);
+  const inReplyTo = replyHeaders?.messageId?.trim();
+  if (inReplyTo) {
+    const references = [...(replyHeaders?.references ?? '').split(/\s+/), inReplyTo].filter(
+      (id, i, ids) => id && ids.indexOf(id) === i
+    );
+    addressHeaders.push(`In-Reply-To: ${inReplyTo}`);
+    // One id per folded line: a long conversation's References would pass the
+    // 998-character line limit.
+    addressHeaders.push(`References: ${references.join('\r\n ')}`);
+  }
 
   // Encode locally-held attachment bytes to base64 up front (async blob reads).
   const encoded = await Promise.all(

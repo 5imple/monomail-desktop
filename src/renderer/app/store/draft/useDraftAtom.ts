@@ -322,7 +322,16 @@ export function useDraftAtom() {
           // bytes. Only thread when threadId is a real server id; a new-compose
           // placeholder id (a local UUID) would 400.
           const attachmentRecords = await DBGetAttachmentsForDraft(uid, draftId);
-          const raw = await buildRawMessage(fullDraft, attachmentRecords);
+          // A reply / forward threads into the conversation by the original's
+          // Message-ID; if that can't be read, it still sends, unthreaded.
+          const replyHeaders =
+            fullDraft.messageId && !isComposeDraftId(fullDraft.messageId)
+              ? await mailApi.getReplyHeaders(uid, fullDraft.messageId).catch((error) => {
+                  console.error('Could not read the original message headers:', error);
+                  return null;
+                })
+              : null;
+          const raw = await buildRawMessage(fullDraft, attachmentRecords, replyHeaders);
           const gmailThreadId =
             fullDraft.threadId && !isComposeDraftId(fullDraft.threadId)
               ? fullDraft.threadId

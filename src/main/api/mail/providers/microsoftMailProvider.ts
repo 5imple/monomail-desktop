@@ -772,6 +772,20 @@ const modifyMessage: MailProviderAdapter['modifyMessage'] = async (
   return { addLabelIds, removeLabelIds };
 };
 
+// The Message-ID and References of a message, for a reply's In-Reply-To /
+// References headers (see buildRawMessage): what Microsoft's servers thread the
+// sent reply into its conversation by.
+const getReplyHeaders: MailProviderAdapter['getReplyHeaders'] = async (uid, id, signal) => {
+  const message = await graphApiClient.get<GraphMessage>(
+    `/me/messages/${encodeURIComponent(id)}?$select=internetMessageId,internetMessageHeaders`,
+    { uid, signal }
+  );
+  const references = message.internetMessageHeaders?.find(
+    (header) => header.name.toLowerCase() === 'references'
+  )?.value;
+  return { messageId: message.internetMessageId, references };
+};
+
 // ── Send (Phase 8) ───────────────────────────────────────────────────────────
 
 // Conservative v1 ceiling on the encoded MIME (A4). The real sendMail MIME limit
@@ -830,5 +844,6 @@ export const microsoftMailProvider: MailProviderAdapter = {
   trashThread,
   untrashThread,
   modifyMessage,
+  getReplyHeaders,
   sendMessage
 };
