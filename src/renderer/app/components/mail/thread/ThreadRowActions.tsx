@@ -9,8 +9,10 @@ import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePop
 import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
 import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
+import { currentSearchQueryAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
+import { useStore } from 'jotai';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -35,7 +37,9 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
   const [open, setOpen] = useState(false);
   const [customMode, setCustomMode] = useState(false);
   const { snoozeThread, unsnooze } = useQueueAtom();
+  const { markThreadAsDone, unmarkThreadAsDone } = useThreadLabelAtom();
   const { addUndoAction } = useUndoManager();
+  const store = useStore();
   const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
   // A second pick while the first request is in flight would snooze twice.
   const snoozingRef = useRef(false);
@@ -46,8 +50,20 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
       snoozingRef.current = true;
       // Close right away; the toast reports the outcome.
       setOpen(false);
+      // The snooze takes the thread out of the inbox on the server; show that
+      // now, the way Done does (off the list in the inbox view), rather than
+      // when the next sync notices. Local only — the snooze made the change.
+      const query = store.get(currentSearchQueryAtom).toLowerCase();
+      const inInboxView =
+        (query.includes('in:inbox') && !query.includes('not in:inbox')) ||
+        query.includes('category:primary');
+      const leaveInbox = () => markThreadAsDone(thread.accountId, [thread.id], false, inInboxView);
+      const backToInbox = () =>
+        unmarkThreadAsDone(thread.accountId, [thread.id], false, false, inInboxView);
       const sender = thread.from?.[0];
       try {
+        await leaveInbox();
+        // A rejected call is a failure too: never leave the thread off the list.
         const res = await snoozeThread({
           threadId: thread.id,
           accountId: thread.accountId,
@@ -62,18 +78,21 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
             },
             isStarred: thread.labelIds?.includes('STARRED') ?? false
           }
-        });
+        }).catch((error: unknown) => ({ ok: false as const, error: String(error) }));
         if (!res.ok) {
           console.error('[SnoozeButton] snooze failed:', res.error);
+          await backToInbox();
           toast.error(t('toast.snooze.error', { defaultValue: "Couldn't snooze this email." }));
           return;
         }
 
         const snoozeId = res.item.id;
         const undo = async () => {
+          await backToInbox();
           const undone = await unsnooze(snoozeId);
           if (!undone.ok) {
             console.error('[SnoozeButton] unsnooze failed:', undone.error);
+            await leaveInbox();
             toast.error(
               t('toast.snooze.undo_error', { defaultValue: "Couldn't undo the snooze." })
             );
@@ -103,7 +122,7 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
         snoozingRef.current = false;
       }
     },
-    [thread, snoozeThread, unsnooze, addUndoAction, t]
+    [thread, snoozeThread, unsnooze, markThreadAsDone, unmarkThreadAsDone, addUndoAction, store, t]
   );
 
   return (

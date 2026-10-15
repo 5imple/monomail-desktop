@@ -9,11 +9,16 @@ import log from 'electron-log';
 
 /**
  * Piece 4 — IPC bridge for the P8 Later Queue. Renderer calls these
- * channels via the preload bridge; main forwards to queueApi (HTTP) and
- * wraps responses in `{ ok, data? | error? }` so the renderer doesn't
- * have to handle axios-style rejections directly. Push-driven cache
- * updates (THREAD_UNSNOOZED, SCHEDULED_SENT) flow back through the
- * existing WebSocketPushClient, not through these channels.
+ * channels via the preload bridge; main wraps responses in
+ * `{ ok, data? | error? }` so the renderer doesn't have to handle
+ * rejections directly.
+ *
+ * Snooze runs on the local SchedulerService: it moves the thread out of the
+ * inbox now and back at snoozeUntil (sending THREAD_UNSNOOZED on
+ * `renderer:queue:event`), with no server. It went to queueApi (HTTP) here,
+ * so with no backend running every snooze failed with "fetch failed".
+ * Scheduled send still goes to queueApi: the local scheduler needs the built
+ * raw message, which the renderer doesn't send, and only sends from Gmail.
  */
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -30,21 +35,21 @@ function wrap<T>(fn: () => Promise<T>): Promise<Result<T>> {
 
 export function registerQueueHandlers() {
   ipcMain.handle('main:queue:snooze', (_, req: CreateSnoozeRequest) =>
-    wrap(() => queueApi.createSnooze(req))
+    wrap(() => schedulerService.createSnooze(req))
   );
 
   ipcMain.handle('main:queue:list-snoozed', (_, accountId: string) =>
-    wrap(() => queueApi.listSnoozes(accountId))
+    wrap(async () => schedulerService.listSnoozes(accountId))
   );
 
   ipcMain.handle('main:queue:unsnooze', (_, snoozeId: string) =>
-    wrap(() => queueApi.unsnooze(snoozeId))
+    wrap(() => schedulerService.unsnooze(snoozeId))
   );
 
   ipcMain.handle(
     'main:queue:reschedule-snooze',
     (_, args: { snoozeId: string; snoozeUntil: string }) =>
-      wrap(() => queueApi.rescheduleSnooze(args.snoozeId, args.snoozeUntil))
+      wrap(() => schedulerService.rescheduleSnooze(args.snoozeId, args.snoozeUntil))
   );
 
   ipcMain.handle('main:queue:schedule', (_, req: CreateScheduleRequest) =>
