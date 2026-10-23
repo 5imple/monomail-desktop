@@ -9,6 +9,7 @@ import {
 import electronApi from '@/renderer/app/lib/electronApi';
 import { extractDomainFromEmail, getFaviconFromEmail } from '@/renderer/app/lib/faviconUtils';
 import { FC, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface VerificationCodeNotificationProps {
   id: string;
@@ -25,6 +26,7 @@ const VerificationCodeNotification: FC<VerificationCodeNotificationProps> = ({
   code,
   from
 }) => {
+  const { t } = useTranslation();
   const verificationCode = code;
   const [isVisible, setIsVisible] = useState(false); // Initial state for visibility
 
@@ -78,14 +80,14 @@ const VerificationCodeNotification: FC<VerificationCodeNotificationProps> = ({
           title={domain}
           icon={<img src={getFaviconFromEmail(from)} className="mr-2 h-4 w-4" alt="" />}
         />
-        <NotificationSubtitle subtitle="Verification code" />
+        <NotificationSubtitle subtitle={t('notification.verification_code')} />
       </div>
       <NotificationButton onClick={handleCopyToClipboard}>
         <div className="max-w-20 overflow-hidden text-ellipsis">
           <span className="whitespace-nowrap">{verificationCode}</span>
         </div>
         {copied ? (
-          <MonoIcon type={'CheckCircle'} className="ml-2 h-4 w-4 text-green-500" />
+          <MonoIcon type={'CheckCircle'} className="ml-2 h-4 w-4 text-chart-1" />
         ) : (
           <MonoIcon type={'Copy'} className="ml-2 h-4 w-4 text-muted-foreground" />
         )}

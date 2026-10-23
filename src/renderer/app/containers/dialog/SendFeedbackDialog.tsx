@@ -16,6 +16,7 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { getSupportEmail } from '@/renderer/app/lib/runtimeBranding';
 import React, { FC } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface SendFeedbackDialogProps {
   children?: React.ReactNode;
@@ -30,6 +31,7 @@ const PLACEHOLDER_SUPPORT_EMAIL = 'support@example.com';
 // direct setup) the form could only fail after you'd typed it, so say so up
 // front and point to the support address, through the app's own compose.
 const FeedbackUnavailable: FC<{ onDone: () => void }> = ({ onDone }) => {
+  const { t } = useTranslation();
   const { accounts } = useAuth();
   const executeCommand = useExecuteCommand();
   const support = getSupportEmail();
@@ -39,10 +41,10 @@ const FeedbackUnavailable: FC<{ onDone: () => void }> = ({ onDone }) => {
   return (
     <div className="space-y-4 p-6">
       <DialogHeader>
-        <DialogTitle>Send feedback</DialogTitle>
+        <DialogTitle>{t('dialog.send_feedback.title')}</DialogTitle>
         <DialogDescription>
-          Feedback can&apos;t be sent from inside the app in this setup.
-          {hasSupport ? ' Email it instead:' : ''}
+          {t('dialog.send_feedback.unavailable')}
+          {hasSupport ? ' ' + t('dialog.send_feedback.unavailable_email') : ''}
         </DialogDescription>
       </DialogHeader>
       {hasSupport && (
@@ -55,11 +57,15 @@ const FeedbackUnavailable: FC<{ onDone: () => void }> = ({ onDone }) => {
               onClick={() => {
                 onDone();
                 executeCommand('COMPOSE_NEW_MESSAGE', {
-                  draft: new MonoDraft({ from: account.email, to: [support], subject: 'Feedback' })
+                  draft: new MonoDraft({
+                    from: account.email,
+                    to: [support],
+                    subject: t('dialog.send_feedback.email_subject')
+                  })
                 });
               }}
             >
-              Write an email
+              {t('dialog.send_feedback.write_email')}
             </Button>
           )}
         </div>

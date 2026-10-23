@@ -228,7 +228,7 @@ export function IntegrationForm() {
                 }}
               >
                 <MonoIcon type="Gmail" className="mr-2 h-4 w-4" />
-                Add Gmail account
+                {t('settings.integration.add_gmail')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => {
@@ -236,7 +236,7 @@ export function IntegrationForm() {
                 }}
               >
                 <MonoIcon type="Outlook" className="mr-2 h-4 w-4" />
-                Add Microsoft 365 account
+                {t('settings.integration.add_microsoft')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

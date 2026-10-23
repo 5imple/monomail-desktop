@@ -195,7 +195,7 @@ const SendFeedbackForm: FC<SendFeedbackFormProps> = ({ onSubmit }) => {
       }
       setIsLoading(false);
     } else {
-      toast.error('Please remove invalid attachments before submitting.');
+      toast.error(t('dialog.send_feedback.remove_invalid_files'));
     }
   };
 

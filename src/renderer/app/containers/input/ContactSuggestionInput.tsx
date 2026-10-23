@@ -270,7 +270,7 @@ const ContactSuggestionInput: React.FC<ContactSuggestionInputProps> = ({
       hideClearAllButton
       activeValue={activeContacts}
       onBadgeClick={handleBadgeClick}
-      emptyIndicator={<span>No result</span>}
+      emptyIndicator={<span>{t('common.no_results')}</span>}
       CustomBadge={CustomBadge}
       placeholder="user@example.com"
       validateCreatable={validateCreatable}

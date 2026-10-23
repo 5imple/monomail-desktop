@@ -9,6 +9,7 @@ import {
 import electronApi from '@/renderer/app/lib/electronApi';
 import { extractDomainFromEmail, getFaviconFromEmail } from '@/renderer/app/lib/faviconUtils';
 import { FC, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface VerificationUrlNotificationProps {
   id: string;
@@ -21,6 +22,7 @@ const capitalizeFirstLetter = (str: string) => {
 };
 
 const VerificationUrlNotification: FC<VerificationUrlNotificationProps> = ({ id, url, from }) => {
+  const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false); // Initial state for visibility
 
   useEffect(() => {
@@ -59,10 +61,10 @@ const VerificationUrlNotification: FC<VerificationUrlNotificationProps> = ({ id,
           title={domain}
           icon={<img src={getFaviconFromEmail(from)} className="mr-2 h-4 w-4" alt="" />}
         />
-        <NotificationSubtitle subtitle="Verify your account" />
+        <NotificationSubtitle subtitle={t('notification.verify_account')} />
       </div>
       <NotificationButton onClick={handleOpenUrl}>
-        Open Link
+        {t('notification.open_link')}
         <MonoIcon type={'ExternalLink'} className="ml-2 h-4 w-4 text-muted-foreground" />
       </NotificationButton>
     </Notification>

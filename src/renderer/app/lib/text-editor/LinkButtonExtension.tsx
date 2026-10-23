@@ -2,6 +2,7 @@ import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Input } from '@/renderer/app/components/ui/input';
 import { Label } from '@/renderer/app/components/ui/label';
+import { useTranslation } from 'react-i18next';
 import { Extension } from '@tiptap/core';
 import { ReactRenderer } from '@tiptap/react';
 import { Plugin, PluginKey } from 'prosemirror-state';
@@ -280,6 +281,7 @@ const LinkEditorPopoverContent: React.FC<LinkEditorPopoverContentProps> = ({
   removeLink,
   visitLink
 }) => {
+  const { t } = useTranslation();
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -315,13 +317,13 @@ const LinkEditorPopoverContent: React.FC<LinkEditorPopoverContentProps> = ({
         </div>
 
         <div className="">
-          <Label className="text-xs">Link title</Label>
+          <Label className="text-xs">{t('text_editor.link_title')}</Label>
           <Input
             value={linkText}
             onChange={(e) => setLinkText(e.target.value)}
             onKeyDown={handleKeyDown}
             className="min-w-[270px] text-sm"
-            placeholder="Link text"
+            placeholder={t('text_editor.link_text')}
           />
         </div>
       </div>

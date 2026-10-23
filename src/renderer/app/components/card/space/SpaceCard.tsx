@@ -111,7 +111,7 @@ const SpaceCard = forwardRef<HTMLButtonElement, SpaceCardProps>(
           toast.success(t('toast.space.delete_success'));
         } catch (error) {
           console.error('Failed to delete space:', error);
-          toast.error('Failed to delete space');
+          toast.error(t('toast.space.delete_error'));
         }
       }
     };

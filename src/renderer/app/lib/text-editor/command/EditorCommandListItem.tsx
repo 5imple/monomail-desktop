@@ -3,6 +3,7 @@ import MonoIcon from '@/renderer/app/components/icons/icons';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { cn } from '@/renderer/app/lib/utils';
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface EditorCommandListItemProps {
   items: Array<{
@@ -20,6 +21,7 @@ export interface EditorCommandListItemProps {
 
 // Use forwardRef to pass refs from parent components
 const EditorCommandListItem = forwardRef<any, EditorCommandListItemProps>((props, ref) => {
+  const { t } = useTranslation();
   const { items, command } = props;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const { trackEvent } = useUserTrackingData(); // Now using hook properly in function component
@@ -228,7 +230,7 @@ const EditorCommandListItem = forwardRef<any, EditorCommandListItemProps>((props
         </div>
       ) : (
         <div className="flex items-center text-muted-foreground">
-          <span className="text-sm">No results found</span>
+          <span className="text-sm">{t('common.no_results')}</span>
         </div>
       )}
     </div>

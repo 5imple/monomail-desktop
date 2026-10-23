@@ -81,10 +81,12 @@
       "drop_hint": "Drop to pin"
     },
     "display": {
-      "close_panel": "Close Panel",
+      "close_panel": "Back",
+      "previous_conversation": "Previous conversation",
+      "next_conversation": "Next conversation",
       "expand": "Expand",
       "shrink": "Shrink",
-      "reminder": "Reminder",
+      "reminder": "Snooze",
       "label": "Label",
       "done": "Done",
       "star": "Star",
@@ -114,7 +116,7 @@
   "command": {
     "search": "Search",
     "ai_search": "AI Search",
-    "reminder": "Reminder",
+    "reminder": "Snooze",
     "space": "Space",
     "label": "Label",
     "move": "Move",
@@ -131,7 +133,7 @@
     "thread_star": "Star",
     "thread_unstar": "Unstar",
     "thread_done": "Done",
-    "thread_undone": "Not done",
+    "thread_undone": "Move to Inbox",
     "thread_report_spam": "Report Spam",
     "thread_select_all": "Select All Conversations",
     "thread_select_none": "Deselect All Conversations",
@@ -164,7 +166,6 @@
     "export_settings": "Export Settings",
     "import_settings": "Import Settings",
     "open_feedback": "Open Feedback",
-    "goto_important": "Go to Inbox",
     "goto_done": "Go to Done",
     "goto_starred": "Go to Starred",
     "goto_sent": "Go to Sent Messages",
@@ -180,7 +181,11 @@
     "discard_draft": "Discard draft",
     "thread_move_to_inbox": "Move to Inbox",
     "pin_named": "Pin {{name}}",
-    "search_from": "Emails from {{name}}"
+    "search_from": "Emails from {{name}}",
+    "reminder_ellipsis": "Snooze…",
+    "move_ellipsis": "Move to…",
+    "label_ellipsis": "Label…",
+    "goto_inbox": "Go to Inbox"
   },
   "settings": {
     "title": "Preferences",
@@ -274,7 +279,7 @@
         "navigation": "Navigation",
         "global": "General",
         "conversation_display": "Open conversation",
-        "conversation_selected": "Selected conversations",
+        "conversation_selected": "Selected or open conversations",
         "sidebar": "Sidebar"
       },
       "navigation": {
@@ -297,7 +302,6 @@
     "filter": {
       "title": "AI Filters",
       "description": "Organize your inbox automatically with filters",
-
       "add_ai_filter": "Add a new AI Filter",
       "gmail": {
         "title": "Gmail Filters",
@@ -352,7 +356,9 @@
       "waiting_for_sign_in": "Waiting for browser sign-in…",
       "sign_in_hint": "Finish signing in in your browser. If you closed it, this resets after 5 minutes.",
       "disconnect_confirm_title": "Disconnect {{email}}?",
-      "disconnect_confirm_body": "Its mail stops showing in this app. Nothing is deleted from the mailbox, and you can add the account again any time."
+      "disconnect_confirm_body": "Its mail stops showing in this app. Nothing is deleted from the mailbox, and you can add the account again any time.",
+      "add_gmail": "Add Gmail account",
+      "add_microsoft": "Add Microsoft 365 account"
     },
     "compose": {
       "title": "Compose",
@@ -543,7 +549,6 @@
         "trash_description": "Show trash section in your inbox.",
         "spam": "Spam",
         "spam_description": "Show spam messages in your inbox.",
-
         "category": {
           "enable_splitting": "Enable Category Splitting",
           "title": "Inbox Categories",
@@ -635,7 +640,8 @@
       "version": "Version"
     },
     "unsaved_change": "Unsaved change",
-    "change_icon": "Change icon"
+    "change_icon": "Change icon",
+    "select_account": "Select account"
   },
   "onboarding": {
     "welcome": {
@@ -898,7 +904,7 @@
       "empty": "No matching contacts — type a full email address to pin it"
     },
     "reminder": {
-      "placeholder": "Type 'Tomorrow', '5 pm', or 'Next Monday'...",
+      "placeholder": "Snooze until… try “Tomorrow”, “5 pm” or “Next Monday”",
       "no_suggestions": "No matching times — try “tomorrow 9am” or “in 2 hours”"
     },
     "search": {
@@ -1109,8 +1115,8 @@
       "label_other": "Label {{count}} conversations",
       "move_one": "Move 1 conversation",
       "move_other": "Move {{count}} conversations",
-      "reminder_one": "Remind me about 1 conversation",
-      "reminder_other": "Remind me about {{count}} conversations",
+      "reminder_one": "Snooze 1 conversation",
+      "reminder_other": "Snooze {{count}} conversations",
       "space": "Spaces",
       "pin": "Pin contacts",
       "bookmark": "Save this search",
@@ -1190,7 +1196,12 @@
       "too_many_files": "{{name}} (max {{max}} files)",
       "email_mode_note": "Your feedback opens as an email to {{email}} — add screenshots there before sending.",
       "remove_file": "Remove {{name}}",
-      "email_button": "Email feedback"
+      "email_button": "Email feedback",
+      "unavailable": "Feedback can’t be sent from inside the app in this setup.",
+      "unavailable_email": "Email it instead:",
+      "write_email": "Write an email",
+      "email_subject": "Feedback",
+      "remove_invalid_files": "Please remove invalid attachments before submitting."
     },
     "plan": {
       "title": "Choose Your Plan",
@@ -1260,19 +1271,29 @@
       "waiting": "Finish signing in in your browser…",
       "signing_in": "Signing you in…",
       "error_in_progress": "A sign-in window is already open in your browser.",
-      "error_admin_consent": "Your Washington College account needs IT approval for Mono Mail. Contact the Technology Services Center at support@washcoll.edu or 410-778-7777.",
+      "error_admin_consent": "Your organization’s account needs admin approval before this app can sign in. Ask your IT administrator to grant consent, then try again.",
       "error_cancelled": "Sign-in cancelled.",
       "error_timed_out": "Sign-in timed out. Try again.",
       "error_generic": "Sign-in failed: {{error}}",
       "update_updating": "Updating…",
-      "update_later": "Later"
+      "update_later": "Later",
+      "intro": "Sign in with the account you want to read mail from. Your mail stays between your provider and this app."
     },
     "titlebar": {
       "mail_views": "Mail views",
       "compose": "Compose",
       "accounts": "Accounts",
       "accounts_attention": "Reconnect {{emails}} — open Accounts",
-      "accounts_open_hint": "Click to open Accounts"
+      "accounts_open_hint": "Click to open Accounts",
+      "tab": {
+        "inbox": "Inbox",
+        "snooze": "Later",
+        "starred": "Starred",
+        "sent": "Sent"
+      },
+      "tab_description": {
+        "snooze": "Snoozed and scheduled mail"
+      }
     },
     "startup": {
       "slow_title": "Taking longer than usual…",
@@ -1291,12 +1312,13 @@
       "unstar": "Unstar",
       "read": "Read",
       "unread": "Unread",
-      "undone": "Not done",
+      "undone": "Move to Inbox",
       "trash": "Trash",
       "untrash": "Restore",
       "label": "Label",
       "share": "Share",
-      "clear_selection": "Clear selection"
+      "clear_selection": "Clear selection",
+      "snooze": "Snooze"
     },
     "draft": "Draft",
     "to_prefix": "To:",
@@ -1312,7 +1334,100 @@
     "load_more_error": "Couldn’t load more",
     "load_error_title": "Couldn’t load your emails",
     "load_error_body": "Check your connection and try again.",
-    "loading": "Loading emails…"
+    "loading": "Loading emails…",
+    "snooze_until": "Snooze until",
+    "add_label": "Add label",
+    "search_placeholder": "Search mail",
+    "search_showing": "Showing results for {{query}}. Edit search",
+    "clear_search": "Clear search",
+    "group": {
+      "today": "Today",
+      "this_week": "This week",
+      "last_week": "Last week",
+      "this_month": "This month",
+      "older": "Older"
+    }
+  },
+  "later": {
+    "title": "Later",
+    "tabs_label": "Later views",
+    "tab": {
+      "snoozed": "Snoozed",
+      "scheduled": "Scheduled"
+    },
+    "subtitle": {
+      "snoozed": "Returning to your inbox at the time you chose.",
+      "scheduled": "Going out at the time you scheduled."
+    },
+    "bucket": {
+      "within_hour": "Within the hour",
+      "later_today": "Later today",
+      "tomorrow": "Tomorrow",
+      "this_week": "This week",
+      "later": "Later"
+    },
+    "time": {
+      "now": "now",
+      "in_minutes_one": "in {{count}} min",
+      "in_minutes_other": "in {{count}} min",
+      "in_hours_one": "in {{count}} hr",
+      "in_hours_other": "in {{count}} hr",
+      "tomorrow_at": "Tomorrow · {{time}}",
+      "day_at": "{{day}} · {{time}}"
+    },
+    "recipients": {
+      "none": "No recipient",
+      "to": "To {{name}}",
+      "two": "{{first}}, {{second}}",
+      "more": "{{first}} + {{others}}"
+    },
+    "empty": {
+      "snoozed_title": "Nothing snoozed",
+      "snoozed_body": "Snoozed emails will show up here, grouped by when they come back.",
+      "scheduled_title": "No scheduled messages",
+      "scheduled_body": "Anything you choose to send later will land here. Reschedule, send now, or cancel."
+    },
+    "action": {
+      "bring_back": "Bring back now",
+      "send_now": "Send now",
+      "reschedule": "Reschedule",
+      "reschedule_now": "Reschedule, now {{time}}",
+      "cancel_send": "Cancel send"
+    },
+    "reschedule": {
+      "snooze_heading": "Reschedule snooze",
+      "send_heading": "Reschedule send"
+    },
+    "cancel_dialog": {
+      "title": "Cancel this scheduled message?",
+      "body": "It won’t be sent and is removed from Later. No copy of it is kept.",
+      "keep": "Keep it"
+    },
+    "toast": {
+      "brought_back": "Moved back to Inbox",
+      "bring_back_error": "Couldn’t bring back: {{error}}",
+      "reschedule_error": "Couldn’t reschedule: {{error}}",
+      "sent": "Sent",
+      "send_now_error": "Couldn’t send now: {{error}}",
+      "cancelled": "Scheduled send cancelled",
+      "cancel_error": "Couldn’t cancel: {{error}}"
+    },
+    "preset": {
+      "in_1_hour": "In 1 hour",
+      "later_today": "Later today",
+      "tomorrow_morning": "Tomorrow morning",
+      "this_weekend": "This weekend",
+      "next_weekend": "Next weekend",
+      "next_monday": "Next Monday",
+      "custom": "Pick a date…",
+      "custom_sublabel": "Open the calendar"
+    },
+    "custom": {
+      "heading": "Pick a date",
+      "set": "Set",
+      "pick_later_time": "Pick a later time",
+      "back": "Back to presets"
+    }
   },
   "message_card": {
     "earlier_messages_one": "earlier message",
@@ -1348,7 +1463,12 @@
     "recipients_other": "{{count}} recipients",
     "trackers_removed": "Trackers removed",
     "tracker_removed_from": "Tracker removed from",
-    "loading_body": "Loading message…"
+    "loading_body": "Loading message…",
+    "reply_all": "Reply all",
+    "tracking_not_read": "Not read",
+    "tracking_reads_one": "{{count}} Read",
+    "tracking_reads_other": "{{count}} Reads",
+    "tracking_last_read": "Last read {{time}}"
   },
   "tooltip": {
     "discard_draft": "Discard draft",
@@ -1379,7 +1499,7 @@
       "no_account_error": "No active account selected"
     },
     "footer": {
-      "send_now": "Send now",
+      "send_now": "Send",
       "use_template": "Use template",
       "use_tracker": "Use tracker",
       "mono_ai": "Mono AI",
@@ -1484,7 +1604,9 @@
       "align_center": "Align center",
       "align_right": "Align right",
       "justify": "Justify"
-    }
+    },
+    "link_title": "Link title",
+    "link_text": "Link text"
   },
   "extension": {
     "contact": {
@@ -1585,7 +1707,8 @@
     "does_not_have": "Does not have",
     "filters": "Filters",
     "all": "All",
-    "with_attachments": "With attachments"
+    "with_attachments": "With attachments",
+    "inbox_filters": "Inbox filters"
   },
   "toast": {
     "clipboard_copy": "Copied to clipboard",
@@ -1595,7 +1718,8 @@
       "name_updated": "Space name updated",
       "icon_updated": "Space icon updated",
       "color_updated": "Space color updated",
-      "accounts_updated": "Space accounts updated"
+      "accounts_updated": "Space accounts updated",
+      "delete_error": "Couldn’t delete the space"
     },
     "feedback": {
       "success": "Thank you for your feedback. We will contact you shortly."
@@ -1639,7 +1763,9 @@
       "schedule_failed": "Couldn’t schedule send: {{error}}",
       "scheduled_draft_not_removed": "Scheduled — but the original draft couldn’t be removed. Delete it from Drafts so it isn’t sent twice.",
       "scheduled": "Scheduled for {{time}}",
-      "view_scheduled": "View"
+      "view_scheduled": "View",
+      "connect_gmail_first": "Connect Gmail before composing a message.",
+      "connect_gmail": "Connect Gmail"
     },
     "thread": {
       "mark_read": "Marking conversation as read...",
@@ -1758,17 +1884,21 @@
       "message_too_large_microsoft": "This email is too large to send from a Microsoft 365 account. Remove some attachments or images and try again.",
       "clipboard_read": "Couldn’t read the clipboard. Use regular paste instead.",
       "plain_paste_unsupported": "Plain-text paste isn’t available here. Use regular paste instead.",
-      "copy": "Couldn’t copy to the clipboard"
+      "copy": "Couldn’t copy to the clipboard",
+      "label_add": "Couldn't add label"
     },
     "snooze": {
       "success": "Snoozed until {{time}}",
       "error": "Couldn't snooze this email.",
-      "undo_error": "Couldn't undo the snooze."
+      "undo_error": "Couldn't undo the snooze.",
+      "success_multiple": "{{count}} conversations snoozed until {{time}}",
+      "error_some": "Couldn't snooze {{count}} of these emails."
     },
     "undo": "Undo",
     "label": {
       "apply_error": "Couldn’t update the label “{{name}}”",
-      "create_error": "Couldn’t create the label “{{name}}”"
+      "create_error": "Couldn’t create the label “{{name}}”",
+      "added": "Added label {{name}}"
     },
     "reminder_set_for": "Reminder set for {{when}}",
     "reminder_no_target": "Open or select a conversation first",
@@ -1793,7 +1923,9 @@
     "pending": "{{count}} pending",
     "online": "Online",
     "description_offline": "You're offline. Changes you make are saved and sent when the connection is back.",
-    "description_pending": "Changes made while offline are being sent."
+    "description_pending": "Changes made while offline are being sent.",
+    "view_title": "You’re offline",
+    "view_hint": "Check your connection or reconnect to Wi-Fi."
   },
   "plan_selection": {
     "title": "Choose Your Plan",
@@ -1946,7 +2078,23 @@
     "show_calendar": "Show calendar",
     "hide_calendar": "Hide calendar",
     "accounts_need_permissions": "Some accounts need calendar permissions",
-    "no_accounts_with_permissions": "No accounts with calendar permissions found. Please update your account permissions."
+    "no_accounts_with_permissions": "No accounts with calendar permissions found. Please update your account permissions.",
+    "new_event": "New event",
+    "previous_month": "Previous month",
+    "next_month": "Next month",
+    "previous_day": "Previous day",
+    "next_day": "Next day",
+    "draft_pending": "Draft changes pending",
+    "timezone_search": "Search timezones…",
+    "timezone_empty": "No timezone found.",
+    "toast": {
+      "move_error": "Couldn’t move the event — it was restored to its original time",
+      "rescheduled": "Rescheduled to {{range}}",
+      "move_changed_since": "The event has changed since, so the move wasn’t undone",
+      "undo_move_error": "Couldn’t undo the move",
+      "moved_send_updates": "Moved — send updates to notify attendees",
+      "refresh_error": "Couldn’t refresh the calendar"
+    }
   },
   "update_notification": {
     "electron": {
@@ -1962,11 +2110,18 @@
     "updating": "Updating…",
     "later": "Later"
   },
+  "notification": {
+    "verify_account": "Verify your account",
+    "open_link": "Open Link",
+    "verification_code": "Verification code"
+  },
   "common": {
     "dismiss": "Dismiss",
     "cancel": "Cancel",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "time": "Time",
+    "no_results": "No results"
   },
   "error_boundary": {
     "title": "Something went wrong",
@@ -2009,6 +2164,82 @@
     "removed": "Removed",
     "re_add_attendee": "Re-add attendee",
     "remove_attendee": "Remove attendee",
-    "max_attendees": "You can add up to {{count}} attendees"
+    "max_attendees": "You can add up to {{count}} attendees",
+    "rsvp": {
+      "going": "Going?",
+      "your_response": "Your response",
+      "yes": "Yes",
+      "maybe": "Maybe",
+      "no": "No",
+      "accepted": "Accepted",
+      "tentative": "Tentatively accepted",
+      "declined": "Declined"
+    },
+    "field": {
+      "title": "Title",
+      "account": "Account",
+      "start_time": "Start time",
+      "end_time": "End time",
+      "all_day": "All-day",
+      "location": "Location",
+      "description": "Description",
+      "add_description": "Add description",
+      "no_description": "No description"
+    },
+    "validation": {
+      "end_after_start": "The end time must be after the start time."
+    },
+    "status": {
+      "draft": "Draft",
+      "saving": "Saving…",
+      "error": "Error",
+      "held_until_sent": "Changes will be held until you send updates"
+    },
+    "action": {
+      "create": "Create",
+      "create_invite": "Create & invite",
+      "send_updates": "Send updates",
+      "save": "Save",
+      "retry": "Retry",
+      "edit_description": "Edit description",
+      "back": "Back",
+      "cancel": "Cancel",
+      "discard": "Discard",
+      "close": "Close"
+    },
+    "hint": {
+      "add_title": "Add a title",
+      "no_changes": "No changes"
+    },
+    "delete": {
+      "remove": "Remove",
+      "remove_question": "Remove this event from your calendar?",
+      "delete": "Delete",
+      "delete_question": "Delete this event?",
+      "cancel_question": "Cancel this meeting and notify attendees?",
+      "cancel_question_count_one": "Cancel this meeting and notify {{count}} person?",
+      "cancel_question_count_other": "Cancel this meeting and notify {{count}} people?",
+      "cancel_meeting": "Cancel meeting"
+    },
+    "toast": {
+      "select_account": "Please select an account",
+      "created": "Event created",
+      "created_invited": "Event created · invitations sent",
+      "updated": "Event updated",
+      "updates_sent": "Updates sent to attendees",
+      "create_error": "Couldn’t create the event",
+      "save_error": "Couldn’t save the event",
+      "discarded": "Changes discarded",
+      "removed": "Removed from your calendar",
+      "meeting_canceled": "Meeting canceled",
+      "deleted": "Event deleted",
+      "delete_error": "Couldn’t delete the event",
+      "rsvp_error": "Couldn’t send your response"
+    },
+    "join": {
+      "teams": "Join Teams meeting",
+      "meet": "Join Google Meet",
+      "zoom": "Join Zoom meeting"
+    }
   }
 }

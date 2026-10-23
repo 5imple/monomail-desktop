@@ -301,7 +301,7 @@ export const LabelForm = () => {
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                 <SelectTrigger variant={'secondary'} className="">
                   <SelectValue
-                    placeholder="Select Account"
+                    placeholder={t('settings.select_account')}
                     className={cn(buttonVariants({ variant: 'secondary' }))}
                   />
                 </SelectTrigger>
