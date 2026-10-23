@@ -8,7 +8,7 @@
  * Frames over the wire look like:
  *   {
  *     "data": {
- *       "type": "MESSAGE_ADDED" | "AI_DRAFT_ADDED" | "MESSAGE_DELETED" | "LABEL_ADDED" | "LABEL_REMOVED",
+ *       "type": "MESSAGE_ADDED" | "AI_DRAFT_ADDED" | "MESSAGE_DELETED" | "LABEL_ADDED" | "LABEL_REMOVED" | "THREAD_RESTORED",
  *       "aAUid": "<account uid>",
  *       "threadId": "...",
  *       ...etc
@@ -35,6 +35,34 @@ export interface MessageAddedPayload {
   verification: 'true' | 'false';
   link: string;
   code: string;
+  /**
+   * ISO 8601 server receive time. Optional and additive: the Microsoft delta
+   * poller sets it so backlog (mail received long before this frame) does not
+   * raise a banner; frames without it skip the age check.
+   */
+  receivedAt?: string;
+}
+
+/**
+ * A conversation came back to the Inbox without a new message (a due snooze).
+ * Main has no message ids for it, so the renderer re-fetches the thread.
+ */
+export interface ThreadRestoredPayload {
+  aAUid: string;
+  threadId: string;
+  type: 'THREAD_RESTORED';
+}
+
+/**
+ * Metadata carried by every native notification main creates, and delivered
+ * back on 'renderer:notification:native:clicked'. `threadId` is absent for
+ * notifications that are not about one conversation (a "N new emails" summary,
+ * a scheduled send with no thread): the click then only brings the account's
+ * inbox forward.
+ */
+export interface NotificationClickPayload {
+  uid: string;
+  threadId?: string;
 }
 
 export interface AIDraftAddedPayload {

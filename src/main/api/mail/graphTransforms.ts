@@ -1,4 +1,6 @@
 import { MonoAttachment, MonoRecipient } from '@/main/models/types';
+import { GraphDateTimeTimeZone, GraphEvent } from '@/main/api/calendar/graphCalendarTransforms';
+import { MonoMeeting, toMeetingKind, toMeetingResponse } from '@/main/models/message/meeting';
 import { IMonoThread } from '@/main/models/thread/MonoThread';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MailMessage, MailMessagePayload } from '@/main/api/mail/types';
@@ -43,8 +45,26 @@ export interface GraphMessage {
   flag?: { flagStatus?: string };
   hasAttachments?: boolean;
   categories?: string[];
+  // Focused Inbox sorting; absent when the field wasn't selected.
+  inferenceClassification?: 'focused' | 'other';
   internetMessageHeaders?: Array<{ name: string; value: string }>;
   attachments?: GraphAttachmentMeta[];
+  // Set when the item is a derived type, e.g. "#microsoft.graph.eventMessage",
+  // "#microsoft.graph.eventMessageRequest", "#microsoft.graph.eventMessageResponse".
+  '@odata.type'?: string;
+  // eventMessage fields (meeting invitations, cancellations and replies); only
+  // present once fetchMeetingFields ran for the message.
+  meetingMessageType?: string;
+  startDateTime?: GraphDateTimeTimeZone;
+  endDateTime?: GraphDateTimeTimeZone;
+  location?: { displayName?: string };
+  isAllDay?: boolean;
+  isOutOfDate?: boolean;
+  // eventMessageResponse: the attendee's answer and any counter-proposal.
+  responseType?: string;
+  proposedNewTime?: { start?: GraphDateTimeTimeZone; end?: GraphDateTimeTimeZone } | null;
+  // The calendar event the message points at ($expand=microsoft.graph.eventMessage/event).
+  event?: GraphEvent | null;
 }
 
 // A delta-page entry is either a changed/added message or a tombstone carrying
@@ -127,10 +147,7 @@ export function buildFolderLabelMap(
  * which folder it queried / resolved `parentFolderId` against); pass null for
  * Archive or custom folders. No `CATEGORY_*` labels are emitted for Microsoft.
  */
-export function mapGraphMessageLabels(
-  message: GraphMessage,
-  folderLabel: string | null
-): string[] {
+export function mapGraphMessageLabels(message: GraphMessage, folderLabel: string | null): string[] {
   const labels = new Set<string>();
   if (folderLabel) labels.add(folderLabel);
   if (message.isRead === false) labels.add('UNREAD');
@@ -138,6 +155,14 @@ export function mapGraphMessageLabels(
   if (message.parentFolderId) labels.add(`folder:${message.parentFolderId}`);
   for (const category of message.categories ?? []) {
     if (category) labels.add(`category:${category}`);
+  }
+  // Focused Inbox: inference:focused / inference:other (lib/threadFilters).
+  // Inbox copies only: Focused Inbox sorts the Inbox, and a Sent or archived
+  // copy (also reported "focused") would otherwise move the conversation
+  // between Focused and Other depending on which fetch saved it last.
+  const inference = message.inferenceClassification;
+  if (folderLabel === 'INBOX' && (inference === 'focused' || inference === 'other')) {
+    labels.add(`inference:${inference}`);
   }
   return Array.from(labels);
 }
@@ -201,12 +226,86 @@ function bodyPart(mimeType: string, content: string): MailMessagePayload {
 function buildSyntheticPayload(body?: GraphItemBody): MailMessagePayload {
   const isHtml = (body?.contentType ?? '').toLowerCase() === 'html';
   const content = body?.content ?? '';
+  const part = bodyPart(isHtml ? 'text/html' : 'text/plain', content);
+  // A listing ($select without body) has no body yet: `data: null` says so, and
+  // the reader fetches the thread in full. A fetched body that is empty (a
+  // meeting reply, a blank email) keeps `data: ''`: fetched, so it is not
+  // fetched again (bodyData.payloadHasBodyData).
+  if (!body) part.body.data = null;
   return {
     partId: '',
     mimeType: 'multipart/alternative',
     fileName: '',
     body: { attachmentId: null, size: 0, data: null },
-    parts: [bodyPart(isHtml ? 'text/html' : 'text/plain', content)]
+    parts: [part]
+  };
+}
+
+// ── Meetings (eventMessage) ───────────────────────────────────────────────────
+
+const EVENT_MESSAGE_TYPE = /^#?microsoft\.graph\.eventMessage/i;
+
+/** Whether a Graph item is a meeting invitation, cancellation or reply. */
+export const isGraphEventMessage = (message: Pick<GraphMessage, '@odata.type'>): boolean =>
+  EVENT_MESSAGE_TYPE.test(message['@odata.type'] ?? '');
+
+/**
+ * Graph's dateTimeTimeZone → UTC ISO string. Graph returns these in UTC unless
+ * a `Prefer: outlook.timezone` header asks otherwise (this app never does); a
+ * value in another zone is kept as given rather than guessed at.
+ */
+export function graphDateTimeToIso(value?: GraphDateTimeTimeZone | null): string | null {
+  const raw = value?.dateTime?.trim();
+  if (!raw) return null;
+  const zone = (value?.timeZone ?? 'UTC').toLowerCase();
+  const hasOffset = /(?:z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const text = !hasOffset && (zone === 'utc' || zone === 'tzone://microsoft/utc') ? `${raw}Z` : raw;
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/**
+ * The meeting a Graph eventMessage is about, or null for ordinary mail and for
+ * event messages whose meeting fields weren't fetched.
+ */
+export function buildMeeting(message: GraphMessage): MonoMeeting | null {
+  if (!isGraphEventMessage(message)) return null;
+  const kind = toMeetingKind(message.meetingMessageType);
+  if (!kind) return null;
+  const event = message.event ?? null;
+  const organizerAddress = event?.organizer?.emailAddress;
+  const attendees = (event?.attendees ?? [])
+    .filter((attendee) => attendee.emailAddress?.address)
+    .map((attendee) => ({
+      name: attendee.emailAddress?.name ?? '',
+      email: attendee.emailAddress?.address ?? '',
+      response: toMeetingResponse(attendee.status?.response)
+    }));
+  const subject = (event?.subject ?? message.subject ?? '')
+    // The message subject carries Outlook's prefix ("Accepted: Standup").
+    .replace(
+      /^(?:accepted|tentative|declined|canceled|cancelled|updated invitation|invitation)\s*:\s*/i,
+      ''
+    )
+    .trim();
+  return {
+    kind,
+    eventId: event?.id ?? null,
+    subject,
+    start: graphDateTimeToIso(event?.start ?? message.startDateTime),
+    end: graphDateTimeToIso(event?.end ?? message.endDateTime),
+    isAllDay: event?.isAllDay ?? message.isAllDay ?? false,
+    location: event?.location?.displayName?.trim() || message.location?.displayName?.trim() || null,
+    joinUrl: event?.onlineMeeting?.joinUrl ?? null,
+    organizer: organizerAddress?.address
+      ? { name: organizerAddress.name ?? '', email: organizerAddress.address }
+      : null,
+    attendees,
+    myResponse: toMeetingResponse(event?.responseStatus?.response),
+    isOutOfDate: message.isOutOfDate === true,
+    isCancelled: kind === 'cancelled' || event?.isCancelled === true,
+    proposedStart: graphDateTimeToIso(message.proposedNewTime?.start),
+    proposedEnd: graphDateTimeToIso(message.proposedNewTime?.end)
   };
 }
 
@@ -274,7 +373,9 @@ export function transformGraphMessage(
   const content = message.body?.content ?? '';
   // Prefer the per-message folder resolution (correct across folders / detail /
   // continuations); fall back to a caller-supplied single folderLabel.
-  const folderLabel = options.resolveFolderLabel?.(message.parentFolderId) ?? options.folderLabel ?? null;
+  const folderLabel =
+    options.resolveFolderLabel?.(message.parentFolderId) ?? options.folderLabel ?? null;
+  const meeting = buildMeeting(message);
 
   return {
     id: message.id,
@@ -299,8 +400,11 @@ export function transformGraphMessage(
     // List items don't expand attachments, so this is all the row knows.
     ...(message.hasAttachments === true ? { hasAttachments: true } : {}),
     payload: buildSyntheticPayload(message.body),
-    bodyHtml: isHtml ? content : undefined,
-    bodyPlain: isHtml ? undefined : content
+    // A listing has no body: leave both unset rather than an empty bodyPlain
+    // that reads like a fetched, empty text body.
+    bodyHtml: message.body && isHtml ? content : undefined,
+    bodyPlain: message.body && !isHtml ? content : undefined,
+    ...(meeting ? { meeting } : {})
   };
 }
 

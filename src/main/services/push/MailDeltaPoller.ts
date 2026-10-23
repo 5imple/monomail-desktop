@@ -6,11 +6,12 @@ import type { GraphDeltaItem, GraphMessage } from '@/main/api/mail/graphTransfor
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { graphGetMain } from '@/main/services/push/graphFetchMain';
-import { handlePushFrame } from '@/main/services/push/pushHandler';
+import { handlePushFrames, type PushFrame } from '@/main/services/push/pushHandler';
 import {
   BACKGROUND_POLL_INTERVAL_MS,
   DeltaPollStatus,
   POLL_INTERVAL_MS,
+  PollGate,
   diffPolledAccounts,
   nextPollDelay,
   splitDelta,
@@ -25,7 +26,9 @@ const POLL_FOLDER = 'inbox';
 // Same $select the provider's list/delta path uses — enough to synthesize the
 // notification (from/subject) and the frame (id/conversationId/isRead).
 const DELTA_SELECT =
-  'id,conversationId,internetMessageId,parentFolderId,subject,bodyPreview,from,sender,isRead,flag,receivedDateTime';
+  'id,conversationId,internetMessageId,parentFolderId,subject,bodyPreview,from,sender,isRead,flag,receivedDateTime,' +
+  // Focused Inbox: a Focused/Other move in Outlook reaches cached messages.
+  'inferenceClassification';
 
 // Defensive cap on a single poll's paging. Ample for incremental deltas; a huge
 // mailbox's INITIAL full delta can exceed it — resumable initial sync (persist
@@ -42,6 +45,9 @@ interface FolderCursor {
   // instead of restarting the whole mailbox every cycle.
   nextLink?: string;
   lastSyncedAt?: number;
+  // The $select the cursor was made with. Graph bakes it into the resume
+  // links, so a cursor from an older field list is started over (once).
+  select?: string;
 }
 
 interface MailDeltaStoreSchema {
@@ -83,7 +89,16 @@ interface FolderDeltaResult {
  */
 class MailDeltaPoller {
   private static instance: MailDeltaPoller;
+  // Pending (not yet fired) poll timers only; a timer removes itself on firing.
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Accounts being polled. Separate from `timers` so "tracked" no longer
+  // depends on a fired timer handle lingering in the map.
+  private active = new Set<string>();
+  // Bumped whenever an account stops being polled: a poll still in flight from
+  // an older generation throws its result away (no stale cursor write after a
+  // sign-out, no frames for a removed account).
+  private generations = new Map<string, number>();
+  private gate = new PollGate();
   private failures = new Map<string, number>();
   private store: Store<MailDeltaStoreSchema>;
   private wired = false;
@@ -107,7 +122,7 @@ class MailDeltaPoller {
       // is a no-op when the account set is unchanged.
       tokenManager.on('mail-accounts-changed', () => this.reconcile());
       tokenManager.on('token-changed', () => this.reconcile());
-      tokenManager.on('signed-out', () => this.stopAll());
+      tokenManager.on('signed-out', () => this.onSignedOut());
       powerMonitor.on('suspend', () => this.stopAll());
       powerMonitor.on('resume', () => this.reconcile());
       // Window focus → poll now (cheap freshness when the user returns).
@@ -116,50 +131,95 @@ class MailDeltaPoller {
     this.reconcile();
   }
 
+  /** Stops every poll loop but keeps the cursors (suspend: resume picks up where it left off). */
   stopAll(): void {
-    for (const uid of [...this.timers.keys()]) this.clearTimer(uid);
+    for (const uid of [...this.active]) this.stop(uid);
+  }
+
+  private stop(uid: string): void {
+    this.clearTimer(uid);
+    this.active.delete(uid);
+    this.generations.set(uid, this.generationOf(uid) + 1);
+    this.gate.forget(uid);
+  }
+
+  private generationOf(uid: string): number {
+    return this.generations.get(uid) ?? 0;
+  }
+
+  /**
+   * Sign-out drops every account. Forget their delta cursors too: otherwise the
+   * next sign-in resumes from the old deltaLink and announces everything that
+   * changed since as new mail.
+   */
+  private onSignedOut(): void {
+    this.stopAll();
+    this.store.set('cursors', {});
   }
 
   /**
    * Reconcile the polled set against the signed-in Microsoft accounts: start
-   * polling newly-added uids, stop removed ones, and LEAVE running timers
-   * untouched. It MUST be a no-op when the account set is unchanged — a token
-   * refresh re-emits the change events, and re-polling here would refresh again,
-   * a tight feedback loop. (This replaces a blanket restart() that did exactly
-   * that and pegged the main process.)
+   * polling newly-added uids, stop removed ones (and forget their cursors), and
+   * LEAVE running loops untouched. It MUST be a no-op when the account set is
+   * unchanged — a token refresh re-emits the change events, and re-polling here
+   * would refresh again, a tight feedback loop. (This replaces a blanket
+   * restart() that did exactly that and pegged the main process.)
    */
   private reconcile(): void {
-    const { toStart, toStop } = diffPolledAccounts(this.microsoftUids(), [...this.timers.keys()]);
-    for (const uid of toStop) this.clearTimer(uid);
-    for (const uid of toStart) this.schedule(uid, 0);
+    const desired = this.microsoftUids();
+    // Account store unreadable: change nothing rather than treat every account
+    // as removed and throw its cursor away.
+    if (desired === null) return;
+    const { toStart, toStop } = diffPolledAccounts(desired, [...this.active]);
+    for (const uid of toStop) this.stop(uid);
+    // A cursor whose account is no longer signed in is stale by definition:
+    // re-adding the account would resume from it and replay everything since.
+    // Purging every orphan (not just toStop) also covers cursors left behind
+    // by a sign-out or removal while the app was not tracking the account.
+    this.clearOrphanCursors(desired);
+    for (const uid of toStart) {
+      this.active.add(uid);
+      this.schedule(uid, 0);
+    }
   }
 
   private pollAllNow(): void {
-    // Only re-arm accounts that already have a timer (i.e. polling is active);
-    // never start a fresh poll loop here. Snapshot the keys — schedule() mutates
-    // the map.
-    for (const uid of [...this.timers.keys()]) this.schedule(uid, 0);
+    // Only accounts already being polled; never start a fresh loop here. Skip
+    // an account whose poll is running or started moments ago: at launch the
+    // first focus lands while the boot poll is still paging.
+    const now = Date.now();
+    for (const uid of this.active) {
+      if (this.gate.shouldPollOnFocus(uid, now)) this.schedule(uid, 0);
+    }
   }
 
-  private microsoftUids(): string[] {
+  /**
+   * The refresh button: poll every account now, even right after a poll
+   * (a poll still running runs once more when it ends).
+   */
+  pollNow(): void {
+    for (const uid of this.active) this.schedule(uid, 0);
+  }
+
+  private microsoftUids(): string[] | null {
     try {
       return tokenManager
         .getMailAccounts()
         .filter((account) => account.provider === 'microsoft')
         .map((account) => account.uid);
     } catch {
-      return [];
+      return null;
     }
   }
 
   private schedule(uid: string, delayMs: number): void {
     this.clearTimer(uid);
-    this.timers.set(
-      uid,
-      setTimeout(() => {
-        void this.poll(uid);
-      }, delayMs)
-    );
+    const timer = setTimeout(() => {
+      // Fired: drop the handle so `timers` only ever holds pending polls.
+      if (this.timers.get(uid) === timer) this.timers.delete(uid);
+      void this.poll(uid);
+    }, delayMs);
+    this.timers.set(uid, timer);
   }
 
   private clearTimer(uid: string): void {
@@ -171,12 +231,23 @@ class MailDeltaPoller {
   }
 
   private async poll(uid: string): Promise<void> {
+    if (!this.active.has(uid)) return;
+    // Single flight per account: two polls reading the same cursor would both
+    // dispatch the same frames. A poll requested meanwhile runs once afterwards.
+    if (!this.gate.begin(uid, Date.now())) return;
+    const generation = this.generationOf(uid);
     // Fast while the user is looking at the app; window focus also triggers an
     // immediate poll (pollAllNow), so returning to the app is always fresh.
     let delay = BrowserWindow.getFocusedWindow() ? POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
     try {
-      const cursor = this.getCursor(uid, POLL_FOLDER);
+      const saved = this.getCursor(uid, POLL_FOLDER);
+      // Made with another field list: re-anchor quietly (an initial sync
+      // dispatches nothing) so the new fields come through from now on.
+      const cursor: FolderCursor = saved.select === DELTA_SELECT ? saved : {};
       const result = await this.runFolderDelta(uid, POLL_FOLDER, cursor);
+      // Stopped (sign-out, account removed, suspend) while this was in flight:
+      // persist nothing and dispatch nothing.
+      if (generation !== this.generationOf(uid)) return;
 
       switch (result.status) {
         case 'ok':
@@ -184,7 +255,8 @@ class MailDeltaPoller {
           this.setCursor(uid, POLL_FOLDER, {
             deltaLink: result.deltaLink ?? cursor.deltaLink,
             nextLink: result.nextLink,
-            lastSyncedAt: Date.now()
+            lastSyncedAt: Date.now(),
+            select: DELTA_SELECT
           });
           // Only dispatch for a true incremental sync (we already had an anchored
           // deltaLink). An initial sync — even a multi-cycle resumable one — must
@@ -208,9 +280,15 @@ class MailDeltaPoller {
     } catch (err) {
       log.warn('[mail-delta] poll error for %s: %s', uid, (err as Error).message);
     } finally {
-      // Only re-arm if this account is still tracked (sign-out / suspend may have
-      // cleared the timer while the poll was in flight).
-      if (this.timers.has(uid)) this.schedule(uid, delay);
+      const runAgain = this.gate.end(uid);
+      // Only re-arm if this account is still polled (sign-out / suspend may have
+      // stopped it while the poll was in flight). A poll requested while this
+      // one ran goes next; otherwise keep the cadence unless a newer loop for
+      // this account already armed its own timer.
+      if (this.active.has(uid)) {
+        if (runAgain) this.schedule(uid, 0);
+        else if (!this.timers.has(uid)) this.schedule(uid, delay);
+      }
     }
   }
 
@@ -223,7 +301,11 @@ class MailDeltaPoller {
    * persisted — the next poll continues forward instead of restarting the whole
    * mailbox every cycle (which hammered Graph and never anchored).
    */
-  private async runFolderDelta(uid: string, folder: string, cursor: FolderCursor): Promise<FolderDeltaResult> {
+  private async runFolderDelta(
+    uid: string,
+    folder: string,
+    cursor: FolderCursor
+  ): Promise<FolderDeltaResult> {
     const upserts: GraphMessage[] = [];
     const removedIds: string[] = [];
     const anchored = !!cursor.deltaLink;
@@ -288,7 +370,11 @@ class MailDeltaPoller {
     // Stopped at the page cap before the deltaLink: still in progress. Persist
     // the nextLink so the next poll resumes forward. Keep any anchored deltaLink.
     if (!anchored) {
-      log.info('[mail-delta] %s initial sync in progress (%d pages this cycle), resuming next poll', uid, MAX_DELTA_PAGES);
+      log.info(
+        '[mail-delta] %s initial sync in progress (%d pages this cycle), resuming next poll',
+        uid,
+        MAX_DELTA_PAGES
+      );
     }
     return {
       status: 'ok',
@@ -304,12 +390,15 @@ class MailDeltaPoller {
   private dispatch(uid: string, upserts: GraphMessage[], removedIds: string[]): void {
     const frames = synthesizeDeltaFrames(uid, POLL_FOLDER, upserts, removedIds);
     if (frames.length === 0) return;
+    // Every frame still reaches the renderer so the cache stays in sync; the
+    // notification side sees the batch at once so it can skip backlog and
+    // collapse a burst into one summary banner.
+    handlePushFrames(frames as PushFrame[]).catch((e) =>
+      log.warn('[mail-delta] handlePushFrames: %s', (e as Error).message)
+    );
     const win = windowManager.getMainAppWindow();
-    for (const frame of frames) {
-      handlePushFrame(
-        frame as { data?: Record<string, string>; notification?: { title?: string; body?: string } }
-      ).catch((e) => log.warn('[mail-delta] handlePushFrame: %s', (e as Error).message));
-      win?.webContents.send('renderer:push:message-received', frame);
+    if (win && !win.isDestroyed()) {
+      for (const frame of frames) win.webContents.send('renderer:push:message-received', frame);
     }
     log.info('[mail-delta] %s dispatched %d frame(s)', uid, frames.length);
   }
@@ -332,6 +421,18 @@ class MailDeltaPoller {
       delete folders[folder];
       this.store.set('cursors', { ...all, [uid]: folders });
     }
+  }
+
+  /** Forgets the cursors of every account not in `signedInUids`. */
+  private clearOrphanCursors(signedInUids: string[]): void {
+    const all = this.store.get('cursors', {});
+    const keep = new Set(signedInUids);
+    const orphans = Object.keys(all).filter((uid) => !keep.has(uid));
+    if (orphans.length === 0) return;
+    const rest = { ...all };
+    for (const uid of orphans) delete rest[uid];
+    this.store.set('cursors', rest);
+    log.info('[mail-delta] forgot delta cursors of %d signed-out account(s)', orphans.length);
   }
 }
 

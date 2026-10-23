@@ -11,5 +11,8 @@ export function setMailAccountProviders(map: Record<string, MailProvider>): void
 }
 
 export function getProviderForUid(uid: string): MailProvider {
-  return providerByUid[uid] ?? 'google';
+  // Microsoft uids carry their provider as a prefix: use it when the registry
+  // isn't filled yet (at startup it was empty, and a Microsoft account's
+  // calendar and avatar calls went to the Gmail adapter and failed).
+  return providerByUid[uid] ?? (uid?.startsWith('microsoft:') ? 'microsoft' : 'google');
 }

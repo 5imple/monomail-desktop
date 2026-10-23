@@ -7,7 +7,8 @@ import {
   splitDeltaPage,
   transformGraphMessage,
   transformGraphThread,
-  wellKnownFolderToLabel
+  wellKnownFolderToLabel,
+  isGraphEventMessage
 } from '@/main/api/mail/graphTransforms';
 import {
   googleMailProvider,
@@ -21,7 +22,9 @@ import {
   MoveFolderIds,
   planMutation,
   selectMessagesToMove,
-  translateQuery
+  translateQuery,
+  buildGraphSearch,
+  graphSearchParam
 } from '@/main/api/mail/graphRequestMapping';
 
 // Defensive cap on pagination loops so a malformed/looping server nextLink can
@@ -33,7 +36,9 @@ const MAX_PAGES = 100;
 // format=metadata list). `from`/`sender` cover delegated/shared mailboxes.
 const LIST_SELECT =
   'id,conversationId,internetMessageId,parentFolderId,subject,bodyPreview,from,sender,' +
-  'toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,flag,hasAttachments,categories';
+  'toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,flag,hasAttachments,categories,' +
+  // Focused Inbox: 'focused' or 'other' (the "Others" label filters on it).
+  'inferenceClassification';
 
 // Detail view adds the body, bcc, and headers. internetMessageHeaders is kept
 // for reply threading; uniqueBody is fetched for the eventual reply-fragment path.
@@ -124,7 +129,12 @@ const folderLabelMapInflight = new Map<string, Promise<Map<string, string>>>();
 // why embedded pictures felt slow to load. Cache the fetched bytes in a bounded
 // in-memory LRU so only the first view of an image pays the network; repeat
 // views resolve instantly.
-type InlineAttachmentResult = { attachmentId: string; size: number; data: string; mimeType: string };
+type InlineAttachmentResult = {
+  attachmentId: string;
+  size: number;
+  data: string;
+  mimeType: string;
+};
 const INLINE_ATTACHMENT_CACHE_MAX_BYTES = 64 * 1024 * 1024;
 const inlineAttachmentCache = new Map<string, InlineAttachmentResult>();
 let inlineAttachmentCacheBytes = 0;
@@ -175,6 +185,8 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
 ) => {
   let path: string;
   let folderLabel: string | null;
+  // Words or search operators: a Graph search, not a folder listing.
+  const searchPlan = q ? buildGraphSearch(q) : null;
 
   // An opaque @odata.nextLink continuation routes straight back through the
   // same Graph helper (origin-validated main-side). The folder is unknown on a
@@ -184,6 +196,19 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
     // Recover the folder's well-known label from the continuation URL so page-2+
     // Inbox threads keep INBOX (not just folder:<id>) and don't vanish.
     folderLabel = folderLabelFromNextLink(pageToken);
+  } else if (searchPlan) {
+    // A search: Graph $search (KQL) over the named folder, or the whole
+    // mailbox. $search takes neither $orderby (results come newest first) nor
+    // $filter (read / flag conditions are applied below).
+    folderLabel = searchPlan.folder ? wellKnownFolderToLabel(searchPlan.folder) : null;
+    const params = new URLSearchParams({
+      $search: graphSearchParam(searchPlan.kql),
+      $select: LIST_SELECT,
+      $top: maxResults || '25'
+    });
+    path = searchPlan.folder
+      ? `/me/mailFolders/${searchPlan.folder}/messages?${params.toString()}`
+      : `/me/messages?${params.toString()}`;
   } else {
     const { folder, filter, translated } = translateQuery(q ?? '');
     if (!translated) {
@@ -206,7 +231,12 @@ const getThreads: MailProviderAdapter['getThreads'] = async (
     graphApiClient.get<GraphListResponse>(path, { uid, signal }),
     folderLabelResolver(uid)
   ]);
-  const threads = groupByConversation(resp.value ?? [])
+  const messages = (resp.value ?? []).filter(
+    (message) =>
+      (!searchPlan?.unreadOnly || message.isRead === false) &&
+      (!searchPlan?.flaggedOnly || message.flag?.flagStatus === 'flagged')
+  );
+  const threads = groupByConversation(messages)
     .map((messages) => transformGraphThread(messages, uid, { folderLabel, resolveFolderLabel }))
     .sort((a, b) => b.timestamp - a.timestamp);
 
@@ -267,8 +297,93 @@ async function enrichInlineContentIds(
   }
 }
 
+// The calendar event a meeting message points at: what the reader shows and
+// the id it RSVPs with, without the event's body.
+const MEETING_EVENT_SELECT =
+  'id,subject,start,end,isAllDay,isCancelled,location,organizer,attendees,responseStatus,onlineMeeting,webLink';
+
+/**
+ * Meeting details for an invitation, a cancellation or an attendee's reply.
+ * Graph delivers these as `eventMessage` items (`@odata.type`), whose body is
+ * usually empty: the meeting lives in fields of the derived type
+ * (meetingMessageType, start/end, the reply's responseType) and in the
+ * calendar event it points at. A `$select` on the polymorphic /me/messages
+ * listing can't name those, so each meeting message costs one more GET, with
+ * the event expanded through the type cast Graph documents for it. Tried most
+ * to least specific; best-effort — on failure the message stays plain mail.
+ */
+async function fetchMeetingFields(
+  uid: string,
+  message: GraphMessage,
+  signal?: AbortSignal
+): Promise<GraphMessage> {
+  if (!isGraphEventMessage(message)) return message;
+  const path = `/me/messages/${encodeURIComponent(message.id)}`;
+  const attempts = [
+    `${path}?${new URLSearchParams({
+      $expand: `microsoft.graph.eventMessage/event($select=${MEETING_EVENT_SELECT})`
+    }).toString()}`,
+    `${path}?${new URLSearchParams({ $expand: 'microsoft.graph.eventMessage/event' }).toString()}`,
+    // Without the event there is no RSVP, but the meeting still shows.
+    path
+  ];
+  for (const url of attempts) {
+    try {
+      const detail = await graphApiClient.get<GraphMessage>(url, { uid, signal });
+      return {
+        ...message,
+        '@odata.type': detail['@odata.type'] ?? message['@odata.type'],
+        meetingMessageType: detail.meetingMessageType,
+        startDateTime: detail.startDateTime,
+        endDateTime: detail.endDateTime,
+        location: detail.location,
+        isAllDay: detail.isAllDay,
+        isOutOfDate: detail.isOutOfDate,
+        responseType: detail.responseType,
+        proposedNewTime: detail.proposedNewTime,
+        event: detail.event ?? null
+      };
+    } catch {
+      if (signal?.aborted) break;
+    }
+  }
+  return message;
+}
+
+/** Everything a message needs beyond the listing: inline image ids, meeting details. */
+const completeMessage = async (
+  uid: string,
+  message: GraphMessage,
+  signal?: AbortSignal
+): Promise<GraphMessage> =>
+  fetchMeetingFields(uid, await enrichInlineContentIds(uid, message, signal), signal);
+
 // Conversations at least this long get a newest-message-first partial result.
 const PROGRESSIVE_MIN_MESSAGES = 3;
+
+const EVENT_RESPONSE_TYPE = /eventMessageResponse$/i;
+
+/**
+ * The message a progressive load fetches first: the newest one the reader
+ * will open on. Not an attendee's empty meeting reply ("Accepted: Standup",
+ * an eventMessageResponse with no preview text), which is often the newest in
+ * an Outlook conversation and has nothing to show; the newest message that
+ * may have a body instead, or the newest of all when none does.
+ */
+function newestWithBody(messages: GraphMessage[]): GraphMessage {
+  const time = (message: GraphMessage) => Date.parse(message.receivedDateTime ?? '') || 0;
+  const byNewest = [...messages].sort((a, b) => time(b) - time(a));
+  return (
+    byNewest.find(
+      (message) =>
+        !EVENT_RESPONSE_TYPE.test(message['@odata.type'] ?? '') || !!message.bodyPreview?.trim()
+    ) ?? byNewest[0]
+  );
+}
+
+// Timing lines in the dev log for opening a conversation. Optional chaining:
+// the unit tests bundle this file with esbuild, where import.meta.env is unset.
+const DEV_TIMING = Boolean(import.meta.env?.DEV);
 
 const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal, onPartial) => {
   const conversationFilter = `conversationId eq '${id.replace(/'/g, "''")}'`;
@@ -290,6 +405,7 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal, onPa
     // Page through ALL messages — a conversation with >10 messages would
     // otherwise render truncated (wrong recipients/attachments/labels and bad
     // reply context).
+    const startedAt = performance.now();
     const messages = await fetchAllMessages(uid, `/me/messages?${params.toString()}`, signal);
     // An empty conversation (deleted/expired) is a "not found" — surface it
     // like Gmail's 404 rather than fabricating a blank, empty-id thread that
@@ -300,8 +416,15 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal, onPa
     // Resolve each message's well-known label from its parentFolderId so a
     // detail fetch never strips INBOX/SENT from the cached thread.
     const resolveFolderLabel = await folderLabelResolver(uid);
+    const listedAt = performance.now();
     // Recover any inline-image contentIds the $expand didn't return.
-    const enriched = await Promise.all(messages.map((m) => enrichInlineContentIds(uid, m, signal)));
+    const enriched = await Promise.all(messages.map((m) => completeMessage(uid, m, signal)));
+    if (DEV_TIMING) {
+      // Dev only: the two network phases of opening a conversation.
+      log.debug(
+        `[graph] thread of ${messages.length}: listed in ${Math.round(listedAt - startedAt)} ms, inline ids and meetings in ${Math.round(performance.now() - listedAt)} ms`
+      );
+    }
     return transformGraphThread(enriched, uid, { resolveFolderLabel });
   })().finally(() => {
     fullSettled = true;
@@ -311,41 +434,37 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal, onPa
   // every reply (one real 36-message thread was 4.2 MB, ~2 s), so fetch the
   // messages without bodies plus only the newest in full — the one message the
   // reader expands — and hand that over first if the full fetch is still out.
-  // Best-effort: any failure just leaves the full fetch to land on its own.
+  // Two round trips: one light listing (no bodies, no attachment expansion:
+  // expanding attachments is what makes a conversation listing slow, ~600 ms
+  // for 36 messages / 152 inline images), then the chosen message's detail.
+  // An ids-only listing before it cost a third, so the partial usually lost
+  // the race to the full fetch and was dropped. Best-effort: any failure just
+  // leaves the full fetch to land on its own.
   const partialDelivered = onPartial
     ? (async () => {
+        const startedAt = performance.now();
         try {
-          const listPath = (select: string) =>
-            `/me/messages?${new URLSearchParams({
-              $filter: conversationFilter,
-              $select: select,
-              $top: GRAPH_MAX_TOP
-            }).toString()}`;
-          // Ids first (~50 ms): enough to pick the newest message. Expanding
-          // attachments is what makes a conversation listing slow (~600 ms for
-          // 36 messages / 152 inline images), so neither query here expands —
-          // the collapsed older messages don't need attachments until the
-          // full thread lands.
-          const ids = await fetchAllMessages(uid, listPath('id,receivedDateTime'), signal);
-          if (fullSettled || ids.length < PROGRESSIVE_MIN_MESSAGES) return;
-          const newest = ids.reduce((latest, message) =>
-            Date.parse(message.receivedDateTime ?? '') >= Date.parse(latest.receivedDateTime ?? '')
-              ? message
-              : latest
-          );
+          const lightParams = new URLSearchParams({
+            $filter: conversationFilter,
+            $select: PARTIAL_SELECT,
+            $top: GRAPH_MAX_TOP
+          });
+          const [light, resolveFolderLabel] = await Promise.all([
+            fetchAllMessages(uid, `/me/messages?${lightParams.toString()}`, signal),
+            folderLabelResolver(uid)
+          ]);
+          if (fullSettled || light.length < PROGRESSIVE_MIN_MESSAGES) return;
+          const newest = newestWithBody(light);
           const detailParams = new URLSearchParams({
             $select: DETAIL_SELECT,
             $expand: ATTACHMENT_EXPAND
           });
-          const [light, rawNewest, resolveFolderLabel] = await Promise.all([
-            fetchAllMessages(uid, listPath(PARTIAL_SELECT), signal),
-            graphApiClient.get<GraphMessage>(
-              `/me/messages/${encodeURIComponent(newest.id)}?${detailParams.toString()}`,
-              { uid, signal }
-            ),
-            folderLabelResolver(uid)
-          ]);
-          const fullNewest = await enrichInlineContentIds(uid, rawNewest, signal);
+          const rawNewest = await graphApiClient.get<GraphMessage>(
+            `/me/messages/${encodeURIComponent(newest.id)}?${detailParams.toString()}`,
+            { uid, signal }
+          );
+          if (fullSettled) return;
+          const fullNewest = await completeMessage(uid, rawNewest, signal);
           if (fullSettled) return;
           await onPartial(
             transformGraphThread(
@@ -354,6 +473,11 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal, onPa
               { resolveFolderLabel }
             )
           );
+          if (DEV_TIMING) {
+            log.debug(
+              `[graph] thread of ${light.length}: newest message shown after ${Math.round(performance.now() - startedAt)} ms`
+            );
+          }
         } catch {
           // Best-effort (see above).
         }
@@ -370,13 +494,16 @@ const getThread: MailProviderAdapter['getThread'] = async (uid, id, signal, onPa
 const getMessage: MailProviderAdapter['getMessage'] = async (uid, id, signal) => {
   const params = new URLSearchParams({ $select: DETAIL_SELECT, $expand: ATTACHMENT_EXPAND });
   const [raw, resolveFolderLabel] = await Promise.all([
-    graphApiClient.get<GraphMessage>(`/me/messages/${encodeURIComponent(id)}?${params.toString()}`, {
-      uid,
-      signal
-    }),
+    graphApiClient.get<GraphMessage>(
+      `/me/messages/${encodeURIComponent(id)}?${params.toString()}`,
+      {
+        uid,
+        signal
+      }
+    ),
     folderLabelResolver(uid)
   ]);
-  const enriched = await enrichInlineContentIds(uid, raw, signal);
+  const enriched = await completeMessage(uid, raw, signal);
   return transformGraphMessage(enriched, { resolveFolderLabel });
 };
 
@@ -422,6 +549,36 @@ interface GraphDeltaPage {
  * pages were read before the failure — treat them as provisional and do NOT
  * advance the cursor (the returned deltaLink is the prior one, unchanged).
  */
+/** How many of a folder's newest messages listFolderMessageIds reads. */
+export const FOLDER_ID_LISTING_SIZE = 250;
+
+/**
+ * Ids and received times of a folder's newest messages, newest first, for
+ * telling which cached messages have left the folder (lib/listingPrune). Just
+ * three small fields, so one request covers far more than a page of the list.
+ * `complete`: these are all of the folder's messages.
+ */
+export async function listFolderMessageIds(
+  uid: string,
+  folder: string,
+  signal?: AbortSignal
+): Promise<{ messages: { id: string; timestamp: number }[]; complete: boolean }> {
+  const params = new URLSearchParams({
+    $select: 'id,receivedDateTime',
+    $orderby: 'receivedDateTime desc',
+    $top: String(FOLDER_ID_LISTING_SIZE)
+  });
+  const resp = await graphApiClient.get<GraphListResponse>(
+    `/me/mailFolders/${folder}/messages?${params.toString()}`,
+    { uid, signal }
+  );
+  const messages = (resp.value ?? []).flatMap((message) => {
+    const timestamp = Date.parse(message.receivedDateTime ?? '');
+    return message.id && Number.isFinite(timestamp) ? [{ id: message.id, timestamp }] : [];
+  });
+  return { messages, complete: !resp['@odata.nextLink'] };
+}
+
 export async function getMicrosoftFolderDelta(
   uid: string,
   folder: string,
@@ -459,7 +616,8 @@ export async function getMicrosoftFolderDelta(
     const outcome = classifyGraphDeltaError(status, code);
     // reset = the cursor is dead (410 / syncStateNotFound / resyncRequired) → drop
     // it for a full resync; retry/expired/error keep the prior cursor.
-    if (outcome === 'reset') return { status: 'reset', upserts: [], removedIds: [], deltaLink: null };
+    if (outcome === 'reset')
+      return { status: 'reset', upserts: [], removedIds: [], deltaLink: null };
     return { status: outcome, upserts, removedIds, deltaLink: deltaLink ?? null };
   }
 }
@@ -539,7 +697,9 @@ const getAttachmentDownload: MailProviderAdapter['getAttachmentDownload'] = asyn
   // referenceAttachment / itemAttachment carry no inline bytes — surface the
   // limitation instead of handing back an empty file (plan Phase 7).
   if ((att['@odata.type'] ?? '') !== FILE_ATTACHMENT_TYPE || typeof att.contentBytes !== 'string') {
-    throw new Error('Unsupported attachment type — this Microsoft attachment cannot be downloaded.');
+    throw new Error(
+      'Unsupported attachment type — this Microsoft attachment cannot be downloaded.'
+    );
   }
   const binary = atob(att.contentBytes);
   const bytes = new Uint8Array(binary.length);

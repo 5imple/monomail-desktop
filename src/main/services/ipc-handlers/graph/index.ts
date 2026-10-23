@@ -13,6 +13,14 @@ import {
   sanitizeMethod,
   withImmutableIdPrefer
 } from '@/main/services/ipc-handlers/graph/graphHttp';
+import { noteMailChanged } from '@/main/services/push/mailChangeNotifier';
+import {
+  acquireGraphSlot,
+  GRAPH_REQUEST_MAX_RETRIES,
+  graphLaneFor,
+  releaseGraphSlot
+} from './graphSlots';
+import { isGraphMailMutation } from '@/main/services/push/mailMutation';
 
 type GraphRequestArgs = {
   method?: string;
@@ -56,79 +64,6 @@ type GraphBatchResult =
   | { ok: false; status?: number; data?: unknown; error: string };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-// Microsoft Graph throttles a single mailbox at ~4 concurrent requests (429
-// "Application is over its MailboxConcurrency limit."). Cap our own per-mailbox
-// single-request fan-out below that so bursts — e.g. the calendar fetching
-// several month windows of /me/calendarView at once — don't throttle
-// themselves. A tiny per-uid FIFO hands an in-flight slot to the next waiter on
-// release; any 429/503 that still slips through is retried on Retry-After.
-const GRAPH_MAX_CONCURRENCY_PER_UID = 3;
-const GRAPH_REQUEST_MAX_RETRIES = 3;
-
-// Two lanes share those slots. Calendar month reads (/me/calendarView, fired in
-// bursts at startup) are "background": they may hold at most 2 slots, and a
-// waiting mail request is always served before a waiting background one. With
-// one FIFO, the startup inbox fetch queued behind the calendar burst and took
-// ~5 s instead of ~0.2 s.
-type GraphLane = 'foreground' | 'background';
-const GRAPH_MAX_BACKGROUND_PER_UID = 2;
-const BACKGROUND_PATH = /\/me\/calendarView\b/i;
-
-export function graphLaneFor(path: string | undefined): GraphLane {
-  return path && BACKGROUND_PATH.test(path) ? 'background' : 'foreground';
-}
-
-interface GraphSlotState {
-  total: number;
-  background: number;
-  waiting: Record<GraphLane, Array<() => void>>;
-}
-const graphSlotsByUid = new Map<string, GraphSlotState>();
-
-function slotState(uid: string): GraphSlotState {
-  let state = graphSlotsByUid.get(uid);
-  if (!state) {
-    state = { total: 0, background: 0, waiting: { foreground: [], background: [] } };
-    graphSlotsByUid.set(uid, state);
-  }
-  return state;
-}
-
-function canStart(state: GraphSlotState, lane: GraphLane): boolean {
-  if (state.total >= GRAPH_MAX_CONCURRENCY_PER_UID) return false;
-  return lane === 'foreground' || state.background < GRAPH_MAX_BACKGROUND_PER_UID;
-}
-
-function occupy(state: GraphSlotState, lane: GraphLane): void {
-  state.total += 1;
-  if (lane === 'background') state.background += 1;
-}
-
-function acquireGraphSlot(uid: string, lane: GraphLane): Promise<void> {
-  const state = slotState(uid);
-  if (canStart(state, lane)) {
-    occupy(state, lane);
-    return Promise.resolve();
-  }
-  return new Promise<void>((resolve) => state.waiting[lane].push(resolve));
-}
-
-function releaseGraphSlot(uid: string, lane: GraphLane): void {
-  const state = slotState(uid);
-  state.total = Math.max(0, state.total - 1);
-  if (lane === 'background') state.background = Math.max(0, state.background - 1);
-  // Mail first, then background, each only while it may start.
-  for (const next of ['foreground', 'background'] as const) {
-    while (state.waiting[next].length > 0 && canStart(state, next)) {
-      occupy(state, next);
-      state.waiting[next].shift()?.();
-    }
-  }
-  if (state.total === 0 && !state.waiting.foreground.length && !state.waiting.background.length) {
-    graphSlotsByUid.delete(uid);
-  }
-}
 
 async function readResponseBody(
   response: Response,
@@ -235,7 +170,8 @@ export function registerGraphHandlers() {
       if (!url) return { ok: false, error: 'Invalid Graph request path' } satisfies GraphResult;
 
       const method = sanitizeMethod(args?.method);
-      if (!method) return { ok: false, error: 'Invalid Graph request method' } satisfies GraphResult;
+      if (!method)
+        return { ok: false, error: 'Invalid Graph request method' } satisfies GraphResult;
 
       const uid = typeof args?.uid === 'string' && args.uid.trim() ? args.uid.trim() : null;
       if (!uid) return { ok: false, error: 'Graph account uid is required' } satisfies GraphResult;
@@ -288,6 +224,7 @@ export function registerGraphHandlers() {
           } satisfies GraphResult;
         }
 
+        if (isGraphMailMutation(method, args?.path ?? '')) noteMailChanged();
         return { ok: true, status: response.status, data } satisfies GraphResult;
       } finally {
         releaseGraphSlot(uid, lane);
@@ -307,14 +244,23 @@ export function registerGraphHandlers() {
   ipcMain.handle('main:graph:batch', async (_event, args?: GraphBatchArgs) => {
     try {
       const uid = typeof args?.uid === 'string' && args.uid.trim() ? args.uid.trim() : null;
-      if (!uid) return { ok: false, error: 'Graph account uid is required' } satisfies GraphBatchResult;
+      if (!uid)
+        return { ok: false, error: 'Graph account uid is required' } satisfies GraphBatchResult;
 
       const requests = Array.isArray(args?.requests) ? args!.requests : null;
       if (!requests || requests.length === 0) {
-        return { ok: false, error: 'Graph batch requires at least one request' } satisfies GraphBatchResult;
+        return {
+          ok: false,
+          error: 'Graph batch requires at least one request'
+        } satisfies GraphBatchResult;
       }
       for (const req of requests) {
-        if (!req || typeof req.id !== 'string' || !sanitizeMethod(req.method) || typeof req.url !== 'string') {
+        if (
+          !req ||
+          typeof req.id !== 'string' ||
+          !sanitizeMethod(req.method) ||
+          typeof req.url !== 'string'
+        ) {
           return { ok: false, error: 'Invalid Graph batch subrequest' } satisfies GraphBatchResult;
         }
       }
@@ -342,6 +288,14 @@ export function registerGraphHandlers() {
         }
       }
 
+      const statusById = new Map(responses.map((sub) => [sub.id, sub.status]));
+      if (
+        requests.some(
+          (req) => (statusById.get(req.id) ?? 500) < 400 && isGraphMailMutation(req.method, req.url)
+        )
+      ) {
+        noteMailChanged();
+      }
       return { ok: true, responses } satisfies GraphBatchResult;
     } catch (error) {
       log.error('[graph:ipc] batch ERROR:', error instanceof Error ? error.message : error);

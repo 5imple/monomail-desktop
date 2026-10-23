@@ -1,3 +1,4 @@
+import { MonoMeeting } from '@/main/models/message/meeting';
 import { MonoAttachment, MonoRecipient } from '@/main/models/types';
 
 export interface MailMessagePayload {
@@ -36,6 +37,9 @@ export interface MailMessage {
   // metadata wasn't fetched (Graph list items: hasAttachments without
   // $expand=attachments). Undefined when unknown (e.g. Gmail).
   hasAttachments?: boolean;
+  // The meeting an invitation / reply / cancellation is about (Microsoft Graph
+  // eventMessage); undefined for ordinary mail.
+  meeting?: MonoMeeting;
 }
 
 export interface MailMessageAttachmentResponse {

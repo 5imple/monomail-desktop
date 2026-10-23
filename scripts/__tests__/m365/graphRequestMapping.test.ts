@@ -5,7 +5,9 @@ import {
   planMutation,
   selectMessagesToMove,
   base64UrlToBase64,
-  classifyGraphDeltaError
+  classifyGraphDeltaError,
+  buildGraphSearch,
+  graphSearchParam
 } from '@/main/api/mail/graphRequestMapping';
 
 test('translateQuery: folder tokens map to Graph well-known folders', () => {
@@ -163,4 +165,59 @@ test('base64UrlToBase64: round-trips through atob for the MIME sendMail envelope
   // Explicit: the underscore branch.
   assert.equal(base64UrlToBase64('AAD_'), 'AAD/');
   assert.equal(base64UrlToBase64('a-b_c'), 'a+b/c===');
+});
+
+// Microsoft search (buildGraphSearch): words and operators become a Graph
+// $search; view queries stay folder listings.
+
+test('buildGraphSearch: view queries are not searches', () => {
+  for (const q of [
+    '',
+    'category:primary',
+    'in:inbox',
+    'label:SENT',
+    'is:starred',
+    'NOT in:inbox',
+    'in:all -in:trash',
+    'in:inbox is:unread',
+    // The Primary view as convertToAccurateQuery sends it: exclusions only.
+    'label:INBOX AND -category:social AND -from:"github.com"'
+  ]) {
+    assert.equal(buildGraphSearch(q), null, q);
+  }
+});
+
+test('buildGraphSearch: free text is searched, the folder kept when named', () => {
+  assert.deepEqual(buildGraphSearch('invoice acme'), {
+    kql: 'invoice acme',
+    folder: undefined,
+    unreadOnly: false,
+    flaggedOnly: false
+  });
+  const inInbox = buildGraphSearch('in:inbox is:unread invoice');
+  assert.equal(inInbox?.kql, 'invoice');
+  assert.equal(inInbox?.folder, 'inbox');
+  assert.equal(inInbox?.unreadOnly, true);
+});
+
+test('buildGraphSearch: Gmail operators map to KQL properties', () => {
+  assert.equal(buildGraphSearch('from:ann@contoso.com')?.kql, 'from:ann@contoso.com');
+  assert.equal(
+    buildGraphSearch('to:bob subject:"weekly report"')?.kql,
+    'to:bob subject:"weekly report"'
+  );
+  assert.equal(buildGraphSearch('has:attachment budget')?.kql, 'hasAttachments:true budget');
+  assert.equal(
+    buildGraphSearch('after:2024/1/5 before:2024/02/01 memo')?.kql,
+    'received>=2024-01-05 received<2024-02-01 memo'
+  );
+  assert.equal(buildGraphSearch('report -draft')?.kql, 'report NOT draft');
+  assert.equal(buildGraphSearch('report NOT from:bob')?.kql, 'report NOT from:bob');
+  assert.equal(buildGraphSearch('alpha OR beta OR')?.kql, 'alpha OR beta');
+  assert.equal(buildGraphSearch('"quarterly plan"')?.kql, '"quarterly plan"');
+});
+
+test('graphSearchParam: the KQL is quoted, inner quotes escaped', () => {
+  assert.equal(graphSearchParam('invoice'), '"invoice"');
+  assert.equal(graphSearchParam('subject:"weekly report"'), '"subject:\\"weekly report\\""');
 });

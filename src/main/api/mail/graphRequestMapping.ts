@@ -158,7 +158,11 @@ export type GraphDeltaErrorStatus = 'reset' | 'retry' | 'expired' | 'error';
 // Graph error codes that mean the stored deltaLink is unusable and a FULL resync
 // is required. syncStateNotFound is a 4xx (NOT 410) and is the common cursor-
 // expiry case — mapping only on status 410 would leave the cursor wedged.
-const DELTA_RESET_CODES = new Set(['syncstatenotfound', 'resyncrequired', 'synchronizationrestart']);
+const DELTA_RESET_CODES = new Set([
+  'syncstatenotfound',
+  'resyncrequired',
+  'synchronizationrestart'
+]);
 
 /**
  * Classifies a failed delta request into a recovery action: `reset` → drop the
@@ -175,3 +179,117 @@ export function classifyGraphDeltaError(
   if (status === 401 || status === 403) return 'expired';
   return 'error';
 }
+
+export interface GraphSearchPlan {
+  /** The KQL for `$search` (unquoted; graphSearchParam quotes it). */
+  kql: string;
+  /** Well-known folder to search in, when the query named one (in:inbox). */
+  folder?: string;
+  /** Read / flag conditions applied to the results ($search can't take $filter). */
+  unreadOnly: boolean;
+  flaggedOnly: boolean;
+}
+
+// Gmail-style operators that map onto Exchange KQL properties.
+const KQL_PROPERTY: Record<string, string> = {
+  from: 'from',
+  to: 'to',
+  cc: 'cc',
+  bcc: 'bcc',
+  subject: 'subject'
+};
+
+// Tokens of a query: quoted phrases stay whole ("weekly report", from:"Ann Lee").
+const tokenize = (q: string): string[] => q.match(/-?[\w.:-]*"[^"]*"|\S+/g) ?? [];
+
+const quoteIfNeeded = (value: string) =>
+  /^".*"$/.test(value) || !/\s/.test(value) ? value : `"${value}"`;
+
+// after:2024/01/31 (Gmail) -> 2024-01-31 (KQL date). Null when not a date.
+const kqlDate = (value: string): string | null => {
+  const m = value.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null;
+};
+
+/**
+ * A free-text / operator search as a Graph `$search` (KQL) plan, or null when
+ * the query is only a view (in:inbox, is:unread, category:primary…), which the
+ * folder listing (translateQuery) serves. Before this, every search on a
+ * Microsoft account listed the Inbox and dropped the words, so "invoice acme"
+ * showed the newest inbox mail instead of matches.
+ */
+export function buildGraphSearch(q: string): GraphSearchPlan | null {
+  const clauses: string[] = [];
+  let folder: string | undefined;
+  let unreadOnly = false;
+  let flaggedOnly = false;
+
+  let negateNext = false;
+  // Terms that ask for something. Exclusions alone ("label:INBOX AND
+  // -from:x", which is how the Primary view reaches the provider) keep the
+  // query a view.
+  let positive = 0;
+  const add = (clause: string, negated: boolean) => {
+    clauses.push(negated ? `NOT ${clause}` : clause);
+    if (!negated) positive += 1;
+  };
+  for (const token of tokenize(q.trim())) {
+    // Boolean operators: NOT applies to the next term (so "NOT in:inbox", the
+    // Done view, stays a view); AND / OR pass through between search terms.
+    if (token === 'NOT') {
+      negateNext = true;
+      continue;
+    }
+    if (token === 'AND' || token === 'OR') {
+      if (clauses.length > 0 && !/^(AND|OR)$/.test(clauses[clauses.length - 1])) {
+        clauses.push(token);
+      }
+      continue;
+    }
+    const negated = token.startsWith('-') || negateNext;
+    negateNext = false;
+    const body = token.startsWith('-') ? token.slice(1) : token;
+    const colon = body.indexOf(':');
+    const key = colon > 0 ? body.slice(0, colon).toLowerCase() : '';
+    const value = colon > 0 ? body.slice(colon + 1) : body;
+
+    if (key === 'in' || key === 'label') {
+      const mapped = FOLDER_BY_LABEL[value.toUpperCase()];
+      if (mapped && !negated) folder = mapped;
+      continue; // in:anywhere / in:all / labels: search everywhere
+    }
+    if (key === 'is') {
+      if (value.toLowerCase() === 'unread' && !negated) unreadOnly = true;
+      if (value.toLowerCase() === 'starred' && !negated) flaggedOnly = true;
+      continue;
+    }
+    if (key === 'category') continue; // Gmail tabs: no Outlook equivalent
+    if (key === 'has') {
+      if (value.toLowerCase().startsWith('attachment')) {
+        add('hasAttachments:true', negated);
+      }
+      continue;
+    }
+    if (key === 'after' || key === 'before' || key === 'newer' || key === 'older') {
+      const date = kqlDate(value);
+      if (date) {
+        add(`received${key === 'after' || key === 'newer' ? '>=' : '<'}${date}`, negated);
+      }
+      continue;
+    }
+    if (KQL_PROPERTY[key]) {
+      if (value) add(`${KQL_PROPERTY[key]}:${quoteIfNeeded(value)}`, negated);
+      continue;
+    }
+    // Free text (an unknown "word:thing" is searched as text too).
+    if (body) add(body, negated);
+  }
+
+  while (clauses.length > 0 && /^(AND|OR)$/.test(clauses[clauses.length - 1])) clauses.pop();
+  if (positive === 0) return null;
+  return { kql: clauses.join(' '), folder, unreadOnly, flaggedOnly };
+}
+
+/** `$search` takes the whole KQL in double quotes, inner quotes escaped. */
+export const graphSearchParam = (kql: string) =>
+  `"${kql.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

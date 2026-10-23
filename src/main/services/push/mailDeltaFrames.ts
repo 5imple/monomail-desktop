@@ -95,7 +95,13 @@ export function synthesizeDeltaFrames(
   const frames: MailDeltaFrame[] = [];
 
   for (const msg of upserts) {
-    const msgLabels = msg.isRead ? labels : [...labels, 'UNREAD'];
+    const msgLabels = msg.isRead ? [...labels] : [...labels, 'UNREAD'];
+    // Focused Inbox, so a move between Focused and Other made in Outlook
+    // reaches a message the app already has (MessageContext).
+    const inference = msg.inferenceClassification;
+    if (folder === 'inbox' && (inference === 'focused' || inference === 'other')) {
+      msgLabels.push(`inference:${inference}`);
+    }
     frames.push({
       data: {
         type: 'MESSAGE_ADDED',
@@ -105,8 +111,13 @@ export function synthesizeDeltaFrames(
         labels: labelString(msgLabels),
         verification: 'false',
         link: '',
-        code: ''
+        code: '',
+        // Lets the notification side tell backlog (a resumed cursor replaying
+        // hours of changes) from mail that just arrived.
+        ...(msg.receivedDateTime ? { receivedAt: msg.receivedDateTime } : {})
       },
+      // Every upsert carries the banner text; pushHandler decides whether it
+      // is news (unread, recent, not already announced).
       notification: { title: senderDisplay(msg), body: msg.subject ?? '' }
     });
   }
@@ -142,6 +153,55 @@ export function diffPolledAccounts(
     toStart: [...desiredSet].filter((uid) => !currentSet.has(uid)),
     toStop: [...currentSet].filter((uid) => !desiredSet.has(uid))
   };
+}
+
+/** A window-focus poll within this long of the last poll's start is skipped. */
+export const FOCUS_POLL_MIN_GAP_MS = 5_000;
+
+/**
+ * Single-flight bookkeeping for the per-account poll loop. At launch the boot
+ * poll and the first window-focus poll used to run at once, read the same
+ * cursor and dispatch the same frames twice. begin() refuses a second poll for
+ * an account while one runs and remembers to run once more afterwards; focus
+ * polls are skipped while one runs or right after one started.
+ */
+export class PollGate {
+  private inFlight = new Set<string>();
+  private again = new Set<string>();
+  private lastStart = new Map<string, number>();
+
+  /** Starts a poll; false (and one re-run queued) when one is already running. */
+  begin(uid: string, now: number): boolean {
+    if (this.inFlight.has(uid)) {
+      this.again.add(uid);
+      return false;
+    }
+    this.inFlight.add(uid);
+    this.lastStart.set(uid, now);
+    return true;
+  }
+
+  /** Ends a poll; true when another was requested meanwhile and should run now. */
+  end(uid: string): boolean {
+    this.inFlight.delete(uid);
+    return this.again.delete(uid);
+  }
+
+  isInFlight(uid: string): boolean {
+    return this.inFlight.has(uid);
+  }
+
+  shouldPollOnFocus(uid: string, now: number): boolean {
+    if (this.inFlight.has(uid)) return false;
+    const last = this.lastStart.get(uid);
+    return last === undefined || now - last >= FOCUS_POLL_MIN_GAP_MS;
+  }
+
+  /** The account stopped being polled; a poll still running clears itself via end(). */
+  forget(uid: string): void {
+    this.again.delete(uid);
+    this.lastStart.delete(uid);
+  }
 }
 
 /**

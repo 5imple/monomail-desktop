@@ -5,12 +5,7 @@ import {
   getMicrosoftFolderDelta
 } from '@/main/api/mail/providers/microsoftMailProvider';
 // Resolved (via the runner's alias) to scripts/__tests__/m365/stubs/apiClient.mjs.
-import {
-  __setGraphHandler,
-  __setBatchHandler,
-  __getRequests,
-  __reset
-} from '@/main/api/apiClient';
+import { __setGraphHandler, __setBatchHandler, __getRequests, __reset } from '@/main/api/apiClient';
 
 // Integration tests: drive the REAL microsoftMailProvider against a stubbed
 // graphApiClient/graphBatch (canned Graph responses + recorded requests). This
@@ -27,7 +22,8 @@ type GraphResp = unknown | ((url: string) => unknown);
 function routeGraph(routes: Array<[RegExp, GraphResp]>) {
   __setGraphHandler(async (_m: string, url: string) => {
     for (const [re, resp] of routes) {
-      if (re.test(url)) return typeof resp === 'function' ? (resp as (u: string) => unknown)(url) : resp;
+      if (re.test(url))
+        return typeof resp === 'function' ? (resp as (u: string) => unknown)(url) : resp;
     }
     throw { status: 404, data: { error: { code: 'notFound' } } };
   });
@@ -63,7 +59,12 @@ test('getThreads: lists inbox, groups by conversation, sorts desc, resolves INBO
       /\/me\/mailFolders\/inbox\/messages/,
       {
         value: [
-          msg({ id: 'm1', conversationId: 'c1', receivedDateTime: '2026-06-01T10:00:00Z', isRead: false }),
+          msg({
+            id: 'm1',
+            conversationId: 'c1',
+            receivedDateTime: '2026-06-01T10:00:00Z',
+            isRead: false
+          }),
           msg({ id: 'm2', conversationId: 'c1', receivedDateTime: '2026-06-01T11:00:00Z' }),
           msg({ id: 'm3', conversationId: 'c2', receivedDateTime: '2026-06-01T09:00:00Z' })
         ],
@@ -121,14 +122,15 @@ test('getThread: filters by conversationId, pages all messages, resolves labels'
   routeGraph([
     [
       /skiptoken=P2/,
-      { value: [msg({ id: 'b', conversationId: 'conv', receivedDateTime: '2026-06-01T12:00:00Z' })] }
+      {
+        value: [msg({ id: 'b', conversationId: 'conv', receivedDateTime: '2026-06-01T12:00:00Z' })]
+      }
     ],
     [
       /conversationId/,
       {
         value: [msg({ id: 'a', conversationId: 'conv', receivedDateTime: '2026-06-01T10:00:00Z' })],
-        '@odata.nextLink':
-          'https://graph.microsoft.com/v1.0/me/messages?$skiptoken=P2'
+        '@odata.nextLink': 'https://graph.microsoft.com/v1.0/me/messages?$skiptoken=P2'
       }
     ]
   ]);
@@ -155,7 +157,14 @@ test('getThread: inline contentIds come from the $expand — no per-message byte
             hasAttachments: true,
             body: { contentType: 'html', content: '<p>hi</p><img src="cid:logo123">' },
             attachments: [
-              { id: 'att-1', name: 'logo.png', contentType: 'image/png', size: 100, isInline: true, contentId: 'logo123' }
+              {
+                id: 'att-1',
+                name: 'logo.png',
+                contentType: 'image/png',
+                size: 100,
+                isInline: true,
+                contentId: 'logo123'
+              }
             ]
           })
         ]
@@ -186,7 +195,9 @@ test('getThread: a missing contentId falls back to a metadata-only lookup', asyn
             conversationId: 'conv-fallback',
             hasAttachments: true,
             body: { contentType: 'html', content: '<img src="cid:logo123">' },
-            attachments: [{ id: 'att-1', name: 'logo.png', contentType: 'image/png', size: 100, isInline: true }]
+            attachments: [
+              { id: 'att-1', name: 'logo.png', contentType: 'image/png', size: 100, isInline: true }
+            ]
           })
         ]
       }
@@ -196,7 +207,10 @@ test('getThread: a missing contentId falls back to a metadata-only lookup', asyn
   const thread = await microsoftMailProvider.getThread('uid-fallback', 'conv-fallback');
   const lookup = __getRequests().find((r) => /\/attachments/.test(r.url ?? ''));
   // $select keeps it to ids — without it Graph returns every image's contentBytes.
-  assert.match(decodeURIComponent(lookup!.url), /\$select=id,microsoft\.graph\.fileAttachment\/contentId/);
+  assert.match(
+    decodeURIComponent(lookup!.url),
+    /\$select=id,microsoft\.graph\.fileAttachment\/contentId/
+  );
   const message = thread.items[0] as { inlineImages: Record<string, unknown> };
   assert.equal(Object.keys(message.inlineImages).length, 1);
 });
@@ -206,7 +220,15 @@ test('getThread: progressive load hands back the newest body first, then the ful
   const bodyOf = (id: string) => ({ contentType: 'html', content: `<p>body ${id}</p>` });
   routeGraph([
     // Phase 1, newest message in full.
-    [/\/me\/messages\/c-new\?/, msg({ id: 'c-new', conversationId: 'conv-prog', receivedDateTime: '2026-06-03T10:00:00Z', body: bodyOf('c-new') })],
+    [
+      /\/me\/messages\/c-new\?/,
+      msg({
+        id: 'c-new',
+        conversationId: 'conv-prog',
+        receivedDateTime: '2026-06-03T10:00:00Z',
+        body: bodyOf('c-new')
+      })
+    ],
     // Phase 1 (no body in $select) vs. phase 2 (full).
     [
       /conversationId/,
@@ -215,8 +237,19 @@ test('getThread: progressive load hands back the newest body first, then the ful
         // The full, body-laden response is the slow one in real life.
         if (full) await new Promise((resolve) => setTimeout(resolve, 30));
         const m = (id: string, at: string) =>
-          msg({ id, conversationId: 'conv-prog', receivedDateTime: at, body: full ? bodyOf(id) : undefined });
-        return { value: [m('c-old', '2026-06-01T10:00:00Z'), m('c-mid', '2026-06-02T10:00:00Z'), m('c-new', '2026-06-03T10:00:00Z')] };
+          msg({
+            id,
+            conversationId: 'conv-prog',
+            receivedDateTime: at,
+            body: full ? bodyOf(id) : undefined
+          });
+        return {
+          value: [
+            m('c-old', '2026-06-01T10:00:00Z'),
+            m('c-mid', '2026-06-02T10:00:00Z'),
+            m('c-new', '2026-06-03T10:00:00Z')
+          ]
+        };
       }
     ]
   ]);
@@ -234,25 +267,98 @@ test('getThread: progressive load hands back the newest body first, then the ful
   });
 
   assert.equal(partials.length, 1);
-  assert.deepEqual(partials[0].items.filter(hasBody).map((i) => i.id), ['c-new']);
-  // Alongside the full fetch, the partial pass lists ids, then metadata — and
-  // neither expands attachments (that expansion is what makes listings slow).
+  assert.deepEqual(
+    partials[0].items.filter(hasBody).map((i) => i.id),
+    ['c-new']
+  );
+  // Alongside the full fetch, the partial pass makes ONE light listing (no
+  // ids-only listing before it: that third round trip lost the race to the
+  // full fetch) and doesn't expand attachments (what makes listings slow).
   const lists = __getRequests()
     .map((r) => decodeURIComponent(r.url ?? ''))
     .filter((u) => /\$filter=conversationId/.test(u));
-  assert.equal(lists.length, 3);
+  assert.equal(lists.length, 2);
   const partialLists = lists.filter((u) => !/internetMessageHeaders/.test(u));
-  assert.equal(partialLists.length, 2);
+  assert.equal(partialLists.length, 1);
   assert.ok(partialLists.every((u) => !/\$expand/.test(u)));
-  assert.ok(partialLists.some((u) => /\$select=id,receivedDateTime&/.test(u)));
+  assert.ok(partialLists.every((u) => /bodyPreview/.test(u)));
+  assert.ok(!lists.some((u) => /\$select=id,receivedDateTime&/.test(u)));
   // Final result is the complete thread.
   assert.equal((thread.items as Item[]).filter(hasBody).length, 3);
+});
+
+test('getThread: the partial pass fetches the newest message with a body, not an empty meeting reply', async () => {
+  okFolderMap();
+  const bodyOf = (id: string) => ({ contentType: 'html', content: `<p>body ${id}</p>` });
+  routeGraph([
+    [
+      /\/me\/messages\/r-mid\?/,
+      msg({
+        id: 'r-mid',
+        conversationId: 'conv-rsvp',
+        receivedDateTime: '2026-06-02T10:00:00Z',
+        body: bodyOf('r-mid')
+      })
+    ],
+    [
+      /conversationId/,
+      async (url: string) => {
+        const full = /internetMessageHeaders/.test(decodeURIComponent(url));
+        if (full) await new Promise((resolve) => setTimeout(resolve, 30));
+        const m = (id: string, at: string, extra: Record<string, unknown> = {}) =>
+          msg({
+            id,
+            conversationId: 'conv-rsvp',
+            receivedDateTime: at,
+            body: full ? bodyOf(id) : undefined,
+            ...extra
+          });
+        return {
+          value: [
+            m('r-old', '2026-06-01T10:00:00Z', { bodyPreview: 'Agenda' }),
+            m('r-mid', '2026-06-02T10:00:00Z', { bodyPreview: 'Sounds good' }),
+            // The newest: an attendee's "Accepted:" reply with no text.
+            m('r-new', '2026-06-03T10:00:00Z', {
+              '@odata.type': '#microsoft.graph.eventMessageResponse',
+              bodyPreview: ''
+            })
+          ]
+        };
+      }
+    ]
+  ]);
+  const partials: Array<{
+    items: Array<{ id: string; payload?: { parts?: Array<{ body?: { data?: string | null } }> } }>;
+  }> = [];
+  await microsoftMailProvider.getThread('uid-rsvp', 'conv-rsvp', undefined, (p) => {
+    partials.push(p as never);
+  });
+  // The partial pass's detail GET (the full fetch's meeting lookups for the
+  // reply are other requests to the same path, without the body $select).
+  const detail = __getRequests().filter((r) =>
+    /\/me\/messages\/r-[a-z]+\?.*internetMessageHeaders/.test(decodeURIComponent(r.url ?? ''))
+  );
+  assert.deepEqual(
+    detail.map((r) => decodeURIComponent(r.url ?? '').match(/\/me\/messages\/(r-[a-z]+)/)?.[1]),
+    ['r-mid']
+  );
+  assert.equal(partials.length, 1);
+  const withBody = partials[0].items.filter((item) =>
+    (item.payload?.parts ?? []).some((part) => part.body?.data != null)
+  );
+  assert.deepEqual(
+    withBody.map((item) => item.id),
+    ['r-mid']
+  );
 });
 
 test('getThread: a partial result is always applied before the full one is returned', async () => {
   okFolderMap();
   routeGraph([
-    [/\/me\/messages\/x3\?/, msg({ id: 'x3', conversationId: 'conv-order', receivedDateTime: '2026-06-03T10:00:00Z' })],
+    [
+      /\/me\/messages\/x3\?/,
+      msg({ id: 'x3', conversationId: 'conv-order', receivedDateTime: '2026-06-03T10:00:00Z' })
+    ],
     [
       /conversationId/,
       {
@@ -271,7 +377,8 @@ test('getThread: a partial result is always applied before the full one is retur
   events.push('full-returned');
   // Whether or not the partial ran, the full result is handed back last.
   assert.equal(events[events.length - 1], 'full-returned');
-  if (events.includes('partial-start')) assert.deepEqual(events, ['partial-start', 'partial-done', 'full-returned']);
+  if (events.includes('partial-start'))
+    assert.deepEqual(events, ['partial-start', 'partial-done', 'full-returned']);
 });
 
 test('getThread: progressive load skips the extra step for a single-message conversation', async () => {
@@ -518,7 +625,8 @@ test('getMicrosoftFolderDelta: 429 → retry, keeps the prior cursor', async () 
   __setGraphHandler(async () => {
     throw { status: 429, data: {} };
   });
-  const prior = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=KEEP';
+  const prior =
+    'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=KEEP';
   const r = await getMicrosoftFolderDelta('uid-retry', 'inbox', prior);
   assert.equal(r.status, 'retry');
   assert.equal(r.deltaLink, prior);

@@ -4,7 +4,45 @@ import {
   parseRetryAfterMs,
   withImmutableIdPrefer
 } from '@/main/services/ipc-handlers/graph/graphHttp';
+import {
+  acquireGraphSlot,
+  GRAPH_REQUEST_MAX_RETRIES,
+  graphLaneFor,
+  releaseGraphSlot
+} from '@/main/services/ipc-handlers/graph/graphSlots';
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
+
+/**
+ * One Graph request in one of the mailbox's shared slots (graphSlots), the
+ * same ones the renderer's requests take, retried on 429/503 after the
+ * server's Retry-After, as the renderer's are. Without the slot, a snooze's
+ * folder lookups fired alongside the list's requests went over Graph's
+ * per-mailbox limit and the snooze failed (429).
+ */
+async function fetchInSlot(uid: string, url: string, init: RequestInit): Promise<Response> {
+  const lane = graphLaneFor(url);
+  await acquireGraphSlot(uid, lane);
+  try {
+    let response = await net.fetch(url, init);
+    for (
+      let attempt = 0;
+      (response.status === 429 || response.status === 503) &&
+      attempt < GRAPH_REQUEST_MAX_RETRIES &&
+      !init.signal?.aborted;
+      attempt++
+    ) {
+      const waitMs = parseRetryAfterMs({
+        'retry-after': response.headers.get('retry-after') ?? ''
+      });
+      await response.text().catch(() => undefined); // frees the connection
+      await new Promise((resolve) => setTimeout(resolve, waitMs || 1000));
+      response = await net.fetch(url, init);
+    }
+    return response;
+  } finally {
+    releaseGraphSlot(uid, lane);
+  }
+}
 
 export interface GraphMainResult<T = unknown> {
   ok: boolean;
@@ -46,7 +84,7 @@ export async function graphGetMain<T = unknown>(
 
   let response: Response;
   try {
-    response = await net.fetch(url, {
+    response = await fetchInSlot(uid, url, {
       method: 'GET',
       headers: { ...withImmutableIdPrefer({}), Authorization: `Bearer ${accessToken}` },
       signal
@@ -100,7 +138,7 @@ export async function graphPostMain<T = unknown>(
 
   let response: Response;
   try {
-    response = await net.fetch(url, {
+    response = await fetchInSlot(uid, url, {
       method: 'POST',
       headers: {
         ...withImmutableIdPrefer({}),
