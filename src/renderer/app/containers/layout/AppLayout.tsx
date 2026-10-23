@@ -231,11 +231,13 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
             </div>
             <div className="no-drag absolute right-[16px] flex items-center gap-[6px]">
               <OfflineIndicator />
+              {/* Compose says so in words: a pen alone, among three identical
+                  grey icons, didn't read as "write a new email". The word
+                  gives way to the icon in a narrow window. */}
               <Button
                 variant="ghost"
-                typeVariant="icon"
                 sizeVariant="sm"
-                className="h-[36px] w-[36px] text-muted-foreground hover:text-foreground"
+                className="h-[32px] gap-[6px] rounded-[7px] px-[10px] text-[13px] font-medium text-foreground hover:bg-foreground/[0.07] max-[900px]:w-[36px] max-[900px]:px-0"
                 tooltip={t('layout.titlebar.compose', { defaultValue: 'Compose' })}
                 shortcut="C"
                 onClick={() => executeCommand('COMPOSE_NEW_MESSAGE')}
@@ -245,6 +247,9 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                   strokeWidth={TITLEBAR_ACTION_ICON_STROKE_WIDTH}
                   aria-hidden="true"
                 />
+                <span className="max-[900px]:sr-only">
+                  {t('layout.titlebar.compose', { defaultValue: 'Compose' })}
+                </span>
               </Button>
               <Button
                 variant="ghost"

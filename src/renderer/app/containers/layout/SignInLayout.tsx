@@ -47,7 +47,7 @@ const showSignInError = (t: TFunction, error: string) => {
     toast.error(
       t('layout.sign_in.error_admin_consent', {
         defaultValue:
-          'Your Washington College account needs IT approval for Mono Mail. Contact the Technology Services Center at support@washcoll.edu or 410-778-7777.'
+          'Your organization’s account needs admin approval before this app can sign in. Ask your IT administrator to grant consent, then try again.'
       }),
       { duration: 10000 }
     );
@@ -243,6 +243,19 @@ const SignInLayout: FC<SignInLayoutProps> = () => {
               automatically via tailwindcss-animate. */}
           <div className="flex flex-col items-center gap-8 duration-500 animate-in fade-in-0 slide-in-from-bottom-2">
             <MonoLogo className="h-24" />
+            {/* A logo over two buttons said nothing about what this is or
+                what signing in does. */}
+            <div className="max-w-sm text-center">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                {t('onboarding.welcome.title', { defaultValue: 'Welcome to Mono Mail' })}
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                {t('layout.sign_in.intro', {
+                  defaultValue:
+                    'Sign in with the account you want to read mail from. Your mail stays between your provider and this app.'
+                })}
+              </p>
+            </div>
             {/* While auth loads, the buttons stay laid out but invisible so the
                 logo doesn't move when they appear. */}
             <div className="relative flex flex-col items-center gap-3">

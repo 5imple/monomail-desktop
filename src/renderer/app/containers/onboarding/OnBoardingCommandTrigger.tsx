@@ -1,3 +1,4 @@
+import { Button } from '@/renderer/app/components/ui/button';
 import { animated, useTrail } from '@react-spring/web';
 import { FC, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -108,15 +109,18 @@ const OnBoardingCommandTrigger: FC<OnBoardingCommandTriggerProps> = ({ onContinu
             </animated.div>
           );
         }
-        // if (index === 3) {
-        //   return (
-        //     <animated.div key="button" style={style} className="flex justify-center mt-4">
-        //       <Button sizeVariant="xl" onClick={onContinue}>
-        //         Continue
-        //       </Button>
-        //     </animated.div>
-        //   );
-        // }
+        if (index === 3) {
+          // The shortcut is the lesson, but it mustn't be the only way on:
+          // without this button the step was a dead end for anyone who
+          // didn't press the keys.
+          return (
+            <animated.div key="button" style={style} className="mt-2 flex justify-center">
+              <Button variant="secondary" sizeVariant="lg" onClick={onContinue}>
+                {t('onboarding.command_trigger.button')}
+              </Button>
+            </animated.div>
+          );
+        }
         return null;
       })}
     </div>
