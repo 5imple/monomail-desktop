@@ -32,11 +32,14 @@ const enterHasOtherJob = focusedElementOwnsKey;
 const plainKeyGuard = (hotkey: string) =>
   /(^|\+)(MOD|CTRL|META|ALT|OPTION)\+/i.test(hotkey) ? {} : { ignoreEventWhen: isComposeExpanded };
 
+// Commands whose palette page acts on the open or selected conversations.
+const THREAD_PAGE_COMMANDS = new Set<CommandType>(['REMINDER', 'LABEL', 'MOVE']);
+
 export const useRegisterHotkeys = (options = {}) => {
   const executeCommand = useExecuteCommand();
   const commands = useCommands();
   const { openDialog } = useDialogs();
-  const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap, setSelectedThreads } = useThreadAtom();
   const { trackEvent } = useUserTrackingData();
   const { undoLastAction, hasUndoActions } = useUndoManager();
   const { t } = useTranslation();
@@ -232,7 +235,12 @@ export const useRegisterHotkeys = (options = {}) => {
                   }
                 }
               },
-              { scopes: [command.scope], preventDefault: true, ...plainKeyGuard(hotkey), ...options },
+              {
+                scopes: [command.scope],
+                preventDefault: true,
+                ...plainKeyGuard(hotkey),
+                ...options
+              },
               [executeCommand, getThreadHotkeyTarget, threadsMap, trackEvent, accounts]
             );
             break;
@@ -277,7 +285,12 @@ export const useRegisterHotkeys = (options = {}) => {
                   }
                 }
               },
-              { scopes: [command.scope], preventDefault: true, ...plainKeyGuard(hotkey), ...options },
+              {
+                scopes: [command.scope],
+                preventDefault: true,
+                ...plainKeyGuard(hotkey),
+                ...options
+              },
               [executeCommand, getThreadHotkeyTarget, threadsMap, trackEvent, accounts]
             );
             break;
@@ -299,12 +312,21 @@ export const useRegisterHotkeys = (options = {}) => {
             );
             break;
 
-          default:
+          default: {
+            // Snooze / Label / Move open a palette page that acts on the
+            // selection. Like E / S / U they also take the row the arrow keys
+            // rest on (it becomes the selection), so they're registered in
+            // the global scope too; with nothing to act on they do nothing.
+            const opensPageOnThreads = THREAD_PAGE_COMMANDS.has(commandId);
             useHotkeys(
               hotkey,
               (e) => {
                 e.preventDefault();
                 const target = getThreadHotkeyTarget();
+                if (opensPageOnThreads) {
+                  if (target.threadIds.length === 0) return;
+                  if (target.source === 'highlight') setSelectedThreads(target.threadIds);
+                }
                 const args =
                   command.scope === 'CONVERSATION_SELECTED'
                     ? getExplicitThreadArgs(target)
@@ -313,7 +335,7 @@ export const useRegisterHotkeys = (options = {}) => {
                 executeCommand(commandId, args);
               },
               {
-                scopes: [command.scope],
+                scopes: opensPageOnThreads ? ['GLOBAL', command.scope] : [command.scope],
                 preventDefault: true,
                 useKey: hotkey === '!' || hotkey === '?',
                 ...plainKeyGuard(hotkey),
@@ -324,10 +346,13 @@ export const useRegisterHotkeys = (options = {}) => {
                 executeCommand,
                 getExplicitThreadArgs,
                 getThreadHotkeyTarget,
+                opensPageOnThreads,
+                setSelectedThreads,
                 trackEvent
               ]
             );
             break;
+          }
         }
       });
     }

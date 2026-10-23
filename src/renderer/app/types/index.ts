@@ -5,7 +5,7 @@ export type CommandType =
   | 'SPACE'
   | 'LABEL'
   | 'MOVE'
-  | 'GOTO_IMPORTANT'
+  | 'GOTO_INBOX'
   | 'GOTO_DONE'
   | 'GOTO_STARRED'
   | 'GOTO_SENT'

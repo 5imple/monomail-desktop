@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { isBackendConfigured } from '@/main/api/apiClient';
 
 // What a Microsoft 365 search can use: the local search's operators (from:,
 // to:, subject:, cc:, bcc:, label:, in:, is:, has:, negation, OR) plus the
@@ -307,14 +308,18 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
                 </span>
               </CommandItem>
 
-              <CommandItem
-                variant="raycast"
-                value={`${searchQuery.trim()}_bookmark`}
-                onSelect={handleBookmarkCreate}
-              >
-                <CommandIcon type="Bookmark" />
-                <span>{t('command_palette.search.save_bookmark', { query: searchQuery })}</span>
-              </CommandItem>
+              {/* Saved searches live on the backend; without one the flow
+                  ended in an error after naming the bookmark. */}
+              {isBackendConfigured() && (
+                <CommandItem
+                  variant="raycast"
+                  value={`${searchQuery.trim()}_bookmark`}
+                  onSelect={handleBookmarkCreate}
+                >
+                  <CommandIcon type="Bookmark" />
+                  <span>{t('command_palette.search.save_bookmark', { query: searchQuery })}</span>
+                </CommandItem>
+              )}
             </CommandGroup>
           )}
 

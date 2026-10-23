@@ -86,11 +86,12 @@ const COMMAND_KEYWORDS: Partial<Record<CommandType, string[]>> = {
   THREAD_MARK_UNREAD: ['unread', 'new'],
   THREAD_STAR: ['flag', 'favorite'],
   THREAD_UNSTAR: ['unflag'],
-  REMINDER: ['snooze', 'later', 'remind', 'follow up'],
+  REMINDER: ['snooze', 'later', 'remind', 'reminder', 'follow up'],
   MOVE: ['folder', 'file', 'move to'],
   LABEL: ['tag', 'category'],
   SPACE: ['workspace', 'switch'],
   SEARCH: ['find', 'look up'],
+  GOTO_INBOX: ['inbox', 'primary', 'home'],
   COMPOSE_NEW_MESSAGE: ['write', 'new email', 'new message'],
   COMPOSE_REPLY_MESSAGE: ['respond'],
   COMPOSE_REPLY_ALL_MESSAGE: ['respond all'],
@@ -417,6 +418,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   // to flows that fail (as the sidebar's "+ Space" did).
   const canManageSpaces = isBackendConfigured() && !spaces.some((s) => s.id === 'local-space');
   const hideSpaceCommand = !canManageSpaces && spaces.length <= 1;
+  // Pinned contacts and saved searches live on the backend too; without one
+  // their pages end in "Failed to…" after the user has filled them in.
+  const backendOnlyCommands = new Set<string>(['PIN_CONTACT', 'SIDEBAR_FAVORITE_ADD']);
+  const hideBackendOnly = !isBackendConfigured();
 
   const rootCommands = Object.keys(commands)
     .map((commandId) => ({
@@ -427,7 +432,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     .filter((command) => activeScopes.includes(command.scope))
     // For commands that come in paired sets, check the condition.
     .filter((command) => shouldShowGroupedCommand(command))
-    .filter((command) => !(hideSpaceCommand && command.commandId === 'SPACE'));
+    .filter((command) => !(hideSpaceCommand && command.commandId === 'SPACE'))
+    .filter((command) => !(hideBackendOnly && backendOnlyCommands.has(command.commandId)));
 
   const rootGroupHeadings: Record<RootGroup, string> = {
     conversation: t('command_palette.group.conversation'),

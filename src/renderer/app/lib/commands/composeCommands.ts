@@ -9,6 +9,7 @@ import {
   ThreadCommandArgs
 } from './types';
 import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
+import { isBackendConfigured } from '@/main/api/apiClient';
 import { toast } from 'sonner';
 import { buildReplyAllRecipients, replySubject } from '@/renderer/app/lib/replyRecipients';
 
@@ -69,11 +70,14 @@ export const createComposeCommands = (
   };
 
   return {
+    // Pins and saved searches are stored on the backend; without one their
+    // keys would open a page that can only end in "Failed to…". The palette
+    // hides the commands too (CommandPalette's backendOnlyCommands).
     PIN_CONTACT: {
       scope: 'GLOBAL',
       title: t('command.pin_contact'),
       icon: 'UserPlus',
-      hotkeys: ['MOD+E', 'MOD+CTRL+E'],
+      hotkeys: isBackendConfigured() ? ['MOD+E', 'MOD+CTRL+E'] : undefined,
       action: (args?: PinContactCommandArgs) => {
         if (dialogState.commandPalette.open) return 'page';
         openDialog('commandPalette', {
@@ -92,9 +96,9 @@ export const createComposeCommands = (
       action: (args?: ComposeCommandArgs) => {
         const accountEmail = getAccountEmailById(args?.draft?.from);
         if (!accountEmail) {
-          toast('Connect Gmail before composing a message.', {
+          toast(t('toast.compose.connect_gmail_first'), {
             action: {
-              label: 'Connect Gmail',
+              label: t('toast.compose.connect_gmail'),
               onClick: () => {
                 void startEmailAccountLink('gmail');
               }
@@ -225,7 +229,7 @@ export const createComposeCommands = (
     SIDEBAR_FAVORITE_ADD: {
       scope: 'SIDEBAR',
       title: t('command.sidebar_favorite_add'),
-      hotkeys: ['MOD+CTRL+D', 'MOD+D'],
+      hotkeys: isBackendConfigured() ? ['MOD+CTRL+D', 'MOD+D'] : undefined,
       icon: 'Plus',
       action: () => {
         if (dialogState.commandPalette.open) return 'page';

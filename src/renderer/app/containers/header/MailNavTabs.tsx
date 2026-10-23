@@ -16,8 +16,11 @@ type MailNavItemBase = {
   label: string;
   Icon: LucideIcon;
   // Must match the go-to hotkey in navigationCommands (ShortcutKeyboard splits
-  // on '+'); omit when none exists. Inbox has none: G+I goes to is:important.
+  // on '+'); omit when none exists.
   shortcut?: string;
+  // One line under the name for views whose name alone doesn't say what's in
+  // them ("Later").
+  description?: string;
 };
 
 type MailNavItem = MailNavItemBase &
@@ -36,9 +39,16 @@ const NAV_ITEMS: MailNavItem[] = [
     id: 'inbox',
     label: 'Inbox',
     Icon: Inbox,
-    query: 'category:primary'
+    query: 'category:primary',
+    shortcut: 'G+I'
   },
-  { id: 'snooze', label: 'Later', Icon: Clock3, layout: 'LATER' as const },
+  {
+    id: 'snooze',
+    label: 'Later',
+    Icon: Clock3,
+    layout: 'LATER' as const,
+    description: 'Snoozed and scheduled mail'
+  },
   { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G+S' },
   { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G+T' }
 ];
@@ -149,7 +159,9 @@ const MailNavTabs = React.memo(() => {
                   strokeWidth={1.8}
                   aria-hidden="true"
                 />
-                <span className={cn(!sidebarCollapsed && 'max-[860px]:sr-only')}>{item.label}</span>
+                <span className={cn(!sidebarCollapsed && 'max-[860px]:sr-only')}>
+                  {t(`layout.titlebar.tab.${item.id}`, { defaultValue: item.label })}
+                </span>
                 {item.id === 'inbox' && inboxUnreadCount > 0 && (
                   <span
                     className={cn(
@@ -169,7 +181,14 @@ const MailNavTabs = React.memo(() => {
             <TooltipPortal>
               <TooltipContent side="bottom">
                 <div className="text-start">
-                  <div>{item.label}</div>
+                  <div>{t(`layout.titlebar.tab.${item.id}`, { defaultValue: item.label })}</div>
+                  {item.description && (
+                    <div className="mt-0.5 opacity-80">
+                      {t(`layout.titlebar.tab_description.${item.id}`, {
+                        defaultValue: item.description
+                      })}
+                    </div>
+                  )}
                   {item.shortcut && (
                     <div className="mt-0.5">
                       <ShortcutKeyboard variant="flat" shortcut={item.shortcut} />

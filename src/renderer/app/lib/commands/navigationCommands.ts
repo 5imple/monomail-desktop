@@ -38,8 +38,11 @@ export const createNavigationCommands = (
       }
     },
 
+    // Snooze / Label / Move act on the open conversation or the selected rows
+    // (CONVERSATION_SELECTED covers both), so H / L / M work from the list the
+    // way E and S do, not only while reading.
     REMINDER: {
-      scope: 'CONVERSATION_DISPLAY',
+      scope: 'CONVERSATION_SELECTED',
       title: t('command.reminder'),
       icon: 'Clock',
       hotkeys: ['H', 'MOD+H'],
@@ -51,7 +54,7 @@ export const createNavigationCommands = (
     },
 
     LABEL: {
-      scope: 'CONVERSATION_DISPLAY',
+      scope: 'CONVERSATION_SELECTED',
       title: t('command.label'),
       icon: 'Label',
       hotkeys: ['L', 'MOD+L'],
@@ -63,7 +66,7 @@ export const createNavigationCommands = (
     },
 
     MOVE: {
-      scope: 'CONVERSATION_DISPLAY',
+      scope: 'CONVERSATION_SELECTED',
       title: t('command.move'),
       icon: 'ArrowRight',
       hotkeys: ['V', 'M', 'MOD+M'],
@@ -74,13 +77,16 @@ export const createNavigationCommands = (
       }
     },
 
-    GOTO_IMPORTANT: {
+    // G then I is "go to Inbox" in every mail client; it used to open
+    // is:important while the titlebar's Inbox tab had no shortcut at all.
+    // Same query as the Inbox tab and the sidebar's Inbox row.
+    GOTO_INBOX: {
       scope: 'GLOBAL',
-      title: t('command.goto_important'),
+      title: t('command.goto_inbox'),
       hotkeys: ['G+I', 'MOD+G+I'],
       icon: 'Inbox',
       action: (_: any) => {
-        searchNewQuery('is:important', undefined, false);
+        searchNewQuery('category:primary', undefined, false);
       }
     },
 
@@ -131,6 +137,6 @@ export const createNavigationCommands = (
       action: (_: any) => {
         electronApi.openLogFolder();
       }
-    },
+    }
   };
 };
