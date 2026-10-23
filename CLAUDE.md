@@ -20,7 +20,7 @@ Copy `.env.example` to `.env.development` (Vite loads this file in dev mode). Al
 
 The app runs **Gmail-direct only**: set `MONO_ENV_GOOGLE_CLIENT_ID` and `MONO_ENV_GOOGLE_CLIENT_SECRET` (see `docs/GOOGLE_OAUTH_SETUP.md`). Sign-in is a direct Google OAuth (PKCE) flow handled in the main process; mail goes straight to the Gmail API via the IPC bridge. There is no first-party "Mono account" and no cloud sign-in backend.
 
-`MONO_ENV_API_URL` is **optional** — it only powers secondary feature modules (signatures, templates, spaces, bookmarks, tracking, contacts, reminders, server-side/AI drafts). Left blank, those features no-op and `apiClient` logs non-fatal `"Backend not configured"` errors.
+`MONO_ENV_API_URL` is **optional** — it only powers secondary feature modules (signatures, templates, spaces, bookmarks, tracking, contacts, server-side/AI drafts). Left blank, those features no-op and `apiClient` logs non-fatal `"Backend not configured"` errors.
 
 ## Architecture
 

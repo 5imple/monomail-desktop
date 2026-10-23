@@ -627,8 +627,6 @@ Adversarially-reviewed-but-deferred nits to pick up in later phases:
   migrate the IPC when `IntegrationForm` gains Microsoft accounts. (Phase 13)
 - No automated tests cover the googleAccounts→mailAccounts migration, JSON
   round-trip, or Microsoft RT rotation persistence. (Phase 16)
-- Reminder `messageId` is dropped by the IPC handler/SchedulerService —
-  harmless today. (Phase 0 review nit)
 - A Microsoft-primary session installs the Graph access token as the backend
   API bearer + push-WS token (pre-existing token-changed bridge design;
   matters once a backend coexists with Microsoft sessions). (Phase 4/11)

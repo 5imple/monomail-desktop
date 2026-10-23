@@ -1,128 +1,44 @@
 import { MonoThread } from '@/main/models/thread/MonoThread';
-import { generateUUID } from '@/main/utils';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
-import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { CustomDateTimePicker } from '@/renderer/app/containers/queue/CustomDateTimePicker';
 import { ReschedulePopover } from '@/renderer/app/containers/queue/ReschedulePopover';
 import { buildSchedulePresets } from '@/renderer/app/containers/queue/schedulePresets';
-import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
+import { useSnoozeThreads } from '@/renderer/app/hooks/useSnoozeThreads';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
-import { currentSearchQueryAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
-import { useStore } from 'jotai';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-
-// "Tue 8:00 AM" — the snooze time, without seconds or the numeric date.
-const formatSnoozeTime = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit'
-  });
 
 interface ThreadActionButtonProps {
   thread: MonoThread;
   buttonClassName?: string;
 }
 
+/**
+ * The row's Snooze: a popover of presets (or a custom time). The snooze
+ * itself is useSnoozeThreads, shared with the reader, the palette page (H)
+ * and the selection bar, so every Snooze does the same thing.
+ */
 export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, buttonClassName }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [customMode, setCustomMode] = useState(false);
-  const { snoozeThread, unsnooze } = useQueueAtom();
-  const { markThreadAsDone, unmarkThreadAsDone } = useThreadLabelAtom();
-  const { addUndoAction } = useUndoManager();
-  const store = useStore();
+  const { snoozeThreads } = useSnoozeThreads();
   const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
-  // A second pick while the first request is in flight would snooze twice.
-  const snoozingRef = useRef(false);
+  const snoozeLabel = t('command.reminder', { defaultValue: 'Snooze' });
+  const heading = t('thread_list.snooze_until', { defaultValue: 'Snooze until' });
 
   const handlePickPreset = useCallback(
     async (preset: { id: string; scheduledFor: string | null }) => {
-      if (!preset.scheduledFor || snoozingRef.current) return;
-      snoozingRef.current = true;
+      if (!preset.scheduledFor) return;
       // Close right away; the toast reports the outcome.
       setOpen(false);
-      // The snooze takes the thread out of the inbox on the server; show that
-      // now, the way Done does (off the list in the inbox view), rather than
-      // when the next sync notices. Local only — the snooze made the change.
-      const query = store.get(currentSearchQueryAtom).toLowerCase();
-      const inInboxView =
-        (query.includes('in:inbox') && !query.includes('not in:inbox')) ||
-        query.includes('category:primary');
-      const leaveInbox = () => markThreadAsDone(thread.accountId, [thread.id], false, inInboxView);
-      const backToInbox = () =>
-        unmarkThreadAsDone(thread.accountId, [thread.id], false, false, inInboxView);
-      const sender = thread.from?.[0];
-      try {
-        await leaveInbox();
-        // A rejected call is a failure too: never leave the thread off the list.
-        const res = await snoozeThread({
-          threadId: thread.id,
-          accountId: thread.accountId,
-          snoozeUntil: preset.scheduledFor,
-          threadSnapshot: {
-            subject: thread.subject || '(No subject)',
-            snippet: thread.snippet || '',
-            from: {
-              id: sender?.email || thread.id,
-              name: sender?.name || sender?.email || 'Unknown',
-              email: sender?.email || ''
-            },
-            isStarred: thread.labelIds?.includes('STARRED') ?? false
-          }
-        }).catch((error: unknown) => ({ ok: false as const, error: String(error) }));
-        if (!res.ok) {
-          console.error('[SnoozeButton] snooze failed:', res.error);
-          await backToInbox();
-          toast.error(t('toast.snooze.error', { defaultValue: "Couldn't snooze this email." }));
-          return;
-        }
-
-        const snoozeId = res.item.id;
-        const undo = async () => {
-          await backToInbox();
-          const undone = await unsnooze(snoozeId);
-          if (!undone.ok) {
-            console.error('[SnoozeButton] unsnooze failed:', undone.error);
-            await leaveInbox();
-            toast.error(
-              t('toast.snooze.undo_error', { defaultValue: "Couldn't undo the snooze." })
-            );
-          }
-        };
-        const toastId = generateUUID();
-        addUndoAction({ execute: undo, timestamp: Date.now(), toastId });
-        toast.success(
-          t('toast.snooze.success', {
-            defaultValue: 'Snoozed until {{time}}',
-            time: formatSnoozeTime(preset.scheduledFor)
-          }),
-          {
-            id: toastId,
-            action: {
-              label: (
-                <span className="inline-flex items-end gap-1">
-                  {t('toast.undo', { defaultValue: 'Undo' })}{' '}
-                  <ShortcutKeyboard variant="text" className="gap-0" shortcut={'Z'} />
-                </span>
-              ),
-              onClick: () => void undo()
-            }
-          }
-        );
-      } finally {
-        snoozingRef.current = false;
-      }
+      await snoozeThreads([thread], preset.scheduledFor);
     },
-    [thread, snoozeThread, unsnooze, markThreadAsDone, unmarkThreadAsDone, addUndoAction, store, t]
+    [thread, snoozeThreads]
   );
 
   return (
@@ -147,8 +63,9 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
             e.stopPropagation();
           }}
           data-row-action
-          tooltip="Snooze"
-          aria-label="Snooze"
+          tooltip={snoozeLabel}
+          shortcut="H"
+          aria-label={snoozeLabel}
         >
           <MonoIcon type="Clock" size={18} weight={300} grade={0} />
         </Button>
@@ -162,8 +79,8 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
       >
         {customMode ? (
           <CustomDateTimePicker
-            heading="Snooze until"
-            confirmLabel="Snooze"
+            heading={heading}
+            confirmLabel={snoozeLabel}
             onBack={() => setCustomMode(false)}
             onConfirm={(iso) => {
               setCustomMode(false);
@@ -173,7 +90,7 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
         ) : (
           <ReschedulePopover
             presets={presets}
-            heading="Snooze until"
+            heading={heading}
             onPickPreset={handlePickPreset}
             onPickCustom={() => setCustomMode(true)}
           />
@@ -185,9 +102,11 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
 SnoozeButton.displayName = 'SnoozeButton';
 
 export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, buttonClassName }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { labelsMapByAccount } = useLabelAtom();
   const { addLabelToThread } = useThreadLabelAtom();
+  const labelTitle = t('command.label', { defaultValue: 'Label' });
 
   // Only user-created labels (Gmail's are `Label_*`); system labels like
   // INBOX/UNREAD aren't things you "add" from here.
@@ -204,12 +123,17 @@ export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, button
       if (!thread.accountId || thread.labelIds?.includes(labelId)) return;
       try {
         await addLabelToThread(thread.accountId, [thread.id], labelId);
-        toast.success(`Added label: ${labelName.replace('Mono/', '')}`);
+        toast.success(
+          t('toast.label.added', {
+            defaultValue: 'Added label {{name}}',
+            name: labelName.replace('Mono/', '')
+          })
+        );
       } catch {
-        toast.error("Couldn't add label");
+        toast.error(t('toast.error.label_add', { defaultValue: "Couldn't add label" }));
       }
     },
-    [thread, addLabelToThread]
+    [thread, addLabelToThread, t]
   );
 
   // No user labels (e.g. Microsoft 365, where labels aren't loaded): the
@@ -232,8 +156,9 @@ export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, button
             e.stopPropagation();
           }}
           data-row-action
-          tooltip="Label"
-          aria-label="Label"
+          tooltip={labelTitle}
+          shortcut="L"
+          aria-label={labelTitle}
         >
           <MonoIcon type="Folder" size={18} weight={300} grade={0} />
         </Button>
@@ -245,7 +170,9 @@ export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, button
         className="w-56 p-1"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Add label</div>
+        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          {t('thread_list.add_label', { defaultValue: 'Add label' })}
+        </div>
         <div className="max-h-64 overflow-y-auto">
           {userLabels.map((label) => {
             const applied = thread.labelIds?.includes(label.id) ?? false;

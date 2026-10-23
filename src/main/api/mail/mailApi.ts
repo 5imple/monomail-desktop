@@ -1,5 +1,4 @@
 import drafts from '@/main/api/mail/drafts';
-import reminder from '@/main/api/mail/reminder';
 import cloudPubSub from '@/main/api/mail/cloudPubSub';
 import {
   googleMailProvider,
@@ -26,11 +25,10 @@ const dispatched = Object.fromEntries(
   ])
 ) as MailProviderAdapter;
 
-// drafts/reminder/cloudPubSub are backend/local (not the Gmail API) and stay
+// drafts/cloudPubSub are backend/local (not the Gmail API) and stay
 // provider-neutral.
 export default {
   ...dispatched,
   ...drafts,
-  ...reminder,
   ...cloudPubSub
 };

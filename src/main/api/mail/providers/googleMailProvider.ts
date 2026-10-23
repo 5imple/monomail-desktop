@@ -5,7 +5,7 @@ import label from '@/main/api/mail/label';
 import history from '@/main/api/mail/history';
 
 // The current Gmail-direct behavior, unchanged — just grouped behind the
-// provider seam. drafts/reminder/cloudPubSub are NOT here: they hit the backend
+// provider seam. drafts/cloudPubSub are NOT here: they hit the backend
 // `apiClient` (or local stores), not the Gmail API, so they are provider-neutral
 // and stay on `mailApi` directly.
 export const googleMailProvider = {

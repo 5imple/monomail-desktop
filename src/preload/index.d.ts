@@ -155,14 +155,6 @@ interface IpcRenderer {
   queueCancelSchedule: (scheduleId: string) => Promise<any>;
   queueRescheduleSend: (args: { scheduleId: string; sendAt: string }) => Promise<any>;
   queueSendNow: (scheduleId: string) => Promise<any>;
-  reminderCreate: (req: {
-    uid: string;
-    threadId: string;
-    subject?: string;
-    reminderAt: string;
-  }) => Promise<any>;
-  reminderList: () => Promise<any>;
-  reminderDelete: (reminderId: string) => Promise<any>;
   setAlertSound: (audio: AudioType) => void;
   setIsFullSizeWindowOnCreation: (value: boolean) => void;
   setOnlineStatus: (isOnline: boolean) => void;

@@ -19,13 +19,10 @@ import { BrowserWindow } from 'electron';
 import log from 'electron-log';
 import Store from 'electron-store';
 
-// Local replacement for the backend "Later Queue". Snooze / scheduled-send /
-// reminders are persisted in electron-store and fired by a periodic sweep, so
-// they survive restarts and tolerate long delays (best-effort while the app is
+// Local replacement for the backend "Later Queue". Snooze and scheduled-send
+// are persisted in electron-store and fired by a periodic sweep, so they
+// survive restarts and tolerate long delays (best-effort while the app is
 // running — the documented limitation of a no-server scheduler).
-//
-// Increment 1 implements snooze (label-based, reversible). Scheduled-send and
-// reminders are added next.
 
 const SWEEP_INTERVAL_MS = 30_000;
 const SNOOZE_LABEL_NAME = 'Snoozed';
@@ -45,17 +42,6 @@ interface SnoozeTask {
   snoozedMessageIds?: string[];
 }
 
-interface ReminderTask {
-  reminderId: string;
-  accountId: string;
-  threadId: string;
-  subject: string;
-  reminderAt: string; // ISO 8601
-  createdAt: string; // ISO 8601
-  notifiedAt?: string; // ISO 8601 — set once the notification fired, so a failed
-  // restore-to-inbox retry on a later sweep doesn't re-fire the notification.
-}
-
 interface ScheduleTask {
   scheduleId: string;
   accountId: string;
@@ -71,7 +57,6 @@ interface ScheduleTask {
 
 interface SchedulerStoreSchema {
   snoozes?: Record<string, SnoozeTask>;
-  reminders?: Record<string, ReminderTask>;
   schedules?: Record<string, ScheduleTask>;
 }
 
@@ -103,8 +88,7 @@ class SchedulerService {
       // Keep snoozes: a snoozed thread sits out of the inbox under a "Snoozed"
       // label, so clearing the record would strand it (never restored). Leaving
       // it lets the sweep restore it at snoozeUntil once the account reconnects.
-      // Reminders/schedules are forward actions that shouldn't fire post-sign-out.
-      this.store.set('reminders', {});
+      // Scheduled sends are forward actions that shouldn't fire post-sign-out.
       this.store.set('schedules', {});
       this.labelIdByAccount.clear();
     });
@@ -122,10 +106,9 @@ class SchedulerService {
   start(): void {
     if (this.sweepTimer) return;
     log.info(
-      '[scheduler] started — sweeping every %ds (%d snooze, %d reminder, %d scheduled-send pending)',
+      '[scheduler] started — sweeping every %ds (%d snooze, %d scheduled-send pending)',
       SWEEP_INTERVAL_MS / 1000,
       Object.keys(this.getSnoozes()).length,
-      Object.keys(this.getReminders()).length,
       Object.keys(this.getSchedules()).length
     );
     this.recoverStuckSchedules();
@@ -217,38 +200,6 @@ class SchedulerService {
     return { items };
   }
 
-  // ── reminders ─────────────────────────────────────────────────────────────
-
-  createReminder(req: {
-    uid: string;
-    threadId: string;
-    subject?: string;
-    reminderAt: string;
-  }): { id: string } {
-    const task: ReminderTask = {
-      reminderId: generateUUID(),
-      accountId: req.uid,
-      threadId: req.threadId,
-      subject: req.subject ?? '',
-      reminderAt: req.reminderAt,
-      createdAt: new Date().toISOString()
-    };
-    this.setReminders({ ...this.getReminders(), [task.reminderId]: task });
-    log.info('[scheduler] reminder set for thread %s at %s', task.threadId, task.reminderAt);
-    return { id: task.reminderId };
-  }
-
-  listReminders(): { items: ReminderTask[] } {
-    return { items: Object.values(this.getReminders()) };
-  }
-
-  deleteReminder(reminderId: string): { ok: boolean } {
-    const reminders = this.getReminders();
-    delete reminders[reminderId];
-    this.setReminders(reminders);
-    return { ok: true };
-  }
-
   // ── scheduled send ────────────────────────────────────────────────────────
 
   async createSchedule(req: LocalCreateScheduleRequest): Promise<ScheduleRecord> {
@@ -326,45 +277,6 @@ class SchedulerService {
       }
     }
 
-    for (const reminder of Object.values(this.getReminders())) {
-      if (new Date(reminder.reminderAt).getTime() > now) continue;
-
-      // Fire the OS notification once, persisting notifiedAt so a failed restore
-      // retry on a later sweep doesn't pop the notification again.
-      if (!reminder.notifiedAt) {
-        try {
-          log.info('[scheduler] firing reminder %s (thread %s)', reminder.reminderId, reminder.threadId);
-          notificationManager.createNativeNotification({
-            id: `reminder-${reminder.reminderId}`,
-            title: 'Reminder',
-            body: reminder.subject || 'You have a reminder',
-            metadata: { threadId: reminder.threadId, accountId: reminder.accountId }
-          });
-        } catch (e) {
-          log.warn('[scheduler] reminder notification failed for %s:', reminder.reminderId, (e as Error).message);
-        }
-        this.setReminders({
-          ...this.getReminders(),
-          [reminder.reminderId]: { ...reminder, notifiedAt: new Date().toISOString() }
-        });
-      }
-
-      // The reminder "completing" returns the email to the inbox (it was moved
-      // out when the reminder was set). Best-effort: if the move fails (offline /
-      // throttled), keep the reminder and retry the restore on the next sweep —
-      // the notification won't re-fire because notifiedAt is set above.
-      try {
-        await this.restoreReminderThreadToInbox(reminder.accountId, reminder.threadId);
-        this.removeReminder(reminder.reminderId);
-      } catch (e) {
-        log.warn(
-          '[scheduler] reminder restore-to-inbox failed for %s (will retry):',
-          reminder.reminderId,
-          (e as Error).message
-        );
-      }
-    }
-
     for (const task of Object.values(this.getSchedules())) {
       if (task.status === 'sending' || task.status === 'failed') continue;
       if (new Date(task.sendAt).getTime() > now) continue;
@@ -429,20 +341,6 @@ class SchedulerService {
     }
   }
 
-  /** Reminder restore: return the thread to the inbox, provider-aware. The
-   *  scheduler runs in main, where the renderer-only mailProvider can't run, so
-   *  Microsoft goes through the main-native Graph move (move conversation back to
-   *  the Inbox folder) and Gmail re-adds the INBOX label. The MailDeltaPoller then
-   *  surfaces the restored thread in an open inbox with no renderer change. */
-  private async restoreReminderThreadToInbox(accountId: string, threadId: string): Promise<void> {
-    const provider = tokenManager.getMailAccounts().find((a) => a.uid === accountId)?.provider;
-    if (provider === 'microsoft') {
-      await restoreMicrosoftThreadToInbox(accountId, threadId);
-    } else {
-      await modifyThread(accountId, threadId, ['INBOX'], []);
-    }
-  }
-
   private getSnoozes(): Record<string, SnoozeTask> {
     return this.store.get('snoozes', {});
   }
@@ -455,20 +353,6 @@ class SchedulerService {
     const snoozes = this.getSnoozes();
     delete snoozes[snoozeId];
     this.setSnoozes(snoozes);
-  }
-
-  private getReminders(): Record<string, ReminderTask> {
-    return this.store.get('reminders', {});
-  }
-
-  private setReminders(reminders: Record<string, ReminderTask>): void {
-    this.store.set('reminders', reminders);
-  }
-
-  private removeReminder(reminderId: string): void {
-    const reminders = this.getReminders();
-    delete reminders[reminderId];
-    this.setReminders(reminders);
   }
 
   private getSchedules(): Record<string, ScheduleTask> {
