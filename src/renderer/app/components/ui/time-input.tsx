@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Input } from '@/renderer/app/components/ui/input';
 import { cn } from '@/renderer/app/lib/utils';
@@ -20,6 +21,7 @@ export const TimeInput: React.FC<TimeInputProps> = ({
   keepPopoverAttr = false,
   ...rest
 }) => {
+  const { t } = useTranslation();
   const [internal, setInternal] = React.useState(value);
 
   React.useEffect(() => {
@@ -90,7 +92,7 @@ export const TimeInput: React.FC<TimeInputProps> = ({
       </style>
       <Input
         // Before `rest`, so a caller can name the field ("Start time").
-        aria-label="Time"
+        aria-label={t('common.time')}
         {...rest}
         {...commonKeep}
         type="time"

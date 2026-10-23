@@ -1,12 +1,14 @@
+import { useTranslation } from 'react-i18next';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { cn } from '@/renderer/app/lib/utils';
 import type { SchedulePreset } from '@/renderer/app/containers/queue/schedulePresets';
 
+// The system locale, as the snooze toast and the Later rows use.
 function formatPresetTime(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const day = d.toLocaleDateString('en-US', {
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const day = d.toLocaleDateString(undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric'
@@ -23,10 +25,11 @@ interface ReschedulePopoverProps {
 
 export function ReschedulePopover({
   presets,
-  heading = 'Reschedule',
+  heading,
   onPickPreset,
   onPickCustom
 }: ReschedulePopoverProps) {
+  const { t } = useTranslation();
   return (
     // Theme tokens, like the Label menu beside it (raw white/stone before).
     <div
@@ -34,7 +37,9 @@ export function ReschedulePopover({
       className="w-[300px] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
     >
       <div className="border-b px-3 py-2">
-        <p className="text-xs font-medium text-muted-foreground">{heading}</p>
+        <p className="text-xs font-medium text-muted-foreground">
+          {heading ?? t('later.action.reschedule')}
+        </p>
       </div>
       <ul className="py-1">
         {presets.map((preset) => {
@@ -54,10 +59,12 @@ export function ReschedulePopover({
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-medium tracking-tight text-foreground">
-                    {preset.label}
+                    {t(preset.labelKey)}
                   </div>
                   <div className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
-                    {isCustom ? preset.sublabel : formatPresetTime(preset.scheduledFor)}
+                    {preset.sublabelKey
+                      ? t(preset.sublabelKey)
+                      : formatPresetTime(preset.scheduledFor)}
                   </div>
                 </div>
                 <MonoIcon

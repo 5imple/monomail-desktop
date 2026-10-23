@@ -110,21 +110,26 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   return (
     <div className={cn('no-drag', className)}>
       <CardFooter className="mx-9 flex h-[61px] items-center border-t border-border px-0 py-0">
-        {/* Left: primary text actions */}
-        <div className="flex items-center gap-5">
+        {/* Left: Send, the one filled button in the card, then Send later. It
+            was a line of plain text next to "Send later" and read as a label. */}
+        <div className="flex items-center gap-4">
           <Button
-            variant="text"
+            variant="default"
+            sizeVariant="sm"
             className={cn(
-              'px-0 text-[13px] font-semibold text-foreground hover:text-foreground/80',
-              (blocked || isSending) &&
-                'cursor-not-allowed text-muted-foreground hover:text-muted-foreground'
+              'h-8 gap-1.5 rounded-md px-3.5 text-[13px] font-semibold',
+              (blocked || isSending) && 'cursor-not-allowed opacity-60'
             )}
             aria-disabled={blocked || isSending}
             onClick={handleSubmit}
             tooltip={sendBlockedReason ?? t('compose_card.footer.send_now')}
             shortcut={!blocked && !isSending ? 'MOD+ENTER' : undefined}
           >
-            {isSending && <Loader className="mr-1.5 h-3.5 w-3.5" />}
+            {isSending ? (
+              <Loader className="h-3.5 w-3.5 text-primary-foreground" />
+            ) : (
+              <MonoIcon type="Send" className="h-3.5 w-3.5" />
+            )}
             {t('compose_card.footer.send_now')}
           </Button>
 
@@ -234,7 +239,7 @@ function SendLaterButton({
   const blocked = !!blockedReason;
 
   const handlePickPreset = useCallback(
-    async (preset: { id: string; label: string; scheduledFor: string | null }) => {
+    async (preset: { id: string; scheduledFor: string | null }) => {
       if (!preset.scheduledFor) return;
       const fromUid = getUidFromEmail(draft.from);
       const accountId = fromUid || primaryAccountId;
@@ -251,7 +256,7 @@ function SendLaterButton({
         accountId,
         sendAt: preset.scheduledFor,
         draftSnapshot: {
-          subject: draft.subject || '(no subject)',
+          subject: draft.subject || '',
           bodySnippet: bodyPlain.slice(0, 160),
           recipients: draft.to.map((email) => ({ id: email, name: email, email })),
           attachmentCount: Object.keys(draft.attachments || {}).length,
@@ -342,7 +347,7 @@ function SendLaterButton({
             onBack={() => setCustomMode(false)}
             onConfirm={(iso) => {
               setCustomMode(false);
-              handlePickPreset({ id: 'custom', label: 'Custom', scheduledFor: iso });
+              handlePickPreset({ id: 'custom', scheduledFor: iso });
             }}
           />
         ) : (

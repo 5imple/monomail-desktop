@@ -1,4 +1,5 @@
 import { forwardRef, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import MonoIcon, { type InboxIconType } from '@/renderer/app/components/icons/InboxIcon';
 import { Popover, PopoverContent, PopoverTrigger } from '@/renderer/app/components/ui/popover';
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
@@ -55,9 +56,14 @@ export function QueueRow({
   onCloseReschedule,
   onPickReschedule
 }: QueueRowProps) {
-  const primaryActionLabel = variant === 'snoozed' ? 'Bring back now' : 'Send now';
+  const { t } = useTranslation();
+  const primaryActionLabel =
+    variant === 'snoozed' ? t('later.action.bring_back') : t('later.action.send_now');
   const primaryActionIcon: InboxIconType = variant === 'snoozed' ? 'RotateCcw' : 'Send';
-  const rescheduleHeading = variant === 'snoozed' ? 'Reschedule snooze' : 'Reschedule send';
+  const rescheduleHeading =
+    variant === 'snoozed'
+      ? t('later.reschedule.snooze_heading')
+      : t('later.reschedule.send_heading');
   // "Pick a date…" swaps the presets for the calendar (it used to be filtered
   // out, with nothing to pick from).
   const [customMode, setCustomMode] = useState(false);
@@ -92,7 +98,7 @@ export function QueueRow({
 
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="max-w-[42%] shrink-0 truncate text-[13px] font-medium text-foreground">
-            {subject || '(No subject)'}
+            {subject || t('header.display.no_subject')}
           </span>
           {/* No separator without a snippet (it was left dangling). */}
           {snippet && (
@@ -149,7 +155,7 @@ export function QueueRow({
                       ? 'text-foreground opacity-100'
                       : 'group-focus-within:opacity-0 group-pointer-hover:opacity-0'
                   )}
-                  aria-label={`Reschedule, now ${timeLabel}`}
+                  aria-label={t('later.action.reschedule_now', { time: timeLabel })}
                 >
                   {timeLabel}
                 </button>
@@ -170,11 +176,15 @@ export function QueueRow({
                 {customMode ? (
                   <CustomDateTimePicker
                     heading={rescheduleHeading}
-                    confirmLabel="Reschedule"
+                    confirmLabel={t('later.action.reschedule')}
                     onBack={() => setCustomMode(false)}
                     onConfirm={(iso) => {
                       setCustomMode(false);
-                      onPickReschedule?.({ id: 'custom', label: 'Custom', scheduledFor: iso });
+                      onPickReschedule?.({
+                        id: 'custom',
+                        labelKey: 'later.preset.custom',
+                        scheduledFor: iso
+                      });
                     }}
                   />
                 ) : (
@@ -198,7 +208,7 @@ export function QueueRow({
             >
               <RowActionButton
                 ref={rescheduleButtonRef}
-                ariaLabel="Reschedule"
+                ariaLabel={t('later.action.reschedule')}
                 icon="Clock"
                 tabIndex={isRescheduling ? -1 : 0}
                 onClick={(e) => {
@@ -220,7 +230,7 @@ export function QueueRow({
                   destructive cue. */}
               {variant === 'scheduled' && (
                 <RowActionButton
-                  ariaLabel="Cancel send"
+                  ariaLabel={t('later.action.cancel_send')}
                   icon="X"
                   destructive
                   tabIndex={isRescheduling ? -1 : 0}

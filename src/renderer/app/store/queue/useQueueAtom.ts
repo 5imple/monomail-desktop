@@ -1,6 +1,7 @@
 import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { isBackendConfigured } from '@/main/api/apiClient';
 import type {
   ScheduleRecord,
   SnoozeRecord,
@@ -109,6 +110,10 @@ function resolveQueueState(s: QueueState | Promise<QueueState>): QueueState {
 }
 
 let pushSubscribed = false;
+// The account whose queue has been loaded. Module-level, like pushSubscribed:
+// this hook sits behind every row's Snooze button, so hydrating per consumer
+// re-fetched both lists on every row mount.
+let hydratedAccountId: string | null = null;
 
 function ensurePushSubscribed() {
   if (pushSubscribed) return;
@@ -175,16 +180,22 @@ export function useQueueAtom() {
     ensurePushSubscribed();
   }, []);
 
-  // Hydrate from server once we have an account.
+  // Hydrate from the scheduler once per account, not once per consumer. The
+  // actions below and the push events keep the cache current afterwards, so a
+  // consumer unmounting mid-flight no longer cancels the load (the atom is
+  // app-wide state, not the component's).
   useEffect(() => {
-    if (!primaryAccountId) return;
-    let cancelled = false;
+    if (!primaryAccountId || hydratedAccountId === primaryAccountId) return;
+    hydratedAccountId = primaryAccountId;
     (async () => {
       const [snoozeRes, schedRes] = await Promise.all([
         electronApi.queueListSnoozed(primaryAccountId),
-        electronApi.queueListScheduled(primaryAccountId)
+        // Scheduled send goes to the backend (ipc-handlers/queue); without one
+        // the call can only fail, so don't make it.
+        isBackendConfigured()
+          ? electronApi.queueListScheduled(primaryAccountId)
+          : Promise.resolve({ ok: true as const, data: { items: [] } })
       ]);
-      if (cancelled) return;
       setState((raw) => {
         const prev = resolveQueueState(raw);
         return {
@@ -201,9 +212,6 @@ export function useQueueAtom() {
         };
       });
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [primaryAccountId, setState]);
 
   const snoozedItems = useMemo(() => Object.values(state.snoozed), [state.snoozed]);
@@ -219,7 +227,10 @@ export function useQueueAtom() {
       const res = await electronApi.queueSnooze(req);
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = snoozeRecordToItem(res.data);
-      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }; });
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
+        return { ...prev, snoozed: { ...prev.snoozed, [item.id]: item } };
+      });
       return { ok: true as const, item };
     },
     [setState]
@@ -256,7 +267,10 @@ export function useQueueAtom() {
       const res = await electronApi.queueRescheduleSnooze({ snoozeId, snoozeUntil });
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = snoozeRecordToItem(res.data);
-      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, snoozed: { ...prev.snoozed, [item.id]: item } }; });
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
+        return { ...prev, snoozed: { ...prev.snoozed, [item.id]: item } };
+      });
       return { ok: true as const };
     },
     [setState]
@@ -272,7 +286,10 @@ export function useQueueAtom() {
       const res = await electronApi.queueSchedule(req);
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = scheduleRecordToItem(res.data);
-      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }; });
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
+        return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } };
+      });
       return { ok: true as const, item };
     },
     [setState]
@@ -307,7 +324,10 @@ export function useQueueAtom() {
       const res = await electronApi.queueRescheduleSend({ scheduleId, sendAt });
       if (!res.ok) return { ok: false as const, error: res.error };
       const item = scheduleRecordToItem(res.data);
-      setState((raw) => { const prev = resolveQueueState(raw); return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } }; });
+      setState((raw) => {
+        const prev = resolveQueueState(raw);
+        return { ...prev, scheduled: { ...prev.scheduled, [item.id]: item } };
+      });
       return { ok: true as const };
     },
     [setState]

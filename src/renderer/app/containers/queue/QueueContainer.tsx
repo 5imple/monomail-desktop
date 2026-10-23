@@ -1,4 +1,6 @@
 import { FC, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { toast } from 'sonner';
 import MonoIcon, { type InboxIconType } from '@/renderer/app/components/icons/InboxIcon';
 import {
@@ -13,6 +15,7 @@ import {
   AlertDialogTitle
 } from '@/renderer/app/components/ui/alert-dialog';
 import { Button } from '@/renderer/app/components/ui/button';
+import { formatSnoozeTime } from '@/renderer/app/hooks/useSnoozeThreads';
 import { cn } from '@/renderer/app/lib/utils';
 import { useQueueAtom } from '@/renderer/app/store/queue/useQueueAtom';
 import type { ScheduledItem, SnoozedItem } from '@/renderer/app/store/queue/useQueueAtom';
@@ -27,9 +30,10 @@ import { QueueRow } from '@/renderer/app/containers/queue/QueueRow';
  *
  * Top-level container for the "Later" view. Tabs between Snoozed and
  * Scheduled, groups items by time bucket, renders empty states when
- * there's nothing to show. State lives in useQueueAtom (client-only;
- * snooze/schedule actions are wired through the atom for now, will be
- * replaced with backend IPC when pieces 4 + 6 land).
+ * there's nothing to show. State lives in useQueueAtom, which runs the
+ * actions on the local scheduler over IPC. Every label comes from en.json
+ * (`later.*`); dates and times follow the system locale, as the snooze
+ * toast's do.
  */
 
 type LaterQueueTab = 'snoozed' | 'scheduled';
@@ -38,13 +42,13 @@ type BucketKey = 'in-30-min' | 'later-today' | 'tomorrow' | 'this-week' | 'later
 
 const BUCKET_ORDER: BucketKey[] = ['in-30-min', 'later-today', 'tomorrow', 'this-week', 'later'];
 
-const BUCKET_LABELS: Record<BucketKey, string> = {
+const BUCKET_LABEL_KEYS: Record<BucketKey, string> = {
   // Holds everything due within 60 minutes (it said "In 30 min").
-  'in-30-min': 'Within the hour',
-  'later-today': 'Later today',
-  tomorrow: 'Tomorrow',
-  'this-week': 'This week',
-  later: 'Later'
+  'in-30-min': 'later.bucket.within_hour',
+  'later-today': 'later.bucket.later_today',
+  tomorrow: 'later.bucket.tomorrow',
+  'this-week': 'later.bucket.this_week',
+  later: 'later.bucket.later'
 };
 
 function startOfDay(d: Date): Date {
@@ -72,57 +76,49 @@ function bucketFor(targetIso: string, now: Date): BucketKey {
   return 'later';
 }
 
-function formatRelativeTime(targetIso: string, now: Date): string {
+// Under the "Tomorrow" header the row doesn't need to repeat "Tomorrow".
+function formatRelativeTime(
+  targetIso: string,
+  now: Date,
+  t: TFunction,
+  underTomorrowHeader = false
+): string {
   const target = new Date(targetIso);
   const diffSec = (target.getTime() - now.getTime()) / 1000;
   const diffMin = diffSec / 60;
   const diffHour = diffMin / 60;
 
-  if (diffSec <= 60) return 'now';
-  if (diffMin < 60) return `in ${Math.round(diffMin)} min`;
+  if (diffSec <= 60) return t('later.time.now');
+  if (diffMin < 60) return t('later.time.in_minutes', { count: Math.round(diffMin) });
   if (diffHour < 6 && target.toDateString() === now.toDateString()) {
-    return `in ${Math.round(diffHour)} hr`;
+    return t('later.time.in_hours', { count: Math.round(diffHour) });
   }
 
-  const time = target.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const time = target.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   if (target.toDateString() === now.toDateString()) return time;
 
   const tomorrow = new Date(startOfDay(now));
   tomorrow.setDate(tomorrow.getDate() + 1);
-  if (target.toDateString() === tomorrow.toDateString()) return `Tomorrow · ${time}`;
+  if (target.toDateString() === tomorrow.toDateString()) {
+    return underTomorrowHeader ? time : t('later.time.tomorrow_at', { time });
+  }
 
   const sixDaysOut = new Date(now);
   sixDaysOut.setDate(sixDaysOut.getDate() + 6);
-  if (target <= sixDaysOut) {
-    const weekday = target.toLocaleDateString('en-US', { weekday: 'short' });
-    return `${weekday} · ${time}`;
-  }
-
-  const monthDay = target.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `${monthDay} · ${time}`;
+  const day =
+    target <= sixDaysOut
+      ? target.toLocaleDateString(undefined, { weekday: 'short' })
+      : target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return t('later.time.day_at', { day, time });
 }
 
-// Under the "Tomorrow" header the row doesn't need to repeat "Tomorrow".
-function rowTimeLabel(targetIso: string, now: Date, bucket: BucketKey): string {
-  const label = formatRelativeTime(targetIso, now);
-  return bucket === 'tomorrow' ? label.replace(/^Tomorrow · /, '') : label;
-}
-
-// "Tue, Oct 13, 8:00 AM", as the snooze toast writes it.
-const formatWhen = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit'
-  });
-
-function recipientLabel(recipients: { name: string }[]): string {
-  if (recipients.length === 0) return 'No recipient';
+function recipientLabel(recipients: { name: string }[], t: TFunction): string {
+  if (recipients.length === 0) return t('later.recipients.none');
   if (recipients.length === 1) return recipients[0].name;
-  if (recipients.length === 2) return `${recipients[0].name}, ${recipients[1].name}`;
-  return `${recipients[0].name} + ${recipients.length - 1}`;
+  if (recipients.length === 2) {
+    return t('later.recipients.two', { first: recipients[0].name, second: recipients[1].name });
+  }
+  return t('later.recipients.more', { first: recipients[0].name, others: recipients.length - 1 });
 }
 
 function groupByBucket<T>(items: T[], getIso: (item: T) => string, now: Date) {
@@ -143,6 +139,7 @@ function groupByBucket<T>(items: T[], getIso: (item: T) => string, now: Date) {
 }
 
 const QueueContainer: FC = () => {
+  const { t } = useTranslation();
   const {
     snoozedItems,
     scheduledItems,
@@ -187,31 +184,32 @@ const QueueContainer: FC = () => {
   const presets = useMemo(() => buildSchedulePresets(now), [now]);
 
   const subtitle =
-    activeTab === 'snoozed'
-      ? 'Returning to your inbox at the time you chose.'
-      : 'Going out at the time you scheduled.';
+    activeTab === 'snoozed' ? t('later.subtitle.snoozed') : t('later.subtitle.scheduled');
 
   return (
     <div className="h-full w-full overflow-auto bg-background">
       <header className="sticky top-0 z-10 border-b border-border bg-background/80 px-[10%] backdrop-blur-md">
         {/* The titlebar tab already names the view; the big title only took
             room above the list. */}
-        <h2 className="sr-only">Later</h2>
+        <h2 className="sr-only">{t('later.title')}</h2>
         <div className="flex items-center gap-4">
-          <nav aria-label="Later queue tabs" className="-mb-px flex items-center gap-1 text-sm">
+          <nav
+            aria-label={t('later.tabs_label')}
+            className="-mb-px flex items-center gap-1 text-sm"
+          >
             <TabButton
               active={activeTab === 'snoozed'}
               count={snoozedItems.length}
               onClick={() => setActiveTab('snoozed')}
             >
-              Snoozed
+              {t('later.tab.snoozed')}
             </TabButton>
             <TabButton
               active={activeTab === 'scheduled'}
               count={scheduledItems.length}
               onClick={() => setActiveTab('scheduled')}
             >
-              Scheduled
+              {t('later.tab.scheduled')}
             </TabButton>
           </nav>
           <p className="ml-auto hidden truncate text-xs text-muted-foreground sm:block">
@@ -229,15 +227,15 @@ const QueueContainer: FC = () => {
           onOpenRescheduleFor={setReschedulingItemId}
           onBringBackNow={async (id) => {
             const res = await unsnooze(id);
-            if (!res.ok) toast.error(`Couldn't bring back: ${res.error}`);
-            else toast.success('Moved back to Inbox');
+            if (!res.ok) toast.error(t('later.toast.bring_back_error', { error: res.error }));
+            else toast.success(t('later.toast.brought_back'));
           }}
           onRescheduleSnooze={async (id, until) => {
             // Closed first: a second pick while this one ran rescheduled twice.
             setReschedulingItemId(null);
             const res = await rescheduleSnooze(id, until);
-            if (!res.ok) toast.error(`Couldn't reschedule: ${res.error}`);
-            else toast.success(`Snoozed until ${formatWhen(until)}`);
+            if (!res.ok) toast.error(t('later.toast.reschedule_error', { error: res.error }));
+            else toast.success(t('toast.snooze.success', { time: formatSnoozeTime(until) }));
           }}
         />
       ) : (
@@ -252,8 +250,8 @@ const QueueContainer: FC = () => {
             // mock backend will broadcast SCHEDULED_SENT which clears
             // the cache too, but we drop it optimistically on success.
             const res = await sendScheduledNow(id);
-            if (!res.ok) toast.error(`Couldn't send now: ${res.error}`);
-            else toast.success('Sent');
+            if (!res.ok) toast.error(t('later.toast.send_now_error', { error: res.error }));
+            else toast.success(t('later.toast.sent'));
           }}
           onCancelSchedule={(id) => {
             const item = scheduledItems.find((scheduled) => scheduled.id === id);
@@ -262,8 +260,8 @@ const QueueContainer: FC = () => {
           onRescheduleSend={async (id, when) => {
             setReschedulingItemId(null);
             const res = await rescheduleSend(id, when);
-            if (!res.ok) toast.error(`Couldn't reschedule: ${res.error}`);
-            else toast.success(`Scheduled for ${formatWhen(when)}`);
+            if (!res.ok) toast.error(t('later.toast.reschedule_error', { error: res.error }));
+            else toast.success(t('toast.compose.scheduled', { time: formatSnoozeTime(when) }));
           }}
         />
       )}
@@ -281,14 +279,12 @@ const QueueContainer: FC = () => {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="text-lg">
-                Cancel this scheduled message?
+                {t('later.cancel_dialog.title')}
               </AlertDialogTitle>
-              <AlertDialogDescription>
-                It won&apos;t be sent and is removed from Later. No copy of it is kept.
-              </AlertDialogDescription>
+              <AlertDialogDescription>{t('later.cancel_dialog.body')}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep it</AlertDialogCancel>
+              <AlertDialogCancel>{t('later.cancel_dialog.keep')}</AlertDialogCancel>
               <Button
                 type="button"
                 variant="destructive"
@@ -297,11 +293,11 @@ const QueueContainer: FC = () => {
                   setPendingCancel(null);
                   if (!item) return;
                   const res = await cancelSchedule(item.id);
-                  if (!res.ok) toast.error(`Couldn't cancel: ${res.error}`);
-                  else toast.success('Scheduled send cancelled');
+                  if (!res.ok) toast.error(t('later.toast.cancel_error', { error: res.error }));
+                  else toast.success(t('later.toast.cancelled'));
                 }}
               >
-                Cancel send
+                {t('later.action.cancel_send')}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -365,14 +361,15 @@ function SnoozedTab({
   onBringBackNow,
   onRescheduleSnooze
 }: SnoozedTabProps) {
+  const { t } = useTranslation();
   const grouped = useMemo(() => groupByBucket(items, (i) => i.snoozeUntil, now), [items, now]);
 
   if (items.length === 0) {
     return (
       <EmptyState
         icon="Inbox"
-        title="Nothing snoozed"
-        body="Snoozed emails will show up here, grouped by when they come back."
+        title={t('later.empty.snoozed_title')}
+        body={t('later.empty.snoozed_body')}
       />
     );
   }
@@ -384,7 +381,7 @@ function SnoozedTab({
         if (!bucketItems.length) return null;
         return (
           <section key={bucket} aria-labelledby={`bucket-${bucket}`}>
-            <BucketHeader id={`bucket-${bucket}`} label={BUCKET_LABELS[bucket]} />
+            <BucketHeader id={`bucket-${bucket}`} label={t(BUCKET_LABEL_KEYS[bucket])} />
             <ul>
               {bucketItems.map((item) => (
                 <li key={item.id}>
@@ -396,7 +393,7 @@ function SnoozedTab({
                     primaryEmail={item.sender.email}
                     subject={item.subject}
                     snippet={item.snippet}
-                    timeLabel={rowTimeLabel(item.snoozeUntil, now, bucket)}
+                    timeLabel={formatRelativeTime(item.snoozeUntil, now, t, bucket === 'tomorrow')}
                     isUrgent={bucket === 'in-30-min'}
                     isStarred={item.isStarred}
                     reschedulePresets={presets}
@@ -439,14 +436,15 @@ function ScheduledTab({
   onCancelSchedule,
   onRescheduleSend
 }: ScheduledTabProps) {
+  const { t } = useTranslation();
   const grouped = useMemo(() => groupByBucket(items, (i) => i.scheduledFor, now), [items, now]);
 
   if (items.length === 0) {
     return (
       <EmptyState
         icon="Send"
-        title="No scheduled messages"
-        body="Anything you choose to send later will land here. Reschedule, send now, or cancel."
+        title={t('later.empty.scheduled_title')}
+        body={t('later.empty.scheduled_body')}
       />
     );
   }
@@ -458,36 +456,35 @@ function ScheduledTab({
         if (!bucketItems.length) return null;
         return (
           <section key={bucket} aria-labelledby={`bucket-${bucket}`}>
-            <BucketHeader id={`bucket-${bucket}`} label={BUCKET_LABELS[bucket]} />
+            <BucketHeader id={`bucket-${bucket}`} label={t(BUCKET_LABEL_KEYS[bucket])} />
             <ul>
-              {bucketItems.map((item) => {
-                const primaryName = recipientLabel(item.recipients);
-                return (
-                  <li key={item.id}>
-                    <QueueRow
-                      variant="scheduled"
-                      itemId={item.id}
-                      accountId={item.accountId}
-                      primaryName={`To ${primaryName}`}
-                      primaryEmail={item.recipients[0]?.email ?? ''}
-                      subject={item.subject}
-                      snippet={item.bodySnippet}
-                      timeLabel={rowTimeLabel(item.scheduledFor, now, bucket)}
-                      isUrgent={bucket === 'in-30-min'}
-                      attachmentCount={item.attachmentCount}
-                      reschedulePresets={presets}
-                      isRescheduling={reschedulingItemId === item.id}
-                      onPrimaryAction={() => onSendNow(item.id)}
-                      onCancel={() => onCancelSchedule(item.id)}
-                      onOpenReschedule={() => onOpenRescheduleFor(item.id)}
-                      onCloseReschedule={() => onOpenRescheduleFor(null)}
-                      onPickReschedule={(preset) => {
-                        if (preset.scheduledFor) onRescheduleSend(item.id, preset.scheduledFor);
-                      }}
-                    />
-                  </li>
-                );
-              })}
+              {bucketItems.map((item) => (
+                <li key={item.id}>
+                  <QueueRow
+                    variant="scheduled"
+                    itemId={item.id}
+                    accountId={item.accountId}
+                    primaryName={t('later.recipients.to', {
+                      name: recipientLabel(item.recipients, t)
+                    })}
+                    primaryEmail={item.recipients[0]?.email ?? ''}
+                    subject={item.subject}
+                    snippet={item.bodySnippet}
+                    timeLabel={formatRelativeTime(item.scheduledFor, now, t, bucket === 'tomorrow')}
+                    isUrgent={bucket === 'in-30-min'}
+                    attachmentCount={item.attachmentCount}
+                    reschedulePresets={presets}
+                    isRescheduling={reschedulingItemId === item.id}
+                    onPrimaryAction={() => onSendNow(item.id)}
+                    onCancel={() => onCancelSchedule(item.id)}
+                    onOpenReschedule={() => onOpenRescheduleFor(item.id)}
+                    onCloseReschedule={() => onOpenRescheduleFor(null)}
+                    onPickReschedule={(preset) => {
+                      if (preset.scheduledFor) onRescheduleSend(item.id, preset.scheduledFor);
+                    }}
+                  />
+                </li>
+              ))}
             </ul>
           </section>
         );

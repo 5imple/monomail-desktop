@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Calendar } from '@/renderer/app/components/ui/calendar';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -29,11 +30,12 @@ interface CustomDateTimePickerProps {
 }
 
 export function CustomDateTimePicker({
-  heading = 'Pick a date',
-  confirmLabel = 'Set',
+  heading,
+  confirmLabel,
   onConfirm,
   onBack
 }: CustomDateTimePickerProps) {
+  const { t } = useTranslation();
   const [initial] = useState(plusOneHour);
   const [date, setDate] = useState<Date>(initial);
   const [time, setTime] = useState<string>(toTimeInput(initial));
@@ -51,12 +53,14 @@ export function CustomDateTimePicker({
         <button
           type="button"
           onClick={onBack}
-          aria-label="Back to presets"
+          aria-label={t('later.custom.back')}
           className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           <MonoIcon type="ChevronLeft" size={16} weight={300} />
         </button>
-        <p className="text-xs font-medium text-muted-foreground">{heading}</p>
+        <p className="text-xs font-medium text-muted-foreground">
+          {heading ?? t('later.custom.heading')}
+        </p>
       </div>
       <Calendar
         mode="single"
@@ -72,7 +76,7 @@ export function CustomDateTimePicker({
         <Input
           type="time"
           sizeVariant="sm"
-          aria-label="Time"
+          aria-label={t('common.time')}
           value={time}
           onChange={(e) => setTime(e.target.value)}
           onKeyDown={(e) => {
@@ -84,7 +88,7 @@ export function CustomDateTimePicker({
           className="flex-1 tabular-nums [color-scheme:light] focus-visible:ring-1 focus-visible:ring-ring dark:[color-scheme:dark]"
         />
         <Button sizeVariant="sm" disabled={isPast} onClick={() => onConfirm(when.toISOString())}>
-          {isPast ? 'Pick a later time' : confirmLabel}
+          {isPast ? t('later.custom.pick_later_time') : (confirmLabel ?? t('later.custom.set'))}
         </Button>
       </div>
     </div>
