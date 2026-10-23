@@ -40,6 +40,7 @@ import {
 } from '@/renderer/app/containers/panel/calendar/timezoneUtils';
 import { cn } from '@/renderer/app/lib/utils';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 
 // Helper functions for proper all-day date handling
 const formatDateForGoogleCalendar = (date: Date): string => {
@@ -56,10 +57,19 @@ const addDayForGoogleCalendar = (date: Date): Date => {
 };
 
 type RsvpResponse = 'accepted' | 'tentative' | 'declined';
-const RSVP_OPTIONS: Array<{ value: RsvpResponse; label: string; done: string }> = [
-  { value: 'accepted', label: 'Yes', done: 'Accepted' },
-  { value: 'tentative', label: 'Maybe', done: 'Tentatively accepted' },
-  { value: 'declined', label: 'No', done: 'Declined' }
+// en.json keys: the option's button, and the toast once the reply is sent.
+const RSVP_OPTIONS: Array<{ value: RsvpResponse; labelKey: string; doneKey: string }> = [
+  {
+    value: 'accepted',
+    labelKey: 'calendar_event.rsvp.yes',
+    doneKey: 'calendar_event.rsvp.accepted'
+  },
+  {
+    value: 'tentative',
+    labelKey: 'calendar_event.rsvp.maybe',
+    doneKey: 'calendar_event.rsvp.tentative'
+  },
+  { value: 'declined', labelKey: 'calendar_event.rsvp.no', doneKey: 'calendar_event.rsvp.declined' }
 ];
 
 type EditorMode = 'create' | 'edit';
@@ -108,6 +118,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
   initialAccountUid,
   preference
 }) => {
+  const { t } = useTranslation();
   const { contactArray } = useContactAtom();
   const {
     getEvent,
@@ -534,7 +545,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
         // Create new event
         const selectedAccount = accounts.find((a) => a.uid === selectedAccountUid);
         if (!selectedAccount) {
-          toast.error('Please select an account');
+          toast.error(t('calendar_event.toast.select_account'));
           return;
         }
 
@@ -588,7 +599,9 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
         const accountsInfo = accounts.map((acc) => ({ uid: acc.uid, email: acc.email }));
         const newEventId = await addEvent(newEventData, accountsInfo);
         toast.success(
-          localAttendees.length > 0 ? 'Event created · invitations sent' : 'Event created'
+          localAttendees.length > 0
+            ? t('calendar_event.toast.created_invited')
+            : t('calendar_event.toast.created')
         );
         onEventCreated?.(newEventId);
         onClose();
@@ -604,14 +617,20 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
         await saveEvent(eventId, eventHasAttendees, accountsInfo);
         // An invitee's edits change only their own copy; nobody is notified.
         toast.success(
-          eventHasAttendees && !isInvitee ? 'Updates sent to attendees' : 'Event updated'
+          eventHasAttendees && !isInvitee
+            ? t('calendar_event.toast.updates_sent')
+            : t('calendar_event.toast.updated')
         );
         onEventUpdated?.(eventId);
         onClose();
       }
     } catch (error) {
       console.error('Failed to save event:', error);
-      toast.error(mode === 'create' ? "Couldn't create the event" : "Couldn't save the event");
+      toast.error(
+        mode === 'create'
+          ? t('calendar_event.toast.create_error')
+          : t('calendar_event.toast.save_error')
+      );
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -637,7 +656,8 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
     discardEventChanges,
     onEventCreated,
     onEventUpdated,
-    onClose
+    onClose,
+    t
   ]);
 
   const handleDiscard = useCallback(() => {
@@ -678,10 +698,10 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
       }
 
       // Only when something was actually thrown away.
-      if (changed) toast.success('Changes discarded');
+      if (changed) toast.success(t('calendar_event.toast.discarded'));
     }
     onClose();
-  }, [eventId, drafts, hasUnsavedChanges, discardEventChanges, onClose, getBaseEvent]);
+  }, [eventId, drafts, hasUnsavedChanges, discardEventChanges, onClose, getBaseEvent, t]);
 
   const handleDelete = useCallback(async () => {
     if (!eventId || deletingRef.current) return;
@@ -691,21 +711,21 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
       await removeEvent(eventId, eventHasAttendees);
       toast.success(
         isInvitee
-          ? 'Removed from your calendar'
+          ? t('calendar_event.toast.removed')
           : eventHasAttendees
-            ? 'Meeting canceled'
-            : 'Event deleted'
+            ? t('calendar_event.toast.meeting_canceled')
+            : t('calendar_event.toast.deleted')
       );
       onEventDeleted?.(eventId);
       onClose();
     } catch (error) {
       console.error('Failed to delete event:', error);
-      toast.error("Couldn't delete the event");
+      toast.error(t('calendar_event.toast.delete_error'));
     } finally {
       deletingRef.current = false;
       setDeleting(false);
     }
-  }, [eventId, eventHasAttendees, isInvitee, removeEvent, onEventDeleted, onClose]);
+  }, [eventId, eventHasAttendees, isInvitee, removeEvent, onEventDeleted, onClose, t]);
 
   // Delete takes a second click on an explicit confirmation (it used to act on
   // the first, cancelling meetings for every attendee). The question reverts
@@ -740,12 +760,13 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
         sendNotifications: eventAccount?.provider === 'microsoft',
         uid: event.accountUid
       });
-      toast.success(RSVP_OPTIONS.find((option) => option.value === response)?.done);
+      const sent = RSVP_OPTIONS.find((option) => option.value === response);
+      if (sent) toast.success(t(sent.doneKey));
       onEventUpdated?.(event.id);
     } catch (error) {
       console.error('Failed to send RSVP:', error);
       setRsvp(previous);
-      toast.error("Couldn't send your response");
+      toast.error(t('calendar_event.toast.rsvp_error'));
     } finally {
       setRsvpSending(false);
     }
@@ -794,29 +815,43 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
 
   const notifiedCount = localAttendees.length;
   const deleteCopy = isInvitee
-    ? { action: 'Remove', question: 'Remove this event from your calendar?', confirm: 'Remove' }
+    ? {
+        action: t('calendar_event.delete.remove'),
+        question: t('calendar_event.delete.remove_question'),
+        confirm: t('calendar_event.delete.remove')
+      }
     : eventHasAttendees
       ? {
-          action: 'Delete',
+          action: t('calendar_event.delete.delete'),
           question:
             notifiedCount > 0
-              ? `Cancel this meeting and notify ${notifiedCount} ${notifiedCount === 1 ? 'person' : 'people'}?`
-              : 'Cancel this meeting and notify attendees?',
-          confirm: 'Cancel meeting'
+              ? t('calendar_event.delete.cancel_question_count', { count: notifiedCount })
+              : t('calendar_event.delete.cancel_question'),
+          confirm: t('calendar_event.delete.cancel_meeting')
         }
-      : { action: 'Delete', question: 'Delete this event?', confirm: 'Delete' };
+      : {
+          action: t('calendar_event.delete.delete'),
+          question: t('calendar_event.delete.delete_question'),
+          confirm: t('calendar_event.delete.delete')
+        };
 
   const primaryLabel =
     mode === 'create'
       ? localAttendees.length > 0
-        ? 'Create & invite'
-        : 'Create'
+        ? t('calendar_event.action.create_invite')
+        : t('calendar_event.action.create')
       : eventHasAttendees && !isInvitee
-        ? 'Send updates'
-        : 'Save';
+        ? t('calendar_event.action.send_updates')
+        : t('calendar_event.action.save');
   // Why the primary button is disabled (a disabled button can't show a tooltip).
   const saveHint =
-    mode === 'create' ? (titleMissing ? 'Add a title' : null) : !hasChanges ? 'No changes' : null;
+    mode === 'create'
+      ? titleMissing
+        ? t('calendar_event.hint.add_title')
+        : null
+      : !hasChanges
+        ? t('calendar_event.hint.no_changes')
+        : null;
 
   const timeValue = (d: Date) =>
     `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -842,8 +877,8 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
       {/* Title */}
       <Input
         ref={titleRef}
-        placeholder="Title"
-        aria-label="Title"
+        placeholder={t('calendar_event.field.title')}
+        aria-label={t('calendar_event.field.title')}
         value={localTitle}
         onChange={(e) => handleTitleChange(e.target.value)}
         onKeyDown={(e) => {
@@ -864,14 +899,18 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
           onClick={() => window.open(joinLink.url, '_blank')}
         >
           <MonoIcon type="ExternalLink" className="mr-1.5 h-3.5 w-3.5" />
-          {joinLink.label}
+          {t(`calendar_event.join.${joinLink.service}`)}
         </Button>
       )}
 
       {isInvitee && (
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Going?</span>
-          <div role="group" aria-label="Your response" className="flex gap-1">
+          <span className="text-sm text-muted-foreground">{t('calendar_event.rsvp.going')}</span>
+          <div
+            role="group"
+            aria-label={t('calendar_event.rsvp.your_response')}
+            className="flex gap-1"
+          >
             {RSVP_OPTIONS.map((option) => (
               <Button
                 key={option.value}
@@ -882,7 +921,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
                 disabled={rsvpSending}
                 onClick={() => handleRsvp(option.value)}
               >
-                {option.label}
+                {t(option.labelKey)}
               </Button>
             ))}
           </div>
@@ -893,7 +932,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
       {mode === 'create' && accounts.length > 1 && (
         <div className="space-y-1">
           <label htmlFor={accountSelectId} className="text-xs text-muted-foreground">
-            Account
+            {t('calendar_event.field.account')}
           </label>
           <Select value={selectedAccountUid} onValueChange={setSelectedAccountUid}>
             <SelectTrigger id={accountSelectId} className="w-full min-w-0 shadow-sm">
@@ -955,7 +994,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
           <>
             <TimeInput
               keepPopoverAttr
-              aria-label="Start time"
+              aria-label={t('calendar_event.field.start_time')}
               className="w-[100px]"
               value={timeValue(localStart)}
               onValueChange={(v) => {
@@ -970,7 +1009,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
             <span className="text-sm text-muted-foreground">–</span>
             <TimeInput
               keepPopoverAttr
-              aria-label="End time"
+              aria-label={t('calendar_event.field.end_time')}
               className="w-[100px]"
               value={timeValue(localEnd)}
               onValueChange={(v) => {
@@ -987,14 +1026,14 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
       </div>
       {timesInvalid && (
         <div role="alert" className="text-xs text-destructive">
-          The end time must be after the start time.
+          {t('calendar_event.validation.end_after_start')}
         </div>
       )}
 
       <div className="flex items-center gap-2">
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <Switch size="sm" checked={localAllDay} onCheckedChange={handleAllDayChange} />
-          All-day
+          {t('calendar_event.field.all_day')}
         </label>
         {!localAllDay && (
           <span
@@ -1008,8 +1047,8 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
 
       {/* Location */}
       <Input
-        placeholder="Location"
-        aria-label="Location"
+        placeholder={t('calendar_event.field.location')}
+        aria-label={t('calendar_event.field.location')}
         value={localLocation}
         onChange={(e) => handleLocationChange(e.target.value)}
         className="rounded-md"
@@ -1051,9 +1090,9 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
             {(status === 'draft' || status === 'saving') && (
               <span className="h-1.5 w-1.5 rounded-full bg-secondary-accent" />
             )}
-            {status === 'draft' && 'Draft'}
-            {status === 'saving' && 'Saving...'}
-            {status === 'error' && 'Error'}
+            {status === 'draft' && t('calendar_event.status.draft')}
+            {status === 'saving' && t('calendar_event.status.saving')}
+            {status === 'error' && t('calendar_event.status.error')}
           </div>
           {status === 'error' && draft && (
             <Button
@@ -1063,12 +1102,12 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
               onClick={handleSave}
               disabled={busy}
             >
-              Retry
+              {t('calendar_event.action.retry')}
             </Button>
           )}
           {eventHasAttendees && !isInvitee && status === 'draft' && (
             <span className="text-xs text-muted-foreground">
-              Changes will be held until you send updates
+              {t('calendar_event.status.held_until_sent')}
             </span>
           )}
         </div>
@@ -1079,7 +1118,11 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
       {descriptionIsHtml && !editingDescription ? (
         <div>
           <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-sm">
-            {descriptionText || <span className="text-muted-foreground">No description</span>}
+            {descriptionText || (
+              <span className="text-muted-foreground">
+                {t('calendar_event.field.no_description')}
+              </span>
+            )}
           </div>
           <Button
             variant="text"
@@ -1087,13 +1130,13 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
             className="mt-1 h-auto px-0 text-muted-foreground hover:text-foreground"
             onClick={() => setEditingDescription(true)}
           >
-            Edit description
+            {t('calendar_event.action.edit_description')}
           </Button>
         </div>
       ) : (
         <Textarea
-          placeholder="Add description"
-          aria-label="Description"
+          placeholder={t('calendar_event.field.add_description')}
+          aria-label={t('calendar_event.field.description')}
           className="min-h-[80px]"
           value={localDescription}
           onChange={(e) => handleDescriptionChange(e.target.value)}
@@ -1118,7 +1161,7 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
             onClick={closeConfirm}
             disabled={deleting}
           >
-            Back
+            {t('calendar_event.action.back')}
           </Button>
           <Button variant="destructive" sizeVariant="sm" onClick={handleDelete} disabled={deleting}>
             {deleting && <MonoIcon type="Loader2" className="mr-1 h-3 w-3 animate-spin" />}
@@ -1129,7 +1172,11 @@ const CalendarEventEditor: React.FC<CalendarEventEditorProps> = ({
         <div className="flex items-center gap-2 pt-1">
           {/* "Cancel" read like "cancel the meeting"; say what it does. */}
           <Button variant="secondary" sizeVariant="sm" onClick={handleDiscard} disabled={busy}>
-            {mode === 'create' ? 'Cancel' : hasChanges ? 'Discard' : 'Close'}
+            {mode === 'create'
+              ? t('calendar_event.action.cancel')
+              : hasChanges
+                ? t('calendar_event.action.discard')
+                : t('calendar_event.action.close')}
           </Button>
 
           {mode === 'edit' && eventId && (

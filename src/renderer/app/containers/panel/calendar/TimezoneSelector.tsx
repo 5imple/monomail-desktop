@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/renderer/app/lib/utils';
 import { formatInTimeZone } from 'date-fns-tz';
 import { Popover, PopoverContent } from '@/renderer/app/components/ui/popover';
@@ -41,6 +42,7 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const { t } = useTranslation();
 
   const { abbreviation } = getCurrentTimeWithAbbreviation(selectedTimeZone);
   const timezonesByRegion = getTimezonesByRegion();
@@ -92,14 +94,14 @@ export const TimezoneSelector: React.FC<TimezoneSelectorProps> = ({
       <PopoverContent className="w-96 p-0" align="start">
         <Command className="rounded-xl">
           <CommandInput
-            placeholder="Search timezones..."
+            placeholder={t('calendar.timezone_search')}
             value={searchQuery}
             onValueChange={setSearchQuery}
             className="m-2 flex h-fit w-full p-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
           />
           <CommandList>
             <ScrollArea className="max-h-80">
-              <CommandEmpty>No timezone found.</CommandEmpty>
+              <CommandEmpty>{t('calendar.timezone_empty')}</CommandEmpty>
 
               {!searchQuery && (
                 <>

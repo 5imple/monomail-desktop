@@ -37,21 +37,24 @@ const JOIN_URL =
   /https:\/\/(?:teams\.microsoft\.com\/l\/meetup-join\/|teams\.live\.com\/meet\/|meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}|(?:[\w-]+\.)?zoom\.us\/(?:j|my|w)\/)[^\s"'<>]*/i;
 
 // The first join link in `sources` (most reliable first: conference entry
-// points, then location, then the body), with a label naming the service.
+// points, then location, then the body), and which service it belongs to;
+// the editor names it (en.json `calendar_event.join.*`).
+export type JoinService = 'teams' | 'meet' | 'zoom';
+
 export const findJoinLink = (
   sources: Array<string | null | undefined>
-): { url: string; label: string } | null => {
+): { url: string; service: JoinService } | null => {
   for (const text of sources) {
     const match = text?.match(JOIN_URL);
     if (!match) continue;
     // Bodies are HTML (href="…&amp;…"); prose ends sentences after links.
     const url = match[0].replace(/&amp;/g, '&').replace(/[.,;:!?)\]]+$/, '');
-    const label = /teams\./i.test(url)
-      ? 'Join Teams meeting'
+    const service: JoinService = /teams\./i.test(url)
+      ? 'teams'
       : /meet\.google\.com/i.test(url)
-        ? 'Join Google Meet'
-        : 'Join Zoom meeting';
-    return { url, label };
+        ? 'meet'
+        : 'zoom';
+    return { url, service };
   }
   return null;
 };

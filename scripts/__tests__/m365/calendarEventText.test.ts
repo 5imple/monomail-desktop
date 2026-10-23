@@ -40,28 +40,25 @@ test('calendarEventText: an HTML body reads as text, without its styles', () => 
 test('calendarEventText: the Teams join link comes out of an HTML href, entities decoded', () => {
   const body = `<p><a href="${teamsJoin.replace('?', '?a=1&amp;')}">Click here to join the meeting</a></p>`;
   const link = findJoinLink([undefined, 'Microsoft Teams Meeting', body]);
-  assert.equal(link?.label, 'Join Teams meeting');
+  assert.equal(link?.service, 'teams');
   assert.equal(link?.url, teamsJoin.replace('?', '?a=1&'));
 });
 
 test('calendarEventText: Meet and Zoom links are found, trailing punctuation dropped', () => {
   assert.deepEqual(findJoinLink(['Join at https://meet.google.com/abc-defg-hij.']), {
     url: 'https://meet.google.com/abc-defg-hij',
-    label: 'Join Google Meet'
+    service: 'meet'
   });
   assert.deepEqual(findJoinLink(['(https://washcoll.zoom.us/j/123456789?pwd=xyz)']), {
     url: 'https://washcoll.zoom.us/j/123456789?pwd=xyz',
-    label: 'Join Zoom meeting'
+    service: 'zoom'
   });
 });
 
 test('calendarEventText: only https meeting links count, earlier sources first', () => {
   assert.equal(findJoinLink(['http://meet.google.com/abc-defg-hij']), null);
   assert.equal(findJoinLink(['https://example.com/meeting', 'Room 201']), null);
-  assert.equal(
-    findJoinLink(['https://meet.google.com/aaa-bbbb-ccc', teamsJoin])?.label,
-    'Join Google Meet'
-  );
+  assert.equal(findJoinLink(['https://meet.google.com/aaa-bbbb-ccc', teamsJoin])?.service, 'meet');
 });
 
 test('calendarEventText: text on an accent fill is white on dark accents, near-black on light ones', () => {

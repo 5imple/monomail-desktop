@@ -306,15 +306,15 @@ export const CalendarEventCard: React.FC<CalendarEventProps> = ({
 
       // Show success toast
       const statusMessages = {
-        ACCEPTED: 'You have accepted this event',
-        DECLINED: 'You have declined this event',
-        TENTATIVE: 'You have tentatively accepted this event'
+        ACCEPTED: t('calendar_event.rsvp.accepted'),
+        DECLINED: t('calendar_event.rsvp.declined'),
+        TENTATIVE: t('calendar_event.rsvp.tentative')
       };
 
       toast.success(statusMessages[status]);
     } catch (err) {
       console.error('RSVP error:', err);
-      toast.error('Failed to update RSVP status');
+      toast.error(t('calendar_event.toast.rsvp_error'));
 
       // Revert the local state if the API call fails
       const previousStatus = getUserResponseStatus(event, currentUserEmail);

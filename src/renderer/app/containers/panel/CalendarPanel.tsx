@@ -41,6 +41,7 @@ import { useAtomValue } from 'jotai';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import type { Instance } from 'tippy.js';
 import tippy from 'tippy.js';
 import DayView from './calendar/DayView';
@@ -119,6 +120,7 @@ const AgendaList: React.FC<{
 };
 
 const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
+  const { t } = useTranslation();
   // ============================================================================
   // CLEAN CALENDAR HOOK
   // ============================================================================
@@ -1124,15 +1126,15 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       // The move was rolled back (smartCreateDraftAtom) — say so instead of
       // claiming success.
       console.error('Failed to move event:', error);
-      toast.error("Couldn't move the event — it was restored to its original time");
+      toast.error(t('calendar.toast.move_error'));
       return;
     }
 
     if (!eventHasAttendees) {
       // Saved already, so offer Undo rather than popping the editor open.
-      toast.success(`Rescheduled to ${formatTimeRange(newStart, newEnd)}`, {
+      toast.success(t('calendar.toast.rescheduled', { range: formatTimeRange(newStart, newEnd) }), {
         action: {
-          label: 'Undo',
+          label: t('toast.undo'),
           onClick: async () => {
             // Only while the event is still where this move left it.
             const current = getEvent(event.id);
@@ -1142,14 +1144,14 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
               at(current.start.dateTime) !== newStart.getTime() ||
               at(current.end.dateTime) !== newEnd.getTime()
             ) {
-              toast("The event has changed since, so the move wasn't undone");
+              toast(t('calendar.toast.move_changed_since'));
               return;
             }
             try {
               await updateEventFields(event.id, before, 'drag', accountsInfo);
             } catch (error) {
               console.error('Failed to undo event move:', error);
-              toast.error("Couldn't undo the move");
+              toast.error(t('calendar.toast.undo_move_error'));
             }
           }
         }
@@ -1159,7 +1161,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
 
     // A meeting's move is a draft until updates are sent: open the editor
     // near the dragged element so they can be.
-    toast.success('Moved — send updates to notify attendees');
+    toast.success(t('calendar.toast.moved_send_updates'));
     const eventElement = document.querySelector(`[data-event-id="${event.id}"]`) as HTMLElement;
     if (eventElement) {
       openEventPopover(
@@ -1224,7 +1226,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       const results = await Promise.all(
         selectedAccountUids.flatMap((uid) => months.map((m) => fetchMonth(m, uid)))
       );
-      if (results.includes(false)) toast.error("Couldn't refresh the calendar");
+      if (results.includes(false)) toast.error(t('calendar.toast.refresh_error'));
     } finally {
       setIsRefreshing(false);
     }
@@ -1268,7 +1270,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
           variant="ghost"
           sizeVariant="sm"
           typeVariant="icon"
-          tooltip="New event"
+          tooltip={t('calendar.new_event')}
           onClick={(e) => createNewEvent(e.currentTarget)}
           className="-ml-1"
         >
@@ -1286,7 +1288,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
             variant="secondary"
             sizeVariant="sm"
             typeVariant="icon"
-            tooltip="Previous month"
+            tooltip={t('calendar.previous_month')}
             onClick={goPrevMonth}
           >
             <MonoIcon type="ChevronLeft" />
@@ -1295,7 +1297,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
             variant="secondary"
             sizeVariant="sm"
             typeVariant="icon"
-            tooltip="Next month"
+            tooltip={t('calendar.next_month')}
             onClick={goNextMonth}
           >
             <MonoIcon type="ChevronRight" />
@@ -1355,7 +1357,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
           variant="ghost"
           sizeVariant="xs"
           typeVariant="icon"
-          tooltip="Previous day"
+          tooltip={t('calendar.previous_day')}
           onClick={() => stepDay(-1)}
         >
           <MonoIcon type="ChevronLeft" className="h-4 w-4" />
@@ -1364,7 +1366,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
           variant="ghost"
           sizeVariant="xs"
           typeVariant="icon"
-          tooltip="Next day"
+          tooltip={t('calendar.next_day')}
           onClick={() => stepDay(1)}
         >
           <MonoIcon type="ChevronRight" className="h-4 w-4" />

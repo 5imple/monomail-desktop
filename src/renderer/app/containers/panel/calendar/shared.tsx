@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
@@ -163,6 +164,7 @@ const DraggableEventInner: React.FC<{
   const isPastEvent = isEventInPast(event);
 
   // Read draft changes to reflect updated title for drafts
+  const { t } = useTranslation();
   const { getEventDraftChanges } = useCalendar();
   const draftChanges = event?.id ? getEventDraftChanges?.(event.id) : undefined;
   const displayedTitle =
@@ -343,7 +345,7 @@ const DraggableEventInner: React.FC<{
       {isDraft && (
         <span
           className="mr-1 inline-block h-2 w-2 rounded-full bg-secondary-accent"
-          title="Draft changes pending"
+          title={t('calendar.draft_pending')}
         />
       )}
       {isMultiDayEvent && !isDraft && (
