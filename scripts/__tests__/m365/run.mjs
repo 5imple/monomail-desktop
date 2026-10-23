@@ -10,12 +10,16 @@ import { readdirSync, rmSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
-const outdir = join(here, '.build');
+// M365_TEST_OUTDIR lets parallel runs build into separate folders;
+// M365_TEST_FILTER (substring) runs only the matching *.test.ts files.
+const outdir = process.env.M365_TEST_OUTDIR || join(here, '.build');
+const filter = process.env.M365_TEST_FILTER || '';
 
 rmSync(outdir, { recursive: true, force: true });
 
 const entryPoints = readdirSync(here)
   .filter((f) => f.endsWith('.test.ts'))
+  .filter((f) => !filter || filter.split(',').some((part) => f.includes(part.trim())))
   .map((f) => join(here, f));
 
 await build({
@@ -25,6 +29,8 @@ await build({
   format: 'esm',
   outdir,
   outExtension: { '.js': '.mjs' },
+  // As in the app (Vite): .tsx files don't import React for JSX.
+  jsx: 'automatic',
   alias: {
     // Most specific first: the apiClient stub lets integration tests drive the
     // real provider against canned Graph responses. electron-log + dompurify are
