@@ -1,3 +1,4 @@
+import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { isComposeDraftId } from '@/main/utils';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger
 } from '@/renderer/app/components/ui/dropdown-menu';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
+import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
@@ -42,7 +44,14 @@ interface DisplayPanelHeaderProps {
 
 const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
   ({ thread, handlePrint, isPrinting }, ref) => {
-    const { setActiveThreadId } = useThreadAtom();
+    const {
+      setActiveThreadId,
+      activeThreadId,
+      filteredThreadIds,
+      threadsMap,
+      selectNextThread,
+      selectPreviousThread
+    } = useThreadAtom();
     const { removeLabelFromThread, addLabelToThread } = useThreadLabelAtom();
     const { t } = useTranslation();
     const { fullscreenDisplayPanel } = useGlobalAtom();
@@ -51,6 +60,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     const executeCommand = useExecuteCommand();
     const { trackEvent } = useUserTrackingData();
     const { labelsMapByAccount } = useLabelAtom();
+    const { accounts } = useAuth();
 
     // Keyboard navigation
     const { registerItem, unregisterItem, registerAreaRef } = useKeyboardNavigationContext();
@@ -58,6 +68,11 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
     // Refs for keyboard navigation
     const headerContainerRef = useRef<HTMLDivElement>(null);
     const closePanelRef = useRef<HTMLButtonElement>(null);
+    const previousThreadRef = useRef<HTMLButtonElement>(null);
+    const nextThreadRef = useRef<HTMLButtonElement>(null);
+    const replyRef = useRef<HTMLButtonElement>(null);
+    const replyAllRef = useRef<HTMLButtonElement>(null);
+    const forwardRef = useRef<HTMLButtonElement>(null);
     const reminderRef = useRef<HTMLButtonElement>(null);
     const labelRef = useRef<HTMLButtonElement>(null);
     const starRef = useRef<HTMLButtonElement>(null);
@@ -80,6 +95,11 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
 
       if (thread) {
         navigationItems.push(
+          { id: 'previous-thread', ref: previousThreadRef.current },
+          { id: 'next-thread', ref: nextThreadRef.current },
+          { id: 'reply', ref: replyRef.current },
+          { id: 'reply-all', ref: replyAllRef.current },
+          { id: 'forward', ref: forwardRef.current },
           { id: 'reminder', ref: reminderRef.current },
           { id: 'label', ref: labelRef.current },
           { id: 'star-toggle', ref: starRef.current },
@@ -104,6 +124,51 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       };
     }, [thread?.id, registerItem, unregisterItem, registerAreaRef]);
 
+    // Reply / Reply all / Forward act on the thread's latest message, the
+    // same targets as the R / Enter / F keys: Reply answers the latest
+    // message from someone else (your own if there is none), the other two
+    // take the newest message.
+    const latestMessage = (preferOthers: boolean): MonoMessage | null => {
+      if (!thread) return null;
+      const messages = thread.items.filter((item) => item.type === 'message') as MonoMessage[];
+      const own = new Set(accounts.map((account) => account.email.trim().toLowerCase()));
+      const fromOthers = messages.filter(
+        (message) => !own.has(message.from?.email?.trim().toLowerCase())
+      );
+      const pool = preferOthers && fromOthers.length > 0 ? fromOthers : messages;
+      return pool[pool.length - 1] ?? null;
+    };
+    const hasMessages = !!thread && thread.items.some((item) => item.type === 'message');
+
+    // Previous / Next walk the list the reader covers, in its order; the ends
+    // are disabled so "Next" never wraps back to an earlier conversation.
+    const listPosition = useMemo(() => {
+      const validIds = filteredThreadIds.filter((id) => threadsMap[id]);
+      const index = activeThreadId ? validIds.indexOf(activeThreadId) : -1;
+      return { hasPrevious: index > 0, hasNext: index >= 0 && index < validIds.length - 1 };
+    }, [activeThreadId, filteredThreadIds, threadsMap]);
+
+    const handleReply = () => {
+      const message = latestMessage(true);
+      if (!thread || !message) return;
+      executeCommand('COMPOSE_REPLY_MESSAGE', { message, accountId: thread.accountId });
+      trackEvent('thread_reply_toolbar', { thread_id: thread.id });
+    };
+
+    const handleReplyAll = () => {
+      const message = latestMessage(false);
+      if (!thread || !message) return;
+      executeCommand('COMPOSE_REPLY_ALL_MESSAGE', { message, accountId: thread.accountId });
+      trackEvent('thread_reply_all_toolbar', { thread_id: thread.id });
+    };
+
+    const handleForward = () => {
+      const message = latestMessage(false);
+      if (!thread || !message) return;
+      executeCommand('COMPOSE_FORWARD_MESSAGE', { message, accountId: thread.accountId });
+      trackEvent('thread_forward_toolbar', { thread_id: thread.id });
+    };
+
     const handleDone = async () => {
       if (thread) {
         executeCommand('THREAD_DONE', { threadIds: [thread.id] });
@@ -112,8 +177,9 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
         });
       }
     };
-    // Trash / restore the open thread. THREAD_TRASH advances the reader to the
-    // next email (it acts on the active thread), like the Backspace hotkey.
+    // Trash / restore the open thread. THREAD_TRASH moves the reader on to the
+    // next email when it acts on the open thread, like Done and the Backspace
+    // hotkey.
     const handleTrashToggle = async () => {
       if (!thread) return;
       const inTrash = thread.labelIds.includes('TRASH');
@@ -249,11 +315,93 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
               >
                 <MonoIcon type="ChevronsLeft" />
               </Button>
+              {thread && !isComposeDraftId(thread.id) && (
+                <div className="ml-1 flex items-center">
+                  <Button
+                    ref={previousThreadRef}
+                    className="text-muted-foreground hover:text-foreground"
+                    tooltip={t('header.display.previous_conversation')}
+                    variant="ghost"
+                    sizeVariant="sm"
+                    typeVariant="icon"
+                    disabled={!listPosition.hasPrevious}
+                    onMouseDown={keepFocus}
+                    onClick={() => selectPreviousThread()}
+                    data-keyboard-item="previous-thread"
+                  >
+                    <MonoIcon type="ChevronUp" />
+                  </Button>
+                  <Button
+                    ref={nextThreadRef}
+                    className="text-muted-foreground hover:text-foreground"
+                    tooltip={t('header.display.next_conversation')}
+                    variant="ghost"
+                    sizeVariant="sm"
+                    typeVariant="icon"
+                    disabled={!listPosition.hasNext}
+                    onMouseDown={keepFocus}
+                    onClick={() => selectNextThread()}
+                    data-keyboard-item="next-thread"
+                  >
+                    <MonoIcon type="ChevronDown" />
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Action buttons — centered */}
             {thread && !isComposeDraftId(thread.id) && (
-              <div className="flex w-full items-center justify-center gap-[22px]">
+              <div className="flex w-full items-center justify-center gap-[14px]">
+                {/* Reply / Reply all / Forward first: what most people open an
+                    email to do, and the keys (R / Enter / F) and a hover over
+                    the message header were the only ways to them. */}
+                {hasMessages && (
+                  <>
+                    <Button
+                      ref={replyRef}
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground"
+                      tooltip={t('message_card.reply')}
+                      shortcut="R"
+                      sizeVariant="sm"
+                      variant="ghost"
+                      typeVariant="icon"
+                      onMouseDown={keepFocus}
+                      onClick={handleReply}
+                      data-keyboard-item="reply"
+                    >
+                      <MonoIcon type="Reply" />
+                    </Button>
+                    <Button
+                      ref={replyAllRef}
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground"
+                      tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
+                      shortcut="Enter"
+                      sizeVariant="sm"
+                      variant="ghost"
+                      typeVariant="icon"
+                      onMouseDown={keepFocus}
+                      onClick={handleReplyAll}
+                      data-keyboard-item="reply-all"
+                    >
+                      <MonoIcon type="reply_all" />
+                    </Button>
+                    <Button
+                      ref={forwardRef}
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground"
+                      tooltip={t('message_card.forward')}
+                      shortcut="F"
+                      sizeVariant="sm"
+                      variant="ghost"
+                      typeVariant="icon"
+                      onMouseDown={keepFocus}
+                      onClick={handleForward}
+                      data-keyboard-item="forward"
+                    >
+                      <MonoIcon type="Forward" />
+                    </Button>
+                    <div aria-hidden className="mx-1 h-4 w-px bg-border" />
+                  </>
+                )}
                 <Button
                   ref={reminderRef}
                   className="text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -320,13 +468,10 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 </Button>
                 <Button
                   ref={doneRef}
-                  className={cn(
-                    'hover:bg-muted',
-                    !thread?.labelIds.includes('INBOX')
-                      ? 'text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                  // Once done, clicking moves it back to the inbox — say so.
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground"
+                  // Once done, clicking moves it back to the inbox — say so,
+                  // and show an inbox, not a filled check, like the rows and
+                  // the context menu do.
                   tooltip={
                     thread?.labelIds.includes('INBOX')
                       ? t('header.display.done')
@@ -341,7 +486,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                   disabled={!thread}
                   data-keyboard-item="done-toggle"
                 >
-                  <MonoIcon type="CheckCircle" fill={!thread?.labelIds.includes('INBOX')} />
+                  <MonoIcon type={thread?.labelIds.includes('INBOX') ? 'CheckCircle' : 'Inbox'} />
                 </Button>
                 <Button
                   ref={trashRef}
@@ -400,6 +545,34 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                         <ShortcutKeyboard variant={'flat'} shortcut={'U'} />
                       </DropdownMenuShortcut>
                     </DropdownMenuItem>
+                    {/* Move and Report spam had keys (M, !) and palette entries
+                        but no button; a mouse user had no way to them. */}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        openDialog('commandPalette', { pages: ['MOVE'] });
+                        trackEvent('move_dialog_opened', { thread_id: thread.id });
+                      }}
+                    >
+                      <MonoIcon type="ArrowRight" className="mr-2 text-muted-foreground" />
+                      {t('command.move_ellipsis', { defaultValue: 'Move to…' })}
+                      <DropdownMenuShortcut>
+                        <ShortcutKeyboard variant={'flat'} shortcut={'M'} />
+                      </DropdownMenuShortcut>
+                    </DropdownMenuItem>
+                    {!thread.labelIds.includes('SPAM') && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          executeCommand('THREAD_REPORT_SPAM', { threadIds: [thread.id] });
+                          trackEvent('thread_reported_spam', { thread_id: thread.id });
+                        }}
+                      >
+                        <MonoIcon type="AlertCircle" className="mr-2 text-muted-foreground" />
+                        {t('command.thread_report_spam')}
+                        <DropdownMenuShortcut>
+                          <ShortcutKeyboard variant={'flat'} shortcut={'!'} />
+                        </DropdownMenuShortcut>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem
                       disabled={isPrinting}
                       onClick={() => {

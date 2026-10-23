@@ -1,6 +1,7 @@
 import { isComposeDraftId } from '@/main/utils';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { CommandType } from '@/renderer/app/types';
+import { neighbourAfterLeaving } from '@/renderer/app/lib/commands/readerNavigation';
 import { runUndoableAction } from '@/renderer/app/lib/commands/undoableAction';
 import { MonoCommand, ThreadCommandArgs } from './types';
 
@@ -12,6 +13,7 @@ interface ThreadCommandDependencies {
   filteredThreadIds: string[];
   threadsMap: any;
   setSelectedThreads: (threads: string[]) => void;
+  setActiveThreadId: (threadId: string | null) => void;
   selectNextThread: () => void;
   groupThreadsByAccount: (threadIds: string[]) => Record<string, string[]>;
   addUndoAction: (action: any) => void;
@@ -39,6 +41,7 @@ export const createThreadCommands = (
     filteredThreadIds,
     threadsMap,
     setSelectedThreads,
+    setActiveThreadId,
     selectNextThread,
     groupThreadsByAccount,
     addUndoAction,
@@ -82,6 +85,27 @@ export const createThreadCommands = (
       args?.threadIds ??
       (activeThreadId ? [activeThreadId] : selectedThreads.length > 0 ? selectedThreads : [])
     ).filter((id) => !isComposeDraftId(id));
+
+  // Done / Trash / Spam on the open email: the reader moves on to the next
+  // email down (the one above at the end of the list; it closes when the
+  // email was alone), measured while the email is still in the list. From
+  // the list itself nothing opens, since the reader would go fullscreen and
+  // hide the whole inbox; advanceAfterAction keeps the explicit opt-in.
+  const moveReaderOnAfter = (
+    threadIds: string[],
+    args?: ThreadCommandArgs
+  ): (() => void) | undefined => {
+    const openThreadId =
+      activeThreadId && threadIds.includes(activeThreadId) ? activeThreadId : null;
+    if (openThreadId) {
+      const nextThreadId = neighbourAfterLeaving(
+        filteredThreadIds.filter((id) => threadsMap[id]),
+        openThreadId
+      );
+      return () => setActiveThreadId(nextThreadId);
+    }
+    return args?.advanceAfterAction === true ? selectNextThread : undefined;
+  };
 
   return {
     // THREAD_MARK_READ
@@ -156,15 +180,7 @@ export const createThreadCommands = (
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
-        const shouldAdvanceAfterTrash =
-          args?.advanceAfterAction === true ||
-          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId) ||
-          // Acting on the currently-open thread (the reader toolbar passes its
-          // explicit id, which otherwise reads as "list context" and skips the
-          // advance) must move the reader off the thread being trashed. Only
-          // fires when a thread is already open, so it never opens the reader
-          // from a pure list view.
-          (!!activeThreadId && threadIds.includes(activeThreadId));
+        const afterStateUpdate = moveReaderOnAfter(threadIds, args);
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
@@ -174,14 +190,7 @@ export const createThreadCommands = (
         undoable({
           perform: () =>
             forEachAccount(threadsByAccount, (accountId, ids) =>
-              markThreadAsTrash(
-                accountId,
-                ids,
-                true,
-                !isInTrashView,
-                false,
-                shouldAdvanceAfterTrash ? selectNextThread : undefined
-              )
+              markThreadAsTrash(accountId, ids, true, !isInTrashView, false, afterStateUpdate)
             ),
           undo: (performed) => {
             const undone = forEachAccount(threadsByAccount, (accountId, ids) =>
@@ -302,19 +311,7 @@ export const createThreadCommands = (
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
-        // Only auto-open the next thread when acting from the reader (a single
-        // active thread, no explicit target/selection) or when explicitly asked.
-        // Otherwise a list-context Done would open a thread and the reader would
-        // go fullscreen, hiding the whole inbox.
-        const shouldAdvanceAfterDone =
-          args?.advanceAfterAction === true ||
-          (!args?.threadIds && selectedThreads.length === 0 && !!activeThreadId) ||
-          // Acting on the currently-open thread (the reader toolbar passes its
-          // explicit id, which otherwise reads as "list context" and skips the
-          // advance) must move the reader off the thread being archived. Only
-          // fires when a thread is already open, so it never opens the reader
-          // from a pure list view.
-          (!!activeThreadId && threadIds.includes(activeThreadId));
+        const afterStateUpdate = moveReaderOnAfter(threadIds, args);
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
@@ -325,14 +322,7 @@ export const createThreadCommands = (
         undoable({
           perform: () =>
             forEachAccount(threadsByAccount, (accountId, ids) =>
-              markThreadAsDone(
-                accountId,
-                ids,
-                true,
-                isInInboxView,
-                false,
-                shouldAdvanceAfterDone ? selectNextThread : undefined
-              )
+              markThreadAsDone(accountId, ids, true, isInInboxView, false, afterStateUpdate)
             ),
           undo: (performed) => {
             const undone = forEachAccount(threadsByAccount, (accountId, ids) =>
@@ -393,13 +383,14 @@ export const createThreadCommands = (
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
+        const afterStateUpdate = moveReaderOnAfter(threadIds, args);
 
         // Group threads by account
         const threadsByAccount = groupThreadsByAccount(threadIds);
         undoable({
           perform: async () => {
             await forEachAccount(threadsByAccount, (accountId, ids) =>
-              markThreadAsSpam(accountId, ids, true)
+              markThreadAsSpam(accountId, ids, true, false, false, afterStateUpdate)
             );
             setSelectedThreads([]);
           },

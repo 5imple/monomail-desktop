@@ -9,6 +9,7 @@ import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Button } from '@/renderer/app/components/ui/button';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import DisplayPanelHeader from '@/renderer/app/containers/header/DisplayPanelHeader';
+import ThreadReplyBar from '@/renderer/app/containers/panel/ThreadReplyBar';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
@@ -627,7 +628,9 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
                       lineHeight: '1.3'
                     }}
                   >
-                    {!thread.subject || thread.subject === '' ? '(No subject)' : thread.subject}
+                    {!thread.subject || thread.subject === ''
+                      ? t('header.display.no_subject')
+                      : thread.subject}
                   </h1>
                 )}
                 {thread && bodyFetch?.threadId === thread.id && bodyFetch.state === 'error' && (
@@ -718,6 +721,16 @@ export const DisplayPanel = ({ className, readerPhase = 'closed' }: DisplayPanel
                     </div>
                   ))}
                 </div>
+                {/* Reply / Reply all / Forward under the conversation (outside
+                    the printed area). Not while a draft is already open in
+                    this thread: continuing it is the next step then. */}
+                {thread &&
+                  !isComposeDraftId(thread.id) &&
+                  orderedItems.messages.length > 0 &&
+                  orderedItems.unlinkedDrafts.length === 0 &&
+                  !orderedItems.messageDraftMap[
+                    orderedItems.messages[orderedItems.messages.length - 1].id
+                  ] && <ThreadReplyBar thread={thread} className="mt-4" />}
               </div>
             </ScrollArea>
           </motion.div>

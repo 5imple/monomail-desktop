@@ -46,6 +46,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     selectedThreads,
     activeThreadId,
     setSelectedThreads,
+    setActiveThreadId,
     selectNextThread
   } = useThreadAtom();
   const { setGlobalDraftWindows } = useComposeWindowAtom();
@@ -65,6 +66,7 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     filteredThreadIds,
     threadsMap,
     setSelectedThreads,
+    setActiveThreadId,
     selectNextThread,
     groupThreadsByAccount,
     addUndoAction,

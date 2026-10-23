@@ -38,7 +38,6 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Forward, Reply, ReplyAll } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Collapsible } from '@radix-ui/react-collapsible';
@@ -1166,7 +1165,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                                 shortcut={showReplyHint ? 'R' : undefined}
                                 onClick={handleReplyMessage}
                               >
-                                <Reply className="h-4 w-4" strokeWidth={1.8} />
+                                <MonoIcon type="Reply" size={16} weight={300} />
                               </Button>
                               <Button
                                 typeVariant="icon"
@@ -1178,7 +1177,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                                 shortcut={isLastCard ? 'Enter' : undefined}
                                 onClick={handleReplyAllMessage}
                               >
-                                <ReplyAll className="h-4 w-4" strokeWidth={1.8} />
+                                <MonoIcon type="reply_all" size={16} weight={300} />
                               </Button>
                               <Button
                                 typeVariant="icon"
@@ -1190,7 +1189,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                                 shortcut={isLastCard ? 'F' : undefined}
                                 onClick={handleForwardMessage}
                               >
-                                <Forward className="h-4 w-4" strokeWidth={1.8} />
+                                <MonoIcon type="Forward" size={16} weight={300} />
                               </Button>
                             </div>
                           )}
@@ -1356,7 +1355,9 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                         // Tracking enabled but not seen yet - show muted-foreground check
                         <div className="flex items-center gap-2">
                           <MonoIcon type={'Check'} className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-muted-foreground">Not read</span>
+                          <span className="text-muted-foreground">
+                            {t('message_card.tracking_not_read')}
+                          </span>
                           <Button
                             typeVariant={'icon'}
                             variant={'ghost'}
@@ -1396,7 +1397,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                               type={trackingHistory.length > 1 ? 'CheckCheck' : 'Check'}
                               className="mr-1 h-3 w-3 text-foreground"
                             />
-                            {trackingHistory.length} Read{trackingHistory.length > 1 ? 's' : ''}
+                            {t('message_card.tracking_reads', { count: trackingHistory.length })}
                             <MonoIcon
                               type={showTrackingDropdown ? 'ChevronUp' : 'ChevronDown'}
                               className="ml-1 h-3 w-3"
@@ -1405,7 +1406,11 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                           {trackingTimes && (
                             <div className="font-medium text-muted-foreground">
                               {trackingTimes.lastRead && (
-                                <div>Last read {trackingTimes.lastRead}</div>
+                                <div>
+                                  {t('message_card.tracking_last_read', {
+                                    time: trackingTimes.lastRead
+                                  })}
+                                </div>
                               )}
                             </div>
                           )}
