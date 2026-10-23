@@ -90,7 +90,7 @@ export const defaultPreference: UserPreference = {
       category: {}
     },
     threadList: {
-      showAvatar: false,
+      showAvatar: true,
       showSnippet: true,
       showLabels: true,
       showAttachments: true

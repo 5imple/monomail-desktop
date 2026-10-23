@@ -111,6 +111,8 @@ module.exports = {
           foreground: 'hsl(var(--popover-foreground))'
         },
         'reader-well': 'hsl(var(--reader-well))',
+        // The unread marker (the dot on an unread row).
+        unread: 'hsl(var(--unread))',
         selection: {
           DEFAULT: 'hsl(var(--selection))',
           foreground: 'hsl(var(--selection-foreground))'

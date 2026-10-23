@@ -4,6 +4,7 @@ import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import {
   rowAvatarRecipient,
+  useThreadListDisplay,
   stripExternalBanner,
   ThreadRowMeta,
   ThreadSenderNames
@@ -18,6 +19,7 @@ import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
 // Sender names, the right-hand metadata and the hover actions live in
@@ -35,7 +37,9 @@ export const ThreadListCozyItem = React.memo(
       const { activeThreadId, selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
       const { labelsMapByAccount } = useLabelAtom();
       const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
+      const { t } = useTranslation();
       const { accounts } = useAuth();
+      const { showAvatar, showSnippet } = useThreadListDisplay();
 
       const [isRendering, setIsRendering] = useState(false);
       // Start fully visible so the first screenful paints at once. This used to
@@ -86,13 +90,14 @@ export const ThreadListCozyItem = React.memo(
         return {
           subject: highlightThreadText(
             !currentThread.subject || currentThread.subject === ''
-              ? '(No subject)'
+              ? t('header.display.no_subject')
               : currentThread.subject,
             globalSearchQuery
           ),
           snippet: snippet ? highlightThreadText(snippet, globalSearchQuery) : null
         };
-      }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery]);
+      }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery, t]);
+      const snippetHtml = showSnippet ? highlightedContent.snippet : null;
 
       const { registerItem, unregisterItem } = useKeyboardNavigationContext();
 
@@ -221,7 +226,7 @@ export const ThreadListCozyItem = React.memo(
                       <span
                         aria-hidden
                         data-unread-dot
-                        className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 transition-opacity duration-150 group-pointer-hover:opacity-0"
+                        className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-unread transition-opacity duration-150 group-pointer-hover:opacity-0"
                       />
                     )}
                     <button
@@ -278,12 +283,14 @@ export const ThreadListCozyItem = React.memo(
                   </div>
 
                   {/* Avatar */}
-                  <RecipientAvatar
-                    className="h-8 w-8 shrink-0"
-                    recipient={senderAvatarRecipient}
-                    accountId={currentThread.accountId}
-                    preferredImageSrc={senderAccountImageSrc}
-                  />
+                  {showAvatar && (
+                    <RecipientAvatar
+                      className="h-8 w-8 shrink-0"
+                      recipient={senderAvatarRecipient}
+                      accountId={currentThread.accountId}
+                      preferredImageSrc={senderAccountImageSrc}
+                    />
+                  )}
 
                   {/* Sender — fixed column so subject always starts at the same x */}
                   <div className="flex w-40 shrink-0 items-center gap-1.5 overflow-hidden">
@@ -311,7 +318,7 @@ export const ThreadListCozyItem = React.memo(
                         // Needs a max width to ever truncate: as a bare shrink-0
                         // it overflowed and was clipped mid-letter, no ellipsis.
                         'shrink-0 truncate text-[13px] tracking-tight',
-                        highlightedContent.snippet ? 'max-w-[65%]' : 'max-w-full',
+                        snippetHtml ? 'max-w-[65%]' : 'max-w-full',
                         isUnread
                           ? 'font-medium text-foreground'
                           : 'font-normal text-foreground/80'
@@ -319,18 +326,18 @@ export const ThreadListCozyItem = React.memo(
                       dangerouslySetInnerHTML={{
                         __html:
                           !highlightedContent.subject || highlightedContent.subject === ''
-                            ? '(No subject)'
+                            ? t('header.display.no_subject')
                             : highlightedContent.subject
                       }}
                     />
-                    {highlightedContent.snippet && (
+                    {snippetHtml && (
                       <>
                         <span aria-hidden className="shrink-0 text-muted-foreground/40">
                           –
                         </span>
                         <span
                           className="min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground"
-                          dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
+                          dangerouslySetInnerHTML={{ __html: snippetHtml }}
                         />
                       </>
                     )}

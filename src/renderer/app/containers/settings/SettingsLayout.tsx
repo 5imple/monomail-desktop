@@ -50,9 +50,7 @@ const visibleSettingsPages = new Set([
   'template',
   'account',
   'inbox',
-  // 'threadlist' (Conversation Display) is hidden: none of its toggles reach
-  // the inbox rows yet, so they did nothing. Its page and stored settings stay
-  // in place; deep links to it open General.
+  'threadlist',
   'profile',
   'system'
 ]);
@@ -206,6 +204,12 @@ export default function SettingsLayout({ defaultPage }: SettingsLayoutProps) {
       id: 'inbox',
       icon: 'Inbox',
       title: t('settings.display.inbox.title')
+    },
+    {
+      type: 'item',
+      id: 'threadlist',
+      icon: 'Menu',
+      title: t('settings.display.threadlist.title')
     },
 
     //PROFILE

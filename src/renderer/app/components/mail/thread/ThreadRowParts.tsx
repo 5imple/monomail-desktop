@@ -4,6 +4,7 @@ import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIco
 import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
+import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { formatListDate } from '@/renderer/app/lib/formatDate';
 import { threadHasFileAttachments } from '@/renderer/app/lib/threadAttachments';
@@ -13,6 +14,7 @@ import {
   isOwnAddress,
   otherRecipients
 } from '@/renderer/app/components/mail/thread/threadRowModel';
+import { isBackendConfigured } from '@/main/api/apiClient';
 import { useDraggable } from '@dnd-kit/core';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -31,14 +33,20 @@ interface DraggableSenderProps {
   email: string;
 }
 
-/** A sender name that can be dragged onto the pin row. */
+/**
+ * A sender name that can be dragged onto the pin row. Pins are stored with
+ * the backend, so without one the name is plain text: a grab cursor with
+ * nowhere to drop invited a drag that did nothing.
+ */
 export const DraggableSender = React.memo<DraggableSenderProps>(
   ({ sender, threadId, index, email }) => {
+    const canPin = isBackendConfigured();
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
       id: `thread-contact-${threadId}-${sender}-${index}`,
       attributes: {
         tabIndex: -1
       },
+      disabled: !canPin,
       data: {
         from: {
           name: sender,
@@ -46,6 +54,8 @@ export const DraggableSender = React.memo<DraggableSenderProps>(
         }
       }
     });
+
+    if (!canPin) return <span>{sender}</span>;
 
     const style = {
       opacity: isDragging ? 0.5 : 1,
@@ -186,6 +196,18 @@ const RowActionButton = ({
 
 type LabelInfo = { name: string; color: { textColor?: string; backgroundColor?: string } };
 
+/** Settings → Conversation Display, with the defaults the rows always had. */
+export const useThreadListDisplay = () => {
+  const { preference } = useAuth();
+  const prefs = preference.display.threadList;
+  return {
+    showAvatar: prefs?.showAvatar ?? true,
+    showSnippet: prefs?.showSnippet ?? true,
+    showLabels: prefs?.showLabels ?? true,
+    showAttachments: prefs?.showAttachments ?? true
+  };
+};
+
 /**
  * Right side of a row: label / category badges and the star stay put; a
  * fixed slot holds the paperclip + date, which swap with the hover actions.
@@ -206,6 +228,7 @@ export const ThreadRowMeta = ({
 }) => {
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
+  const { showLabels } = useThreadListDisplay();
 
   const userLabels = [
     ...new Set(thread.labelIds.filter((labelId) => labelId && labelId.includes('Label_')))
@@ -225,7 +248,7 @@ export const ThreadRowMeta = ({
 
   return (
     <div className="flex shrink-0 items-center gap-2">
-      {(shownLabels.length > 0 || shownCategories.length > 0) && (
+      {showLabels && (shownLabels.length > 0 || shownCategories.length > 0) && (
         <div className="flex items-center gap-1">
           {shownLabels.map(({ labelId, label }) => (
             <Badge
@@ -299,6 +322,31 @@ export const ThreadRowMeta = ({
               shortcut="E"
               icon="CheckCircle"
               onAction={() => run('THREAD_DONE')}
+            />
+          )}
+          {/* A starred row keeps its star on the left of the date (click it to
+              unstar); an unstarred one offers Star here. */}
+          {!thread.labelIds.includes('STARRED') && (
+            <RowActionButton
+              label={t('command.thread_star')}
+              shortcut="S"
+              icon="Star"
+              onAction={() => run('THREAD_STAR')}
+            />
+          )}
+          {thread.labelIds.includes('UNREAD') ? (
+            <RowActionButton
+              label={t('command.thread_mark_read')}
+              shortcut="U"
+              icon="EnvelopeOpen"
+              onAction={() => run('THREAD_MARK_READ')}
+            />
+          ) : (
+            <RowActionButton
+              label={t('command.thread_mark_unread')}
+              shortcut="U"
+              icon="Envelope"
+              onAction={() => run('THREAD_MARK_UNREAD')}
             />
           )}
           <LabelButton thread={thread} buttonClassName={ACTION_BUTTON_CLASS} />

@@ -225,7 +225,7 @@ export function DisplayInboxForm() {
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                 <SelectTrigger variant={'secondary'} className="w-[220px]">
                   <SelectValue
-                    placeholder="Select Account"
+                    placeholder={t('settings.select_account')}
                     className={cn(buttonVariants({ variant: 'secondary' }))}
                   />
                 </SelectTrigger>

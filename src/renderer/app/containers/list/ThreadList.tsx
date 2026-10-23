@@ -255,11 +255,11 @@ function ThreadList({ onScroll }: ThreadListProps) {
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
     const buckets: { label: string; ids: string[] }[] = [
-      { label: 'Today', ids: [] },
-      { label: 'This Week', ids: [] },
-      { label: 'Last Week', ids: [] },
-      { label: 'This Month', ids: [] },
-      { label: 'Older', ids: [] }
+      { label: t('thread_list.group.today', { defaultValue: 'Today' }), ids: [] },
+      { label: t('thread_list.group.this_week', { defaultValue: 'This week' }), ids: [] },
+      { label: t('thread_list.group.last_week', { defaultValue: 'Last week' }), ids: [] },
+      { label: t('thread_list.group.this_month', { defaultValue: 'This month' }), ids: [] },
+      { label: t('thread_list.group.older', { defaultValue: 'Older' }), ids: [] }
     ];
 
     deduplicatedThreadIds.forEach((id) => {
@@ -272,7 +272,7 @@ function ThreadList({ onScroll }: ThreadListProps) {
     });
 
     return buckets.filter((b) => b.ids.length > 0);
-  }, [deduplicatedThreadIds, threadsMap]);
+  }, [deduplicatedThreadIds, threadsMap, t]);
   listedThreadIdsRef.current = new Set(deduplicatedThreadIds);
 
   // First-load skeleton: only when there's nothing cached to show yet and a

@@ -28,6 +28,7 @@
      hover / keyboard-cursor highlights. */
   --selection: 217 91% 55%;
   --selection-foreground: 0 0% 100%;
+  --unread: 217 91% 55%;
   --background: 0 0% 100%; /* snow-white app canvas */
   --foreground: 24 10% 10%; /* stone-900 */
 
@@ -92,6 +93,7 @@
      hover / keyboard-cursor highlights. */
   --selection: 217 91% 55%;
   --selection-foreground: 0 0% 100%;
+  --unread: 217 91% 55%;
   --background: 0 0% 100%; /* pure white variant */
   --foreground: 24 10% 10%;
 
@@ -152,6 +154,7 @@
      hover / keyboard-cursor highlights. */
   --selection: 213 94% 68%;
   --selection-foreground: 222 47% 11%;
+  --unread: 213 94% 68%;
   --background: 24 10% 11%; /* stone-900 */
   --foreground: 60 9% 97%;
   --card: 24 10% 13%; /* stone-850-ish */
@@ -213,6 +216,7 @@
      hover / keyboard-cursor highlights. */
   --selection: 213 94% 68%;
   --selection-foreground: 222 47% 11%;
+  --unread: 213 94% 68%;
   --background: 24 10% 5%;
   --foreground: 60 9% 89%;
   --card: 24 10% 8%;

@@ -17,7 +17,11 @@ import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
+import { contextMenuSelectionAtom } from '@/renderer/app/store/thread/contextMenuAtom';
 import { CommandType } from '@/renderer/app/types';
+import { isBackendConfigured } from '@/main/api/apiClient';
+import { useSetAtom } from 'jotai';
 import React, { FC, useMemo, useCallback, useRef } from 'react';
 import { Keys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +39,8 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
   const { removeDraft, sendDraftQueue } = useDraftAtom();
   const { getUidFromEmail } = useAuth();
   const { accounts } = useAuth();
+  const { labelsMapByAccount } = useLabelAtom();
+  const setContextMenuSelection = useSetAtom(contextMenuSelectionAtom);
 
   const isDraft = isComposeDraftId(thread.id);
   const accountId = isDraft ? getUidFromEmail(thread.from[0]?.email) : null;
@@ -54,6 +60,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         if (!selectedThreads.some((t) => t === thread.id)) {
           implicitSelectionRef.current = selectedThreads;
           setSelectedThreads([thread.id]);
+          setContextMenuSelection(true);
         }
         return;
       }
@@ -61,8 +68,17 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
         setSelectedThreads(implicitSelectionRef.current);
       }
       implicitSelectionRef.current = null;
+      setContextMenuSelection(false);
     },
-    [selectedThreads, thread.id, setSelectedThreads]
+    [selectedThreads, thread.id, setSelectedThreads, setContextMenuSelection]
+  );
+
+  // The Label page has nothing to offer for an account without user labels
+  // (Microsoft 365 labels aren't loaded); Move covers folders there.
+  const accountHasLabels = useMemo(
+    () =>
+      Object.keys(labelsMapByAccount[thread.accountId] ?? {}).some((id) => id.startsWith('Label_')),
+    [labelsMapByAccount, thread.accountId]
   );
 
   // Pin / search target the latest person in the thread who isn't you — on a
@@ -179,9 +195,39 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
             command: 'THREAD_STAR'
           },
 
-      singleThreadSelected ? { label: 'Separator' } : null,
+      { label: 'Separator' },
 
-      singleThreadSelected && fromRecipient
+      // The same three "put it somewhere" actions as the reader toolbar and
+      // the selection bar. They open a palette page, so the rows stay
+      // selected for it (see handleContextMenuCommand).
+      !thread.labelIds.includes('TRASH')
+        ? {
+            icon: 'Clock',
+            label: t('command.reminder_ellipsis', { defaultValue: 'Snooze…' }),
+            shortcut: 'H',
+            command: 'REMINDER'
+          }
+        : null,
+      {
+        icon: 'ArrowRight',
+        label: t('command.move_ellipsis', { defaultValue: 'Move to…' }),
+        shortcut: 'M',
+        command: 'MOVE'
+      },
+      accountHasLabels
+        ? {
+            icon: 'Label',
+            label: t('command.label_ellipsis', { defaultValue: 'Label…' }),
+            shortcut: 'L',
+            command: 'LABEL'
+          }
+        : null,
+
+      singleThreadSelected && fromRecipient && isBackendConfigured()
+        ? { label: 'Separator' }
+        : null,
+
+      singleThreadSelected && fromRecipient && isBackendConfigured()
         ? {
             icon: 'Pin',
             label: t('command.pin_named', {
@@ -208,6 +254,15 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
 
       { label: 'Separator' },
 
+      !thread.labelIds.includes('SPAM') && !thread.labelIds.includes('TRASH')
+        ? {
+            icon: 'AlertCircle',
+            label: t('command.thread_report_spam'),
+            shortcut: '!',
+            command: 'THREAD_REPORT_SPAM'
+          }
+        : null,
+
       thread.labelIds.includes('TRASH')
         ? {
             icon: 'Trash',
@@ -228,7 +283,16 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
       command?: CommandType;
       disabled?: boolean;
     }[];
-  }, [selectedThreads, thread, t, isDraft, sendDraftQueue, contactRecipient, accounts]);
+  }, [
+    selectedThreads,
+    thread,
+    t,
+    isDraft,
+    sendDraftQueue,
+    contactRecipient,
+    accounts,
+    accountHasLabels
+  ]);
 
   // Memoize the command handler to prevent recreation on each render
   const handleContextMenuCommand = useCallback(
@@ -302,7 +366,20 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
           case 'THREAD_UNDONE':
           case 'THREAD_STAR':
           case 'THREAD_UNSTAR':
+          case 'THREAD_REPORT_SPAM':
             executeCommand(command, { threadIds: targetThreads });
+            break;
+
+          case 'REMINDER':
+          case 'MOVE':
+          case 'LABEL':
+            // These open a palette page that acts on the live selection, so
+            // the rows the menu was opened for stay selected: the menu's
+            // close must not put the previous selection back.
+            implicitSelectionRef.current = null;
+            setContextMenuSelection(false);
+            setSelectedThreads(targetThreads);
+            executeCommand(command);
             break;
 
           case 'PIN_CONTACT':
@@ -333,7 +410,9 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
       isDraft,
       accountId,
       removeDraft,
-      contactRecipient
+      contactRecipient,
+      setSelectedThreads,
+      setContextMenuSelection
     ]
   );
 

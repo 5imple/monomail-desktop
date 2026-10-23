@@ -8,6 +8,8 @@ import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { useTranslation } from 'react-i18next';
 import { Separator } from '@/renderer/app/components/ui/separator';
+import { contextMenuSelectionAtom } from '@/renderer/app/store/thread/contextMenuAtom';
+import { useAtomValue } from 'jotai';
 import { toast } from 'sonner';
 
 const ThreadSelectionToast = () => {
@@ -16,6 +18,7 @@ const ThreadSelectionToast = () => {
   const { labelsMapByAccount } = useLabelAtom();
   const executeCommand = useExecuteCommand();
   const { t } = useTranslation();
+  const contextMenuSelection = useAtomValue(contextMenuSelectionAtom);
 
   // Get selected thread objects from the store.
   const selectedThreadObjects = useMemo(
@@ -122,6 +125,15 @@ const ThreadSelectionToast = () => {
     executeCommand('LABEL', { threadIds: selectedThreads });
   };
 
+  // Snooze and Move open their palette pages on the selection (like Label).
+  const handleSnooze = () => {
+    executeCommand('REMINDER');
+  };
+
+  const handleMove = () => {
+    executeCommand('MOVE');
+  };
+
   const handleReadToggle = () => {
     // If any thread is unread then mark them as read; otherwise mark them as unread.
     const command = anyUnread ? 'THREAD_MARK_READ' : 'THREAD_MARK_UNREAD';
@@ -139,6 +151,8 @@ const ThreadSelectionToast = () => {
   const readTooltip = anyUnread ? t('command.thread_mark_read') : t('command.thread_mark_unread');
 
   const labelTooltip = t('command.label');
+  const snoozeTooltip = t('command.reminder', { defaultValue: 'Snooze' });
+  const moveTooltip = t('command.move_ellipsis', { defaultValue: 'Move to…' });
 
   // Determine icon colors based on status
   const starIconColor = allStarred ? 'text-secondary-accent' : 'text-muted-foreground';
@@ -192,15 +206,33 @@ const ThreadSelectionToast = () => {
                     localTooltip
                     onClick={handleDoneToggle}
                   >
-                    <MonoIcon type={anyInInbox ? 'CheckCircle' : 'Inbox'} className={doneIconColor} />
+                    <MonoIcon
+                      type={anyInInbox ? 'CheckCircle' : 'Inbox'}
+                      className={doneIconColor}
+                    />
                   </Button>
                 )}
 
-                {/* No L hint: the Label hotkey only works while reading. */}
+                {/* Snooze only means something for mail that's in the Inbox. */}
+                {anyInInbox && (
+                  <Button
+                    variant="ghost"
+                    sizeVariant="sm"
+                    shortcut={'H'}
+                    tooltip={snoozeTooltip}
+                    aria-label={snoozeTooltip}
+                    localTooltip
+                    onClick={handleSnooze}
+                  >
+                    <MonoIcon type="Clock" className="text-muted-foreground" />
+                  </Button>
+                )}
+
                 {hasUserLabels && (
                   <Button
                     variant="ghost"
                     sizeVariant="sm"
+                    shortcut={'L'}
                     tooltip={labelTooltip}
                     aria-label={labelTooltip}
                     localTooltip
@@ -209,6 +241,18 @@ const ThreadSelectionToast = () => {
                     <MonoIcon type="Label" className={labelIconColor} />
                   </Button>
                 )}
+
+                <Button
+                  variant="ghost"
+                  sizeVariant="sm"
+                  shortcut={'M'}
+                  tooltip={moveTooltip}
+                  aria-label={moveTooltip}
+                  localTooltip
+                  onClick={handleMove}
+                >
+                  <MonoIcon type="ArrowRight" className="text-muted-foreground" />
+                </Button>
 
                 <Button
                   variant="ghost"
@@ -243,12 +287,15 @@ const ThreadSelectionToast = () => {
   };
 
   // Track selection and show/dismiss toast as needed. Hidden while a thread is
-  // open: the bar floated over the reader acting on rows you can't see.
+  // open: the bar floated over the reader acting on rows you can't see. Up
+  // from the first selected row (it used to wait for two): ticking one
+  // checkbox gave a mouse user nothing to click on, and the hints on the
+  // buttons are how the row keys (E, S, U, H, ⌫) get learned. Not for the
+  // stand-in selection a right-click makes for its menu.
   useEffect(() => {
-    if (selectedThreads.length >= 2 && !activeThreadId) {
-      // Show toast with actions when 2 or more threads are selected
+    if (selectedThreads.length >= 1 && !activeThreadId && !contextMenuSelection) {
       toast(
-        <div className="w-80 flex-1 duration-200 animate-in fade-in slide-in-from-bottom-4">
+        <div className="w-[26rem] max-w-[calc(100vw-2rem)] flex-1 duration-200 animate-in fade-in slide-in-from-bottom-4">
           {renderToastContent()}
         </div>,
         {
@@ -260,12 +307,12 @@ const ThreadSelectionToast = () => {
         }
       );
     } else {
-      // Dismiss toast when fewer than 2 threads are selected
       toast.dismiss('thread-selection-toast');
     }
   }, [
     selectedThreads,
     activeThreadId,
+    contextMenuSelection,
     anyInInbox,
     showDoneButton,
     hasUserLabels,

@@ -5,6 +5,7 @@ import AttachmentItem from '@/renderer/app/components/mail/attachment/Attachment
 import ThreadItemContextMenu from '@/renderer/app/components/mail/thread/ThreadItemContextMenu';
 import {
   rowAvatarRecipient,
+  useThreadListDisplay,
   stripExternalBanner,
   ThreadRowMeta,
   ThreadSenderNames
@@ -19,6 +20,7 @@ import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 
 interface ThreadListDenseItemProps {
@@ -37,7 +39,9 @@ export const ThreadListDenseItem = React.memo(
       // gates content rendering (isRendering) for long-list virtualization.
       const [opacity, setOpacity] = useState(100);
       const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
+      const { t } = useTranslation();
       const { accounts } = useAuth();
+      const { showAvatar, showSnippet, showAttachments } = useThreadListDisplay();
       const memoizedSearchQuery = useCallback(searchNewQuery, [searchNewQuery]);
 
       const { labelsMapByAccount } = useLabelAtom();
@@ -80,13 +84,14 @@ export const ThreadListDenseItem = React.memo(
         return {
           subject: highlightThreadText(
             !currentThread.subject || currentThread.subject === ''
-              ? '(No subject)'
+              ? t('header.display.no_subject')
               : currentThread.subject,
             globalSearchQuery
           ),
           snippet: snippet ? highlightThreadText(snippet, globalSearchQuery) : null
         };
-      }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery]);
+      }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery, t]);
+      const snippetHtml = showSnippet ? highlightedContent.snippet : null;
 
       const { registerItem, unregisterItem } = useKeyboardNavigationContext();
 
@@ -243,7 +248,7 @@ export const ThreadListDenseItem = React.memo(
                         <span
                           aria-hidden
                           data-unread-dot
-                          className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 transition-opacity duration-150 group-pointer-hover:opacity-0"
+                          className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-unread transition-opacity duration-150 group-pointer-hover:opacity-0"
                         />
                       )}
                       <button
@@ -302,12 +307,14 @@ export const ThreadListDenseItem = React.memo(
                     </div>
 
                     {/* Avatar */}
-                    <RecipientAvatar
-                      className="h-6 w-6 shrink-0"
-                      recipient={senderAvatarRecipient}
-                      accountId={currentThread.accountId}
-                      preferredImageSrc={senderAccountImageSrc}
-                    />
+                    {showAvatar && (
+                      <RecipientAvatar
+                        className="h-6 w-6 shrink-0"
+                        recipient={senderAvatarRecipient}
+                        accountId={currentThread.accountId}
+                        preferredImageSrc={senderAccountImageSrc}
+                      />
+                    )}
 
                     {/* Sender column — fixed per breakpoint so subjects share one start x */}
                     <div className="flex w-32 shrink-0 items-center gap-2 overflow-hidden lg:w-40 xl:w-48">
@@ -335,7 +342,7 @@ export const ThreadListDenseItem = React.memo(
                       <span
                         className={cn(
                           'shrink-0 truncate text-[13px] tracking-tight',
-                          highlightedContent.snippet ? 'max-w-[60%]' : 'max-w-full',
+                          snippetHtml ? 'max-w-[60%]' : 'max-w-full',
                           isUnread
                             ? 'font-medium text-foreground'
                             : 'font-normal text-foreground/80'
@@ -343,11 +350,11 @@ export const ThreadListDenseItem = React.memo(
                         dangerouslySetInnerHTML={{
                           __html:
                             !highlightedContent.subject || highlightedContent.subject === ''
-                              ? '(No subject)'
+                              ? t('header.display.no_subject')
                               : highlightedContent.subject
                         }}
                       />
-                      {highlightedContent.snippet && (
+                      {snippetHtml && (
                         <>
                           <span
                             aria-hidden
@@ -357,7 +364,7 @@ export const ThreadListDenseItem = React.memo(
                           </span>
                           <span
                             className="hidden min-w-0 flex-1 truncate text-[13px] tracking-tight text-muted-foreground sm:inline"
-                            dangerouslySetInnerHTML={{ __html: highlightedContent.snippet }}
+                            dangerouslySetInnerHTML={{ __html: snippetHtml }}
                           />
                         </>
                       )}
@@ -373,10 +380,18 @@ export const ThreadListDenseItem = React.memo(
                   {/* Attachment chips — tucked under the subject column. One line,
                       sized like the row's metadata, so they read as a detail of
                       the email rather than a card stacked under it. */}
-                  {Object.keys(currentThread.attachments).length > 0 && (
+                  {showAttachments && Object.keys(currentThread.attachments).length > 0 && (
                     // Starts under the subject: px-3 + 28px checkbox slot + avatar +
                     // sender column, with the row's 12px gaps (sender widens at lg/xl).
-                    <div className="-mt-0.5 flex items-center gap-1.5 overflow-hidden pb-1.5 pl-[14.25rem] pr-6 lg:pl-[16.25rem] xl:pl-[18.25rem]">
+                    <div
+                      className={cn(
+                        '-mt-0.5 flex items-center gap-1.5 overflow-hidden pb-1.5 pr-6',
+                        // Without the 24px avatar and its gap the chips start 2.25rem further left.
+                        showAvatar
+                          ? 'pl-[14.25rem] lg:pl-[16.25rem] xl:pl-[18.25rem]'
+                          : 'pl-[12rem] lg:pl-[14rem] xl:pl-[16rem]'
+                      )}
+                    >
                       {Object.keys(currentThread.attachments)
                         .slice(0, 2)
                         .map((id) => (

@@ -24,7 +24,7 @@ import { z } from 'zod';
 
 // Zod schema for thread list display preferences
 const threadListFormSchema = z.object({
-  showAvatar: z.boolean().default(false),
+  showAvatar: z.boolean().default(true),
   showSnippet: z.boolean().default(true),
   showLabels: z.boolean().default(true),
   showAttachments: z.boolean().default(true)
@@ -42,7 +42,7 @@ export function ThreadListDisplayForm() {
   const threadListForm = useForm<ThreadListFormValues>({
     resolver: zodResolver(threadListFormSchema),
     defaultValues: {
-      showAvatar: preference.display.threadList?.showAvatar ?? false,
+      showAvatar: preference.display.threadList?.showAvatar ?? true,
       showSnippet: preference.display.threadList?.showSnippet ?? true,
       showLabels: preference.display.threadList?.showLabels ?? true,
       showAttachments: preference.display.threadList?.showAttachments ?? true
@@ -52,7 +52,7 @@ export function ThreadListDisplayForm() {
   // Reset thread list form when preferences change
   useEffect(() => {
     const threadListPrefs = localPreference.display.threadList ?? {
-      showAvatar: preference.display.threadList?.showAvatar ?? false,
+      showAvatar: preference.display.threadList?.showAvatar ?? true,
       showSnippet: preference.display.threadList?.showSnippet ?? true,
       showLabels: preference.display.threadList?.showLabels ?? true,
       showAttachments: preference.display.threadList?.showAttachments ?? true
@@ -119,7 +119,7 @@ export function ThreadListDisplayForm() {
   // Determine if thread list settings have been modified
   const isThreadListModified = useMemo(() => {
     const currentThreadListPrefs = localPreference.display.threadList ?? {
-      showAvatar: preference.display.threadList?.showAvatar ?? false,
+      showAvatar: preference.display.threadList?.showAvatar ?? true,
       showSnippet: preference.display.threadList?.showSnippet ?? true,
       showLabels: preference.display.threadList?.showLabels ?? true,
       showAttachments: preference.display.threadList?.showAttachments ?? true
