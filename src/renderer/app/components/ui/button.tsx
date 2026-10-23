@@ -24,9 +24,6 @@ const buttonVariants = cva(
           'bg-gradient-to-t from-primary to-[#303030ff] dark:from-neutral-200 dark:to-primary bg-primary dark:bg-neutral-200 hover:bg-none hover:bg-primary  dark:hover:neutral-200',
         destructive:
           'bg-gradient-to-t from-red-700 to-destructive text-destructive-foreground hover:bg-none bg-red-700 hover:bg-red-700 border-destructive/95',
-        // Newton primary action — reserved for Send / Compose / other CTAs
-        // that source uses red-500 for. Distinct from `destructive` (rose).
-        send: 'bg-red-500 text-white border border-red-600 shadow-sm hover:bg-red-600',
         outline: 'border border-input bg-background hover:bg-muted-low/50 hover:text-foreground',
         // secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         secondary:

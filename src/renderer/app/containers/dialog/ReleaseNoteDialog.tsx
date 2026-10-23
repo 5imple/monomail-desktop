@@ -13,6 +13,7 @@ import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { ReleaseNote, useReleaseNotesAtom } from '@/renderer/app/store/layout/useReleaseNotesAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import React, { FC, useEffect, useMemo, useState, ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import Markdown, { Components } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
@@ -31,32 +32,32 @@ const Badge: FC<{ children: React.ReactNode; category?: string }> = ({
   children,
   category = 'default'
 }) => {
-  // Map category names to colors. Aligned to the Newton palette:
-  //   stone  → neutral / informational
-  //   red    → primary action (compose)
-  //   lime   → active categorization / customization
-  //   amber  → command / transient
-  //   rose   → security-sensitive
+  // Map category names to theme tokens (no raw palette colors):
+  //   muted-foreground → neutral / informational
+  //   secondary-accent → primary action (compose)
+  //   chart-1 (lime)   → active categorization / customization
+  //   chart-5 (amber)  → command / transient
+  //   destructive      → security-sensitive
   const getCategoryColor = (category: string) => {
     const categoryColors: Record<string, string> = {
-      history: 'bg-stone-500',
+      history: 'bg-muted-foreground',
       templates: 'bg-chart-1',
-      notifications: 'bg-stone-500',
-      contacts: 'bg-stone-500',
-      compose: 'bg-red-500',
-      slash: 'bg-amber-500',
-      slack: 'bg-stone-500',
-      auth: 'bg-rose-600',
-      'oauth applications': 'bg-rose-600',
-      preferences: 'bg-stone-400',
+      notifications: 'bg-muted-foreground',
+      contacts: 'bg-muted-foreground',
+      compose: 'bg-secondary-accent',
+      slash: 'bg-chart-5',
+      slack: 'bg-muted-foreground',
+      auth: 'bg-destructive',
+      'oauth applications': 'bg-destructive',
+      preferences: 'bg-muted-foreground/70',
       labeling: 'bg-chart-1',
-      api: 'bg-stone-500',
-      default: 'bg-stone-400'
+      api: 'bg-muted-foreground',
+      default: 'bg-muted-foreground/70'
     };
 
     // Normalize category for lookup - lowercase for case insensitive matching
     const normalizedCategory = category.toLowerCase();
-    return categoryColors[normalizedCategory] || 'bg-stone-400';
+    return categoryColors[normalizedCategory] || 'bg-muted-foreground/70';
   };
 
   return (
@@ -151,13 +152,11 @@ const MarkdownComponents: Components = {
     </code>
   ),
   blockquote: ({ node, children, ...props }) => (
-    <blockquote className="border-l-4 border-gray-200 pl-4 italic dark:border-gray-700" {...props}>
+    <blockquote className="border-l-4 border-border pl-4 italic" {...props}>
       {children}
     </blockquote>
   ),
-  hr: ({ node, ...props }) => (
-    <hr className="my-6 select-text border-gray-200 dark:border-gray-700" {...props} />
-  ),
+  hr: ({ node, ...props }) => <hr className="my-6 select-text border-border" {...props} />,
   img: ({ src, alt }) => <ImageComponent src={src || ''} alt={alt} />
 };
 
@@ -384,6 +383,7 @@ const ReleaseNoteDialog: FC<ReleaseNoteDialogProps> = ({
     releaseNotes
   } = useReleaseNotesAtom();
   const { closeDialog } = useDialogs();
+  const { t } = useTranslation();
 
   // Use the prop release note if provided, otherwise fall back to the one from the atom
   const releaseNote = propReleaseNote || atomReleaseNote;
@@ -473,7 +473,12 @@ const ReleaseNoteDialog: FC<ReleaseNoteDialogProps> = ({
               {/* The newest note (shown after an update) had no way to close
                   but Escape: Next only exists on older notes. */}
               <DialogClose asChild>
-                <Button variant="ghost" typeVariant="icon" sizeVariant="sm" tooltip="Close">
+                <Button
+                  variant="ghost"
+                  typeVariant="icon"
+                  sizeVariant="sm"
+                  tooltip={t('tooltip.close')}
+                >
                   <MonoIcon type="X" />
                 </Button>
               </DialogClose>
