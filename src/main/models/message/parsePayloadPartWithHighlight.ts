@@ -1,30 +1,43 @@
-import DOMPurify from 'dompurify';
+import log from 'electron-log';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { transformEmailForDarkMode } from '@/main/models/message/transformEmailForDarkMode';
 import { parsePayloadPart } from '@/main/models/message/utils';
 
-/**
- * Sanitize a single email-history HTML fragment.
- *
- * parsePayloadPart's light-mode branch returns history fragments built from
- * arbitrary email DOM (`element.outerHTML`) and they get mounted directly via
- * dangerouslySetInnerHTML in MessageCard. Without sanitization, a quoted
- * message containing `<script>` or `<img onerror=...>` runs script when the
- * user clicks "show quoted" — XSS → renderer compromise. The dark-mode
- * branch already sanitizes via transformEmailForDarkMode; this brings the
- * light-mode branch up to parity.
- */
-function sanitizeHistoryFragment(html: string): string {
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ['target', 'data-open-modal', 'bgColor', 'color', 'borderColor', 'align'],
-    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'meta', 'base'],
-    FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus']
-  });
+export interface ParsedPayload {
+  content: string;
+  history: string[];
+  trackingImagesRemoved?: number;
+  trackingDomains?: string[];
 }
 
-// Cache for parsed content
-const parsedContentCache = new Map<string, { content: string; history: string[] }>();
+// Parsed bodies, most recently used last. Bounded: every message read (per
+// search / theme variant) used to stay for the whole session. An open reader
+// keeps its own parse (MessageCard memo), so evicting an old entry only costs
+// a re-parse if that message is opened again much later.
+const PARSED_CACHE_MAX_ENTRIES = 200;
+const parsedContentCache = new Map<string, ParsedPayload>();
+
+const cacheGet = (key: string): ParsedPayload | undefined => {
+  const hit = parsedContentCache.get(key);
+  if (hit) {
+    parsedContentCache.delete(key);
+    parsedContentCache.set(key, hit);
+  }
+  return hit;
+};
+
+const cacheSet = (key: string, value: ParsedPayload) => {
+  parsedContentCache.set(key, value);
+  while (parsedContentCache.size > PARSED_CACHE_MAX_ENTRIES) {
+    const oldest = parsedContentCache.keys().next().value;
+    if (oldest === undefined) break;
+    parsedContentCache.delete(oldest);
+  }
+};
+
+// Parse timing in the dev log. Optional chaining: the unit tests bundle this
+// file with esbuild, where import.meta.env is unset.
+const DEV_TIMING = Boolean(import.meta.env?.DEV);
 
 /**
  * Function to highlight search terms in HTML content
@@ -119,7 +132,10 @@ function highlightTextNodes(node, searchTerms) {
     // One alternation (longest first) so a later term can never match inside
     // the markup of an earlier term's highlight.
     const regex = new RegExp(
-      `(${[...terms].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})`,
+      `(${[...terms]
+        .sort((a, b) => b.length - a.length)
+        .map(escapeRegExp)
+        .join('|')})`,
       'gi'
     );
     const parts = content.split(regex);
@@ -208,37 +224,50 @@ function getPayloadCacheSignature(message: MonoMessage): string {
  * @param {string} searchQuery - The search query
  * @returns {Object} - The parsed content with highlighted search terms
  */
+const cacheKeyOf = (message: MonoMessage, searchQuery: string, isDarkMode: boolean) =>
+  [message.id, searchQuery, isDarkMode ? 'dark' : 'light', getPayloadCacheSignature(message)].join(
+    ':'
+  );
+
+/** Whether `message`'s parse (for this search / theme) is already cached. */
+export function hasParsedPayload(
+  message: MonoMessage,
+  searchQuery: string,
+  isDarkMode: boolean
+): boolean {
+  return parsedContentCache.has(cacheKeyOf(message, searchQuery, isDarkMode));
+}
+
 export function parsePayloadPartWithHighlight(
   message: MonoMessage,
   searchQuery: string,
   isDarkMode: boolean
-) {
-  const cacheKey = [
-    message.id,
-    searchQuery,
-    isDarkMode ? 'dark' : 'light',
-    getPayloadCacheSignature(message)
-  ].join(':');
+): ParsedPayload {
+  const cacheKey = cacheKeyOf(message, searchQuery, isDarkMode);
 
   // Check if we have a cached result
-  const cachedResult = parsedContentCache.get(cacheKey);
+  const cachedResult = cacheGet(cacheKey);
   if (cachedResult) {
     return cachedResult;
   }
 
+  const startedAt = performance.now();
   const rawParsedContent = parsePayloadPart(message);
 
   const parsed = {
     content: isDarkMode
       ? transformEmailForDarkMode(rawParsedContent.content, true)
       : rawParsedContent.content,
-    // Always sanitize history fragments. The dark-mode helper already runs
-    // them through DOMPurify; the light-mode branch previously returned raw
-    // outerHTML which is an XSS sink when later mounted via
-    // dangerouslySetInnerHTML in MessageCard.
+    // History fragments are mounted with dangerouslySetInnerHTML, so they must
+    // be sanitised: parsePayloadPart already runs each one through the same
+    // DOMPurify policy as the body (utils.extractAndRemoveEmailHistory →
+    // sanitizeEmailHtml, its only producer; <style> blocks are stripped from
+    // the document before history is extracted). A second pass here cost a
+    // full DOMPurify run over the quoted history on every open. The dark-mode
+    // transform re-sanitises with its own policy.
     history: isDarkMode
       ? rawParsedContent.history.map((history) => transformEmailForDarkMode(history, true))
-      : rawParsedContent.history.map((history) => sanitizeHistoryFragment(history)),
+      : rawParsedContent.history,
     trackingImagesRemoved: rawParsedContent.trackingImagesRemoved,
     trackingDomains: rawParsedContent.trackingDomains
   };
@@ -257,7 +286,18 @@ export function parsePayloadPartWithHighlight(
       : parsed;
 
   // Cache the result
-  parsedContentCache.set(cacheKey, result);
+  cacheSet(cacheKey, result);
+
+  if (DEV_TIMING) {
+    // Dev only: parsing (and in dark mode, re-colouring) a body is on the path
+    // from click to text on screen, so say when it costs more than a frame.
+    const elapsed = performance.now() - startedAt;
+    if (elapsed > 16) {
+      log.debug(
+        `[reader] parsed message ${message.id} in ${Math.round(elapsed)} ms (${Math.round(result.content.length / 1024)} KB${isDarkMode ? ', dark mode' : ''})`
+      );
+    }
+  }
 
   return result;
 }

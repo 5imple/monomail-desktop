@@ -1,4 +1,5 @@
 import { GmailMessage } from '@/main/api/gmail/types';
+import { MonoMeeting } from '@/main/models/message/meeting';
 import { parseGmailMessage, parsePayloadPart } from '@/main/models/message/utils';
 import { ThreadItemBase } from '@/main/models/thread/ThreadItem';
 import { MonoAttachment, MonoRecipient } from '@/main/models/types';
@@ -44,6 +45,9 @@ export interface IMonoMessage extends ThreadItemBase {
   // Provider-reported "has file attachments" for list items whose attachment
   // metadata wasn't fetched yet (Microsoft Graph); undefined when unknown.
   hasAttachments?: boolean;
+  // The meeting this message invites to, cancels, or answers (Microsoft Graph
+  // eventMessage). Arrives with the full fetch, like the body.
+  meeting?: MonoMeeting;
 }
 
 export class MonoMessage implements ThreadItemBase {
@@ -70,6 +74,7 @@ export class MonoMessage implements ThreadItemBase {
   bodyPlain?: string;
   bodyHtml?: string;
   hasAttachments?: boolean;
+  meeting?: MonoMeeting;
 
   // emailHistory: string[];
 
@@ -101,6 +106,7 @@ export class MonoMessage implements ThreadItemBase {
     this.bodyPlain = data.bodyPlain;
     this.bodyHtml = data.bodyHtml;
     if (data.hasAttachments !== undefined) this.hasAttachments = data.hasAttachments;
+    if (data.meeting) this.meeting = data.meeting;
   }
 
   /**
@@ -129,7 +135,8 @@ export class MonoMessage implements ThreadItemBase {
       payload: this.payload,
       bodyPlain: this.bodyPlain,
       bodyHtml: this.bodyHtml,
-      ...(this.hasAttachments !== undefined ? { hasAttachments: this.hasAttachments } : {})
+      ...(this.hasAttachments !== undefined ? { hasAttachments: this.hasAttachments } : {}),
+      ...(this.meeting ? { meeting: this.meeting } : {})
     };
   }
 
@@ -158,7 +165,17 @@ export class MonoMessage implements ThreadItemBase {
    * Parses a GmailMessage into a MonoMessage.
    */
   static fromGmailMessage(message: GmailMessage): MonoMessage {
-    return parseGmailMessage(message);
+    const parsed = parseGmailMessage(message);
+    // Provider responses can carry more than Gmail's shape (a Microsoft
+    // message's meeting, direct body and attachment flag). Keep them: a pushed
+    // Outlook meeting reply counts as fetched (its empty body is data ''), so
+    // nothing would bring its meeting back later.
+    const extra = message as unknown as Partial<IMonoMessage>;
+    if (extra.meeting) parsed.meeting = extra.meeting;
+    if (extra.hasAttachments !== undefined) parsed.hasAttachments = extra.hasAttachments;
+    if (extra.bodyHtml !== undefined) parsed.bodyHtml = extra.bodyHtml;
+    if (extra.bodyPlain !== undefined) parsed.bodyPlain = extra.bodyPlain;
+    return parsed;
   }
 
   /**

@@ -108,7 +108,12 @@ function decodePayloadData(data: string, textDecoder: TextDecoder): string {
   const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
   const decodedData = atob(padded);
 
-  return textDecoder.decode(new Uint8Array([...decodedData].map((char) => char.charCodeAt(0))));
+  // atob gives one character per byte. Filling the byte array directly; the
+  // spread-and-map built two arrays as long as the body (a megabyte-sized
+  // newsletter is a million entries each) every time a message was parsed.
+  const bytes = new Uint8Array(decodedData.length);
+  for (let i = 0; i < decodedData.length; i++) bytes[i] = decodedData.charCodeAt(i);
+  return textDecoder.decode(bytes);
 }
 
 function sanitizeEmailHtml(html: string): string {

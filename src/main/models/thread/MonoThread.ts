@@ -56,7 +56,10 @@ export class MonoThread {
    * Converts the MonoThread instance to a plain object.
    */
   toPlainObject(): IMonoThread {
-    return { ...this };
+    // accountId explicitly: list and search loads redefine it as a
+    // non-enumerable property, which a spread drops, and a copy built from
+    // the result lost its account ('').
+    return { ...this, accountId: this.accountId };
   }
 
   /**
