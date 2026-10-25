@@ -260,7 +260,25 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
     }
   };
 
+  // Network loads wait until the panel is shown, and at launch until the
+  // inbox has had the first moment to itself: the hidden panel fetched three
+  // months per account at startup, alongside the first inbox and body
+  // requests. Events already stored show at once either way.
+  const panelVisible = useAtomValue(calendarDisplayPanelAtom);
+  const [startupSettled, setStartupSettled] = useState(false);
   useEffect(() => {
+    const settle = () => setStartupSettled(true);
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(settle, { timeout: 1500 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = setTimeout(settle, 1000);
+    return () => clearTimeout(timer);
+  }, []);
+  const canLoad = panelVisible && startupSettled;
+
+  useEffect(() => {
+    if (!canLoad) return;
     if (selectedAccountUids.length === 0) return;
 
     // If selected accounts changed, abort previous requests and clear cache for removed accounts
@@ -306,6 +324,7 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
       }
     });
   }, [
+    canLoad,
     currentMonth,
     selectedAccountUids,
     clearAccountEvents,
@@ -323,12 +342,12 @@ const CalendarPanel: React.FC<CalendarPanelProps> = ({ className }) => {
   const initialFetchedRef = useRef(false);
   useEffect(() => {
     if (initialFetchedRef.current) return;
-    if (accounts.length === 0) return;
+    if (!canLoad || accounts.length === 0) return;
     initialFetchedRef.current = true;
     const uids = accounts.map((a) => a.uid);
     const monthsToFetch = getPreloadMonths(currentMonth);
     uids.forEach((uid) => monthsToFetch.forEach((m) => fetchMonth(m, uid)));
-  }, [accounts, getPreloadMonths]);
+  }, [accounts, getPreloadMonths, canLoad]);
 
   // ============================================================================
   // NAVIGATION

@@ -217,9 +217,12 @@ const getGoogleCalendarEvents = async (
 /**
  * Send RSVP response to a calendar event invitation
  * @param {CalendarRsvpRequest} request - The RSVP request parameters
- * @returns {Promise<CalendarRsvpResponse>} The response from the API
+ * @returns {Promise<CalendarRsvpResponse | null>} The event as updated, or null
+ *   when it can't be read back (a declined Outlook meeting leaves the calendar)
  */
-const sendEventRsvp = async (request: CalendarRsvpRequest): Promise<CalendarRsvpResponse> => {
+const sendEventRsvp = async (
+  request: CalendarRsvpRequest
+): Promise<CalendarRsvpResponse | null> => {
   if (request.uid && getProviderForUid(request.uid) === 'microsoft') {
     return microsoftCalendarProvider.sendRsvp(request);
   }

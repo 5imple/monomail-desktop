@@ -1,6 +1,6 @@
 import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
-import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
+import { createIndexedDBStorage, nonSuspendingStorageAtom } from '@/renderer/app/lib/db/jotai-idb';
 import { addMonths, format, subMonths } from 'date-fns';
 import type { GoogleCalendarEvent } from '@/main/api/calendar/types';
 import {
@@ -177,12 +177,15 @@ export const selectedDateAtom = atom<Date>(new Date());
 export const currentMonthAtom = atom<Date>(new Date());
 
 // Storage atoms for persistence (only for atoms not used in derived atoms)
-export const viewModeAtom = atomWithStorage<CalendarViewMode>(
-  'calendar:viewMode',
-  'DAY',
-  createIndexedDBStorage<CalendarViewMode>({
-    defaultValue: 'DAY'
-  })
+export const viewModeAtom = nonSuspendingStorageAtom(
+  atomWithStorage<CalendarViewMode>(
+    'calendar:viewMode',
+    'DAY',
+    createIndexedDBStorage<CalendarViewMode>({
+      defaultValue: 'DAY'
+    })
+  ),
+  'DAY'
 );
 
 // Account selection

@@ -58,8 +58,14 @@ async function getEvents(
 /**
  * RSVP via Graph's dedicated response actions (accept / decline /
  * tentativelyAccept), then re-read the event for the updated state.
+ *
+ * The response is sent once the action succeeds. The re-read is extra: a
+ * declined meeting leaves the calendar (Outlook moves it to Deleted Items),
+ * so reading it back 404s. That must not report the decline as failed: the
+ * card then went back to "You haven't responded", and a second Decline was
+ * refused ("does not support binding to a non-calendar folder").
  */
-async function sendRsvp(request: CalendarRsvpRequest): Promise<CalendarRsvpResponse> {
+async function sendRsvp(request: CalendarRsvpRequest): Promise<CalendarRsvpResponse | null> {
   const action = RSVP_TO_GRAPH_ACTION[request.responseStatus];
   if (!action) throw new Error(`Unsupported RSVP status: ${request.responseStatus}`);
 
@@ -69,10 +75,15 @@ async function sendRsvp(request: CalendarRsvpRequest): Promise<CalendarRsvpRespo
     { uid: request.uid }
   );
 
-  const updated = await graphApiClient.get<GraphEvent>(
-    `${eventPath(request.eventId)}?$select=${CALENDAR_SELECT}`,
-    { uid: request.uid }
-  );
+  let updated: GraphEvent;
+  try {
+    updated = await graphApiClient.get<GraphEvent>(
+      `${eventPath(request.eventId)}?$select=${CALENDAR_SELECT}`,
+      { uid: request.uid }
+    );
+  } catch {
+    return null;
+  }
   const full = transformGraphEvent(updated);
   const toEpoch = (dt: string | null) => (dt ? Date.parse(dt) || 0 : 0);
 
