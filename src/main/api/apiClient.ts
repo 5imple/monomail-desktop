@@ -3,6 +3,19 @@ import log from 'electron-log';
 log.transports.console.level = import.meta.env.DEV ? 'debug' : 'warn';
 log.transports.ipc.level = import.meta.env.DEV ? 'debug' : 'warn';
 
+// A request for the dev log: the path without its (long) query, plus what the
+// query is for when that is what makes a Graph call slow or large.
+const describeRequest = (url: string): string => {
+  const [path, query = ''] = url.split('?');
+  const hints = [
+    /(\$|%24)filter=[^&]*conversationId/.test(query) ? 'one conversation' : null,
+    /(\$|%24)expand=attachments/.test(query) ? 'with attachments' : null,
+    /(\$|%24)select=[^&]*body(,|&|$|%2C)/.test(query) ? 'with bodies' : null
+  ].filter(Boolean);
+  const shortPath = path.length > 90 ? `${path.slice(0, 87)}…` : path;
+  return hints.length ? `${shortPath} (${hints.join(', ')})` : shortPath;
+};
+
 interface RequestOptions extends RequestInit {
   headers?: HeadersInit;
   body?: any;
@@ -138,6 +151,9 @@ class ApiClient {
   private idToken: string | null = null;
   private activeUid: string | null = null;
   private pendingRequests: Map<string, Promise<any>> = new Map();
+  // Fail fast for a backend that doesn't answer (see backendUnreachable()).
+  private consecutiveNetworkFailures = 0;
+  private unreachableUntil = 0;
 
   constructor(baseURL: string, idToken?: string, activeUid?: string) {
     this.baseURL = baseURL;
@@ -161,6 +177,9 @@ class ApiClient {
 
     // Clear pending requests when network changes
     this.pendingRequests.clear();
+    // Back online: give an unreachable backend another try.
+    this.consecutiveNetworkFailures = 0;
+    this.unreachableUntil = 0;
 
     if (isElectron) {
       // log.info(`[ApiClient] Network status changed. Online: ${navigator.onLine}`);
@@ -202,6 +221,31 @@ class ApiClient {
 
   private isCalendarApiClient() {
     return this.baseURL.startsWith('https://www.googleapis.com/calendar/v3');
+  }
+
+  /**
+   * The optional Mono backend (MONO_ENV_API_URL), not Gmail / Graph / Google
+   * Calendar: requests to it are the only ones that fail fast.
+   */
+  private isBackendClient() {
+    return (
+      !this.isGmailApiClient() &&
+      !this.isCalendarApiClient() &&
+      !this.isGraphApiClient() &&
+      !this.shouldProxyGmailRequest() &&
+      !this.shouldProxyGraphRequest()
+    );
+  }
+
+  /**
+   * After two network failures in a row the backend counts as unreachable for
+   * a minute: its requests fail at once instead of retrying (each one used to
+   * take ~2 s of retries, at every launch and on every settings save, when the
+   * configured backend was down). Any success or the window coming back online
+   * resets it.
+   */
+  private backendUnreachable() {
+    return this.isBackendClient() && Date.now() < this.unreachableUntil;
   }
 
   private isGraphApiClient() {
@@ -415,6 +459,10 @@ class ApiClient {
       idToken,
       ...rest
     } = options;
+
+    if (this.backendUnreachable()) {
+      return Promise.reject(new Error('Backend unreachable (failing fast for a minute)'));
+    }
 
     const accountUid = uid || this.activeUid;
     const shouldProxyGmail = this.shouldProxyGmailRequest();
@@ -653,6 +701,9 @@ class ApiClient {
           // log.info(`[${method} ${response.status}]: ${url}`);
         }
 
+        // The backend answered (even with an error status): it is reachable.
+        this.consecutiveNetworkFailures = 0;
+
         if (!response.ok) {
           return Promise.reject({ status: response.status, data });
         }
@@ -681,6 +732,17 @@ class ApiClient {
           errorMessage.includes('connection') ||
           errorMessage.includes('Connection');
 
+        if (isNetworkError && !isTimeout && this.isBackendClient()) {
+          this.consecutiveNetworkFailures += 1;
+          if (this.consecutiveNetworkFailures >= 2) {
+            if (this.unreachableUntil <= Date.now()) {
+              log.warn(`[ApiClient] Backend ${this.baseURL} unreachable; failing fast for 60 s`);
+            }
+            this.unreachableUntil = Date.now() + 60_000;
+            return Promise.reject(error);
+          }
+        }
+
         // Retry on network errors if we haven't exceeded max retries
         if (isNetworkError && attempt < retries) {
           if (isElectron) {
@@ -702,9 +764,16 @@ class ApiClient {
     // Create the request promise and register it for dedup. The previous
     // code commented out the `.set` line which silently broke dedup —
     // identical concurrent requests all hit the network.
+    const startedAt = performance.now();
     const requestPromise = makeRequest().finally(() => {
       // Remove from pending requests when done
       this.pendingRequests.delete(requestKey);
+      if (import.meta.env.DEV) {
+        // Dev only: where the time goes when opening an email feels slow.
+        log.debug(
+          `[ApiClient] ${method} ${describeRequest(url)} ${Math.round(performance.now() - startedAt)} ms`
+        );
+      }
     });
     this.pendingRequests.set(requestKey, requestPromise);
 
@@ -814,7 +883,10 @@ function graphBatchViaWorkerHost(args: {
  * request order; the main process resolves 429 throttling at the subrequest
  * level (A9). Never throws — failures come back as { ok: false, error }.
  */
-export function graphBatch(uid: string, requests: GraphBatchSubRequest[]): Promise<GraphBatchResult> {
+export function graphBatch(
+  uid: string,
+  requests: GraphBatchSubRequest[]
+): Promise<GraphBatchResult> {
   const args = { uid, requests };
 
   if (isWebWorker) return graphBatchViaWorkerHost(args);

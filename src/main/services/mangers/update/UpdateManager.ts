@@ -150,10 +150,13 @@ export class UpdateManager {
           window.webContents.send('renderer:offline:mode');
         }
       } else {
-        // For critical errors that aren't network-related, show error and quit
+        // Any other updater failure (a missing latest-mac.yml, a signature
+        // problem) is logged and the app keeps running: it used to show an
+        // error box and quit, taking the inbox down over an update check.
         windowManager.closeUpdateWindow();
-        dialog.showErrorBox(err.name, err.message);
-        app.quit();
+        if (!windowManager.getMainAppWindow()) {
+          windowManager.createAppWindow();
+        }
       }
     });
   }

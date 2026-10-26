@@ -6,8 +6,27 @@ import type { MicrosoftOAuthTokens } from '@/main/services/mangers/auth/Microsof
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { createTray, setTrayContextMenu } from '@/main/services/tray';
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import log from 'electron-log';
+
+/**
+ * The OAuth flow finishes in the browser, which stays in front. Bring Mono Mail
+ * back once the account is saved so the user does not have to switch apps.
+ * macOS needs `steal` to take focus from another app.
+ */
+function bringAppToFront(): void {
+  try {
+    const mainAppWindow = windowManager.getMainAppWindow();
+    if (mainAppWindow && !mainAppWindow.isDestroyed()) {
+      if (mainAppWindow.isMinimized()) mainAppWindow.restore();
+      mainAppWindow.show();
+      mainAppWindow.focus();
+    }
+    app.focus({ steal: true });
+  } catch (e) {
+    log.warn('[auth] could not bring the app to the front:', (e as Error).message);
+  }
+}
 
 export function registerAuthHandlers() {
   ipcMain.handle('main:auth:set-active-uid', (_, id: string) => {
@@ -99,6 +118,7 @@ export function registerAuthHandlers() {
           },
           provider: 'google'
         });
+        bringAppToFront();
         return { ok: true };
       } catch (e) {
         log.error('[auth:initiate-sign-in]', (e as Error).message);
@@ -127,6 +147,7 @@ export function registerAuthHandlers() {
         if (mainAppWindow) {
           mainAppWindow.webContents.send('renderer:auth:add-account', tokens.accessToken);
         }
+        bringAppToFront();
         return { ok: true, accessToken: tokens.accessToken };
       } catch (e) {
         log.error('[auth:initiate-add-account]', (e as Error).message);
@@ -169,6 +190,7 @@ export function registerAuthHandlers() {
             userPrincipalName: tokens.userPrincipalName
           }
         });
+        bringAppToFront();
         return { ok: true };
       } catch (e) {
         log.error('[auth:initiate-microsoft-sign-in]', (e as Error).message);
@@ -198,6 +220,7 @@ export function registerAuthHandlers() {
         if (mainAppWindow) {
           mainAppWindow.webContents.send('renderer:auth:add-account', tokens.accessToken);
         }
+        bringAppToFront();
         return { ok: true, accessToken: tokens.accessToken };
       } catch (e) {
         log.error('[auth:initiate-microsoft-add-account]', (e as Error).message);

@@ -2,6 +2,7 @@ import { net, shell } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { createServer } from 'http';
 import log from 'electron-log';
+import { oauthResultPage } from '@/main/services/mangers/auth/oauthResultPage';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -132,10 +133,8 @@ class GoogleOAuthServer {
 
           const oauthError = reqUrl.searchParams.get('error');
           if (oauthError) {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(
-              '<html><body><h2>Sign-in cancelled. You can close this tab and return to Mono Mail.</h2></body></html>'
-            );
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(oauthResultPage('cancelled'));
             finish(
               new Error(
                 `OAuth error: ${oauthError} — ${reqUrl.searchParams.get('error_description') ?? ''}`
@@ -189,12 +188,8 @@ class GoogleOAuthServer {
           // Workspace accounts often omit the OIDC `picture`; fall back to People API.
           const picture = userInfo.picture || (await fetchOwnPhotoUrl(body.access_token));
 
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(
-            '<html><body style="font-family:system-ui;max-width:480px;margin:80px auto;padding:24px">' +
-              '<h2>Sign-in complete!</h2><p>You can close this tab and return to Mono Mail.</p>' +
-              '</body></html>'
-          );
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(oauthResultPage('success'));
 
           finish(null, {
             accessToken: body.access_token,
@@ -206,10 +201,8 @@ class GoogleOAuthServer {
             picture
           });
         } catch (e) {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(
-            `<html><body><h2>Sign-in failed.</h2><p>${(e as Error).message}</p><p>Close this tab and try again in Mono Mail.</p></body></html>`
-          );
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(oauthResultPage('failed', (e as Error).message));
           finish(e as Error);
         }
       });

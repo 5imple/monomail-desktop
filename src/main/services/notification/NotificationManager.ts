@@ -2,7 +2,7 @@ import {
   ICustomNotificationOptions,
   INativeNotificationOptions
 } from '@/main/services/notification/INotificationOptions';
-import { ipcMain, Notification } from 'electron';
+import { app, ipcMain, Notification } from 'electron';
 import CustomNotification from './CustomNotification';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import path from 'path';
@@ -70,9 +70,12 @@ class NotificationManager {
   public createNativeNotification<T>(options: INativeNotificationOptions<T>): string {
     const id = options.id || `native-${Date.now()}`; // Assign a unique ID if none provided
 
-    if (this.nativeNotifications.has(id)) {
-      // Prevent duplicates
-      return id;
+    const existing = this.nativeNotifications.get(id);
+    if (existing) {
+      // Prevent duplicates, unless the caller asked to replace the one on screen.
+      if (!options.replace) return id;
+      this.nativeNotifications.delete(id);
+      existing.close();
     }
 
     const notification = new Notification({
@@ -82,22 +85,33 @@ class NotificationManager {
       silent: options.silent || false
     });
 
+    // Only forget the entry if it is still this notification: a replaced one's
+    // late 'close' must not drop its successor.
+    const forget = () => {
+      if (this.nativeNotifications.get(id) === notification) this.nativeNotifications.delete(id);
+    };
+
     notification.on('click', () => {
+      const message = {
+        channel: 'renderer:notification:native:clicked',
+        args: [options.metadata]
+      };
       const browserWindow = windowManager.getMainAppWindow();
-      if (!browserWindow) {
-        windowManager.createAppWindow({
-          messages: [{ channel: 'renderer:notification:native:clicked', args: [options.metadata] }]
-        });
+      if (!browserWindow || browserWindow.isDestroyed()) {
+        // Delivered once the new window's renderer reports ready.
+        windowManager.createAppWindow({ messages: [message] });
       } else {
-        browserWindow.show();
-        browserWindow.webContents.send('renderer:notification:native:clicked', options.metadata);
+        if (browserWindow.isMinimized()) browserWindow.restore();
+        // Shows the window, and queues the message until the renderer is ready.
+        browserWindow.triggerMessage(message);
+        browserWindow.focus();
       }
-      this.nativeNotifications.delete(id); // Remove after use
+      // Bring the app itself forward (macOS needs steal to take focus).
+      app.focus({ steal: true });
+      forget();
     });
 
-    notification.on('close', () => {
-      this.nativeNotifications.delete(id);
-    });
+    notification.on('close', forget);
 
     notification.show();
 

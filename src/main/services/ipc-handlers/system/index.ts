@@ -2,6 +2,7 @@ import { SplitCategoryPreferences } from '@/main/api/auth/types';
 import { ToastArgs } from '@/main/models/types/toastTypes';
 import { resolveBackendUrl, tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { systemManager } from '@/main/services/mangers/system/SystemManager';
+import { mailDeltaPoller } from '@/main/services/push/MailDeltaPoller';
 import { updateManager } from '@/main/services/mangers/update/UpdateManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { openLogFolder } from '@/main/utils/helpers';
@@ -289,6 +290,10 @@ export function registerSystemHandlers() {
     if (Array.isArray(uids) && uids.every((u) => typeof u === 'string')) {
       systemManager.setKnownAccountUids(uids);
     }
+  });
+
+  ipcMain.handle('main:mail:refresh', () => {
+    mailDeltaPoller.pollNow();
   });
 
   ipcMain.handle('main:unsubscribe:fetch', async (_event, url: unknown) => {

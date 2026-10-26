@@ -47,7 +47,13 @@ const updateUserPreference = (preference: Partial<UserPreference>, signal?: Abor
   // Notification/Inbox/Thread-list/Signature forms bail before saving locally
   // and show "Preference update error" on every Save.
   if (!isBackendConfigured()) return Promise.resolve();
-  return apiClient.patch(`/mono/preference`, { preference }, { signal });
+  // The mirror runs in the background and never fails the save: the forms
+  // await this before saving locally, so a slow or unreachable backend held
+  // every Save for seconds and then discarded the change.
+  apiClient
+    .patch(`/mono/preference`, { preference }, { signal })
+    .catch((error) => console.warn('[preference] backend mirror failed:', error));
+  return Promise.resolve();
 };
 
 /**

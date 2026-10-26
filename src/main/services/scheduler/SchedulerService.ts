@@ -1,4 +1,9 @@
 import type {
+  NotificationClickPayload,
+  PushPayload,
+  ThreadRestoredPayload
+} from '@/main/api/message/push';
+import type {
   CreateSnoozeRequest,
   DraftSnapshot,
   LocalCreateScheduleRequest,
@@ -9,7 +14,13 @@ import type {
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { windowManager } from '@/main/services/mangers/window/WindowManager';
 import { notificationManager } from '@/main/services/notification/NotificationManager';
-import { findOrCreateLabel, modifyThread, sendRawMessage } from '@/main/services/scheduler/gmailMain';
+import { notifyBackFromSnooze } from '@/main/services/push/pushHandler';
+import { MAIN_STRINGS } from '@/main/utils/strings';
+import {
+  findOrCreateLabel,
+  modifyThread,
+  sendRawMessage
+} from '@/main/services/scheduler/gmailMain';
 import {
   archiveThread as archiveMicrosoftThread,
   restoreThreadToInbox as restoreMicrosoftThreadToInbox
@@ -126,13 +137,15 @@ class SchedulerService {
       log.warn('[scheduler] schedule %s stuck "sending" after restart — dropping', task.scheduleId);
       this.removeSchedule(task.scheduleId);
       try {
-        notificationManager.createNativeNotification({
+        // Same click payload as new-mail banners: opens the conversation the
+        // send replied to, or just the account's inbox for a new message.
+        notificationManager.createNativeNotification<NotificationClickPayload>({
           id: `schedule-stuck-${task.scheduleId}`,
-          title: 'Scheduled send may not have completed',
-          body:
-            task.draftSnapshot.subject ||
-            'A scheduled email was interrupted — please check your Sent folder.',
-          metadata: { scheduleId: task.scheduleId, accountId: task.accountId }
+          title: MAIN_STRINGS.notifications.scheduleStuckTitle,
+          body: task.draftSnapshot.subject || MAIN_STRINGS.notifications.scheduleStuckFallbackBody,
+          metadata: task.threadId
+            ? { uid: task.accountId, threadId: task.threadId }
+            : { uid: task.accountId }
         });
       } catch {
         /* notification is best-effort */
@@ -271,6 +284,7 @@ class SchedulerService {
         await this.restoreToInbox(task);
         this.removeSnooze(task.snoozeId);
         this.emit({ type: 'THREAD_UNSNOOZED', snoozeId: task.snoozeId });
+        this.announceUnsnoozed(task);
       } catch (e) {
         // Leave the task in place; the next sweep retries.
         log.warn('[scheduler] un-snooze sweep failed for %s:', task.snoozeId, (e as Error).message);
@@ -389,6 +403,30 @@ class SchedulerService {
       createdAt: task.createdAt,
       threadSnapshot: task.threadSnapshot
     };
+  }
+
+  /**
+   * A due snooze came back: tell the user (the point of a snooze is the
+   * reminder) and refresh the thread in the inbox now rather than on the next
+   * mail sync. Best-effort: the thread is already restored either way.
+   */
+  private announceUnsnoozed(task: SnoozeTask): void {
+    try {
+      notifyBackFromSnooze({
+        uid: task.accountId,
+        threadId: task.threadId,
+        subject: task.threadSnapshot?.subject
+      });
+    } catch (e) {
+      log.warn('[scheduler] back-from-snooze notification failed: %s', (e as Error).message);
+    }
+    const frame: PushPayload<ThreadRestoredPayload> = {
+      data: { type: 'THREAD_RESTORED', aAUid: task.accountId, threadId: task.threadId }
+    };
+    const target = windowManager.getMainAppWindow();
+    if (target && !target.isDestroyed()) {
+      target.webContents.send('renderer:push:message-received', frame);
+    }
   }
 
   private emit(event: Record<string, unknown>): void {

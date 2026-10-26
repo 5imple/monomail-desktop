@@ -99,7 +99,14 @@ export function registerAppEventHandlers() {
     });
 
     registerIpcHandlers();
-    // windowManager.createAppWindow();
+    // The window first, the update check after it in the background: the
+    // window used to wait for the connectivity probe and the update feed (and,
+    // with an update, for a separate download window) before the inbox could
+    // appear. With a window open, an available update shows the in-app
+    // update card instead.
+    windowManager.createAppWindow({
+      fullSizeOnCreation: systemManager.getIsFullSizeWindowOnCreation()
+    });
 
     systemManager.initializeAutoStartSettings();
 

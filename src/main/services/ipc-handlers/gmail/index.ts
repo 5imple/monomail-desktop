@@ -1,6 +1,8 @@
 import { tokenManager } from '@/main/services/mangers/auth/TokenManager';
 import { ipcMain, net } from 'electron';
 import log from 'electron-log';
+import { noteMailChanged } from '@/main/services/push/mailChangeNotifier';
+import { isGmailMailMutation } from '@/main/services/push/mailMutation';
 
 type GmailRequestArgs = {
   method?: string;
@@ -138,6 +140,12 @@ export function registerGmailHandlers() {
         } satisfies GmailRequestResult;
       }
 
+      // The full url: the path alone lacks the /gmail/v1/users/me prefix.
+      if (
+        isGmailMailMutation(method, url, typeof args?.body === 'string' ? args.body : undefined)
+      ) {
+        noteMailChanged();
+      }
       return { ok: true, status: response.status, data } satisfies GmailRequestResult;
     } catch (error) {
       log.error(

@@ -200,6 +200,7 @@ const api = {
   clearBadge: () => ipcRenderer.invoke('main:badge:clear'),
 
   unsubscribeFetch: (url: string) => ipcRenderer.invoke('main:unsubscribe:fetch', url),
+  refreshMail: () => ipcRenderer.invoke('main:mail:refresh'),
   setKnownAccountUids: (uids: string[]) =>
     ipcRenderer.invoke('main:system:set-known-account-uids', uids),
   setSplitCategoryPreferences: (uid: string, preferences: SplitCategoryPreferences) =>

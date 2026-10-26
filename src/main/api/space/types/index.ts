@@ -67,6 +67,8 @@ export interface CustomNavItem {
 export interface CustomSidebarState {
   items: Record<string, CustomNavItem>;
   order: string[];
+  /** Which set of default rows this sidebar has been given (see withSidebarDefaults). */
+  defaultsVersion?: number;
 }
 
 export interface CustomSidebarResponse {

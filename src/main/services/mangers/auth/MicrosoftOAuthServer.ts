@@ -2,6 +2,7 @@ import { net, shell } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { createServer } from 'http';
 import log from 'electron-log';
+import { oauthResultPage } from '@/main/services/mangers/auth/oauthResultPage';
 
 // Microsoft identity platform (v2) endpoints, templated by tenant.
 // Tenant 'organizations' = any work/school tenant (v1 scope: no personal MSA;
@@ -175,10 +176,8 @@ class MicrosoftOAuthServer {
 
           const oauthError = reqUrl.searchParams.get('error');
           if (oauthError) {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(
-              '<html><body><h2>Sign-in cancelled. You can close this tab and return to Mono Mail.</h2></body></html>'
-            );
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(oauthResultPage('cancelled'));
             finish(
               new Error(
                 `OAuth error: ${oauthError} — ${reqUrl.searchParams.get('error_description') ?? ''}`
@@ -256,12 +255,8 @@ class MicrosoftOAuthServer {
 
           const picture = await fetchOwnPhotoDataUri(body.access_token);
 
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(
-            '<html><body style="font-family:system-ui;max-width:480px;margin:80px auto;padding:24px">' +
-              '<h2>Sign-in complete!</h2><p>You can close this tab and return to Mono Mail.</p>' +
-              '</body></html>'
-          );
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(oauthResultPage('success'));
 
           finish(null, {
             accessToken: body.access_token,
@@ -276,10 +271,8 @@ class MicrosoftOAuthServer {
             picture
           });
         } catch (e) {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(
-            `<html><body><h2>Sign-in failed.</h2><p>${(e as Error).message}</p><p>Close this tab and try again in Mono Mail.</p></body></html>`
-          );
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(oauthResultPage('failed', (e as Error).message));
           finish(e as Error);
         }
       });

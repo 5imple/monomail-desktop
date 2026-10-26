@@ -19,7 +19,13 @@ export const validRendererChannel = [
   'renderer:queue:event',
   'renderer:system:deeplink-query',
   'renderer:mailto:compose',
-  'renderer:toast:show'
+  'renderer:toast:show',
+  // Main asks the renderer to play the chosen alert sound once per new-mail
+  // batch (the native banner itself is silent). Payload: AudioType.
+  'renderer:notification:sound',
+  // A send, reply, move or delete went through (mailChangeNotifier): the
+  // list refreshes itself quietly.
+  'renderer:mail:changed'
 ] as const;
 export type ValidRendererChannel = (typeof validRendererChannel)[number];
 

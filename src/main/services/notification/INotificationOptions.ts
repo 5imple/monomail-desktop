@@ -21,4 +21,10 @@ export interface INativeNotificationOptions<T> {
   icon?: string;
   silent?: boolean;
   metadata?: T;
+  /**
+   * When a notification with this id is still on screen: false (default) keeps
+   * it and drops the new one; true closes it and shows the new one, so a new
+   * reply in an already-notified conversation is not swallowed.
+   */
+  replace?: boolean;
 }

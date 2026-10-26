@@ -244,6 +244,7 @@ interface IpcRenderer {
 
   unsubscribeFetch: (url: string) => Promise<{ ok: boolean; status?: number; error?: string }>;
   setKnownAccountUids: (uids: string[]) => Promise<void>;
+  refreshMail: () => Promise<void>;
   setSplitCategoryPreferences: (
     uid: string,
     preferences: SplitCategoryPreferences

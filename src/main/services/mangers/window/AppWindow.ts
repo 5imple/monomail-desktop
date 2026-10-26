@@ -123,6 +123,8 @@ class AppWindow extends BrowserWindow {
   private fullSizeOnCreation: boolean;
   private saveBoundsTimeout: NodeJS.Timeout | null = null;
   private rendererReady: boolean = false;
+  // The URL the app was last loaded from; where the crash page's Refresh goes.
+  private appUrl: string = '';
 
   constructor({
     route = '/',
@@ -214,6 +216,8 @@ class AppWindow extends BrowserWindow {
       log.error(
         `[AppWindow] render-process-gone reason=${details.reason} exitCode=${details.exitCode}`
       );
+      // The window is blank after a crash. Put a Refresh in the middle of it.
+      if (details.reason !== 'clean-exit') this.showReloadPage(details.reason);
     });
     this.webContents.on('preload-error', (_e, preloadPath, err) => {
       log.error(`[AppWindow] preload-error path=${preloadPath} err=${err.message}`);
@@ -376,6 +380,27 @@ class AppWindow extends BrowserWindow {
     }
   }
 
+  /** Loads the app and remembers where from, for the crash page's Refresh. */
+  private loadApp(url: string): void {
+    this.appUrl = url;
+    void this.loadURL(url);
+  }
+
+  /**
+   * reload.html: one centered Refresh button, shown when the renderer process
+   * died and left the window blank. Refresh goes back to the app URL; the page
+   * never reloads by itself, so a renderer that crashes on start cannot loop.
+   */
+  private showReloadPage(reason: string): void {
+    if (this.isDestroyed()) return;
+    const base =
+      is.dev && process.env['ELECTRON_RENDERER_URL']
+        ? process.env['ELECTRON_RENDERER_URL']
+        : 'monomail-app://app';
+    const params = new URLSearchParams({ appUrl: this.appUrl, reason });
+    void this.loadURL(`${base}/reload.html?${params.toString()}`);
+  }
+
   /**
    * Load the bundled React renderer from disk (no Firebase Hosting fetch).
    * This is used both as the success path for standalone builds with no
@@ -392,13 +417,13 @@ class AppWindow extends BrowserWindow {
     const cleanRoute = route.startsWith('/') ? route : '/' + route;
     const target = `monomail-app://app${cleanRoute}`;
     log.info(`[AppWindow] Loading local renderer from ${target}`);
-    this.loadURL(target);
+    this.loadApp(target);
   }
 
   // Helper method to load remote URL based on environment
   private loadRemoteURL(route: string): void {
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-      this.loadURL(process.env['ELECTRON_RENDERER_URL'] + route);
+      this.loadApp(process.env['ELECTRON_RENDERER_URL'] + route);
       return;
     }
 
@@ -420,7 +445,7 @@ class AppWindow extends BrowserWindow {
 
     if (isRealAuthDomain) {
       log.info(`[AppWindow] Loading remote URL https://${authDomain}${route}`);
-      this.loadURL(`https://${authDomain}${route}`);
+      this.loadApp(`https://${authDomain}${route}`);
     } else {
       log.info(
         `[AppWindow] No real auth domain ("${authDomain}") — loading bundled renderer locally`
