@@ -28,15 +28,21 @@ const inertWhen = (condition: boolean) =>
 const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
+  // The quoted email is parsed and laid out only once it's first shown (kept
+  // after, for the collapse animation): collapsed, it cost a full parse and
+  // layout of the original on every compose open.
+  const [hasExpanded, setHasExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const referenceBody = useMemo(() => {
+    if (!hasExpanded) return '';
     return type === 'forward' ? getForwardedMessageBody(item) : item.getParsedBody();
-  }, [item, type]);
+  }, [item, type, hasExpanded]);
   // Local time, like the reader's message cards (formatMessageDate keeps the
   // sender's zone, right for the forwarded "Date:" line but not for the UI).
   const formattedDate = useMemo(() => formatMessageCardDate(item.timestamp), [item]);
 
   const toggleExpand = () => {
+    setHasExpanded(true);
     setIsExpanded((prev) => !prev);
   };
 
@@ -108,7 +114,8 @@ const ReferenceCard: FC<ReferenceCardProps> = ({ type, item, accountId }) => {
     return () => {
       images.forEach((img) => observer.unobserve(img));
     };
-  }, [contentRef.current, item.id]);
+    // Re-run once the quoted body is mounted (first expand).
+  }, [referenceBody, item.id]);
 
   return (
     <Card className="border-border/60 shadow-sm transition-all duration-400 ease-bouncy-in-out">

@@ -29,7 +29,7 @@ import EditorCommandList from '@/renderer/app/lib/text-editor/command/EditorComm
 import getCommandSuggestions from '@/renderer/app/lib/text-editor/command/getCommandSuggestions';
 import { mergeAttributes } from '@tiptap/core';
 import HardBreak from '@tiptap/extension-hard-break';
-import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import { LinkButtonExtension } from '@/renderer/app/lib/text-editor/LinkButtonExtension';
 import { PlainTextPasteExtension } from '@/renderer/app/lib/text-editor/PlainTextPasteExtension';
 
@@ -57,6 +57,8 @@ export const Heading = BaseHeading.configure({ levels: [1, 2, 3] }).extend({
 });
 
 export interface EditorExtensionsOptions {
+  /** Translations for the placeholders. */
+  t: TFunction;
   draftId?: string;
   onUploadInlineImage?: (
     file: File,
@@ -64,18 +66,25 @@ export interface EditorExtensionsOptions {
     draftId: string
   ) => Promise<DraftUploadInlineImageResponse>;
   onUploadAttachment?: (file: File) => Promise<void>;
-  templates?: IMonoTemplate[];
+  /** Read when the slash menu opens, so templates added later show up. */
+  getTemplates?: () => IMonoTemplate[];
   onSelectTemplate?: (template: IMonoTemplate) => void;
 }
 
+/**
+ * The editor's extensions. Built once per editor: TipTap compares them by
+ * identity on every render, and a fresh set made it re-apply its options
+ * (view.setProps + updateState) on every keystroke. Callbacks that change
+ * should be passed as stable wrappers.
+ */
 export const getEditorExtensions = ({
+  t,
   draftId,
   onUploadInlineImage,
   onUploadAttachment,
-  templates = [],
+  getTemplates,
   onSelectTemplate
-}: EditorExtensionsOptions = {}) => {
-  const { t } = useTranslation();
+}: EditorExtensionsOptions) => {
   return [
     Document,
     StarterKit.configure({
@@ -256,7 +265,7 @@ export const getEditorExtensions = ({
       suggestion: {
         items: (props) =>
           getCommandSuggestions(props.query, {
-            templates,
+            templates: getTemplates?.() ?? [],
             onSelectTemplate
           }),
         render: EditorCommandList

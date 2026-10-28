@@ -4,8 +4,26 @@ import { Separator } from '@/renderer/app/components/ui/separator';
 import { Toggle } from '@/renderer/app/components/ui/toggle';
 import { isMac } from '@/renderer/app/lib/platform';
 import { PopoverTrigger } from '@radix-ui/react-popover';
-import { type Editor } from '@tiptap/react';
+import { type Editor, useEditorState } from '@tiptap/react';
 import { useState } from 'react';
+
+// What the toolbar shows from the editor. The editor no longer re-renders its
+// children on every transaction, so the toolbar re-renders itself when one of
+// these changes (and only then).
+const toolbarStateKey = (editor: Editor): string =>
+  [
+    editor.isActive('bold'),
+    editor.isActive('italic'),
+    editor.isActive('strike'),
+    editor.isActive('bulletList'),
+    editor.isActive('orderedList'),
+    editor.isActive({ textAlign: 'left' }),
+    editor.isActive({ textAlign: 'center' }),
+    editor.isActive({ textAlign: 'right' }),
+    editor.isActive({ textAlign: 'justify' }),
+    editor.getAttributes('textStyle').color ?? '',
+    editor.getAttributes('highlight').color ?? ''
+  ].join('|');
 import { useTranslation } from 'react-i18next';
 
 // "Bold (⌘B)" / "Bold (Ctrl+B)" — TipTap's own shortcuts for each control.
@@ -28,6 +46,7 @@ const NoColorSwatch = () => (
 
 const TextEditorToolbar = ({ editor, className }: { editor: Editor; className?: string }) => {
   const { t } = useTranslation();
+  useEditorState({ editor, selector: ({ editor: current }) => toolbarStateKey(current) });
   const [isTextColorPickerOpen, setIsTextColorPickerOpen] = useState(false);
   const [isBackgroundColorPickerOpen, setIsBackgroundColorPickerOpen] = useState(false);
 

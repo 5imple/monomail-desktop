@@ -153,12 +153,9 @@ const EditorCommandList = () => {
         return true;
       }
 
-      // Access the ref with proper typing
-      const commandsListRef = component?.ref as CommandsListRef;
-      const result = commandsListRef?.onKeyDown ? commandsListRef.onKeyDown(props) : false;
-
-      // If we have an empty list and Enter was pressed, hide the popup like Escape
-      if (result && props.event.key === 'Enter') {
+      // Nothing matches ("/usr/local", "and / or"): Enter closes the menu and
+      // is still an Enter — it used to be swallowed, so the line didn't break.
+      if (props.event.key === 'Enter') {
         const items = (component && (component?.props as EditorCommandListItemProps))?.items || [];
         if (items.length === 0) {
           // Set decoration inactive
@@ -173,10 +170,13 @@ const EditorCommandList = () => {
             component.destroy();
             component = null;
           }
+          return false;
         }
       }
 
-      return result;
+      // Access the ref with proper typing
+      const commandsListRef = component?.ref as CommandsListRef;
+      return commandsListRef?.onKeyDown ? commandsListRef.onKeyDown(props) : false;
     },
 
     onExit() {

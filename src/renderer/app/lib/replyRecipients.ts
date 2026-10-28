@@ -35,3 +35,38 @@ export function buildReplyAllRecipients(
 export function replySubject(subject: string): string {
   return subject.toLowerCase().startsWith('re: ') ? subject : `Re: ${subject}`;
 }
+
+/**
+ * Recipients for plain Reply: the sender only. Replying to your own message
+ * goes to its original To. Cc and Bcc are never copied (that's Reply All).
+ */
+export function buildReplyRecipients(
+  message: { from: Recipient; to: Recipient[] },
+  ownEmails: Iterable<string>
+): string[] {
+  const own = new Set([...ownEmails].map((email) => email.trim().toLowerCase()));
+  const fromSelf = own.has(message.from.email.trim().toLowerCase());
+  return fromSelf ? message.to.map((recipient) => recipient.email) : [message.from.email];
+}
+
+/**
+ * Which messages of a conversation the reply actions answer: Reply the latest
+ * one from someone else (in a conversation you only sent to, your own latest,
+ * so the reply goes to its recipients); Reply all and Forward the newest.
+ * Addresses compare case-insensitively.
+ */
+export function replyTargets<T extends { from?: { email?: string } | null }>(
+  messages: T[],
+  ownEmails: Iterable<string>
+): { replyTarget: T | null; latest: T | null; fromOthers: boolean } {
+  const own = new Set([...ownEmails].map((email) => email.trim().toLowerCase()));
+  const others = messages.filter(
+    (message) => !own.has((message.from?.email ?? '').trim().toLowerCase())
+  );
+  const pool = others.length > 0 ? others : messages;
+  return {
+    replyTarget: pool[pool.length - 1] ?? null,
+    latest: messages[messages.length - 1] ?? null,
+    fromOthers: others.length > 0
+  };
+}

@@ -362,37 +362,8 @@ interface LinkButtonPopoverProps {
 }
 
 export const LinkButtonPopover: React.FC<LinkButtonPopoverProps> = ({ editor }) => {
-  // Add custom CSS for link button styling
-  useEffect(() => {
-    const styleEl = document.createElement('style');
-    styleEl.innerHTML = `
-      .link-text-hidden {
-        display: none;
-      }
-      .link-button {
-        position: relative;
-        z-index: 1;
-        cursor: pointer;
-        color: rgb(37 99 235);
-        text-decoration-line: underline;
-        text-underline-offset: 2px;
-      }
-      .ProseMirror a {
-        color: rgb(37 99 235);
-        text-decoration-line: underline;
-        text-underline-offset: 2px;
-        cursor: text; /* Changed from pointer to text for better text edit experience */
-        &:hover {
-         background-color: revert;
-        }
-      }
-    `;
-    document.head.appendChild(styleEl);
-
-    return () => {
-      document.head.removeChild(styleEl);
-    };
-  }, []);
+  // Its styles (.link-text-hidden, .link-button, .ProseMirror a) are in
+  // global.css.
 
   // Listen for link button clicks
   useEffect(() => {

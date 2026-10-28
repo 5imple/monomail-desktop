@@ -9,7 +9,7 @@ import {
   ScrollAreaViewport,
   ScrollBar
 } from '@/renderer/app/components/ui/scroll-area';
-import { convertPlainTextToHtml } from '@/renderer/app/containers/editor/TextEditor';
+import { convertPlainTextToHtml } from '@/renderer/app/lib/text-editor/convertPlainTextToHtml';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useDiscardDraftWithUndo } from '@/renderer/app/hooks/useDiscardDraftWithUndo';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';

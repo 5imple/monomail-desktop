@@ -8,8 +8,17 @@ import { Contact } from '@/renderer/app/lib/db/contact';
 import { recipientLabel } from '@/renderer/app/lib/recipientLabel';
 import { cn } from '@/renderer/app/lib/utils';
 import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
-import { FC, KeyboardEventHandler } from 'react';
+import { FC, KeyboardEventHandler, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+
+/** Reply ↔ Reply all inside compose (a reply only). */
+export interface ReplyAllToggle {
+  /** 'add': reply-all recipients are missing; 'remove': back to the sender only. */
+  mode: 'add' | 'remove';
+  /** How many would be added. */
+  missing: number;
+  onToggle: () => void;
+}
 
 interface ComposeCardHeaderProps {
   composeDraft: MonoDraft;
@@ -24,11 +33,12 @@ interface ComposeCardHeaderProps {
   bccVisible: boolean;
   onToggleCc: () => void;
   onToggleBcc: () => void;
+  replyAll?: ReplyAllToggle | null;
 }
 
 // A chip for an address: the contact's avatar and name when we know them.
-const toRecipientOption = (address: string, contacts: Contact[]): Option => {
-  const contact = contacts.find((c) => c.emailAddress === address);
+const toRecipientOption = (address: string, contacts: Map<string, Contact>): Option => {
+  const contact = contacts.get(address);
   if (!contact) return { label: address, value: address };
   return {
     icon: (
@@ -42,6 +52,9 @@ const toRecipientOption = (address: string, contacts: Contact[]): Option => {
     label: recipientLabel(contact.displayName, contact.emailAddress)
   };
 };
+
+// Stable, so the recipient fields' effects don't re-run on every render.
+const noopSelectionChange = () => undefined;
 
 // One width for To / Cc / Bcc so the three fields start at the same x.
 const FIELD_LABEL_CLASS = 'mr-2 mt-[9px] w-8 shrink-0 text-[14px] font-semibold text-foreground';
@@ -63,10 +76,48 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   ccVisible,
   bccVisible,
   onToggleCc,
-  onToggleBcc
+  onToggleBcc,
+  replyAll
 }) => {
   const { t } = useTranslation();
   const { contactArray } = useContactAtom();
+
+  // One lookup table per contact list (a find over every contact per chip,
+  // per render, before).
+  const contactsByEmail = useMemo(() => {
+    const map = new Map<string, Contact>();
+    for (const contact of contactArray) {
+      if (!map.has(contact.emailAddress)) map.set(contact.emailAddress, contact);
+    }
+    return map;
+  }, [contactArray]);
+  // Chip arrays change only with the addresses (a new array every render
+  // re-ran the fields' sync effects).
+  const toOptions = useMemo(
+    () => composeDraft.to.map((address) => toRecipientOption(address, contactsByEmail)),
+    [composeDraft.to, contactsByEmail]
+  );
+  const ccOptions = useMemo(
+    () => composeDraft.cc.map((address) => toRecipientOption(address, contactsByEmail)),
+    [composeDraft.cc, contactsByEmail]
+  );
+  const bccOptions = useMemo(
+    () => composeDraft.bcc.map((address) => toRecipientOption(address, contactsByEmail)),
+    [composeDraft.bcc, contactsByEmail]
+  );
+  const commandProps = useMemo(() => ({ onKeyDown }), [onKeyDown]);
+  const handleToChange = useCallback(
+    (options: Option[]) => handleInputChange('to', options.map((o) => o.value).filter(Boolean)),
+    [handleInputChange]
+  );
+  const handleCcChange = useCallback(
+    (options: Option[]) => handleInputChange('cc', options.map((o) => o.value).filter(Boolean)),
+    [handleInputChange]
+  );
+  const handleBccChange = useCallback(
+    (options: Option[]) => handleInputChange('bcc', options.map((o) => o.value).filter(Boolean)),
+    [handleInputChange]
+  );
 
   if (isMinimized) {
     const subject =
@@ -156,16 +207,34 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             inputProps={RECIPIENT_INPUT_PROPS}
             hideClearAllButton={true}
             placeholder=""
-            commandProps={{ onKeyDown }}
-            value={composeDraft.to.map((address) => toRecipientOption(address, contactArray))}
-            onChange={(options) =>
-              handleInputChange('to', options.map((o) => o.value).filter(Boolean))
-            }
-            onSelectionChange={() => {}}
+            commandProps={commandProps}
+            value={toOptions}
+            onChange={handleToChange}
+            onSelectionChange={noopSelectionChange}
             emptyIndicator={<span>{t('compose_card.no_contact_match')}</span>}
           />
         </div>
         <div className="ml-1 flex shrink-0 items-center gap-0.5 pt-1">
+          {replyAll && (
+            // Reply ↔ Reply all without leaving compose.
+            <Button
+              tabIndex={-1}
+              onClick={replyAll.onToggle}
+              tooltip={
+                replyAll.mode === 'add'
+                  ? t('compose_card.reply_all_tooltip', { count: replyAll.missing })
+                  : t('compose_card.reply_sender_only_tooltip')
+              }
+              shortcut="MOD+SHIFT+A"
+              className="font-sans text-[13px] font-medium tracking-normal text-muted-foreground transition-colors hover:text-foreground"
+              variant="text"
+              sizeVariant="sm"
+            >
+              {replyAll.mode === 'add'
+                ? t('compose_card.reply_all', { count: replyAll.missing })
+                : t('compose_card.reply_sender_only')}
+            </Button>
+          )}
           {recipientToggle('cc', ccVisible, composeDraft.cc.length > 0, onToggleCc)}
           {recipientToggle('bcc', bccVisible, composeDraft.bcc.length > 0, onToggleBcc)}
 
@@ -196,6 +265,7 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             tabIndex={-1}
             onClick={() => onClose()}
             tooltip={t('tooltip.close')}
+            shortcut="ESC"
             variant="ghost"
             sizeVariant="sm"
             typeVariant="icon"
@@ -216,12 +286,10 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             inputProps={RECIPIENT_INPUT_PROPS}
             hideClearAllButton={true}
             placeholder=""
-            value={composeDraft.cc.map((address) => toRecipientOption(address, contactArray))}
-            onChange={(options) =>
-              handleInputChange('cc', options.map((o) => o.value).filter(Boolean))
-            }
-            commandProps={{ onKeyDown }}
-            onSelectionChange={() => {}}
+            value={ccOptions}
+            onChange={handleCcChange}
+            commandProps={commandProps}
+            onSelectionChange={noopSelectionChange}
             emptyIndicator={<span>{t('compose_card.no_contact_match')}</span>}
           />
         </div>
@@ -237,14 +305,12 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
             inputProps={RECIPIENT_INPUT_PROPS}
             hideClearAllButton={true}
             placeholder=""
-            commandProps={{ onKeyDown }}
+            commandProps={commandProps}
             // value (not defaultValue) like To / Cc, so Bcc chips follow the
             // draft — they never picked up names once contacts loaded.
-            value={composeDraft.bcc.map((address) => toRecipientOption(address, contactArray))}
-            onChange={(options) =>
-              handleInputChange('bcc', options.map((o) => o.value).filter(Boolean))
-            }
-            onSelectionChange={() => {}}
+            value={bccOptions}
+            onChange={handleBccChange}
+            onSelectionChange={noopSelectionChange}
             emptyIndicator={<span>{t('compose_card.no_contact_match')}</span>}
           />
         </div>
@@ -253,4 +319,6 @@ const ComposeCardHeader: FC<ComposeCardHeaderProps> = ({
   );
 };
 
-export default ComposeCardHeader;
+// Re-renders only when its props change (the body no longer re-renders the
+// card, and the card passes stable callbacks).
+export default memo(ComposeCardHeader);

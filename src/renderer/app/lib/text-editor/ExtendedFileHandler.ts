@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { generateUUID } from '@/main/utils';
 import { Editor } from '@tiptap/react';
 import { DraftUploadInlineImageResponse } from '@/main/api/draft/types';
-import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 
 // Utility function to check if file is an image
 function isImageFile(file: File): boolean {
@@ -89,7 +89,11 @@ export const ExtendedFileHandler = (
 ) =>
   FileHandler.extend({
     addOptions() {
-      const { t } = useTranslation();
+      // Not useTranslation(): this runs while the editor is being built, not
+      // as a hook of a component. Calling a hook here added hooks to whichever
+      // component happened to build the editor, and once TextEditor built it
+      // only on mount, the next render crashed ("Should have a queue").
+      const t = i18n.t.bind(i18n);
       return {
         ...this.parent?.(),
 

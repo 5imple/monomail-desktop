@@ -177,23 +177,7 @@ interface VariableEditorPopoverProps {
 }
 
 export const VariableEditorPopover: React.FC<VariableEditorPopoverProps> = ({ editor }) => {
-  // Add custom CSS to document for variable styling
-  useEffect(() => {
-    const styleEl = document.createElement('style');
-    styleEl.innerHTML = `
-      .variable-text-hidden {
-        display: none;
-      }
-      .variable-preview {
-        transition: background-color 0.2s ease;
-      }
-    `;
-    document.head.appendChild(styleEl);
-
-    return () => {
-      document.head.removeChild(styleEl);
-    };
-  }, []);
+  // Its styles (.variable-text-hidden, .variable-preview) are in global.css.
 
   // Listen for variable clicks
   useEffect(() => {

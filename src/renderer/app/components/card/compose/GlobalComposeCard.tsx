@@ -1,13 +1,24 @@
-// Updated GlobalComposeCard.tsx
 import { apiClient } from '@/main/api/apiClient';
-import mailApi from '@/main/api/mail/mailApi';
+import { IMonoTemplate } from '@/main/api/template/types';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoAttachment } from '@/main/models/types';
-import { generateUUID, isComposeDraftId } from '@/main/utils'; // Import getUidFromEmail
-import tailwindCSS from '@/renderer/app/assets/style/tailwind.css?raw';
+import { generateUUID } from '@/main/utils';
 import ComposeCardFooter from '@/renderer/app/components/card/compose/ComposeCardFooter';
-import ComposeCardHeader from '@/renderer/app/components/card/compose/ComposeCardHeader';
+import ComposeCardHeader, {
+  ReplyAllToggle
+} from '@/renderer/app/components/card/compose/ComposeCardHeader';
+import {
+  closeOutcome,
+  editableSnapshot,
+  escapeClosesCompose,
+  findUnfilledVariables,
+  toggleReplyAll
+} from '@/renderer/app/components/card/compose/composeLifecycle';
+import { defaultSignatureId } from '@/renderer/app/components/card/compose/defaultSignature';
+import { loadReplyOriginal } from '@/renderer/app/components/card/compose/loadReplyOriginal';
+import { useSendComposedDraft } from '@/renderer/app/components/card/compose/useSendComposedDraft';
+import { prewarmEmailInliner } from '@/renderer/app/components/card/compose/prepareOutgoingDraft';
 import ReferenceCard from '@/renderer/app/components/card/compose/ReferenceCard';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import SignatureSwitcher from '@/renderer/app/components/mail/SignatureSwitcher';
@@ -15,32 +26,26 @@ import { Button } from '@/renderer/app/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/renderer/app/components/ui/card';
 import { Input } from '@/renderer/app/components/ui/input';
 import Loader from '@/renderer/app/components/ui/loader';
-import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
+import TextEditor, { TextEditorHandle } from '@/renderer/app/containers/editor/TextEditor';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
 import { useDiscardDraftWithUndo } from '@/renderer/app/hooks/useDiscardDraftWithUndo';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
+import { DBGetDraftById } from '@/renderer/app/lib/db/draft';
 import {
   DBDeleteAttachmentBlob,
   DBSaveAttachmentBlob
 } from '@/renderer/app/lib/db/draftAttachment';
-import { DBGetMessage, DBSaveMessage } from '@/renderer/app/lib/db/message';
-import {
-  embedQuotedImages,
-  formatForwardedMessage,
-  formatQuotedReply
-} from '@/renderer/app/lib/formatBody';
 import { getAttachmentIcon } from '@/renderer/app/lib/getAttachmentIcon';
 import { hasModKey } from '@/renderer/app/lib/platform';
+import { buildReplyAllRecipients } from '@/renderer/app/lib/replyRecipients';
 import {
   GMAIL_MAX_FILE_BYTES,
   MICROSOFT_ATTACHMENT_BUDGET_BYTES,
-  MICROSOFT_MAX_ENCODED_MIME,
-  estimateMicrosoftRequestSize,
-  formatLimit,
-  measureHtmlBody
+  formatLimit
 } from '@/renderer/app/lib/sendSizeLimits';
+import { insertPlainText } from '@/renderer/app/lib/text-editor/PlainTextPasteExtension';
 import { cn } from '@/renderer/app/lib/utils';
 import {
   globalDraftWindowsAtom,
@@ -50,25 +55,11 @@ import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom'
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useStore } from 'jotai';
-import juice from 'juice';
 import { debounce } from 'lodash';
-import React, {
-  Suspense,
-  lazy,
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { insertPlainText } from '@/renderer/app/lib/text-editor/PlainTextPasteExtension';
-
-// Lazy load the TextEditor component
-const TextEditor = lazy(() => import('@/renderer/app/containers/editor/TextEditor'));
 
 interface GlobalComposeCardProps {
   className?: string;
@@ -93,6 +84,14 @@ type SendBlock = {
     | 'too_large'
     | 'forward_loading';
 } | null;
+
+// Autosave: a second after typing pauses, and at least every five seconds
+// while it doesn't (a long reply typed without a pause was never saved).
+const AUTOSAVE_DELAY_MS = 1000;
+const AUTOSAVE_MAX_WAIT_MS = 5000;
+// Open / close fade (opacity + transform, duration-150). The window is removed
+// when the fade ends; this is the backstop if no transition runs.
+const CLOSE_FALLBACK_MS = 200;
 
 const formatAttachmentSize = (size: number) => {
   if (size < 1024) return `${size} B`;
@@ -136,20 +135,10 @@ const getDraggedFiles = (dataTransfer: DataTransfer): File[] => {
   return Array.from(fileMap.values());
 };
 
-// What the user can actually change. signatureId (set by the default-signature
-// switcher on open), timestamp and the thread/message ids (rewritten by the
-// first save) change on their own, and comparing them made closing an
-// untouched compose ask to "save changes".
-const editableSnapshot = (d: MonoDraft) =>
-  JSON.stringify({
-    from: d.from,
-    to: d.to,
-    cc: d.cc,
-    bcc: d.bcc,
-    subject: d.subject,
-    body: (d.body ?? '').replace(/<p><\/p>/g, '').trim(),
-    attachments: Object.keys(d.attachments ?? {}).sort()
-  });
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // A new message gets a full page to write on; replies and forwards (mostly a
 // few lines) start shorter. Both grow with the text.
@@ -159,35 +148,24 @@ const EDITOR_MIN_HEIGHT: Record<ComposeKind, string> = {
   forward: 'min-h-[150px]'
 };
 
-// Matches the editor box (EDITOR_MIN_HEIGHT, px-9 py-4) so the signature and
-// quoted message below don't jump when the real editor mounts.
-const EditorLoadingFallback = ({ minHeightClass }: { minHeightClass: string }) => (
-  <div className={cn(minHeightClass, 'animate-pulse')}>
-    <div className="space-y-2 px-9 py-4">
-      <div className="h-4 w-3/4 rounded bg-muted"></div>
-      <div className="h-4 w-1/2 rounded bg-muted"></div>
-      <div className="h-4 w-2/3 rounded bg-muted"></div>
-    </div>
-  </div>
-);
-
 const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft }) => {
   const { preference, getUidFromEmail, accounts, updatePreference } = useAuth();
   const { t } = useTranslation();
   const executeCommand = useExecuteCommand();
-  const { signatures } = useSignatureAtom();
+  const { getDefaultSignature } = useSignatureAtom();
   const { openDialog } = useDialogs();
-  const { updateDraft, sendDraft, removeDraft, getDraftsForAccount } = useDraftAtom();
+  const { updateDraft, removeDraft } = useDraftAtom();
   const discardDraftWithUndo = useDiscardDraftWithUndo();
   const { setGlobalDraftWindows, setHandleCloseButton } = useComposeWindowAtom();
   const store = useStore();
+  const sendComposed = useSendComposedDraft();
   const { activateScope, deactivateScope } = useHotkeyScope();
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
+  // Settings › Compose › Fullscreen Compose opens every compose expanded.
+  const [isMaximized, setIsMaximized] = useState(() => preference.compose?.fullscreen ?? false);
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const { trackEvent } = useUserTrackingData();
-  const [isSending, setIsSending] = useState(false);
   const [isAttachmentDropActive, setIsAttachmentDropActive] = useState(false);
   // Off by default (see defaultPreference.compose.trackReadReceipts) — this was
   // previously hardcoded to `true` with no UI, so every send was silently
@@ -216,10 +194,32 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       }
     }
 
+    // The default signature is chosen here, not saved: applying it through a
+    // full draft save on open wrote (and re-rendered the thread for) every
+    // compose, and an untouched one then had to be deleted again on close.
+    if (!initialDraft.signatureId) {
+      const signatureId = defaultSignatureId(
+        initialDraft,
+        preference.signature,
+        getUidFromEmail,
+        getDefaultSignature
+      );
+      if (signatureId) initialDraft.signatureId = signatureId;
+    }
+
     return initialDraft;
   });
-  // The draft as it opened, for "nothing changed" checks and "Don't save".
+  const composeDraftRef = useRef(composeDraft);
+  composeDraftRef.current = composeDraft;
+  // The draft as it opened, for "nothing changed" checks.
   const [openingSnapshot] = useState(() => editableSnapshot(composeDraft));
+  // A signature picked by the user (the snapshot leaves the signature out).
+  const signaturePickedRef = useRef(false);
+  const isUntouched = useCallback(
+    (latest: MonoDraft) =>
+      !signaturePickedRef.current && editableSnapshot(latest) === openingSnapshot,
+    [openingSnapshot]
+  );
   // Reply / forward / new is decided once: the subject can be edited later,
   // and re-reading it on every keystroke silently dropped a forward's
   // original when "Fwd:" was removed.
@@ -234,10 +234,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const [draftSaveStatus, setDraftSaveStatus] = useState<
     'INITIALIZED' | 'LOADING' | 'SAVED' | 'ERROR'
   >('INITIALIZED');
-  const editorRef = useRef<{
-    setContent: (content: string) => void;
-    focus: (position?: 'start' | 'end') => void;
-  } | null>(null);
+  const [hasSaved, setHasSaved] = useState(false);
   const editorMinHeightClass = EDITOR_MIN_HEIGHT[composeKind];
 
   const subjectRef = useRef<HTMLInputElement>(null);
@@ -248,6 +245,46 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   const openerRef = useRef<Element | null>(
     typeof document !== 'undefined' ? document.activeElement : null
   );
+
+  // ── The body ─────────────────────────────────────────────────────────────
+  // The editor owns the text; it isn't React state. Copying it into the draft
+  // on every keystroke re-rendered the whole card (recipient fields, footer,
+  // quoted message) per key. Edits mark it dirty and schedule the autosave;
+  // the HTML is read when it's needed (save, send, close).
+  const editorRef = useRef<TextEditorHandle | null>(null);
+  // The handle, kept after unmount (React clears editorRef first), so the
+  // replaced-compose cleanup can still read the last keystrokes.
+  const editorHandleRef = useRef<TextEditorHandle | null>(null);
+  const setEditorHandle = useCallback((handle: TextEditorHandle | null) => {
+    editorRef.current = handle;
+    if (handle) editorHandleRef.current = handle;
+  }, []);
+  const [initialBody] = useState(() => composeDraft.body ?? '');
+  const bodyRef = useRef(initialBody);
+  const bodyDirtyRef = useRef(false);
+  const bodyEditedAtRef = useRef(0);
+  const readBody = useCallback(() => {
+    if (bodyDirtyRef.current) {
+      const html = editorHandleRef.current?.getHTML();
+      if (typeof html === 'string') {
+        bodyRef.current = html;
+        bodyDirtyRef.current = false;
+      }
+    }
+    return bodyRef.current;
+  }, []);
+  // `base` with the editor's current text.
+  const withLiveBody = useCallback(
+    (base: MonoDraft) => {
+      const next = new MonoDraft(base.toPlainObject());
+      next.body = readBody();
+      if (bodyEditedAtRef.current > next.timestamp) next.timestamp = bodyEditedAtRef.current;
+      return next;
+    },
+    [readBody]
+  );
+  // The draft as it is now: its fields plus the editor's latest text.
+  const currentDraft = useCallback(() => withLiveBody(composeDraftRef.current), [withLiveBody]);
 
   const toggleMinimize = useCallback(() => {
     setIsMinimized((prev) => {
@@ -306,8 +343,9 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     [t]
   );
 
-  // The save currently writing to the store. Send waits for it, so an
-  // autosave finishing after sendDraft can't put the draft back in Drafts.
+  // The save currently writing to the store. Send and close wait for it, so
+  // an autosave finishing late can't overwrite newer text or put a sent /
+  // discarded draft back in Drafts.
   const inFlightSaveRef = useRef<Promise<unknown> | null>(null);
   const trackSave = useCallback(<T,>(save: Promise<T>): Promise<T> => {
     inFlightSaveRef.current = save;
@@ -318,70 +356,73 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     return save;
   }, []);
 
-  const updateMessage = async (draft: MonoDraft) => {
-    const uid = getUidFromEmail(draft.from);
-    if (draft.from && uid) {
+  // Writes `toSave` (already holding the text to keep). True when it saved.
+  const saveDraftNow = useCallback(
+    async (toSave: MonoDraft, options?: { track?: boolean }): Promise<boolean> => {
+      const uid = getUidFromEmail(toSave.from);
+      if (!toSave.from || !uid) return false;
       apiClient.setApiActiveUid(uid);
       try {
         setDraftSaveStatus('LOADING');
-        await trackSave(updateDraft(uid, draft, true, true));
-        setComposeDraft(draft);
+        await trackSave(updateDraft(uid, toSave, true, true));
         setDraftSaveStatus('SAVED');
-        trackEvent('email_draft_saved', {
-          draft_id: draft.id,
-          thread_id: draft.threadId,
-          has_attachments: Object.keys(draft.attachments).length > 0,
-          subject_length: draft.subject.length,
-          body_length: draft.body.length
-        });
+        setHasSaved(true);
+        // Counted for deliberate saves (closing with edits), as before — not
+        // for every autosave.
+        if (options?.track) {
+          trackEvent('email_draft_saved', {
+            draft_id: toSave.id,
+            thread_id: toSave.threadId,
+            has_attachments: Object.keys(toSave.attachments).length > 0,
+            subject_length: toSave.subject.length,
+            body_length: toSave.body.length
+          });
+        }
+        return true;
       } catch (error) {
         handleDraftSaveError(error);
         setDraftSaveStatus('ERROR');
+        return false;
       }
-    }
+    },
+    [getUidFromEmail, trackSave, updateDraft, trackEvent, handleDraftSaveError]
+  );
+  const saveDraftNowRef = useRef(saveDraftNow);
+  saveDraftNowRef.current = saveDraftNow;
+
+  // Set once the window starts closing (send, discard, close, schedule), so the
+  // unmount cleanup knows it wasn't replaced by another compose.
+  const closedRef = useRef(false);
+
+  // One autosave for the life of the window; it reads the latest draft when
+  // it runs, so callers just say "something changed".
+  const autosaveRef = useRef<() => void>(() => undefined);
+  autosaveRef.current = () => {
+    if (closedRef.current) return;
+    void saveDraftNow(currentDraft());
   };
-
-  const [isEditorMounted, setIsEditorMounted] = useState(false);
-  const mountTimeoutRef = useRef<NodeJS.Timeout>();
-
-  // Delay editor mounting to improve initial render performance
-  useEffect(() => {
-    mountTimeoutRef.current = setTimeout(() => {
-      startTransition(() => {
-        setIsEditorMounted(true);
-      });
-    }, 100); // Mount editor after 100ms
-
-    return () => {
-      if (mountTimeoutRef.current) {
-        clearTimeout(mountTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Memoize heavy computations
-
-  // Optimize debounced update function with useCallback
   const debouncedUpdateDraft = useMemo(
     () =>
-      debounce(async (draft: MonoDraft) => {
-        if (draft.from) {
-          const uid = getUidFromEmail(draft.from);
-          if (uid) {
-            apiClient.setApiActiveUid(uid);
-            try {
-              setDraftSaveStatus('LOADING');
-              await trackSave(updateDraft(uid, draft, true, true));
-              setDraftSaveStatus('SAVED');
-            } catch (error) {
-              handleDraftSaveError(error);
-              setDraftSaveStatus('ERROR');
-            }
-          }
-        }
-      }, 1000),
-    [updateDraft, getUidFromEmail, handleDraftSaveError, trackSave]
+      debounce(() => autosaveRef.current(), AUTOSAVE_DELAY_MS, {
+        maxWait: AUTOSAVE_MAX_WAIT_MS
+      }),
+    []
   );
+
+  // Leaving the app (window hidden, reload) saves what's pending. Best effort:
+  // the IndexedDB write can't be awaited here.
+  useEffect(() => {
+    const flush = () => debouncedUpdateDraft.flush();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [debouncedUpdateDraft]);
 
   // "Saving" only shows for a save that's actually slow; local saves finish in
   // a few ms and flashed a chip after every pause in typing.
@@ -395,110 +436,128 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     return () => clearTimeout(timer);
   }, [draftSaveStatus]);
 
-  // Whether this draft was already saved before the window opened. "Don't
-  // Save" restores that saved copy; a brand-new compose has none, and
-  // re-saving the original empty draft left a blank "(No subject)" in Drafts.
+  // Whether this draft was saved before the window opened, from IndexedDB
+  // (the in-memory drafts map was empty after a restart, so every saved draft
+  // looked new and closing it untouched deleted it). null until the lookup
+  // answers; every delete path treats null as "saved". Nothing is written on
+  // open any more, so the lookup sees the draft as it was.
   const draftExistedAtOpenRef = useRef<boolean | null>(null);
-  if (draftExistedAtOpenRef.current === null && draft?.from) {
-    const uid = getUidFromEmail(draft.from);
-    draftExistedAtOpenRef.current = !!(uid && getDraftsForAccount(uid)[draft.id]);
+  const existenceLookupStartedRef = useRef(false);
+  if (!existenceLookupStartedRef.current) {
+    existenceLookupStartedRef.current = true;
+    const uid = composeDraft.from ? getUidFromEmail(composeDraft.from) : undefined;
+    if (uid && composeDraft.id) {
+      DBGetDraftById(uid, composeDraft.id).then(
+        (saved) => {
+          draftExistedAtOpenRef.current = !!saved;
+        },
+        (error) => console.error('[compose] could not look up the saved draft:', error)
+      );
+    }
   }
-  // The opening draft, copied before anything can mutate it.
-  const [openingDraft] = useState(() => new MonoDraft(composeDraft.toPlainObject()));
 
-  // Set once the window starts closing (send, discard, close, schedule), so the
-  // unmount cleanup knows it wasn't replaced by another compose.
-  const closedRef = useRef(false);
+  const finishedRef = useRef(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishClose = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    setGlobalDraftWindows((prev) => prev.filter((win) => win.id !== draft?.id));
+  }, [draft, setGlobalDraftWindows]);
 
   const handleClose = useCallback(() => {
     // A pending autosave firing after close resurrected a just-discarded
     // draft (or kept edits the user chose not to save).
     debouncedUpdateDraft.cancel();
+    if (closedRef.current) return;
     closedRef.current = true;
     setIsClosing(true);
-    setTimeout(() => {
-      setGlobalDraftWindows((prev) => prev.filter((win) => win.id !== draft?.id));
-      // Hand focus back to whatever opened compose (the list or reader), if
-      // it's still on screen — never click or select it.
-      const opener = openerRef.current;
-      if (
-        opener instanceof HTMLElement &&
-        opener !== document.body &&
-        opener.isConnected &&
-        !composeRootRef.current?.contains(opener)
-      ) {
-        opener.focus({ preventScroll: true });
-      }
-    }, 400);
-  }, [draft, debouncedUpdateDraft]);
+    // Focus goes back now, not after the fade: to whatever opened compose
+    // (the list or reader) if it's still on screen — never click or select
+    // it. Otherwise out of the fading card, so keys don't type into it.
+    const root = composeRootRef.current;
+    const opener = openerRef.current;
+    if (
+      opener instanceof HTMLElement &&
+      opener !== document.body &&
+      opener.isConnected &&
+      !root?.contains(opener)
+    ) {
+      opener.focus({ preventScroll: true });
+    } else if (root && document.activeElement instanceof HTMLElement) {
+      if (root.contains(document.activeElement)) document.activeElement.blur();
+    }
+    // Removed when the fade ends (onTransitionEnd); this is the backstop.
+    closeTimerRef.current = setTimeout(finishClose, prefersReducedMotion() ? 0 : CLOSE_FALLBACK_MS);
+  }, [debouncedUpdateDraft, finishClose]);
 
   // A new message / forward with no recipients yet should start in To, not
-  // the body (the editor's autofocus used to win, so typing went to the body).
+  // the body.
   const [focusToOnOpen] = useState(() => (draft?.to?.length ?? 0) === 0);
   // Reopening a draft puts the caret after what's already written.
-  const [editorAutofocus] = useState<boolean | 'end'>(() =>
-    focusToOnOpen ? false : (draft?.body ?? '').replace(/<p><\/p>/g, '').trim() ? 'end' : true
+  const [editorFocusAt] = useState<'start' | 'end'>(() =>
+    (draft?.body ?? '').replace(/<p><\/p>/g, '').trim() ? 'end' : 'start'
   );
 
   const focusToInput = useCallback(() => {
     composeRootRef.current?.querySelector<HTMLInputElement>('[data-compose-to] input')?.focus();
   }, []);
 
-  useEffect(() => {
-    setIsVisible(true); // Trigger grow animation
-    let attempts = 0;
-    let frame = 0;
-    // The editor mounts a beat after the card (deferred and lazy), and its
-    // own autofocus can fire before it's in the page, which left the caret
-    // nowhere (Reply opened, typing went nowhere). Retry until it's in —
-    // unless focus is already inside compose (autofocus worked, or the user
-    // clicked another field first).
-    const focusEditorWhenMounted = () => {
-      if (closedRef.current) return;
-      const root = composeRootRef.current;
-      const editorDom = root?.querySelector('.ProseMirror');
-      if (editorDom?.isConnected && editorRef.current) {
-        const active = document.activeElement;
-        if (!root?.contains(active) || active === root) {
-          editorRef.current.focus(editorAutofocus === 'end' ? 'end' : 'start');
+  // First focus, in the same commit that shows the card: the editor exists
+  // as soon as it renders, so the next key typed lands in it (it used to
+  // mount 100 ms later behind a timer and a lazy chunk, and keys typed
+  // meanwhile were lost).
+  useLayoutEffect(() => {
+    const focusInitialField = (): boolean => {
+      if (closedRef.current) return true;
+      if (focusToOnOpen) {
+        const toInput =
+          composeRootRef.current?.querySelector<HTMLInputElement>('[data-compose-to] input');
+        if (toInput) {
+          toInput.focus();
+          return true;
         }
-        return;
       }
-      if (attempts++ < 120) frame = requestAnimationFrame(focusEditorWhenMounted);
-    };
-    const focusInitialField = () => {
-      if (!focusToOnOpen) {
-        focusEditorWhenMounted();
-        return;
+      if (editorRef.current) {
+        editorRef.current.focus(editorFocusAt);
+        return true;
       }
-      const toInput =
-        composeRootRef.current?.querySelector<HTMLInputElement>('[data-compose-to] input');
-      if (toInput) toInput.focus();
-      // The header can mount a frame or two late; never leave nothing focused.
-      else if (attempts++ < 10) frame = requestAnimationFrame(focusInitialField);
-      else focusEditorWhenMounted();
+      return false;
     };
-    frame = requestAnimationFrame(focusInitialField);
+    if (focusInitialField()) return;
+    // Not in the page yet (shouldn't happen): one more try next frame.
+    const frame = requestAnimationFrame(() => void focusInitialField());
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    setIsVisible(true); // Fade / slide in
     activateScope('GLOBAL_COMPOSE');
+    // juice + the stylesheet for Send, loaded while the user writes.
+    prewarmEmailInliner();
     return () => {
-      cancelAnimationFrame(frame);
       deactivateScope('GLOBAL_COMPOSE');
     };
   }, []);
-  // Optimize input change handler
+
   const handleInputChange = useCallback(
     (field: keyof MonoDraft, value: string | string[]) => {
       setComposeDraft((prevDraft) => {
         const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
-        updatedDraft.update({
-          [field]: field === 'to' || field === 'cc' || field === 'bcc' ? value : value
-        });
-        debouncedUpdateDraft(updatedDraft);
+        updatedDraft.update({ [field]: value });
         return updatedDraft;
       });
+      debouncedUpdateDraft();
     },
     [debouncedUpdateDraft]
   );
+
+  // Every edit in the body: cheap — no serialising, no re-render.
+  const handleBodyDirty = useCallback(() => {
+    bodyDirtyRef.current = true;
+    bodyEditedAtRef.current = Date.now();
+    debouncedUpdateDraft();
+  }, [debouncedUpdateDraft]);
 
   const handleUploadInlineImage = useCallback(async (file: File, uuid: string) => {
     // Standalone: embed inline images as data URIs in the body. buildRawMessage
@@ -522,10 +581,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     };
   }, []);
 
-  // Synchronous once-per-card send guard. `isSending` is state (stale inside a
-  // double-click / Cmd+Enter-then-click burst) and was reset in `finally`
-  // while the card was still fading out, so a second Send scheduled a second
-  // countdown — and Undo then cancelled only one of the two copies.
+  // Synchronous once-per-card send guard. A double-click / Cmd+Enter-then-click
+  // burst must not schedule a second countdown (Undo would cancel only one).
   const sendStartedRef = useRef(false);
 
   const [historyMessage, setHistoryMessages] = useState<MonoMessage | null>(null);
@@ -558,24 +615,13 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       try {
         const uid = getUidFromEmail(from);
         if (!uid) throw new Error(`No account for ${from}`);
-        let message = await DBGetMessage(uid, messageId);
-
-        // If message doesn't exist in DB, fetch from Gmail API
-        if (!message) {
-          const messageResponse = await mailApi.getMessage(uid, messageId);
-
-          if (messageResponse?.payload) {
-            message = MonoMessage.fromGmailMessage(messageResponse);
-            // Save to DB for future use
-            await DBSaveMessage(uid, message);
-          }
-        }
+        // In full and parsed once, for the quoted card and the send.
+        const original = await loadReplyOriginal(uid, messageId);
         if (!mountedRef.current) return;
-        if (!message) throw new Error('Original message not found');
 
         loadedOriginalIdRef.current = messageId;
-        if (composeKind === 'forward') setHistoryMessages(message);
-        else setReplyMessages(message);
+        if (composeKind === 'forward') setHistoryMessages(original);
+        else setReplyMessages(original);
         setOriginalStatus('loaded');
       } catch (error) {
         console.error('Error fetching message:', error);
@@ -684,363 +730,241 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     if (block.kind === 'no_recipients') focusToInput();
   }, [focusToInput, t]);
 
-  const handleSendMessage = useCallback(async () => {
-    if (sendStartedRef.current || isSending) return;
-    if (sendBlockRef.current) {
-      notifySendBlocked();
-      return;
-    }
-    // Claimed before the first await (the quoted pictures load), so a second
-    // Send in the meantime is ignored; released below if it can't go.
-    sendStartedRef.current = true;
+  const handleSendRef = useRef<(options?: { allowUnfilled?: boolean }) => Promise<void>>(
+    async () => undefined
+  );
 
-    let updatedDraft: MonoDraft;
-    try {
-      // Prepare the updated draft
-      updatedDraft = new MonoDraft({
-        ...composeDraft.toPlainObject(),
-        threadId: isComposeDraftId(composeDraft.threadId) ? undefined : composeDraft.threadId,
-        messageId: isComposeDraftId(composeDraft.threadId) ? undefined : composeDraft.messageId
-      });
-
-      // Default signature logic
-      const signatureContent =
-        signatures.find((signature) => signature.id === updatedDraft.signatureId)?.content ?? '';
-
-      function optimizeForGmail(html) {
-        // Add &nbsp; to empty paragraphs
-        // This regex finds <p> tags with potentially attributes but no content
-        const emptyParagraphRegex = /(<p[^>]*>)\s*(<\/p>)/g;
-        return html.replace(emptyParagraphRegex, '$1&nbsp;$2');
-
-        // Alternatively, to remove empty paragraphs:
-        // return html.replace(emptyParagraphRegex, '');
-      }
-
-      // Ensure line breaks are preserved in the email body
-      function preserveLineBreaks(html) {
-        // Create a temporary DOM element to process the HTML
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-
-        // Ensure <br> tags are preserved and not removed by CSS processing
-        const brElements = tempDiv.querySelectorAll('br');
-        brElements.forEach((br) => {
-          // Add a data attribute to mark line breaks for preservation
-          br.setAttribute('data-preserve-linebreak', 'true');
-          // Ensure the br element has proper styling
-          br.style.display = 'block';
-          br.style.lineHeight = '1.5';
-        });
-
-        // Ensure <p> tags have proper spacing
-        const pElements = tempDiv.querySelectorAll('p');
-        pElements.forEach((p) => {
-          // Add margin to paragraphs for proper spacing
-          p.style.margin = '1em 0';
-          p.style.lineHeight = '1.5';
-        });
-
-        return tempDiv.innerHTML;
-      }
-
-      // Ensure line breaks are preserved after CSS inlining
-      function ensureLineBreaksAfterInlining(html) {
-        // Create a temporary DOM element to process the HTML
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-
-        // Find all <br> tags and ensure they are properly displayed
-        const brElements = tempDiv.querySelectorAll('br');
-        brElements.forEach((br) => {
-          // Force the br element to be displayed as block
-          br.style.setProperty('display', 'block', 'important');
-          br.style.setProperty('line-height', '1.5', 'important');
-          br.style.setProperty('margin', '0', 'important');
-          br.style.setProperty('padding', '0', 'important');
-          // Add a non-breaking space to ensure the line break is visible
-          br.insertAdjacentHTML('afterend', '&#160;');
-        });
-
-        // Ensure paragraphs have proper spacing
-        const pElements = tempDiv.querySelectorAll('p');
-        pElements.forEach((p) => {
-          p.style.setProperty('margin', '1em 0', 'important');
-          p.style.setProperty('line-height', '1.5', 'important');
-        });
-
-        return tempDiv.innerHTML;
-      }
-
-      // This fix addresses the line break preservation issue where Shift+Enter line breaks
-      // were not being preserved in sent emails. The issue was caused by the CSS inlining
-      // process (juice.inlineContent) potentially affecting the HTML structure.
-      // The solution involves:
-      // 1. Pre-processing HTML to mark line breaks for preservation
-      // 2. Post-processing after CSS inlining to ensure line breaks are properly displayed
-      // 3. Adding CSS rules to force proper display of line breaks
-      // Prepare the email body with signature and CSS
-      const preservedBody = preserveLineBreaks(composeDraft.body);
-      const cssParsedBody = juice.inlineContent(
-        `<div class="reset-selection">${preservedBody}</div>`,
-        `<style>${tailwindCSS}</style>`
-      );
-      const finalBody = ensureLineBreaksAfterInlining(cssParsedBody);
-      // The message answered, quoted under a reply as mail apps do (the card
-      // showed it, but it was never sent), or the forwarded one.
-      const original = replyMessage ?? historyMessage;
-      const senderUid = getUidFromEmail(updatedDraft.from);
-      let history = replyMessage
-        ? formatQuotedReply(replyMessage, isMicrosoftAccount ? 'outlook' : 'gmail')
-        : historyMessage
-          ? formatForwardedMessage(historyMessage)
-          : '';
-      if (original && senderUid) history = await embedQuotedImages(history, original, senderUid);
-      const parsedHtml = `<html><body>${finalBody}<div id="mono-signature" class="my-2">${signatureContent}</div>${history}</body></html>`;
-
-      updatedDraft.update({
-        body: optimizeForGmail(parsedHtml)
-      });
-    } catch (e) {
-      sendStartedRef.current = false;
-      console.error('Error preparing message:', e);
-      toast.error(t('toast.error.send_mail'));
-      return;
-    }
-
-    // Graph refuses an encoded MIME over its cap; say so now, with the reason,
-    // instead of after the undo countdown with a generic error.
-    if (isMicrosoftAccount) {
-      const size = estimateMicrosoftRequestSize({
-        attachmentBytes,
-        ...measureHtmlBody(updatedDraft.body)
-      });
-      if (size > MICROSOFT_MAX_ENCODED_MIME) {
-        sendStartedRef.current = false;
-        toast.error(t('toast.error.message_too_large_microsoft'), { id: 'compose-send-blocked' });
+  // Send closes the card at once; the undo countdown toast is the feedback.
+  // Preparing the outgoing message (CSS inlining, quoted pictures, the size
+  // check) happens during the countdown, and only the draft as written is
+  // saved first — that's what Undo and a failed send bring back.
+  const handleSendMessage = useCallback(
+    async (options?: { allowUnfilled?: boolean }) => {
+      if (sendStartedRef.current || closedRef.current) return;
+      if (sendBlockRef.current) {
+        notifySendBlocked();
         return;
       }
-    }
-
-    setIsSending(true);
-    // Don't let a queued autosave re-add the draft after sendDraft removes it.
-    debouncedUpdateDraft.cancel();
-
-    try {
-      // ...or one that's already writing.
-      await inFlightSaveRef.current?.catch(() => undefined);
-      await updateMessage(updatedDraft);
-      // Send the draft
-      const uid = getUidFromEmail(updatedDraft.from);
-      if (uid) {
-        await sendDraft(
-          uid,
-          updatedDraft,
-          preference.compose.cancelWindow ?? 10,
-          () => {
-            updateMessage(composeDraft);
-            executeCommand('COMPOSE_NEW_MESSAGE', { draft: composeDraft });
-          },
-          <span className="inline-flex items-end gap-1">
-            {t('toast.undo')}{' '}
-            <ShortcutKeyboard variant="text" className="gap-0 p-0" shortcut={'Z'} />
-          </span>,
-          trackingEnabled
-        );
-
-        handleClose();
-
-        trackEvent('email_sent', {
-          draft_id: composeDraft.id,
-          thread_id: composeDraft.threadId,
-          recipient_count: composeDraft.to.length,
-          cc_count: composeDraft.cc.length,
-          bcc_count: composeDraft.bcc.length,
-          subject_length: composeDraft.subject.length,
-          body_length: composeDraft.body.length,
-          has_attachments: Object.keys(composeDraft.attachments).length > 0
-        });
-      } else {
-        handleClose();
-        updateMessage(composeDraft);
-        executeCommand('COMPOSE_NEW_MESSAGE', { draft: composeDraft });
-      }
-    } catch (e) {
-      sendStartedRef.current = false;
-      updateMessage(composeDraft);
-      setGlobalDraftWindows((drafts) => {
-        const draftExists = drafts.some((draftWindow) => draftWindow.id === composeDraft.id);
-        if (draftExists) {
-          return drafts.map((draftWindow) =>
-            draftWindow.id === composeDraft.id ? composeDraft : draftWindow
-          );
+      // Template merge fields left as {first_name}: ask before they go out.
+      if (!options?.allowUnfilled) {
+        const unfilled = findUnfilledVariables(editorHandleRef.current?.getText() ?? '');
+        if (unfilled.length > 0) {
+          toast(t('compose_card.unfilled_variables', { names: unfilled.join(', ') }), {
+            id: 'compose-send-blocked',
+            action: {
+              label: t('compose_card.send_anyway'),
+              onClick: () => void handleSendRef.current({ allowUnfilled: true })
+            }
+          });
+          return;
         }
-        return [...drafts, composeDraft];
+      }
+
+      const written = currentDraft();
+      if (!getUidFromEmail(written.from)) {
+        toast.error(t('toast.error.send_mail'));
+        return;
+      }
+      sendStartedRef.current = true;
+      await sendComposed({
+        written,
+        replyMessage,
+        forwardMessage: historyMessage,
+        trackingEnabled,
+        onClose: handleClose,
+        waitForSave: inFlightSaveRef.current
       });
-      console.error('Error:', e);
-      toast.error(t('toast.error.send_mail'));
-    } finally {
-      setIsSending(false);
-    }
-  }, [
-    isSending,
-    composeDraft,
-    preference.compose.cancelWindow,
-    sendDraft,
-    openDialog,
-    trackingEnabled,
-    debouncedUpdateDraft,
-    notifySendBlocked,
-    signatures,
-    historyMessage,
-    replyMessage,
-    isMicrosoftAccount,
-    attachmentBytes,
-    getUidFromEmail,
-    handleClose,
-    t
-  ]);
+    },
+    [
+      notifySendBlocked,
+      currentDraft,
+      getUidFromEmail,
+      handleClose,
+      replyMessage,
+      historyMessage,
+      sendComposed,
+      trackingEnabled,
+      t
+    ]
+  );
+  handleSendRef.current = handleSendMessage;
 
   // Scheduled from Send later: the queue owns the message now, so close
-  // without the save prompt — an autosave or "Save" here would put the
-  // draft back in Drafts and it could be sent twice.
+  // without saving — an autosave here would put the draft back in Drafts and
+  // it could be sent twice.
   const handleScheduled = useCallback(() => {
     debouncedUpdateDraft.cancel();
     sendStartedRef.current = true;
     handleClose();
   }, [debouncedUpdateDraft, handleClose]);
 
-  const isUntouched = useCallback(
-    () => editableSnapshot(composeDraft) === openingSnapshot,
-    [composeDraft, openingSnapshot]
+  const executeCommandRef = useRef(executeCommand);
+  executeCommandRef.current = executeCommand;
+
+  // "Draft saved · Open": where closed edits went, one click from coming back.
+  const announceDraftSaved = useCallback(
+    (saved: MonoDraft) => {
+      toast(t('toast.compose.draft_saved'), {
+        id: `draft-saved-${saved.id}`,
+        action: {
+          label: t('toast.compose.open_draft'),
+          onClick: () =>
+            void executeCommandRef.current('COMPOSE_NEW_MESSAGE', {
+              draft: new MonoDraft(saved.toPlainObject())
+            })
+        }
+      });
+    },
+    [t]
   );
 
   const handleDiscard = useCallback(async () => {
-    if (!composeDraft.from || !composeDraft.id) return;
-    const uid = getUidFromEmail(composeDraft.from);
-    const untouchedNewDraft = isUntouched() && !draftExistedAtOpenRef.current;
+    const latest = currentDraft();
+    if (!latest.from || !latest.id) return;
+    const uid = getUidFromEmail(latest.from);
+    const untouchedNewDraft =
+      closeOutcome(isUntouched(latest), draftExistedAtOpenRef.current) === 'remove-empty';
     handleClose();
     if (!uid) return;
     try {
+      await inFlightSaveRef.current?.catch(() => undefined);
       // Nothing worth an Undo in a compose that was opened and never typed in.
-      if (untouchedNewDraft) await removeDraft(uid, composeDraft.id);
-      else await discardDraftWithUndo(uid, composeDraft, { reopen: true });
+      if (untouchedNewDraft) await removeDraft(uid, latest.id);
+      else await discardDraftWithUndo(uid, latest, { reopen: true });
     } catch (e) {
       console.error('Error discarding draft:', e);
     }
-  }, [composeDraft, getUidFromEmail, handleClose, isUntouched, removeDraft, discardDraftWithUndo]);
+  }, [currentDraft, getUidFromEmail, isUntouched, handleClose, removeDraft, discardDraftWithUndo]);
 
+  // Close (Esc, Back, X, or another surface taking over): drafts autosave,
+  // so closing keeps the draft without asking — edits are saved now and
+  // "Draft saved · Open" says where they went; an untouched new compose just
+  // goes away. Discard (with Undo) is the way to throw a draft out.
   const handleCloseButton = useCallback(
     async (onComplete?: () => void) => {
-      if (!composeDraft.from || !draft) {
+      const latest = currentDraft();
+      if (!latest.from || !draft) {
         handleClose();
         onComplete?.();
         return;
       }
-
-      if (!isUntouched()) {
-        openDialog('saveDraft', {
-          isNewDraft: !draftExistedAtOpenRef.current,
-          onSave: async () => {
-            handleClose();
-            await updateMessage(composeDraft);
-            onComplete?.();
-          },
-          onDiscard: async () => {
-            handleClose();
-            const uid = getUidFromEmail(draft.from);
-            if (!draftExistedAtOpenRef.current && uid) {
-              await removeDraft(uid, draft.id);
-            } else {
-              await updateMessage(openingDraft);
-            }
-            onComplete?.();
-          }
-        });
-      } else {
-        handleClose();
-        // A default signature is applied (and saved) as compose opens; an
-        // untouched new compose mustn't leave that empty draft in Drafts.
-        const uid = getUidFromEmail(draft.from);
-        if (!draftExistedAtOpenRef.current && uid) void removeDraft(uid, draft.id);
-        onComplete?.();
+      const uid = getUidFromEmail(latest.from);
+      const outcome = closeOutcome(isUntouched(latest), draftExistedAtOpenRef.current);
+      handleClose();
+      if (outcome === 'remove-empty') {
+        // Only there if an autosave wrote it (typed, then deleted again).
+        if (uid) void removeDraft(uid, latest.id);
+      } else if (outcome === 'save') {
+        await inFlightSaveRef.current?.catch(() => undefined);
+        if (await saveDraftNow(latest, { track: true })) announceDraftSaved(latest);
       }
+      onComplete?.();
     },
     [
-      composeDraft,
+      currentDraft,
       draft,
       handleClose,
-      openDialog,
-      updateMessage,
       getUidFromEmail,
-      removeDraft,
       isUntouched,
-      openingDraft
+      removeDraft,
+      saveDraftNow,
+      announceDraftSaved
     ]
   );
 
   // Other surfaces (a recipient chip's "New email", "Search for") close the
-  // open compose through this — it was declared but never set, so they did
-  // nothing. A stable wrapper: jotai would call a bare function as an updater.
+  // open compose through this. A stable wrapper: jotai would call a bare
+  // function as an updater.
   const handleCloseButtonRef = useRef(handleCloseButton);
   handleCloseButtonRef.current = handleCloseButton;
+  const closeCompose = useCallback(
+    (onComplete?: () => void) => handleCloseButtonRef.current(onComplete),
+    []
+  );
   useEffect(() => {
-    const registered = (onComplete?: () => void) => handleCloseButtonRef.current(onComplete);
-    setHandleCloseButton(() => registered);
+    setHandleCloseButton(() => closeCompose);
     return () => {
-      setHandleCloseButton((current) => (current === registered ? null : current));
+      setHandleCloseButton((current) => (current === closeCompose ? null : current));
     };
-  }, [setHandleCloseButton]);
+  }, [setHandleCloseButton, closeCompose]);
 
-  // Replaced by another compose (C, R, F, Enter while this one is open or
-  // minimized): save the last edits deliberately and say where they went.
-  const latestRef = useRef({ composeDraft, debouncedUpdateDraft });
-  latestRef.current = { composeDraft, debouncedUpdateDraft };
-  const removeDraftRef = useRef(removeDraft);
-  removeDraftRef.current = removeDraft;
-  const executeCommandRef = useRef(executeCommand);
-  executeCommandRef.current = executeCommand;
-  useEffect(
-    () => () => {
-      if (closedRef.current) return;
-      const latest = latestRef.current;
-      latest.debouncedUpdateDraft.flush();
-      const windows = store.get(globalDraftWindowsAtom);
-      const replaced =
-        windows.length > 0 && !windows.some((win) => win.id === latest.composeDraft.id);
-      if (!replaced) return;
-      if (editableSnapshot(latest.composeDraft) === openingSnapshot) {
-        const uid = getUidFromEmail(latest.composeDraft.from);
-        if (!draftExistedAtOpenRef.current && uid) {
-          void removeDraftRef.current(uid, latest.composeDraft.id);
-        }
-        return;
-      }
-      toast(t('toast.compose.draft_saved'), {
-        action: {
-          label: t('toast.compose.open_draft'),
-          onClick: () =>
-            void executeCommandRef.current('COMPOSE_NEW_MESSAGE', { draft: latest.composeDraft })
-        }
-      });
+  // Esc closes compose (the draft is kept, as above) — decided once the
+  // keydown has been everywhere, so whatever took it first keeps it: the
+  // slash menu, the link / variable popovers, recipient suggestions, a dialog
+  // or menu over compose (see escapeClosesCompose).
+  useHotkeys(
+    'esc',
+    (event) => {
+      window.setTimeout(() => {
+        if (closedRef.current || !escapeClosesCompose(event, document)) return;
+        void handleCloseButtonRef.current();
+      }, 0);
+    },
+    {
+      scopes: ['GLOBAL_COMPOSE'],
+      enableOnFormTags: true,
+      enableOnContentEditable: true,
+      enabled: !isMinimized && !isClosing
     },
     []
   );
 
+  // Replaced by another compose (C, R, F, Enter while this one is open or
+  // minimized): save the last edits and say where they went.
+  const latestForUnmountRef = useRef({ currentDraft, announceDraftSaved, isUntouched });
+  latestForUnmountRef.current = { currentDraft, announceDraftSaved, isUntouched };
+  const removeDraftRef = useRef(removeDraft);
+  removeDraftRef.current = removeDraft;
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      if (closedRef.current) return;
+      debouncedUpdateDraft.cancel();
+      const latest = latestForUnmountRef.current.currentDraft();
+      const windows = store.get(globalDraftWindowsAtom);
+      const replaced = windows.length > 0 && !windows.some((win) => win.id === latest.id);
+      const outcome = closeOutcome(
+        latestForUnmountRef.current.isUntouched(latest),
+        draftExistedAtOpenRef.current
+      );
+      if (outcome === 'save') {
+        void saveDraftNowRef.current(latest, { track: true }).then((saved) => {
+          if (saved && replaced) latestForUnmountRef.current.announceDraftSaved(latest);
+        });
+        return;
+      }
+      if (outcome === 'remove-empty' && replaced) {
+        const uid = getUidFromEmail(latest.from);
+        if (uid) void removeDraftRef.current(uid, latest.id);
+      }
+    },
+    []
+  );
+
+  // The signature switcher reports the signature it shows. Its first report is
+  // the default being resolved on open: no save for that. A pick by the user
+  // is saved like any edit.
+  const signatureReportedRef = useRef(false);
   const onSignatureChange = useCallback(
     (signatureId: string | null) => {
+      const userPick = signatureReportedRef.current;
+      signatureReportedRef.current = true;
+      if ((composeDraftRef.current.signatureId || null) === (signatureId || null)) return;
+      // Not part of editableSnapshot (it changes on its own on open), so a
+      // pick is remembered here for closing to keep it.
+      if (userPick) signaturePickedRef.current = true;
       setComposeDraft((prevDraft) => {
         const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
         if (signatureId) {
-          updatedDraft.update({ signatureId: signatureId ?? undefined });
+          updatedDraft.update({ signatureId });
         } else {
           updatedDraft.removeSignatureId();
         }
-        updateMessage(updatedDraft);
         return updatedDraft;
       });
+      if (userPick) debouncedUpdateDraft();
     },
-    [updateMessage]
+    [debouncedUpdateDraft]
   );
 
   // Attachments removed while their bytes were still being written, so the
@@ -1082,9 +1006,9 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
             }
           }
         });
-        debouncedUpdateDraft(updatedDraft);
         return updatedDraft;
       });
+      debouncedUpdateDraft();
       trackEvent('email_attachment_uploaded', {
         draft_id: composeDraft.id,
         attachment_id: attachmentId,
@@ -1105,11 +1029,11 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         const updatedAttachments = { ...updatedDraft.attachments };
         delete updatedAttachments[attachmentId];
         updatedDraft.update({ attachments: updatedAttachments });
-        updateMessage(updatedDraft);
         return updatedDraft;
       });
+      debouncedUpdateDraft();
     },
-    [updateMessage, getUidFromEmail, composeDraft.from]
+    [debouncedUpdateDraft, getUidFromEmail, composeDraft.from]
   );
 
   const renderDraftStatus = useMemo(() => {
@@ -1120,7 +1044,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       'flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground';
     if (draftSaveStatus === 'LOADING' && showSavingStatus) {
       return (
-        <span className={baseClass}>
+        <span className={baseClass} role="status">
           <Loader className="h-3 w-3" />
           {t('compose_card.status.saving')}
         </span>
@@ -1128,14 +1052,23 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     }
     if (draftSaveStatus === 'ERROR') {
       return (
-        <span className={cn(baseClass, 'text-destructive')}>
+        <span className={cn(baseClass, 'text-destructive')} role="status">
           <MonoIcon type={'AlertCircle'} className="h-3 w-3" />
           {t('compose_card.status.save_failed')}
         </span>
       );
     }
+    // Quiet confirmation once the draft is safe (a fast save keeps it up).
+    if (hasSaved) {
+      return (
+        <span className={cn(baseClass, 'text-muted-foreground/80')} role="status">
+          <MonoIcon type={'Check'} className="h-3 w-3" />
+          {t('compose_card.status.saved')}
+        </span>
+      );
+    }
     return null;
-  }, [draftSaveStatus, showSavingStatus, t]);
+  }, [draftSaveStatus, showSavingStatus, hasSaved, t]);
 
   const filesToUpload = useRef<Record<string, File>>({});
   const attachmentsRef = useRef(attachments);
@@ -1231,7 +1164,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         try {
           const uid = getUidFromEmail(composeDraft.from);
           if (uid) {
-            await updateDraft(uid, composeDraft, true, true);
+            await updateDraft(uid, currentDraft(), true, true);
           }
         } catch (error) {
           handleDraftSaveError(error);
@@ -1249,7 +1182,8 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       await Promise.allSettled(accepted.map(({ id, file }) => uploadAttachment(id, file)));
     },
     [
-      composeDraft,
+      composeDraft.from,
+      currentDraft,
       draftSaveStatus,
       getUidFromEmail,
       handleDraftSaveError,
@@ -1378,12 +1312,12 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
   // Cmd+Enter sent a draft the user couldn't see.
   useHotkeys(
     'MOD+ENTER',
-    handleSendMessage,
+    () => void handleSendRef.current(),
     {
       preventDefault: true,
       enabled: !isMinimized && !isClosing
     },
-    [handleSendMessage]
+    []
   );
   useHotkeys('MOD+SHIFT+M', toggleMinimize, { preventDefault: true, scopes: ['GLOBAL_COMPOSE'] }, [
     toggleMinimize
@@ -1416,10 +1350,54 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       ?.focus();
     setFocusRowRequest(null);
   }, [focusRowRequest, ccVisible, bccVisible]);
+  const toggleCcRow = useCallback(() => toggleRecipientRow('cc'), [toggleRecipientRow]);
+  const toggleBccRow = useCallback(() => toggleRecipientRow('bcc'), [toggleRecipientRow]);
 
-  // Shortcuts shared by the recipient fields and Subject.
-  const handleComposeFieldShortcut = useCallback(
-    (event: React.KeyboardEvent<HTMLElement>): boolean => {
+  // Reply ↔ Reply all, inside compose: the people on the original the reply
+  // doesn't include yet, or (when it has them all) back to the sender only.
+  const ownEmails = useMemo(() => accounts.map((account) => account.email), [accounts]);
+  const replyAllState = useMemo(() => {
+    if (composeKind !== 'reply' || !replyMessage) return null;
+    const own = new Set(
+      [...ownEmails, composeDraft.from].filter(Boolean).map((email) => email.toLowerCase())
+    );
+    // A reply to your own message already goes to its recipients.
+    if (own.has((replyMessage.from?.email ?? '').toLowerCase())) return null;
+    const everyone = buildReplyAllRecipients(replyMessage, own);
+    if (everyone.to.length + everyone.cc.length <= 1) return null;
+    return toggleReplyAll(
+      { to: composeDraft.to, cc: composeDraft.cc },
+      everyone,
+      replyMessage.from.email
+    );
+  }, [composeKind, replyMessage, ownEmails, composeDraft.from, composeDraft.to, composeDraft.cc]);
+  const replyAllStateRef = useRef(replyAllState);
+  replyAllStateRef.current = replyAllState;
+  const toggleReplyAllRecipients = useCallback(() => {
+    const next = replyAllStateRef.current;
+    if (!next) return;
+    setComposeDraft((prevDraft) => {
+      const updatedDraft = new MonoDraft(prevDraft.toPlainObject());
+      updatedDraft.update({ to: next.to, cc: next.cc });
+      return updatedDraft;
+    });
+    debouncedUpdateDraft();
+  }, [debouncedUpdateDraft]);
+  const replyAllToggle = useMemo<ReplyAllToggle | null>(
+    () =>
+      replyAllState
+        ? {
+            mode: replyAllState.mode,
+            missing: replyAllState.missing,
+            onToggle: toggleReplyAllRecipients
+          }
+        : null,
+    [replyAllState, toggleReplyAllRecipients]
+  );
+
+  // Shortcuts shared by the recipient fields, Subject and the body.
+  const handleComposeShortcut = useCallback(
+    (event: KeyboardEvent | React.KeyboardEvent<HTMLElement>): boolean => {
       if (!hasModKey(event) || !event.shiftKey) return false;
       if (event.code === 'KeyM') {
         event.preventDefault();
@@ -1431,9 +1409,123 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
         toggleRecipientRow(event.code === 'KeyC' ? 'cc' : 'bcc');
         return true;
       }
+      if (event.code === 'KeyA' && replyAllStateRef.current) {
+        event.preventDefault();
+        toggleReplyAllRecipients();
+        return true;
+      }
       return false;
     },
-    [toggleMinimize, toggleRecipientRow]
+    [toggleMinimize, toggleRecipientRow, toggleReplyAllRecipients]
+  );
+
+  const handleHeaderKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      // Tab order follows the visible fields via natural DOM order
+      // (To → Cc/Bcc when shown → Subject); the Cc/Bcc toggles and
+      // window buttons are tabIndex={-1} so Tab skips them.
+      if (handleComposeShortcut(event)) return;
+      if (hasModKey(event) && event.key === 'Enter') {
+        const input = event.target instanceof HTMLInputElement ? event.target : null;
+        if (input && input.value.trim()) {
+          // Text typed but not yet a chip isn't in the draft: the field takes
+          // this Enter (picks the suggestion / makes the chip), then it sends —
+          // unless text is left over (not an address), which stays to fix.
+          window.setTimeout(() => {
+            if (input.value.trim()) return;
+            void handleSendRef.current();
+          }, 0);
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        void handleSendRef.current();
+      }
+    },
+    [handleComposeShortcut]
+  );
+
+  const handleSubjectKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (handleComposeShortcut(event)) return;
+      if (hasModKey(event) && event.key === 'Enter') {
+        event.preventDefault();
+        void handleSendRef.current();
+        return;
+      }
+      if (event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) {
+        event.preventDefault();
+        editorRef.current?.focus();
+      }
+    },
+    [handleComposeShortcut]
+  );
+
+  const handleEditorKeyDown = useCallback(
+    (view, event: KeyboardEvent) => {
+      const { state } = view;
+      const { from, to } = state.selection;
+
+      // Backspace in an empty body steps back to Subject — once per
+      // press: holding Backspace to clear the body used to carry on
+      // and erase the subject too.
+      if (event.key === 'Backspace') {
+        if (from === 1 && to === 1 && !event.repeat && state.doc.textContent.length === 0) {
+          event.preventDefault();
+          subjectRef.current?.focus();
+          return true;
+        }
+        return false;
+      }
+
+      if (hasModKey(event) && event.key === 'Enter') {
+        event.preventDefault();
+        void handleSendRef.current();
+        return true;
+      }
+
+      // Handle Cmd+Shift+V for plain text paste
+      if (hasModKey(event) && event.shiftKey && event.code === 'KeyV') {
+        event.preventDefault();
+
+        // Try to get plain text from clipboard
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          navigator.clipboard
+            .readText()
+            .then((text) => {
+              if (text) {
+                // Insert plain text at current selection without any formatting
+                insertPlainText(view, text);
+              }
+            })
+            .catch((error) => {
+              console.error('Failed to read clipboard text:', error);
+              toast.error(t('toast.error.clipboard_read'));
+            });
+        } else {
+          // Fallback for browsers that don't support Clipboard API
+          toast.error(t('toast.error.plain_paste_unsupported'));
+        }
+
+        return true;
+      }
+
+      return handleComposeShortcut(event);
+    },
+    [handleComposeShortcut, t]
+  );
+
+  // A template from the / menu: its body at the caret, and its subject when
+  // the message has none yet (it used to be dropped).
+  const handleSelectTemplate = useCallback(
+    (template: IMonoTemplate) => {
+      editorRef.current?.insertContent(template.body);
+      const subject = template.subject?.trim();
+      if (subject && !composeDraftRef.current.subject.trim()) {
+        handleInputChange('subject', subject);
+      }
+    },
+    [handleInputChange]
   );
 
   const memoizedAttachments = useMemo(() => {
@@ -1563,95 +1655,6 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
     t
   ]);
 
-  // Optimize render method for editor section
-  const renderEditor = useMemo(() => {
-    if (!isEditorMounted) {
-      return <EditorLoadingFallback minHeightClass={editorMinHeightClass} />;
-    }
-
-    return (
-      <Suspense fallback={<EditorLoadingFallback minHeightClass={editorMinHeightClass} />}>
-        <TextEditor
-          ref={editorRef}
-          autofocus={editorAutofocus}
-          className={cn(editorMinHeightClass, 'px-9 py-4 text-[14px]')}
-          value={composeDraft.body}
-          onChange={handleInputChange.bind(null, 'body')}
-          onUploadInlineImage={handleUploadInlineImage}
-          onUploadAttachment={handleAttachmentUpload}
-          draftId={composeDraft.id}
-          onEditorKeyDown={(view, event) => {
-            const { state } = view;
-            const { from, to } = state.selection;
-
-            // Backspace in an empty body steps back to Subject — once per
-            // press: holding Backspace to clear the body used to carry on
-            // and erase the subject too.
-            if (event.key === 'Backspace') {
-              if (from === 1 && to === 1 && !event.repeat && state.doc.textContent.length === 0) {
-                event.preventDefault();
-                subjectRef.current?.focus();
-                return true;
-              }
-              return false;
-            }
-
-            if (hasModKey(event) && event.shiftKey && event.code === 'KeyM') {
-              event.preventDefault();
-              toggleMinimize();
-              return true;
-            }
-            if (hasModKey(event) && event.key === 'Enter') {
-              event.preventDefault();
-              handleSendMessage();
-              return true;
-            }
-
-            // Handle Cmd+Shift+V for plain text paste
-            if (hasModKey(event) && event.shiftKey && event.code === 'KeyV') {
-              event.preventDefault();
-
-              // Try to get plain text from clipboard
-              if (navigator.clipboard && navigator.clipboard.readText) {
-                navigator.clipboard
-                  .readText()
-                  .then((text) => {
-                    if (text) {
-                      // Insert plain text at current selection without any formatting
-                      insertPlainText(view, text);
-                    }
-                  })
-                  .catch((error) => {
-                    console.error('Failed to read clipboard text:', error);
-                    // Fallback: show a message to the user
-                    toast.error(t('toast.error.clipboard_read'));
-                  });
-              } else {
-                // Fallback for browsers that don't support Clipboard API
-                toast.error(t('toast.error.plain_paste_unsupported'));
-              }
-
-              return true;
-            }
-
-            return false;
-          }}
-        />
-      </Suspense>
-    );
-  }, [
-    isEditorMounted,
-    editorMinHeightClass,
-    composeDraft.body,
-    composeDraft.id,
-    handleInputChange,
-    handleUploadInlineImage,
-    toggleMinimize,
-    handleSendMessage,
-    editorAutofocus,
-    t
-  ]);
-
   const accountId = getUidFromEmail(composeDraft.from) as string;
   const title =
     composeKind === 'forward'
@@ -1666,11 +1669,20 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       tabIndex={-1}
       // Read by useRegisterHotkeys to mute plain-key app shortcuts while open.
       data-compose-expanded={!isMinimized && !isClosing}
+      onTransitionEnd={(event) => {
+        // The close fade is done: remove the window.
+        if (isClosing && event.target === event.currentTarget && event.propertyName === 'opacity') {
+          finishClose();
+        }
+      }}
       className={cn(
-        'absolute inset-0 z-40 origin-bottom transition-all duration-300',
+        // Opacity only, 150 ms; nothing that lays out per frame.
+        'absolute inset-0 z-40 transition-opacity duration-150 ease-out motion-reduce:transition-none',
         isMinimized
           ? 'pointer-events-none flex items-end justify-center px-6 pb-6'
-          : 'pointer-events-auto flex flex-col bg-background',
+          : 'flex flex-col bg-background',
+        // Closing, the fading window lets clicks through to what's under it.
+        isClosing ? 'pointer-events-none' : !isMinimized && 'pointer-events-auto',
         // The full-window backdrop fades with the card instead of cutting in
         // and out.
         (!isVisible || isClosing) && 'opacity-0'
@@ -1691,9 +1703,10 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
               variant="ghost"
               sizeVariant="sm"
               typeVariant="icon"
-              className="pointer-events-auto h-9 w-9 text-muted-foreground hover:text-foreground"
-              onClick={() => void handleCloseButton()}
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+              onClick={() => void closeCompose()}
               tooltip={t('tooltip.back')}
+              shortcut="ESC"
             >
               <MonoIcon type="ChevronLeft" className="h-4 w-4" />
             </Button>
@@ -1716,8 +1729,11 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
       >
         <Card
           className={cn(
-            'pointer-events-auto flex flex-col border border-foreground/[0.06] bg-card ease-bouncy-in-out dark:border-white/[0.06]',
-            'w-full min-w-0 transition-all duration-300',
+            'flex flex-col border border-foreground/[0.06] bg-card dark:border-white/[0.06]',
+            !isClosing && 'pointer-events-auto',
+            // Opacity + transform only, 150 ms (size changes on minimize /
+            // maximize apply at once instead of animating layout).
+            'w-full min-w-0 transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none',
             // Only as tall as what's in it, so Send sits right under the
             // message; it grows as you write, up to the cap, then the body
             // scrolls. Maximized fills the window.
@@ -1725,44 +1741,25 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
             isMinimized
               ? 'max-h-12 min-h-12 min-w-80 max-w-80 rounded-xl shadow-md'
               : 'rounded-md shadow-[0_1px_2px_hsl(var(--foreground)/0.04),0_10px_28px_-14px_hsl(var(--foreground)/0.14)] dark:shadow-none',
-
-            // isClosing ? 'duration-0' : 'duration-400',
-            // isVisible && !isClosing ? '' : 'h-0 max-h-0 min-h-0',
-            isVisible && !isClosing ? '' : 'translate-y-4 opacity-0',
+            isVisible && !isClosing ? '' : 'translate-y-2 opacity-0',
             className
           )}
-          style={{
-            willChange: 'width, height, max-height, max-width'
-          }}
         >
           <CardHeader className={cn('justify-center space-y-0 p-0')}>
             <ComposeCardHeader
               composeDraft={composeDraft}
               handleInputChange={handleInputChange}
-              onKeyDown={(event) => {
-                // Tab order follows the visible fields via natural DOM order
-                // (To → Cc/Bcc when shown → Subject); the Cc/Bcc toggles and
-                // window buttons are tabIndex={-1} so Tab skips them.
-                if (handleComposeFieldShortcut(event)) return;
-                if (hasModKey(event) && event.key === 'Enter') {
-                  // Text typed but not yet a chip isn't in the draft: let the
-                  // field take this Enter (picks the suggestion), then send.
-                  const input = event.target instanceof HTMLInputElement ? event.target : null;
-                  if (input && input.value.trim()) return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void handleSendMessage();
-                }
-              }}
-              onClose={handleCloseButton}
+              onKeyDown={handleHeaderKeyDown}
+              onClose={closeCompose}
               onMinimize={toggleMinimize}
               onMaximize={toggleMaximize}
               isMinimized={isMinimized}
               isMaximized={isMaximized}
               ccVisible={ccVisible}
               bccVisible={bccVisible}
-              onToggleCc={() => toggleRecipientRow('cc')}
-              onToggleBcc={() => toggleRecipientRow('bcc')}
+              onToggleCc={toggleCcRow}
+              onToggleBcc={toggleBccRow}
+              replyAll={replyAllToggle}
             />
           </CardHeader>
           {/* Kept mounted while minimized (hidden, so nothing inside can be
@@ -1798,18 +1795,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                   className="h-auto border-none px-0 py-0 text-[14px] font-semibold tracking-normal text-foreground placeholder:text-muted-foreground/80"
                   value={composeDraft.subject}
                   onChange={(e) => handleInputChange('subject', e.target.value)}
-                  onKeyDown={(event) => {
-                    if (handleComposeFieldShortcut(event)) return;
-                    if (hasModKey(event) && event.key === 'Enter') {
-                      event.preventDefault();
-                      handleSendMessage();
-                      return;
-                    }
-                    if (event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) {
-                      event.preventDefault();
-                      editorRef.current?.focus();
-                    }
-                  }}
+                  onKeyDown={handleSubjectKeyDown}
                 />
               </div>
               <div
@@ -1827,7 +1813,20 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
                   editorRef.current?.focus('end');
                 }}
               >
-                {renderEditor}
+                {/* Rendered with the card (TipTap is in the main bundle);
+                    first focus is set in the same commit. */}
+                <TextEditor
+                  ref={setEditorHandle}
+                  autofocus={false}
+                  className={cn(editorMinHeightClass, 'px-9 py-4 text-[14px]')}
+                  value={initialBody}
+                  onDirty={handleBodyDirty}
+                  onUploadInlineImage={handleUploadInlineImage}
+                  onUploadAttachment={handleAttachmentUpload}
+                  onSelectTemplate={handleSelectTemplate}
+                  draftId={composeDraft.id}
+                  onEditorKeyDown={handleEditorKeyDown}
+                />
                 <div className="px-9 text-sm">
                   <SignatureSwitcher draft={composeDraft} onSignatureChange={onSignatureChange} />
                 </div>
@@ -1874,6 +1873,7 @@ const GlobalComposeCard: React.FC<GlobalComposeCardProps> = ({ className, draft 
           >
             <ComposeCardFooter
               draft={composeDraft}
+              getLatestDraft={currentDraft}
               draftStatus={renderDraftStatus}
               handleSendMessage={handleSendMessage}
               handleFileChange={handleFileChange}

@@ -6,11 +6,18 @@ import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { isComposeDraftId } from '@/main/utils';
 import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
 import { buildRawMessage } from '@/renderer/app/lib/mime/buildRawMessage';
-import { DBGetDraftById, DBRemoveDraft, DBSaveDraft } from '@/renderer/app/lib/db/draft';
+import {
+  DBGetAllDrafts,
+  DBGetDraftById,
+  DBRemoveDraft,
+  DBSaveDraft
+} from '@/renderer/app/lib/db/draft';
 import {
   DBDeleteAttachmentsForDraft,
   DBGetAttachmentsForDraft
 } from '@/renderer/app/lib/db/draftAttachment';
+import { MonoThread } from '@/main/models/thread/MonoThread';
+import { DBSaveMessage } from '@/renderer/app/lib/db/message';
 import { DBGetThread, DBSaveThread } from '@/renderer/app/lib/db/thread';
 import {
   calculateAttachments,
@@ -18,15 +25,19 @@ import {
   calculateRecipients,
   calculateRemainingRecipients
 } from '@/renderer/app/lib/db/thread/utils';
-import { useMessageOperationAtom } from '@/renderer/app/store/message/useMessageOperationAtom';
-import { selectedThreadsAtom } from '@/renderer/app/store/thread/atoms';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { selectedThreadsAtom, threadsMapAtom } from '@/renderer/app/store/thread/atoms';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom, useStore } from 'jotai';
 import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { draftByThreadAtom, draftsMapByAccountAtom, sendDraftQueueAtom } from './atoms';
+import { mergeHydratedDrafts } from './hydrateDrafts';
+import { buildOptimisticSentMessage, reconcileSentItems } from './optimisticSent';
+
+// When a Microsoft send's copy is looked for in its conversation (ms after
+// the send). Graph files it in Sent Items within a few seconds.
+const SENT_RECONCILE_DELAYS_MS = [2500, 6000, 15000];
 
 // Add a new type for tracking pending send operations
 type PendingSend = {
@@ -36,19 +47,121 @@ type PendingSend = {
   toastId: string | number;
 };
 
+// Accounts whose locally saved drafts have been loaded into
+// draftsMapByAccount. Module-level (like useQueueAtom's hydratedAccountId):
+// the hook has many consumers, and the map is app-wide state. Without this
+// the map only held drafts saved in the current session, so after a restart
+// the Drafts count read 0 and compose treated every saved draft as new.
+const hydratedDraftAccounts = new Set<string>();
+// Drafts removed in this session, so a hydration read that started before the
+// removal can't put them back.
+const removedDraftIds = new Set<string>();
+
+/** Told when a send goes out, or fails before it does (undo / cancel aside). */
+export interface SendOutcome {
+  /** The provider accepted the message. */
+  onSent?: () => void;
+  /** It failed before the provider accepted it; the draft is back in Drafts. */
+  onFailed?: () => void;
+}
+
 export function useDraftAtom() {
+  const store = useStore();
   const [draftsMapByAccount, setDraftsMapByAccount] = useAtom(draftsMapByAccountAtom);
-  const [, setSelectedThreads] = useAtom(selectedThreadsAtom);
+  // Setters only: subscribing to the thread store (useThreadAtom /
+  // useMessageOperationAtom did) re-rendered every user of this hook — the
+  // compose card, each draft card, the sidebar — on every thread change.
+  const setSelectedThreads = useSetAtom(selectedThreadsAtom);
+  const setThreadsMap = useSetAtom(threadsMapAtom);
   const [sendDraftQueue, setSendDraftQueue] = useAtom(sendDraftQueueAtom);
   const [draftsByThread, setDraftsByThread] = useAtom(draftByThreadAtom);
-  const { setThreadsMap } = useThreadAtom();
   const { addThread, removeThreadFromMap } = useThreadOperationAtom();
-  const { addMessage } = useMessageOperationAtom();
   const { addUndoAction } = useUndoManager();
   const { t } = useTranslation();
 
   // Use a ref to track pending send operations
   const pendingSendsRef = useRef<Record<string, PendingSend>>({});
+
+  // A sent message into its conversation (as useMessageOperationAtom's
+  // addMessage does, without its subscription to the thread store).
+  const addMessage = useCallback(
+    async (uid: string, newMessage: MonoMessage, saveToLocal: boolean = true) => {
+      setThreadsMap((prev) => {
+        const thread = prev[newMessage.threadId];
+        if (!thread) return prev;
+        const updatedItems = [
+          ...thread.items.filter((item) => item.id !== newMessage.id),
+          newMessage
+        ];
+        return {
+          ...prev,
+          [newMessage.threadId]: new MonoThread({ ...thread.toPlainObject(), items: updatedItems })
+        };
+      });
+
+      const fetchedThread = await mailApi.getThread(uid, newMessage.threadId);
+      if (fetchedThread) {
+        const parsedThread = MonoThread.fromPlainObject(fetchedThread);
+        parsedThread.items.push(newMessage);
+        if (saveToLocal) await DBSaveThread(uid, parsedThread);
+      }
+      if (saveToLocal) await DBSaveMessage(uid, newMessage);
+    },
+    [setThreadsMap]
+  );
+
+  // Microsoft: show the reply in its conversation now, then swap in the real
+  // message once the conversation lists it (see optimisticSent.ts).
+  const showSentMessage = useCallback(
+    (uid: string, sentDraft: MonoDraft, threadId: string) => {
+      const optimistic = buildOptimisticSentMessage(sentDraft, threadId);
+      const current = store.get(threadsMapAtom)[threadId];
+      if (!current) return;
+      const preSendIds = new Set(current.items.map((item) => item.id));
+      setThreadsMap((prev) => {
+        const thread = prev[threadId];
+        if (!thread) return prev;
+        return {
+          ...prev,
+          [threadId]: new MonoThread({
+            ...thread.toPlainObject(),
+            items: [...thread.items.filter((item) => item.id !== optimistic.id), optimistic]
+          })
+        };
+      });
+
+      const reconcile = async (attempt: number) => {
+        try {
+          const fetched = await mailApi.getThread(uid, threadId);
+          const fetchedThread = fetched ? MonoThread.fromPlainObject(fetched) : null;
+          let reconciled = false;
+          setThreadsMap((prev) => {
+            const thread = prev[threadId];
+            if (!thread) return prev;
+            const items = reconcileSentItems(thread.items, fetchedThread?.items ?? [], {
+              optimisticId: optimistic.id,
+              preSendIds,
+              senderEmail: sentDraft.from
+            });
+            if (!items) return prev;
+            reconciled = true;
+            return { ...prev, [threadId]: new MonoThread({ ...thread.toPlainObject(), items }) };
+          });
+          if (reconciled) {
+            if (fetchedThread) await DBSaveThread(uid, fetchedThread);
+            return;
+          }
+        } catch (error) {
+          console.error('[send] could not refresh the conversation:', error);
+        }
+        if (attempt + 1 < SENT_RECONCILE_DELAYS_MS.length) {
+          setTimeout(() => void reconcile(attempt + 1), SENT_RECONCILE_DELAYS_MS[attempt + 1]);
+        }
+      };
+      setTimeout(() => void reconcile(0), SENT_RECONCILE_DELAYS_MS[0]);
+    },
+    [setThreadsMap, store]
+  );
 
   // Helper function to fetch and save the sent message
   const fetchAndSaveSentMessage = useCallback(
@@ -149,6 +262,7 @@ export function useDraftAtom() {
       }
 
       // Update the drafts map for the specific account
+      removedDraftIds.delete(draft.id);
       setDraftsMapByAccount((prevMap) => {
         const accountDrafts = prevMap[uid] || {};
         return {
@@ -163,10 +277,35 @@ export function useDraftAtom() {
     [setDraftsMapByAccount, setThreadsMap]
   );
 
+  // Loads an account's saved drafts from IndexedDB into the map, once per
+  // account per session. Merged under what's already in memory (newer).
+  const hydrateDraftsForAccount = useCallback(
+    (uid: string) => {
+      if (!uid || hydratedDraftAccounts.has(uid)) return;
+      hydratedDraftAccounts.add(uid);
+      DBGetAllDrafts(uid)
+        .then((drafts) => {
+          if (!hydratedDraftAccounts.has(uid)) return; // reset meanwhile
+          const excluded = new Set([...removedDraftIds, ...store.get(sendDraftQueueAtom)]);
+          setDraftsMapByAccount((prevMap) => {
+            const current = prevMap[uid] || {};
+            const merged = mergeHydratedDrafts(current, drafts, excluded);
+            return merged === current ? prevMap : { ...prevMap, [uid]: merged };
+          });
+        })
+        .catch((error) => {
+          hydratedDraftAccounts.delete(uid);
+          console.error('[drafts] could not load saved drafts:', error);
+        });
+    },
+    [setDraftsMapByAccount, store]
+  );
+
   // Remove a draft
   const removeDraft = useCallback(
     async (uid: string, draftId: string, callApi: boolean = true) => {
       try {
+        removedDraftIds.add(draftId);
         const draftData = await DBGetDraftById(uid, draftId);
 
         if (draftData) {
@@ -232,16 +371,19 @@ export function useDraftAtom() {
     return allDrafts;
   }, [draftsMapByAccount]);
 
-  // Get drafts for a specific account
+  // Get drafts for a specific account. The first ask for an account also
+  // starts loading its saved drafts (async; the map updates when they're in).
   const getDraftsForAccount = useCallback(
     (accountId: string) => {
+      hydrateDraftsForAccount(accountId);
       return draftsMapByAccount[accountId] || {};
     },
-    [draftsMapByAccount]
+    [draftsMapByAccount, hydrateDraftsForAccount]
   );
 
   // Reset all drafts
   const resetDrafts = useCallback(() => {
+    hydratedDraftAccounts.clear();
     setDraftsMapByAccount({});
   }, [setDraftsMapByAccount]);
 
@@ -278,6 +420,7 @@ export function useDraftAtom() {
       const draftData = await DBGetDraftById(uid, draftId);
       if (draftData) {
         const draft = MonoDraft.fromPlainObject(draftData);
+        removedDraftIds.delete(draft.id);
 
         // Add draft back to the specific account
         setDraftsMapByAccount((prevMap) => {
@@ -309,8 +452,12 @@ export function useDraftAtom() {
       uid: string,
       draftId: string,
       withTracking: boolean = false,
-      draft?: MonoDraft
+      draft?: MonoDraft,
+      outcome?: SendOutcome
     ): Promise<void> => {
+      // Whether the provider accepted the message: a failure after that
+      // (saving the sent copy) doesn't mean it didn't go.
+      let messageLeft = false;
       // Show promise toast for send operation
       toast.promise(
         async () => {
@@ -337,10 +484,18 @@ export function useDraftAtom() {
               ? fullDraft.threadId
               : undefined;
           const sent = await mailApi.sendMessage(uid, raw, gmailThreadId);
+          messageLeft = true;
+          outcome?.onSent?.();
           const messageId = sent?.id;
 
           // Handle the completion of sending
           await handleSendCompleted(uid, draftId);
+
+          // No id to fetch the sent copy by (Microsoft's sendMail): show the
+          // reply in its conversation now, in place of its draft card. After
+          // handleSendCompleted, which puts the stored thread (without it)
+          // back in the map.
+          if (!messageId && gmailThreadId) showSentMessage(uid, fullDraft, gmailThreadId);
           // Drop the locally-held attachment bytes now the message is out.
           await DBDeleteAttachmentsForDraft(uid, draftId);
 
@@ -359,6 +514,7 @@ export function useDraftAtom() {
 
             // Add the draft back if sending failed
             cancelSend(uid, draftId);
+            if (!messageLeft) outcome?.onFailed?.();
 
             // Say why when we know and it's actionable; network and unknown
             // failures keep the generic text.
@@ -370,7 +526,37 @@ export function useDraftAtom() {
         }
       );
     },
-    [handleSendCompleted, cancelSend, fetchAndSaveSentMessage, t]
+    [handleSendCompleted, cancelSend, fetchAndSaveSentMessage, showSentMessage, t]
+  );
+
+  // The message to send once the countdown ends. Compose hands over the
+  // outgoing body still being prepared (CSS inlining, quoted pictures), so
+  // Send can close the card at once; if preparing fails, the draft comes
+  // back (Drafts and a reopened compose) with the reason.
+  const resolveOutgoing = useCallback(
+    async (
+      uid: string,
+      draft: MonoDraft,
+      prepared: Promise<MonoDraft> | undefined,
+      onCancel?: () => void
+    ): Promise<MonoDraft | null> => {
+      if (!prepared) return draft;
+      try {
+        return await prepared;
+      } catch (error) {
+        console.error('[send] could not prepare the message:', error);
+        await cancelSend(uid, draft.id);
+        onCancel?.();
+        toast.error(
+          (error as Error)?.name === 'MessageTooLargeError'
+            ? t('toast.error.message_too_large_microsoft')
+            : t('toast.error.send_mail'),
+          { id: 'compose-send-blocked' }
+        );
+        return null;
+      }
+    },
+    [cancelSend, t]
   );
 
   const sendDraft = useCallback(
@@ -380,8 +566,12 @@ export function useDraftAtom() {
       delay: number,
       onCancel?: () => void,
       cancelLabel?: React.ReactNode,
-      withTracking: boolean = false
+      withTracking: boolean = false,
+      prepared?: Promise<MonoDraft>,
+      outcome?: SendOutcome
     ): Promise<void> => {
+      // Awaited when the countdown ends; a failure is handled there.
+      prepared?.catch(() => undefined);
       // 1. Add draft to sendDraftQueue
       setSendDraftQueue((prevQueue) => [...prevQueue, draft.id]);
 
@@ -410,7 +600,8 @@ export function useDraftAtom() {
 
       // If delay is 0, send immediately
       if (delay <= 0) {
-        await sendDraftImmediately(uid, draft.id, withTracking);
+        const outgoing = await resolveOutgoing(uid, draft, prepared, onCancel);
+        if (outgoing) await sendDraftImmediately(uid, draft.id, withTracking, outgoing, outcome);
         return;
       }
 
@@ -473,9 +664,10 @@ export function useDraftAtom() {
           // Clear interval and send the draft when countdown reaches zero
           clearInterval(intervalId);
           toast.dismiss(toastId);
-
-          await sendDraftImmediately(uid, draft.id, withTracking, draft);
           delete pendingSendsRef.current[draft.id];
+
+          const outgoing = await resolveOutgoing(uid, draft, prepared, onCancel);
+          if (outgoing) await sendDraftImmediately(uid, draft.id, withTracking, outgoing, outcome);
         }
       }, 1000);
 
@@ -493,7 +685,9 @@ export function useDraftAtom() {
       setSelectedThreads,
       removeThreadFromMap,
       sendDraftImmediately,
+      resolveOutgoing,
       cancelSend,
+      addUndoAction,
       t
     ]
   );

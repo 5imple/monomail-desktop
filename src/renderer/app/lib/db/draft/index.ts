@@ -81,6 +81,17 @@ export async function DBGetDraftById(uid: string, draftId: string): Promise<Mono
 }
 
 /**
+ * Every draft saved locally for an account (the drafts store holds only real
+ * drafts; thread rows are not touched).
+ * @param uid - User ID for the database namespace.
+ */
+export async function DBGetAllDrafts(uid: string): Promise<MonoDraft[]> {
+  const db = await initDB(uid);
+  const records = await db.transaction(['drafts'], 'readonly').objectStore('drafts').getAll();
+  return records.map((record) => MonoDraft.fromPlainObject(record));
+}
+
+/**
  * Remove a draft by its ID.
  * @param uid - User ID for the database namespace.
  * @param draftId - Draft ID to remove.

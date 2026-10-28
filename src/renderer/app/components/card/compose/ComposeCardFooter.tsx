@@ -20,7 +20,12 @@ import { isBackendConfigured } from '@/main/api/apiClient';
 interface ComposeCardFooterProps {
   className?: string;
   draft: MonoDraft;
-  /** Autosave state ("Saving" / "Save failed"), shown where it can't push anything. */
+  /**
+   * The draft with the editor's current text. Compose keeps the body out of
+   * React state, so `draft.body` is the text as of the last save.
+   */
+  getLatestDraft?: () => MonoDraft;
+  /** Autosave state ("Saved" / "Saving" / "Save failed"), shown where it can't push anything. */
   draftStatus?: React.ReactNode;
   handleSendMessage: () => Promise<void>;
   handleFileChange: (fileList: FileList | null) => Promise<void>;
@@ -40,6 +45,7 @@ const ICON_BUTTON_CLASS = 'text-muted-foreground hover:text-foreground';
 const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
   className,
   draft,
+  getLatestDraft,
   draftStatus,
   handleSendMessage,
   handleFileChange,
@@ -138,6 +144,7 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
           {isBackendConfigured() && (
             <SendLaterButton
               draft={draft}
+              getLatestDraft={getLatestDraft}
               blockedReason={isSending ? t('compose_card.footer.sending') : sendBlockedReason}
               onBlocked={onSendBlocked}
               onScheduled={onScheduled}
@@ -218,12 +225,14 @@ const ComposeCardFooter: React.FC<ComposeCardFooterProps> = ({
 export default ComposeCardFooter;
 
 function SendLaterButton({
-  draft,
+  draft: draftProp,
+  getLatestDraft,
   blockedReason,
   onBlocked,
   onScheduled
 }: {
   draft: MonoDraft;
+  getLatestDraft?: () => MonoDraft;
   blockedReason: string | null;
   onBlocked: () => void;
   onScheduled: () => void;
@@ -241,6 +250,8 @@ function SendLaterButton({
   const handlePickPreset = useCallback(
     async (preset: { id: string; scheduledFor: string | null }) => {
       if (!preset.scheduledFor) return;
+      // With the text typed since the last save.
+      const draft = getLatestDraft?.() ?? draftProp;
       const fromUid = getUidFromEmail(draft.from);
       const accountId = fromUid || primaryAccountId;
       if (!accountId) {
@@ -296,7 +307,8 @@ function SendLaterButton({
       );
     },
     [
-      draft,
+      draftProp,
+      getLatestDraft,
       scheduleDraft,
       setActiveLayout,
       getUidFromEmail,
