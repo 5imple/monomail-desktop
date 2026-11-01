@@ -25,8 +25,7 @@ import MoveCommandPage from '@/renderer/app/containers/command/MoveCommandPage';
 import PinContactPage from '@/renderer/app/containers/command/PinContactPage';
 import ReminderCommandPage from '@/renderer/app/containers/command/ReminderCommandPage';
 import { useHotkeyScope } from '@/renderer/app/context/HotkeyScopeContext';
-import { useCommands } from '@/renderer/app/lib/commands/useCommands';
-import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
+import { useCommandTable, useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { cn } from '@/renderer/app/lib/utils';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { CommandType } from '@/renderer/app/types';
@@ -174,7 +173,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   const { globalSearchQuery } = useGlobalAtom();
   const { activeScopes } = useHotkeyScope();
-  const commands = useCommands();
+  const commands = useCommandTable();
   const { preference } = useAuth();
   const { theme } = useTheme();
   const executeCommand = useExecuteCommand();

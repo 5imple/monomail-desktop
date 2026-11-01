@@ -25,10 +25,11 @@ export const createPreferencesCommands = (
     OPEN_PREFERENCES_SHORTCUT: {
       scope: 'GLOBAL',
       title: t('command.open_preferences_shortcut'),
-      hotkeys: ['?', 'SHIFT+?'],
+      hotkeys: ['?', 'SHIFT+?', 'MOD+SLASH'],
       icon: 'Command',
+      // The shortcuts sheet over the current screen, not all of Settings.
       action: (_: any) => {
-        openDialog('preference', { defaultPage: 'shortcut' });
+        openDialog('shortcuts');
       }
     },
 

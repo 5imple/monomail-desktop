@@ -1,5 +1,6 @@
 import { cn } from '@/renderer/app/lib/utils';
-import { FC, useMemo } from 'react';
+import React, { FC, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Keys } from 'react-hotkeys-hook';
 import { cva } from 'class-variance-authority';
 
@@ -44,6 +45,8 @@ const keyToIcon = (key: string): string => {
       return '#';
     case 'comma':
       return ',';
+    case 'slash':
+      return '/';
     case 'backspace':
       return '⌫';
     default:
@@ -54,6 +57,10 @@ const keyToIcon = (key: string): string => {
 // Parse shortcut string into an array of keys
 const parseShortcut = (shortcut: Keys): string[] =>
   Array.isArray(shortcut) ? shortcut : (shortcut as string).split('+');
+
+// A sequence ("G>I": press G, then I) as its steps; a plain shortcut is one step.
+const parseSteps = (shortcut: Keys): Keys[] =>
+  typeof shortcut === 'string' && shortcut.includes('>') ? shortcut.split('>') : [shortcut];
 
 // Newton kbd chip: IBM Plex Mono, tabular alignment, calm muted-low
 // background. The chip reads as a tiny piece of code rather than a
@@ -89,14 +96,17 @@ const ShortcutKeyboard: FC<ShortcutKeyboardProps> = ({
   variant,
   sizeVariant
 }) => {
+  const { t } = useTranslation();
   // Before any early return (a hook after one breaks when `shortcut` comes
   // and goes). Off a Mac, MOD and CTRL are both Ctrl: show it once.
-  const keys = useMemo(
+  const steps = useMemo(
     () =>
       shortcut
-        ? parseShortcut(shortcut)
-            .map(keyToIcon)
-            .filter((key, index, all) => all.indexOf(key) === index)
+        ? parseSteps(shortcut).map((step) =>
+            parseShortcut(step)
+              .map(keyToIcon)
+              .filter((key, index, all) => all.indexOf(key) === index)
+          )
         : [],
     [shortcut]
   );
@@ -105,13 +115,22 @@ const ShortcutKeyboard: FC<ShortcutKeyboardProps> = ({
 
   return (
     <span className={cn('inline-flex items-center gap-0.5', className)}>
-      {keys.map((key) => (
-        <kbd
-          key={key}
-          className={cn(keyboardVariants({ variant, sizeVariant }), keyboardClassName)}
-        >
-          {key}
-        </kbd>
+      {steps.map((keys, stepIndex) => (
+        <React.Fragment key={stepIndex}>
+          {stepIndex > 0 && (
+            <span className="px-0.5 text-[10px] text-muted-foreground/80">
+              {t('settings.shortcut.then', { defaultValue: 'then' })}
+            </span>
+          )}
+          {keys.map((key) => (
+            <kbd
+              key={key}
+              className={cn(keyboardVariants({ variant, sizeVariant }), keyboardClassName)}
+            >
+              {key}
+            </kbd>
+          ))}
+        </React.Fragment>
       ))}
     </span>
   );

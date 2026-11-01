@@ -23,7 +23,7 @@ import { createThemeCommands } from './themeCommands';
 
 export const useCommands = (): Record<CommandType, MonoCommand> => {
   const { accounts, preference, updatePreference } = useAuth();
-  const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
+  const { searchNewQuery, globalSearchQuery, setActiveLayout } = useGlobalAtom();
   const { setTheme } = useTheme();
   const { removeDraft } = useDraftAtom();
   // Payment-free build — getUserPlan no longer needed.
@@ -49,6 +49,10 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     setActiveThreadId,
     selectNextThread
   } = useThreadAtom();
+  const openLater = useCallback(() => {
+    setActiveThreadId(null);
+    setActiveLayout('LATER');
+  }, [setActiveLayout, setActiveThreadId]);
   const { setGlobalDraftWindows } = useComposeWindowAtom();
   const { trackEvent } = useUserTrackingData();
   const { t } = useTranslation();
@@ -102,7 +106,8 @@ export const useCommands = (): Record<CommandType, MonoCommand> => {
     t,
     dialogState,
     openDialog,
-    searchNewQuery
+    searchNewQuery,
+    openLater
   });
 
   const preferencesCommands = createPreferencesCommands({

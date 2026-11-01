@@ -1,8 +1,12 @@
 import { useHotkeys } from 'react-hotkeys-hook';
-import { focusedElementOwnsKey } from '@/renderer/app/lib/hotkeyGuards';
-import { useCallback, useMemo } from 'react';
-import { useCommands } from '@/renderer/app/lib/commands/useCommands';
-import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
+import {
+  completesGoTo,
+  focusedElementOwnsKey,
+  isComposeExpanded,
+  overlayOpen
+} from '@/renderer/app/lib/hotkeyGuards';
+import { useCallback, useMemo, useRef } from 'react';
+import { useCommandTable, useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { CommandType } from '@/renderer/app/types';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
@@ -11,40 +15,76 @@ import { useUndoManager } from '@/renderer/app/lib/commands/useUndoManager';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/renderer/app/context/AuthContext';
+import { quickReplyControl } from '@/renderer/app/lib/quickReplyControl';
+import { replyTargets } from '@/renderer/app/lib/replyRecipients';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useStore } from 'jotai';
+import { isDoneViewQuery } from '@/renderer/app/lib/readerBackLabel';
+import {
+  activeLayoutAtom,
+  currentSearchQueryAtom,
+  readerReturnLayoutAtom
+} from '@/renderer/app/store/layout/useGlobalAtom';
 
 type ThreadHotkeyTarget = {
   source: 'selection' | 'highlight' | 'active' | 'none';
   threadIds: string[];
 };
 
-// An expanded compose window covers the whole app (GlobalComposeCard is
-// `absolute inset-0`), so plain-key shortcuts must not reach the hidden list or
-// reader: focus resting on a compose button (e.g. the Cc toggle) turned typing
-// "c"/"e" into a new compose / Done, and Backspace after removing a recipient
-// chip trashed the open thread. Modifier shortcuts (MOD+…) still work.
-const isComposeExpanded = () => !!document.querySelector('[data-compose-expanded="true"]');
-
+// Plain-key shortcuts step aside while an expanded compose covers the app
+// (isComposeExpanded): focus resting on a compose button (e.g. the Cc toggle)
+// turned typing "c"/"e" into a new compose / Done, and Backspace after removing
+// a recipient chip trashed the open thread. Modifier shortcuts (MOD+…) still work.
 // Enter means Reply All in the reader — unless Enter already has a job (see
 // focusedElementOwnsKey).
 const enterHasOtherJob = focusedElementOwnsKey;
+// The second key of a "G then …" go-to is not a shortcut of its own
+// (completesGoTo), and an open dialog or menu (a Delete confirmation, the
+// row menu) owns plain keys: E or ⌫ there acted on the conversation behind it.
+//
+// The guards are module-level functions on purpose: react-hotkeys-hook
+// compares its options by value, and a function made during render is a new
+// value each time, so every render re-registered every hotkey, which updates
+// the hotkeys provider and renders again ("Maximum update depth exceeded").
+const plainKeyIgnored = () => isComposeExpanded() || completesGoTo() || overlayOpen();
 const plainKeyGuard = (hotkey: string) =>
-  /(^|\+)(MOD|CTRL|META|ALT|OPTION)\+/i.test(hotkey) ? {} : { ignoreEventWhen: isComposeExpanded };
+  /(^|\+)(MOD|CTRL|META|ALT|OPTION)\+/i.test(hotkey) ? {} : { ignoreEventWhen: plainKeyIgnored };
+
+// Whether an email is open, kept current by useRegisterHotkeys for the
+// list-only guard below (a stable function, see above).
+let readerOpen = false;
+const listOnlyIgnored = () => readerOpen || isComposeExpanded() || overlayOpen();
+
+// Reply (R), Reply all (A) and Forward (F) also act on the row the list
+// cursor or the pointer is on (getThreadHotkeyTarget), so they are live in
+// the global scope too. Enter stays reader-only: on the list it opens a row.
+const replyScopes = (hotkey: string, scope: string) =>
+  hotkey === 'Enter' ? [scope] : ['GLOBAL', scope];
+
+// Select-all works on the list only; in the reader ⌘A is the text's select-all.
+const LIST_ONLY_COMMANDS = new Set<CommandType>(['THREAD_SELECT_ALL']);
 
 // Commands whose palette page acts on the open or selected conversations.
 const THREAD_PAGE_COMMANDS = new Set<CommandType>(['REMINDER', 'LABEL', 'MOVE']);
 
 export const useRegisterHotkeys = (options = {}) => {
   const executeCommand = useExecuteCommand();
-  const commands = useCommands();
+  const commands = useCommandTable();
   const { openDialog } = useDialogs();
   const { activeThreadId, selectedThreads, threadsMap, setSelectedThreads } = useThreadAtom();
+  readerOpen = !!activeThreadId;
+  // Defined below; the ⌘K handler reads the latest through this ref.
+  const getThreadHotkeyTargetRef = useRef<() => ThreadHotkeyTarget>(() => ({
+    source: 'none',
+    threadIds: []
+  }));
   const { trackEvent } = useUserTrackingData();
   const { undoLastAction, hasUndoActions } = useUndoManager();
   const { t } = useTranslation();
   const { accounts } = useAuth();
   const { getHighlightedItemId } = useKeyboardNavigationContext();
+  const store = useStore();
 
   // Undo is a plain Z (like E / Backspace). As a single key it is ignored in
   // form fields / the editor (react-hotkeys-hook defaults) and while a compose
@@ -71,11 +111,15 @@ export const useRegisterHotkeys = (options = {}) => {
     [undoLastAction, hasUndoActions, trackEvent, t]
   );
 
-  // Open the command palette with MOD+K.
+  // Open the command palette with MOD+K. A row the cursor or the pointer is on
+  // becomes the selection first (as H / L / M do), so the palette offers the
+  // conversation commands for it: they were hidden although E, S, U acted on it.
   useHotkeys(
     'MOD+K',
     () => {
       trackEvent('hotkey_command_executed', { command: 'COMMAND_PALETTE_OPEN' });
+      const target = getThreadHotkeyTargetRef.current();
+      if (target.source === 'highlight') setSelectedThreads(target.threadIds);
       openDialog('commandPalette', {
         pages: [],
         searchQuery: '',
@@ -83,7 +127,7 @@ export const useRegisterHotkeys = (options = {}) => {
       });
     },
     { preventDefault: true, ...options },
-    [openDialog, trackEvent]
+    [openDialog, trackEvent, setSelectedThreads]
   );
 
   // --- Paired command registration logic ---
@@ -120,6 +164,12 @@ export const useRegisterHotkeys = (options = {}) => {
       trueCommand: 'THREAD_UNTRASH',
       falseCommand: 'THREAD_TRASH'
     },
+    // Superhuman / Gmail trash key (Shift+3; matched by the character).
+    '#': {
+      check: (thread) => thread.labelIds.includes('TRASH'),
+      trueCommand: 'THREAD_UNTRASH',
+      falseCommand: 'THREAD_TRASH'
+    },
     Delete: {
       // Trash/untrash hotkey
       check: (thread) => thread.labelIds.includes('TRASH'),
@@ -148,6 +198,8 @@ export const useRegisterHotkeys = (options = {}) => {
     return { source: 'none', threadIds: [] };
   }, [activeThreadId, getHighlightedItemId, selectedThreads]);
 
+  getThreadHotkeyTargetRef.current = getThreadHotkeyTarget;
+
   const getExplicitThreadArgs = useCallback((target: ThreadHotkeyTarget) => {
     return target.source === 'selection' || target.source === 'highlight'
       ? { threadIds: target.threadIds }
@@ -165,13 +217,59 @@ export const useRegisterHotkeys = (options = {}) => {
           target.threadIds.length > 0 ? threadsMap[target.threadIds[0]] : null;
         if (!firstTargetThread || target.threadIds.length === 0) return;
 
+        // E is Done for whatever of the target is in the Inbox (as the
+        // selection bar's Done counts it: any row in the Inbox). With none
+        // in the Inbox it moves them back, but only in the Done view or for an
+        // email opened from Later: in Sent, Starred, Trash or a search, E (Done,
+        // by habit) pulled your own sent mail into the Inbox. There it says so
+        // and offers it instead.
+        if (hotkey === 'E') {
+          const inInbox = target.threadIds.filter((id) =>
+            threadsMap[id]?.labelIds.includes('INBOX')
+          );
+          if (inInbox.length > 0) {
+            trackEvent('hotkey_command_executed', { command: 'THREAD_DONE' });
+            executeCommand(
+              'THREAD_DONE',
+              inInbox.length === target.threadIds.length
+                ? getExplicitThreadArgs(target)
+                : { threadIds: inInbox }
+            );
+            return;
+          }
+          const movesBack =
+            store.get(activeLayoutAtom) !== 'MAIL' ||
+            store.get(readerReturnLayoutAtom) === 'LATER' ||
+            isDoneViewQuery(store.get(currentSearchQueryAtom));
+          if (!movesBack) {
+            // The exact emails E was pressed on, not whatever is open when
+            // the toast's button is clicked.
+            const threadIds = [...target.threadIds];
+            toast(t('header.display.already_done', { defaultValue: 'Already out of your Inbox' }), {
+              action: {
+                label: t('header.display.move_to_inbox', { defaultValue: 'Move to Inbox' }),
+                onClick: () => executeCommand('THREAD_UNDONE', { threadIds })
+              }
+            });
+            return;
+          }
+        }
+
         // Determine which command to run based on the thread's current state
         const commandToRun = check(firstTargetThread) ? trueCommand : falseCommand;
         trackEvent('hotkey_command_executed', { command: commandToRun });
         executeCommand(commandToRun as CommandType, getExplicitThreadArgs(target));
       },
-      { preventDefault: true, ...plainKeyGuard(hotkey), ...options },
-      [executeCommand, getExplicitThreadArgs, getThreadHotkeyTarget, threadsMap, trackEvent]
+      { preventDefault: true, useKey: hotkey === '#', ...plainKeyGuard(hotkey), ...options },
+      [
+        executeCommand,
+        getExplicitThreadArgs,
+        getThreadHotkeyTarget,
+        threadsMap,
+        trackEvent,
+        store,
+        t
+      ]
     );
   });
 
@@ -209,34 +307,37 @@ export const useRegisterHotkeys = (options = {}) => {
                 if (targetThreadIds.length > 0) {
                   const thread = threadsMap[targetThreadIds[0]];
                   if (thread) {
-                    const messages = thread.items.filter(
-                      (item) => item.type === 'message'
-                    ) as MonoMessage[];
-                    const fromOthers = messages.filter(
-                      (message) => !accounts.some((account) => account.email === message.from.email)
+                    // The open email: its quick reply, right under it.
+                    if (targetThreadIds.length === 1 && quickReplyControl.open?.(thread.id)) {
+                      trackEvent('hotkey_command_executed', {
+                        command: 'QUICK_REPLY',
+                        accountId: thread.accountId
+                      });
+                      return;
+                    }
+                    // The latest message from someone else (your own latest
+                    // in a thread you only sent to: the reply then goes to
+                    // its recipients), as the reply bar picks it.
+                    const { replyTarget: item } = replyTargets(
+                      thread.items.filter((entry) => entry.type === 'message') as MonoMessage[],
+                      accounts.map((account) => account.email)
                     );
-                    // Fall back to your own latest message so R works in threads
-                    // you only sent to (the reply then goes to its recipients).
-                    const items = fromOthers.length > 0 ? fromOthers : messages;
 
-                    if (items.length > 0) {
-                      const item = items[items.length - 1];
-                      if (item) {
-                        trackEvent('hotkey_command_executed', {
-                          command: 'COMPOSE_REPLY_MESSAGE',
-                          accountId: thread.accountId
-                        });
-                        executeCommand(commandId, {
-                          message: item,
-                          accountId: thread.accountId
-                        });
-                      }
+                    if (item) {
+                      trackEvent('hotkey_command_executed', {
+                        command: 'COMPOSE_REPLY_MESSAGE',
+                        accountId: thread.accountId
+                      });
+                      executeCommand(commandId, {
+                        message: item,
+                        accountId: thread.accountId
+                      });
                     }
                   }
                 }
               },
               {
-                scopes: [command.scope],
+                scopes: replyScopes(hotkey, command.scope),
                 preventDefault: true,
                 ...plainKeyGuard(hotkey),
                 ...options
@@ -249,19 +350,26 @@ export const useRegisterHotkeys = (options = {}) => {
             useHotkeys(
               hotkey,
               (e) => {
-                if (enterHasOtherJob()) return;
+                if (hotkey === 'Enter' && enterHasOtherJob()) return;
                 const targetThreadIds = getThreadHotkeyTarget().threadIds;
                 const thread = targetThreadIds.length > 0 ? threadsMap[targetThreadIds[0]] : null;
                 const lastMessage = thread?.getLastMessage();
                 if (!thread || !lastMessage) return;
                 e.preventDefault();
+                // A reply being written under the open email continues as
+                // Reply all there, rather than a second draft.
+                if (
+                  targetThreadIds.length === 1 &&
+                  quickReplyControl.open?.(thread.id, { replyAll: true, onlyIfWriting: true })
+                )
+                  return;
                 trackEvent('hotkey_command_executed', {
                   command: 'COMPOSE_REPLY_ALL_MESSAGE',
                   accountId: thread.accountId
                 });
                 executeCommand(commandId, { message: lastMessage, accountId: thread.accountId });
               },
-              { scopes: [command.scope], ...plainKeyGuard(hotkey), ...options },
+              { scopes: replyScopes(hotkey, command.scope), ...plainKeyGuard(hotkey), ...options },
               [executeCommand, getThreadHotkeyTarget, threadsMap, trackEvent]
             );
             break;
@@ -286,7 +394,7 @@ export const useRegisterHotkeys = (options = {}) => {
                 }
               },
               {
-                scopes: [command.scope],
+                scopes: replyScopes(hotkey, command.scope),
                 preventDefault: true,
                 ...plainKeyGuard(hotkey),
                 ...options
@@ -318,9 +426,13 @@ export const useRegisterHotkeys = (options = {}) => {
             // rest on (it becomes the selection), so they're registered in
             // the global scope too; with nothing to act on they do nothing.
             const opensPageOnThreads = THREAD_PAGE_COMMANDS.has(commandId);
+            // Sequences ("G>I") skip ignoreEventWhen in react-hotkeys-hook, so
+            // the compose guard is checked in the handler.
+            const isSequence = hotkey.includes('>');
             useHotkeys(
               hotkey,
               (e) => {
+                if (isSequence && isComposeExpanded()) return;
                 e.preventDefault();
                 const target = getThreadHotkeyTarget();
                 if (opensPageOnThreads) {
@@ -339,6 +451,13 @@ export const useRegisterHotkeys = (options = {}) => {
                 preventDefault: true,
                 useKey: hotkey === '!' || hotkey === '?',
                 ...plainKeyGuard(hotkey),
+                ...(LIST_ONLY_COMMANDS.has(commandId)
+                  ? {
+                      // ignoreEventWhen returns before the library's
+                      // preventDefault, so the native select-all still runs.
+                      ignoreEventWhen: listOnlyIgnored
+                    }
+                  : {}),
                 ...options
               },
               [

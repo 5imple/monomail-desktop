@@ -13,6 +13,7 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { threadExitIntentAtom, ThreadExitIntent } from '@/renderer/app/store/thread/exitIntentAtom';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { advanceReaderFrom } from '@/renderer/app/store/thread/readerAdvance';
 import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
 import { useSetAtom } from 'jotai';
 import React, { useCallback, useLayoutEffect, useRef, useState, useMemo } from 'react';
@@ -55,7 +56,8 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const { labelsMapByAccount } = useLabelAtom();
-  const { activeThreadId, selectedThreads, threadsMap } = useThreadAtom();
+  const { activeThreadId, selectedThreads, threadsMap, filteredThreadIds, setActiveThreadId } =
+    useThreadAtom();
   const { updateLabelFromThread } = useThreadLabelAtom();
   const { addUndoAction, removeUndoAction } = useUndoManager();
   const { accounts } = useAuth();
@@ -263,6 +265,12 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
             ? null
             : 'archive';
       const movingIds = movingThreads.map((thread) => thread.id);
+      // Moving the open email moves the reader on, like Done and Trash: to
+      // the next email down (into the next page at the end of what's loaded;
+      // the one above at the real end), measured while it is still listed.
+      const openMovingId =
+        activeThreadId && movingIds.includes(activeThreadId) ? activeThreadId : null;
+      const listedIds = filteredThreadIds.filter((id) => threadsMap[id]);
 
       // The toast, and its Undo / Z, come at once (see runUndoableAction).
       runUndoableAction({
@@ -281,7 +289,9 @@ const MoveCommandPage: React.FC<MoveCommandPageProps> = ({
                   true,
                   true, // shouldRemoveThread - remove from current view
                   false, // shouldRestoreThread
-                  undefined // afterStateUpdate - don't close yet, wait for promise to resolve
+                  openMovingId && state.threadIds.includes(openMovingId)
+                    ? () => advanceReaderFrom(openMovingId, listedIds, setActiveThreadId)
+                    : undefined
                 )
               )
             );

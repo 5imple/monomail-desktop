@@ -68,6 +68,10 @@ export interface DialogState {
   pinContact: {
     open: boolean;
   };
+  /** The keyboard shortcuts sheet (? or ⌘/). */
+  shortcuts: {
+    open: boolean;
+  };
 }
 
 export const dialogStateAtom = atom<DialogState>({
@@ -116,6 +120,9 @@ export const dialogStateAtom = atom<DialogState>({
     selectedSpaceId: undefined // Initialize with undefined
   },
   pinContact: {
+    open: false
+  },
+  shortcuts: {
     open: false
   }
 });

@@ -9,17 +9,23 @@ import {
   TableHeader,
   TableRow
 } from '@/renderer/app/components/ui/table';
-import { useCommands } from '@/renderer/app/lib/commands/useCommands';
+import { useCommandTable } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { useTranslation } from 'react-i18next';
 
 // Keys handled outside the command list (keyboard navigation, the reader,
 // undo, the palette), so they were missing from this page. Names are
 // react-hotkeys-hook keys, which ShortcutKeyboard draws.
 const NAVIGATION_SHORTCUTS: Array<{ key: string; title: string; hotkeys: string[] }> = [
-  { key: 'move', title: 'Move up / down the list', hotkeys: ['up', 'down'] },
+  { key: 'next', title: 'Next conversation (list or reader)', hotkeys: ['J', 'down'] },
+  { key: 'previous', title: 'Previous conversation (list or reader)', hotkeys: ['K', 'up'] },
+  { key: 'open_row', title: 'Open the highlighted conversation', hotkeys: ['O', 'enter'] },
+  { key: 'select_row', title: 'Select or deselect', hotkeys: ['X', 'space'] },
   { key: 'extend', title: 'Extend the selection', hotkeys: ['shift+up', 'shift+down'] },
-  { key: 'select', title: 'Select or deselect', hotkeys: ['space'] },
-  { key: 'open', title: 'Open; Reply all in the reader', hotkeys: ['enter'] },
+  {
+    key: 'split',
+    title: 'Next / previous split (Inbox tabs)',
+    hotkeys: ['tab', 'shift+tab']
+  },
   { key: 'back', title: 'Back, or clear the selection', hotkeys: ['esc'] },
   { key: 'undo', title: 'Undo', hotkeys: ['Z'] },
   { key: 'palette', title: 'Command palette', hotkeys: ['MOD+K'] }
@@ -32,7 +38,7 @@ const titleCase = (scope: string) =>
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
 export function ShortcutForm() {
-  const commands = useCommands();
+  const commands = useCommandTable();
   const { t } = useTranslation();
 
   const commandsByTitle = Object.values(commands).reduce(

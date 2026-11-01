@@ -9,8 +9,13 @@ import {
   NavigationPivotContext,
   DisabledAreasMap
 } from '@/renderer/app/hooks/useKeyboardNavigation';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { currentSearchQueryAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import {
+  activeThreadIdAtom,
+  filteredThreadIdsAtom,
+  selectedThreadsAtom
+} from '@/renderer/app/store/thread/atoms';
+import { atom, useAtomValue } from 'jotai';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 
 import { createContext, useContext, useMemo, useCallback, useEffect } from 'react';
@@ -75,10 +80,43 @@ export const useKeyboardNavigationContext = () => {
 };
 
 /**
+ * Just the registration functions, whose identity never changes. Components
+ * that only register themselves (every list row, every message card) take
+ * this one: the full context's value is rebuilt on every provider render —
+ * each key press, each change to any thread — and re-rendered all of them.
+ */
+type KeyboardRegistration = Pick<
+  KeyboardNavigationContextType,
+  'registerItem' | 'updateItemRef' | 'registerItems' | 'unregisterItem' | 'registerAreaRef'
+>;
+
+const KeyboardRegistrationContext = createContext<KeyboardRegistration | null>(null);
+KeyboardRegistrationContext.displayName = 'KeyboardRegistrationContext';
+
+// Whether the keyboard is driving (rarely changes), for components that style
+// themselves by it: the full context changes on every key press.
+const KeyboardModeContext = createContext(false);
+KeyboardModeContext.displayName = 'KeyboardModeContext';
+export const useIsKeyboardMode = () => useContext(KeyboardModeContext);
+
+export const useKeyboardRegistration = () => {
+  const context = useContext(KeyboardRegistrationContext);
+  if (!context) {
+    throw new Error('useKeyboardRegistration must be used within a KeyboardNavigationProvider');
+  }
+  return context;
+};
+
+/**
  * Hook to create pivot context based on your app's atoms
  */
+// Only the count: the provider wraps the whole layout, so subscribing it to
+// the id list (or the whole thread store) re-rendered the app on every change.
+const filteredThreadCountAtom = atom((get) => get(filteredThreadIdsAtom).length);
+
 function useNavigationPivotContext(): NavigationPivotContext {
-  const { activeThreadId, filteredThreadIds } = useThreadAtom();
+  const activeThreadId = useAtomValue(activeThreadIdAtom);
+  const filteredThreadCount = useAtomValue(filteredThreadCountAtom);
 
   const getPivotIndex = useCallback((area: FocusableArea): number => {
     // This is now just a fallback - the real logic is in the provider's useEffect
@@ -134,7 +172,7 @@ function useNavigationPivotContext(): NavigationPivotContext {
           return false;
       }
     },
-    [activeThreadId, filteredThreadIds.length]
+    [activeThreadId, filteredThreadCount]
   );
 
   return useMemo(
@@ -152,8 +190,9 @@ export const KeyboardNavigationProvider: React.FC<{ children: React.ReactNode }>
 }) => {
   const pivotContext = useNavigationPivotContext();
   const navigation = useKeyboardNavigation(pivotContext);
-  const { globalSearchQuery } = useGlobalAtom();
-  const { activeThreadId, selectedThreads } = useThreadAtom();
+  const globalSearchQuery = useAtomValue(currentSearchQueryAtom);
+  const activeThreadId = useAtomValue(activeThreadIdAtom);
+  const selectedThreads = useAtomValue(selectedThreadsAtom);
   const { activeSpace, spaces } = useSpaceAtom();
 
   // Update space navigation pivot based on active space
@@ -191,9 +230,20 @@ export const KeyboardNavigationProvider: React.FC<{ children: React.ReactNode }>
     [navigation]
   );
 
+  const { registerItem, updateItemRef, registerItems, unregisterItem, registerAreaRef } =
+    navigation;
+  const registration = useMemo(
+    () => ({ registerItem, updateItemRef, registerItems, unregisterItem, registerAreaRef }),
+    [registerItem, updateItemRef, registerItems, unregisterItem, registerAreaRef]
+  );
+
   return (
     <KeyboardNavigationContext.Provider value={contextValue}>
-      <div className="keyboard-navigation-root">{children}</div>
+      <KeyboardRegistrationContext.Provider value={registration}>
+        <KeyboardModeContext.Provider value={navigation.isKeyboardMode}>
+          <div className="keyboard-navigation-root">{children}</div>
+        </KeyboardModeContext.Provider>
+      </KeyboardRegistrationContext.Provider>
     </KeyboardNavigationContext.Provider>
   );
 };

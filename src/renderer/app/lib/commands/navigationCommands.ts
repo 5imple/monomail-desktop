@@ -7,19 +7,22 @@ interface NavigationCommandDependencies {
   dialogState: any;
   openDialog: (dialog: any, options?: any) => void;
   searchNewQuery: (query: string, threadIds?: string[], addToHistory?: boolean) => void;
+  openLater: () => void;
 }
 
 export const createNavigationCommands = (
   deps: NavigationCommandDependencies
 ): Partial<Record<CommandType, MonoCommand>> => {
-  const { t, dialogState, openDialog, searchNewQuery } = deps;
+  const { t, dialogState, openDialog, searchNewQuery, openLater } = deps;
 
   return {
     SEARCH: {
       scope: 'GLOBAL',
       title: t('command.search'),
       icon: 'Search',
-      hotkeys: ['MOD+F'],
+      // / as in Superhuman and Gmail (matched by key code: "/" itself
+      // would also match ⌘/ under react-hotkeys-hook's useKey).
+      hotkeys: ['SLASH', 'MOD+F'],
       action: () => {
         if (dialogState.commandPalette.open) return 'page';
         openDialog('commandPalette', { pages: ['SEARCH'] });
@@ -45,7 +48,8 @@ export const createNavigationCommands = (
       scope: 'CONVERSATION_SELECTED',
       title: t('command.reminder'),
       icon: 'Clock',
-      hotkeys: ['H', 'MOD+H'],
+      // ⌘H / ⌘M were listed too, but macOS takes them (Hide, Minimize).
+      hotkeys: ['H'],
       action: () => {
         if (dialogState.commandPalette.open) return 'page';
         openDialog('commandPalette', { pages: ['REMINDER'] });
@@ -69,7 +73,7 @@ export const createNavigationCommands = (
       scope: 'CONVERSATION_SELECTED',
       title: t('command.move'),
       icon: 'ArrowRight',
-      hotkeys: ['V', 'M', 'MOD+M'],
+      hotkeys: ['V', 'M'],
       action: () => {
         if (dialogState.commandPalette.open) return 'page';
         openDialog('commandPalette', { pages: ['MOVE'] });
@@ -83,7 +87,9 @@ export const createNavigationCommands = (
     GOTO_INBOX: {
       scope: 'GLOBAL',
       title: t('command.goto_inbox'),
-      hotkeys: ['G+I', 'MOD+G+I'],
+      // A sequence (press G, then I), as the UI draws it; "G+I" meant both
+      // keys held together.
+      hotkeys: ['G>I'],
       icon: 'Inbox',
       action: (_: any) => {
         searchNewQuery('category:primary', undefined, false);
@@ -93,7 +99,7 @@ export const createNavigationCommands = (
     GOTO_DONE: {
       scope: 'GLOBAL',
       title: t('command.goto_done'),
-      hotkeys: ['G+E', 'MOD+G+E'],
+      hotkeys: ['G>E'],
       icon: 'CheckCircle',
       action: (_: any) => {
         searchNewQuery('NOT in:inbox', undefined, false);
@@ -103,7 +109,7 @@ export const createNavigationCommands = (
     GOTO_STARRED: {
       scope: 'GLOBAL',
       title: t('command.goto_starred'),
-      hotkeys: ['G+S', 'MOD+G+S'],
+      hotkeys: ['G>S'],
       icon: 'Star',
       action: (_: any) => {
         searchNewQuery('is:starred', undefined, false);
@@ -113,7 +119,7 @@ export const createNavigationCommands = (
     GOTO_SENT: {
       scope: 'GLOBAL',
       title: t('command.goto_sent'),
-      hotkeys: ['G+T', 'MOD+G+T'],
+      hotkeys: ['G>T'],
       icon: 'SendHorizontal',
       action: (_: any) => {
         searchNewQuery('in:sent', undefined, false);
@@ -123,10 +129,21 @@ export const createNavigationCommands = (
     GOTO_DRAFTS: {
       scope: 'GLOBAL',
       title: t('command.goto_drafts'),
-      hotkeys: ['G+D', 'MOD+G+D'],
+      hotkeys: ['G>D'],
       icon: 'FileText',
       action: (_: any) => {
         searchNewQuery('in:draft', undefined, false);
+      }
+    },
+
+    // Snoozed and scheduled mail (the Later tab): G then L.
+    GOTO_LATER: {
+      scope: 'GLOBAL',
+      title: t('command.goto_later', { defaultValue: 'Go to Later' }),
+      hotkeys: ['G>L'],
+      icon: 'Clock',
+      action: (_: any) => {
+        openLater();
       }
     },
 

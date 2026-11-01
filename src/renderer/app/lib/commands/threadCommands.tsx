@@ -1,8 +1,9 @@
 import { isComposeDraftId } from '@/main/utils';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { CommandType } from '@/renderer/app/types';
-import { neighbourAfterLeaving } from '@/renderer/app/lib/commands/readerNavigation';
+import { advanceReaderFrom } from '@/renderer/app/store/thread/readerAdvance';
 import { runUndoableAction } from '@/renderer/app/lib/commands/undoableAction';
+import { toast } from 'sonner';
 import { MonoCommand, ThreadCommandArgs } from './types';
 
 interface ThreadCommandDependencies {
@@ -87,8 +88,9 @@ export const createThreadCommands = (
     ).filter((id) => !isComposeDraftId(id));
 
   // Done / Trash / Spam on the open email: the reader moves on to the next
-  // email down (the one above at the end of the list; it closes when the
-  // email was alone), measured while the email is still in the list. From
+  // email down, measured while the email is still in the list. At the end of
+  // what's loaded it waits for the next page (advanceReaderFrom); at the real
+  // end of the list, the one above (it closes when the email was alone). From
   // the list itself nothing opens, since the reader would go fullscreen and
   // hide the whole inbox; advanceAfterAction keeps the explicit opt-in.
   const moveReaderOnAfter = (
@@ -97,12 +99,10 @@ export const createThreadCommands = (
   ): (() => void) | undefined => {
     const openThreadId =
       activeThreadId && threadIds.includes(activeThreadId) ? activeThreadId : null;
+    if (openThreadId && args?.returnToList) return () => setActiveThreadId(null);
     if (openThreadId) {
-      const nextThreadId = neighbourAfterLeaving(
-        filteredThreadIds.filter((id) => threadsMap[id]),
-        openThreadId
-      );
-      return () => setActiveThreadId(nextThreadId);
+      const ids = filteredThreadIds.filter((id) => threadsMap[id]);
+      return () => advanceReaderFrom(openThreadId, ids, setActiveThreadId);
     }
     return args?.advanceAfterAction === true ? selectNextThread : undefined;
   };
@@ -165,9 +165,15 @@ export const createThreadCommands = (
           message:
             threadIds.length === 1
               ? t('toast.thread.marked_unread')
-              : t('toast.thread.marked_reads', { count: threadIds.length }),
+              : t('toast.thread.marked_unread', { count: threadIds.length }),
           errorMessage: t('toast.thread.mark_read_error')
         });
+        // Marking the open email unread puts it back for later: the reader
+        // closes and the list it was opened from shows again (as in Gmail and
+        // Superhuman). Done / Trash instead move on to the next email.
+        if (activeThreadId && threadIds.includes(activeThreadId)) {
+          setActiveThreadId(null);
+        }
       }
     },
 
@@ -176,7 +182,9 @@ export const createThreadCommands = (
       scope: 'CONVERSATION_SELECTED',
       title: t('command.thread_trash'),
       icon: 'Trash',
-      hotkeys: ['MOD+Backspace', 'Backspace', 'Delete'],
+      // ⌫ first: the key the palette and tooltips show. # is bound in
+      // useRegisterHotkeys' paired table (with the other trash keys).
+      hotkeys: ['Backspace', '#', 'Delete', 'MOD+Backspace'],
       action: async (args?: ThreadCommandArgs) => {
         const threadIds = getTargetThreadIds(args);
         if (threadIds.length === 0) return;
@@ -319,6 +327,35 @@ export const createThreadCommands = (
           (globalSearchQuery.toLowerCase().includes('in:inbox') &&
             !globalSearchQuery.toLowerCase().includes('not in:inbox')) ||
           globalSearchQuery.toLowerCase().includes('category:primary');
+        if (args?.onQuietUndo) {
+          const { waitFor } = args;
+          let undone = false;
+          const performed = forEachAccount(threadsByAccount, (accountId, ids) =>
+            markThreadAsDone(accountId, ids, true, isInInboxView, false, afterStateUpdate, waitFor)
+          );
+          // No success toast (the caller has its own), but a failure says so:
+          // the conversation is back in the inbox.
+          performed.catch((error) => {
+            console.error('[THREAD_DONE] quiet archive failed:', error);
+            if (!undone) toast.error(t('toast.thread.done_error'));
+          });
+          args.onQuietUndo(() => {
+            undone = true;
+            // With waitFor the server hasn't been told yet: restore locally only.
+            void forEachAccount(threadsByAccount, (accountId, ids) =>
+              unmarkThreadAsDone(
+                accountId,
+                ids,
+                !waitFor,
+                false,
+                isInInboxView,
+                undefined,
+                waitFor ? undefined : performed
+              )
+            );
+          });
+          return;
+        }
         undoable({
           perform: () =>
             forEachAccount(threadsByAccount, (accountId, ids) =>
@@ -408,8 +445,11 @@ export const createThreadCommands = (
     },
 
     // Thread List selection commands
+    // Global, so ⌘A selects every row on a clean list too. With an email open
+    // useRegisterHotkeys steps aside and ⌘A selects the email's text: it used
+    // to check every row of the hidden list instead.
     THREAD_SELECT_ALL: {
-      scope: 'CONVERSATION_SELECTED',
+      scope: 'GLOBAL',
       title: t('command.thread_select_all'),
       hotkeys: ['MOD+A', 'SHIFT+MOD+A'],
       icon: 'List',

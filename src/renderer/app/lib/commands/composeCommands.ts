@@ -11,7 +11,11 @@ import {
 import { startEmailAccountLink } from '@/renderer/app/lib/accountLinking';
 import { isBackendConfigured } from '@/main/api/apiClient';
 import { toast } from 'sonner';
-import { buildReplyAllRecipients, replySubject } from '@/renderer/app/lib/replyRecipients';
+import {
+  buildReplyAllRecipients,
+  buildReplyRecipients,
+  replySubject
+} from '@/renderer/app/lib/replyRecipients';
 
 interface ComposeCommandDependencies {
   t: (key: string, options?: any) => string;
@@ -131,8 +135,7 @@ export const createComposeCommands = (
         // Plain Reply answers the sender only — copying Cc/Bcc made it behave
         // like Reply All (and re-exposed Bcc recipients of your own mail).
         // Replying to your own message goes to its original recipients.
-        const fromSelf = ownEmails().has(item.from.email.toLowerCase());
-        const to = fromSelf ? item.to.map((recipient) => recipient.email) : [item.from.email];
+        const to = buildReplyRecipients(item, ownEmails());
 
         const draft = new MonoDraft({
           from: accountEmail,
@@ -152,7 +155,8 @@ export const createComposeCommands = (
     COMPOSE_REPLY_ALL_MESSAGE: {
       scope: 'CONVERSATION_DISPLAY',
       title: t('command.compose_reply_all_message'),
-      hotkeys: ['Enter'],
+      // A is the Superhuman / Gmail key; Enter works in the reader.
+      hotkeys: ['Enter', 'A'],
       icon: 'Reply',
       action: (rawArgs?: MessageCommandArgs) => {
         const args = resolveMessageArgs(rawArgs, false);
@@ -198,9 +202,8 @@ export const createComposeCommands = (
           from: accountEmail,
           messageId: item.id,
           threadId: item.threadId,
-          subject: item.subject.toLowerCase().startsWith('fwd: ')
-            ? item.subject
-            : `Fwd: ${item.subject}`
+          // Outlook's "FW:" counts too (it became "Fwd: FW: …").
+          subject: /^fwd?:/i.test(item.subject.trim()) ? item.subject : `Fwd: ${item.subject}`
         });
         setGlobalDraftWindows([draft]);
       }

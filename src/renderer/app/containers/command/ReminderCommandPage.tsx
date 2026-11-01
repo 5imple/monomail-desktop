@@ -14,7 +14,7 @@ import dayjs from 'dayjs';
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { getReminderSuggestions } from './getReminderSuggestions';
+import { getReminderSuggestions, type Suggestion } from './getReminderSuggestions';
 
 interface ReminderCommandPageProps {
   reminderValue: string;
@@ -59,11 +59,14 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
     [activeThreadId, selectedThreads]
   );
 
-  const handleSelect = async (value: string) => {
+  const handleSelect = async (suggestion: Suggestion) => {
     bounce();
-    const parsedDate = chrono.parseDate(value, new Date(), { forwardDate: true });
-
-    if (!parsedDate) return;
+    // Re-read the value so "in 2 hours" counts from now, not from when the
+    // list was drawn; absolute rows re-read to the same time they show.
+    const now = new Date();
+    const reparsed = chrono.parseDate(suggestion.value, now, { forwardDate: true });
+    const when = reparsed && reparsed > now ? reparsed : suggestion.date;
+    if (!(when > now)) return;
     const threads = targetThreadIds.map((id) => threadsMap[id]).filter(Boolean);
     // Nothing to snooze: say so here (the palette used to just vanish).
     if (threads.length === 0) {
@@ -73,7 +76,7 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
 
     closeDialog('commandPalette');
     onClose();
-    await snoozeThreads(threads, dayjs(parsedDate).toISOString());
+    await snoozeThreads(threads, dayjs(when).toISOString());
   };
 
   useLayoutEffect(() => {
@@ -106,25 +109,23 @@ const ReminderCommandPage: React.FC<ReminderCommandPageProps> = ({
         <div ref={commandListRef}>
           <CommandEmpty>{t('command_palette.reminder.no_suggestions')}</CommandEmpty>
           <CommandGroup heading={t('command_palette.header.suggestions')} className="p-2">
-            {suggestions.map((sugg) => {
-              const when = chrono.parseDate(sugg.value, new Date(), { forwardDate: true });
-              return (
-                <CommandItem
-                  key={sugg.label}
-                  variant={'raycast'}
-                  value={reminderValue + sugg.value}
-                  onSelect={() => handleSelect(sugg.value)}
-                >
-                  <CommandIcon type="Clock" />
-                  <span className="min-w-0 flex-1 truncate">{sugg.label}</span>
-                  {when && (
-                    <span className="ml-3 shrink-0 text-xs text-muted-foreground">
-                      {formatWhen(when, '·')}
-                    </span>
-                  )}
-                </CommandItem>
-              );
-            })}
+            {/* One row per time, best first: Enter takes the first. Values are
+                unique, and prefixed with the input so cmdk's filter keeps every
+                row in this order. */}
+            {suggestions.map((sugg) => (
+              <CommandItem
+                key={sugg.value}
+                variant={'raycast'}
+                value={reminderValue + sugg.value}
+                onSelect={() => handleSelect(sugg)}
+              >
+                <CommandIcon type="Clock" />
+                <span className="min-w-0 flex-1 truncate">{sugg.label}</span>
+                <span className="ml-3 shrink-0 text-xs text-muted-foreground">
+                  {formatWhen(sugg.date, '·')}
+                </span>
+              </CommandItem>
+            ))}
           </CommandGroup>
         </div>
       </CommandList>

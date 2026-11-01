@@ -13,7 +13,7 @@ import { useContactAtom } from '@/renderer/app/store/contact/useContactAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { Button } from '@/renderer/app/components/ui/button';
@@ -249,29 +249,17 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
 
   const commandListRef = useRef<HTMLDivElement>(null);
   const commandScrollListRef = useRef<HTMLDivElement>(null);
-  const [listHeight, setListHeight] = useState<number | undefined>(undefined);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     onKeydown(e);
   };
 
-  useLayoutEffect(() => {
-    setTimeout(() => {
-      if (commandListRef.current) {
-        const computedHeight = commandListRef.current.scrollHeight;
-        setListHeight(computedHeight < 300 ? computedHeight : 300);
-        // Reset scroll position to top when content changes
-      }
-    }, 0);
-  }, [searchState, filteredOperators, filteredContacts]);
-
-  // Additional effect to ensure scroll position stays at top when search query changes
+  // Back to the top as the query changes, at once. The list's height used to
+  // be measured after each keystroke and animated over 300 ms (with a smooth
+  // scroll), so the suggestions trailed the typing; it now just grows to its
+  // content, up to the CSS max height.
   useEffect(() => {
-    if (commandScrollListRef.current) {
-      // commandScrollListRef.current.scrollTop = 0;
-
-      commandScrollListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    if (commandScrollListRef.current) commandScrollListRef.current.scrollTop = 0;
   }, [searchQuery]);
 
   return (
@@ -285,15 +273,7 @@ const SearchCommandPage: React.FC<SearchCommandPageProps> = ({
         renderCondition={(part) => part.includes(':')}
         onKeyDown={handleKeyDown}
       />
-      <CommandList
-        ref={commandScrollListRef}
-        className="origin-top transition-all duration-200 ease-bouncy-in-out"
-        style={
-          listHeight === undefined
-            ? { transition: 'height 300ms' }
-            : { transition: 'height 300ms', height: `${listHeight}px` }
-        }
-      >
+      <CommandList ref={commandScrollListRef} className="max-h-[300px] overflow-y-auto">
         <div ref={commandListRef}>
           {countQueries(searchQuery) > 0 && (
             <CommandGroup heading={t('command_palette.header.actions')} className="p-2">
