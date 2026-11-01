@@ -5,9 +5,13 @@ import electronApi from '@/renderer/app/lib/electronApi';
 import { useTrackingAtom } from '@/renderer/app/store/tracking/useTrackingAtom';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { IMonoMessage, MonoMessage } from '@/main/models/message/MonoMessage';
-import { parsePayloadPartWithHighlight } from '@/main/models/message/parsePayloadPartWithHighlight';
+import {
+  hasParsedPayload,
+  parsePayloadPartWithHighlight
+} from '@/main/models/message/parsePayloadPartWithHighlight';
 import { MonoAttachment, MonoRecipient } from '@/main/models/types';
 import { CalendarEventCard } from '@/renderer/app/components/card/CalendarEventCard';
+import { MeetingCard } from '@/renderer/app/components/card/MeetingCard';
 import DraftCard from '@/renderer/app/components/card/DraftCard';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import AttachmentItem from '@/renderer/app/components/mail/attachment/AttachmentItem';
@@ -20,7 +24,7 @@ import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/components/ui/tooltip';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useKeyboardRegistration } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import {
   formatFullDateTime,
@@ -30,14 +34,16 @@ import {
 } from '@/renderer/app/lib/formatDate';
 import { isCalendarAttachment } from '@/renderer/app/lib/icsParser';
 import { cleanHistorySnippet, MessageStackPosition } from '@/renderer/app/lib/messageHistory';
+import { isReaderOpenFor, markBodyPainted, markReaderPhase } from '@/renderer/app/lib/readerTiming';
 import { buildReplyAllRecipients, replySubject } from '@/renderer/app/lib/replyRecipients';
+import { recipientSummary } from '@/renderer/app/lib/recipientSummary';
 import { payloadHasBodyData } from '@/renderer/app/lib/threadBodyPrefetch';
 import { cn } from '@/renderer/app/lib/utils';
 import i18n from '@/renderer/assets/locales';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Collapsible } from '@radix-ui/react-collapsible';
@@ -46,6 +52,10 @@ import { TooltipPortal } from '@radix-ui/react-tooltip';
 
 interface MessageCardProps {
   className?: string;
+  /**
+   * Controlled: the message shows as a one-line row. The conversation owns
+   * this (DisplayPanel); the card asks for a change with onCollapsedChange.
+   */
   collapsed?: boolean;
   item: MonoMessage;
   draft?: MonoDraft;
@@ -54,23 +64,52 @@ interface MessageCardProps {
   contactToggle?: boolean;
   accountId?: string;
   cardClassName?: string;
-  isFocused?: boolean;
-  onFocusRequest?: () => void;
-  /** Reports the card's own collapse state (it toggles itself on click). */
-  onCollapsedChange?: (collapsed: boolean) => void;
+  /** The message was clicked or acted on. */
+  onFocusRequest?: (messageId: string) => void;
+  /** Asks to collapse / expand this message. Keep it stable: the card is memoised. */
+  onCollapsedChange?: (messageId: string, collapsed: boolean) => void;
   /** Position in a stack of adjacent collapsed rows; joins their edges. */
   stack?: MessageStackPosition | null;
   handleContactOpen?: (recipient: MonoRecipient) => void;
   style?: React.CSSProperties;
+  /** Stacking order among the cards (a number, unlike `style`, keeps the memo). */
+  zIndex?: number;
   /** The thread's full body is still being fetched (shows a skeleton). */
   bodyLoading?: boolean;
+  /** Printing: the quoted history is printed too. */
+  isPrinting?: boolean;
 }
 
-// Collapsed content stays mounted (for the height animation), so it's made
-// inert: its links and buttons leave the Tab order. React 18 has no typed
-// `inert` prop; it passes the string attribute through.
-const inertWhen = (condition: boolean) =>
-  (condition ? { inert: '' } : {}) as React.HTMLAttributes<HTMLDivElement>;
+// Idle time for work nobody waits on (warming the parse of a hovered row).
+const whenIdle = (task: () => void) => {
+  if (typeof requestIdleCallback === 'function') {
+    const id = requestIdleCallback(task, { timeout: 500 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(task, 50);
+  return () => clearTimeout(id);
+};
+
+/**
+ * Scale an email wider than the reader down to fit (`.scale-to-fit.scaled`
+ * applies the transform). A transform leaves the layout box at full size, so
+ * a negative bottom margin takes back the height the scaling freed; the card
+ * no longer has to be pinned to a measured pixel height for it. Called before
+ * paint (layout effect) and from a ResizeObserver, so it never snaps visibly.
+ */
+const fitToWidth = (element: HTMLDivElement | null) => {
+  if (!element) return;
+  element.classList.remove('scaled');
+  element.style.removeProperty('--scale-factor');
+  element.style.marginBottom = '';
+  const available = element.clientWidth;
+  const contentWidth = element.scrollWidth;
+  if (available <= 0 || contentWidth <= available + 1) return;
+  const scale = available / contentWidth;
+  element.style.setProperty('--scale-factor', scale.toString());
+  element.classList.add('scaled');
+  element.style.marginBottom = `${-Math.round(element.offsetHeight * (1 - scale))}px`;
+};
 
 // "Name (email)", or just the email when there's no name.
 const formatRecipient = (recipient: MonoRecipient) =>
@@ -172,15 +211,15 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       preview,
       cardClassName,
       isLastCard,
-      isFocused,
       onFocusRequest,
       onCollapsedChange,
       stack,
       accountId,
       draft,
-      contactToggle,
       style,
-      bodyLoading
+      zIndex,
+      bodyLoading,
+      isPrinting
     },
     forwardedRef
   ) => {
@@ -190,12 +229,24 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const { setGlobalDraftWindows } = useComposeWindowAtom();
     const { accounts } = useAuth();
 
-    const [isCollapsed, setIsCollapsed] = useState(collapsed);
-    const onCollapsedChangeRef = useRef(onCollapsedChange);
-    onCollapsedChangeRef.current = onCollapsedChange;
-    useEffect(() => {
-      onCollapsedChangeRef.current?.(!!isCollapsed);
-    }, [isCollapsed]);
+    // Collapse is the conversation's (DisplayPanel): it opens on the message
+    // to read, follows that as bodies arrive, and expands / collapses all.
+    const isCollapsed = !!collapsed;
+    // A body the user just expanded fades in (120 ms); one shown on open or
+    // because the thread loaded appears at once.
+    const userToggledRef = useRef(false);
+    const fadeBodyInRef = useRef(false);
+    const lastCollapsedRef = useRef(isCollapsed);
+    if (lastCollapsedRef.current !== isCollapsed) {
+      lastCollapsedRef.current = isCollapsed;
+      fadeBodyInRef.current = !isCollapsed && userToggledRef.current;
+      userToggledRef.current = false;
+    }
+    const requestCollapsed = (next: boolean) => {
+      if (next === isCollapsed) return;
+      userToggledRef.current = true;
+      onCollapsedChange?.(item.id, next);
+    };
     const [showQuotedContent, setShowQuotedContent] = useState(false);
     const [showCcDropdown, setShowCcDropdown] = useState(false);
     const [showBccDropdown, setShowBccDropdown] = useState(false);
@@ -203,8 +254,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     // expands them by clicking the recipient summary line. The message body
     // stays visible regardless — this only toggles the header detail block.
     const [showRecipientDetails, setShowRecipientDetails] = useState(false);
-    const contentRef = useRef<HTMLDivElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
     const itemRef = useRef<HTMLDivElement | null>(null);
     const messageContentRef = useRef<HTMLDivElement>(null);
     const quotedContentRef = useRef<HTMLDivElement>(null);
@@ -212,7 +261,22 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
     const [unsubscribedLoading, setUnsubscribedLoading] = useState(true);
 
     const executeCommand = useExecuteCommand();
-    const [currentMessage, setCurrentMessage] = useState<IMonoMessage>(item.toPlainObject());
+    // The message as shown: the item itself (read straight from the props, so a
+    // body that lands renders in the same pass), with the List-Unsubscribe
+    // details the card fetched on its own for promotions.
+    const [fetchedUnsubscribe, setFetchedUnsubscribe] = useState<{
+      messageId: string;
+      value: IMonoMessage['listUnsubscribe'];
+    } | null>(null);
+    const currentMessage = useMemo(
+      () =>
+        fetchedUnsubscribe?.messageId === item.id
+          ? Object.assign(Object.create(Object.getPrototypeOf(item)) as MonoMessage, item, {
+              listUnsubscribe: fetchedUnsubscribe.value
+            })
+          : item,
+      [item, fetchedUnsubscribe]
+    );
     const [showTrackingDropdown, setShowTrackingDropdown] = useState(false);
     const { getMessageTrackingHistory, fetchAndSetTrackingHistories } = useTrackingAtom();
     const isDarkMode = useMemo(
@@ -236,21 +300,46 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         lastRead: formatRelativeTime(lastRead)
       };
     }, [trackingHistory]);
-    const { registerItem, unregisterItem } = useKeyboardNavigationContext();
+    const { registerItem, unregisterItem } = useKeyboardRegistration();
     const [showTrackerPrevention, setShowTrackerPrevention] = useState(false);
     const [trackingLoading, setTrackingLoading] = useState(false);
 
-    const shouldParsePayload = isLastCard || !isCollapsed;
-
-    const [parsedPayload, setParsedPayload] = useState<{
-      content: string;
-      history: string[];
-      trackingImagesRemoved?: number;
-      trackingDomains?: string[];
-    } | null>(
-      shouldParsePayload
-        ? parsePayloadPartWithHighlight(item, globalSearchQuery, shouldTransformEmailForDarkMode)
-        : null
+    // The body, parsed while rendering: when a fetched body lands, the card
+    // shows it in that same render (it used to take an effect and another
+    // render). Memoised on what the parse reads, so other updates (labels,
+    // the list, a prefetch of another thread) don't redo O(body size) work;
+    // the parse itself is cached across cards and opens. A collapsed row
+    // shows no body and isn't parsed (hovering it warms the cache in idle
+    // time instead).
+    const shouldParse = !isCollapsed || !!isPrinting;
+    const parsedPayload = useMemo(() => {
+      if (!shouldParse) return null;
+      const timed = isReaderOpenFor(item.threadId) && payloadHasBodyData(item.payload);
+      const miss =
+        timed && !hasParsedPayload(item, globalSearchQuery, shouldTransformEmailForDarkMode);
+      const startedAt = miss ? performance.now() : 0;
+      const parsed = parsePayloadPartWithHighlight(
+        item,
+        globalSearchQuery,
+        shouldTransformEmailForDarkMode
+      );
+      if (miss) {
+        markReaderPhase(
+          `parsed ${item.id} in ${Math.round(performance.now() - startedAt)} ms`,
+          item.threadId
+        );
+      }
+      return parsed;
+      // The fields the parse reads, not `item`: a label change gives the
+      // message a new object but keeps these.
+    }, [shouldParse, item.id, item.payload, item.inlineImages, item.historyId, globalSearchQuery]);
+    const bodyHtml = useMemo(
+      () => parsedPayload?.content.replaceAll('\r\n', '\n').replaceAll('\r', '\n') ?? '',
+      [parsedPayload?.content]
+    );
+    const historyHtml = useMemo(
+      () => (parsedPayload?.history ?? []).join(''),
+      [parsedPayload?.history]
     );
 
     const handleClickNewEmail = (recipient: MonoRecipient) => {
@@ -270,8 +359,8 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 
     const handleReplyMessage = (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
-      setIsCollapsed(false);
-      onFocusRequest?.();
+      requestCollapsed(false);
+      onFocusRequest?.(item.id);
       executeCommand('COMPOSE_REPLY_MESSAGE', {
         message: item,
         accountId: accountId
@@ -291,8 +380,8 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       ownEmails.add(accountEmail.toLowerCase());
       const { to, cc } = buildReplyAllRecipients(item, ownEmails);
 
-      setIsCollapsed(false);
-      onFocusRequest?.();
+      requestCollapsed(false);
+      onFocusRequest?.(item.id);
       setGlobalDraftWindows([
         new MonoDraft({
           from: accountEmail,
@@ -307,25 +396,12 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 
     const handleForwardMessage = (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
-      setIsCollapsed(false);
-      onFocusRequest?.();
+      requestCollapsed(false);
+      onFocusRequest?.(item.id);
       executeCommand('COMPOSE_FORWARD_MESSAGE', {
         message: item,
         accountId: accountId
       });
-    };
-
-    // Lazy parsing function with email-document rendering.
-    const parseIfNeeded = () => {
-      if (!parsedPayload) {
-        const processedContent = parsePayloadPartWithHighlight(
-          item,
-          globalSearchQuery,
-          shouldTransformEmailForDarkMode
-        );
-
-        setParsedPayload(processedContent);
-      }
     };
 
     useEffect(() => {
@@ -338,37 +414,41 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       };
     }, []);
 
-    // Keep the rendered message in sync when metadata-only list data is
-    // replaced by the full Gmail payload. The parser cache key also includes
-    // payload shape, so this reprocesses the HTML instead of reusing an empty
-    // metadata parse.
+    // Dev timing (readerTiming): this message's body is in the DOM (before
+    // paint), then on screen. Only bodies that were fetched count.
+    const bodyCommitted = !isCollapsed && !!bodyHtml && payloadHasBodyData(item.payload);
+    useLayoutEffect(() => {
+      if (bodyCommitted) markReaderPhase(`first body committed (${item.id})`, item.threadId);
+    }, [bodyCommitted, bodyHtml]);
     useEffect(() => {
-      setCurrentMessage(item.toPlainObject());
+      if (bodyCommitted) markBodyPainted(item.threadId, item.id);
+    }, [bodyCommitted, bodyHtml]);
 
-      setParsedPayload((currentParsedPayload) => {
-        if (!currentParsedPayload && !shouldParsePayload) return null;
-        return parsePayloadPartWithHighlight(
-          item,
-          globalSearchQuery,
-          shouldTransformEmailForDarkMode
-        );
+    // Wide emails scale down to fit, measured before paint so they never
+    // show at full width first; re-measured when the body or the reader
+    // resizes (images loading, the window).
+    useLayoutEffect(() => {
+      const elements = [messageContentRef.current, quotedContentRef.current].filter(
+        (element): element is HTMLDivElement => !!element
+      );
+      if (elements.length === 0) return;
+      elements.forEach(fitToWidth);
+      const observer = new ResizeObserver((entries) => {
+        entries.forEach((entry) => fitToWidth(entry.target as HTMLDivElement));
       });
-    }, [globalSearchQuery, item, shouldParsePayload]);
+      elements.forEach((element) => observer.observe(element));
+      return () => observer.disconnect();
+    }, [bodyHtml, historyHtml, isCollapsed, showQuotedContent, isPrinting]);
 
-    // Trigger parsing when expanded or scrolled into view
-    useEffect(() => {
-      if (!isCollapsed) {
-        parseIfNeeded();
-      }
-      // const timeout = setTimeout(() => setIsVisible(true), 150);
-    }, [isCollapsed]);
+    // The quoted history is in the DOM only while shown (or printed).
+    const quotedShown = showQuotedContent || !!isPrinting;
 
     useEffect(() => {
       if (!parsedPayload || !accountId) return;
 
       const roots = [
         messageContentRef.current,
-        showQuotedContent ? quotedContentRef.current : null
+        quotedShown ? quotedContentRef.current : null
       ].filter(Boolean) as HTMLDivElement[];
       if (roots.length === 0) return;
 
@@ -388,7 +468,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           defaultValue: 'Image unavailable'
         });
         img.parentNode?.insertBefore(fallback, img.nextSibling);
-        requestAnimationFrame(updateHeight);
       };
 
       const loadInlineImage = async (img: HTMLImageElement) => {
@@ -410,7 +489,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 
         if (!ALLOWED_INLINE_IMAGE_MIMES.has(inlineImage.mimeType)) {
           img.remove();
-          requestAnimationFrame(updateHeight);
           return;
         }
 
@@ -430,7 +508,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 
         img.style.display = 'none';
         img.parentNode?.insertBefore(skeleton, img);
-        requestAnimationFrame(updateHeight);
 
         try {
           const inlineAttachment = await mailApi.getAttachmentInline(
@@ -458,7 +535,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             if (isDarkMode) {
               img.style.border = '1px solid rgba(24, 24, 27, 0.08)';
             }
-            updateHeight();
           };
           img.onerror = () => markImageUnavailable(img, skeleton);
           // Must be eager: the image is display:none behind its skeleton, and
@@ -519,187 +595,13 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       // finish — leaving the loading skeleton stuck forever. isDarkMode is also
       // omitted (only used for a cosmetic image border) to avoid the same churn.
       parsedPayload?.content,
-      showQuotedContent
+      quotedShown
     ]);
-
-    const updateHeight = () => {
-      if (containerRef.current && contentRef.current) {
-        let contentHeight = contentRef.current.scrollHeight;
-
-        // Check if messageContent is scaled and adjust height accordingly
-        if (messageContentRef.current?.classList.contains('scaled')) {
-          const messageElement = messageContentRef.current;
-          const originalMessageHeight = messageElement.scrollHeight;
-          const scaleFactor =
-            parseFloat(messageElement.style.getPropertyValue('--scale-factor')) || 1;
-          const scaledMessageHeight = originalMessageHeight * scaleFactor;
-          const heightDifference = originalMessageHeight - scaledMessageHeight;
-          contentHeight = contentHeight - heightDifference;
-        }
-
-        // Check if quotedContent is scaled and adjust height accordingly
-        if (quotedContentRef.current?.classList.contains('scaled') && showQuotedContent) {
-          const quotedElement = quotedContentRef.current;
-          const originalQuotedHeight = quotedElement.scrollHeight;
-          const scaleFactor =
-            parseFloat(quotedElement.style.getPropertyValue('--scale-factor')) || 1;
-          const scaledQuotedHeight = originalQuotedHeight * scaleFactor;
-          const heightDifference = originalQuotedHeight - scaledQuotedHeight;
-          contentHeight = contentHeight - heightDifference;
-        }
-
-        // Never force an expanded message to 0px. If the content hasn't been
-        // measured yet (scrollHeight 0), fall back to natural height so the body
-        // can't end up rendered-but-invisible.
-        containerRef.current.style.height = isCollapsed
-          ? '0px'
-          : contentHeight > 0
-            ? `${contentHeight}px`
-            : 'auto';
-      }
-    };
-
-    useEffect(() => {
-      const timeout = setTimeout(() => {
-        updateHeight();
-      }, 250);
-
-      const handleResize = () => {
-        updateHeight();
-      };
-
-      // Create ResizeObserver to detect panel resize
-      const resizeObserver = new ResizeObserver(() => {
-        updateHeight();
-      });
-
-      // Find and observe the panel container for resize events
-      const panelContainer = containerRef.current?.closest('[data-nav-area="display-panel"]');
-      if (panelContainer) {
-        resizeObserver.observe(panelContainer);
-      }
-      // Also follow the content itself: the container is pinned to a measured
-      // pixel height, so content that grows after measurement (expanded
-      // recipient details, a calendar card that loads async) was clipped.
-      if (contentRef.current) {
-        resizeObserver.observe(contentRef.current);
-      }
-
-      window.addEventListener('resize', handleResize);
-
-      return () => {
-        clearTimeout(timeout);
-        window.removeEventListener('resize', handleResize);
-        resizeObserver.disconnect();
-      };
-    }, [
-      showQuotedContent,
-      contentRef.current,
-      parsedPayload,
-      showQuotedContent,
-      showBccDropdown,
-      showCcDropdown,
-      showTrackingDropdown,
-      showTrackerPrevention,
-      draft,
-      contactToggle,
-      showRecipientDetails
-    ]);
-
-    useEffect(() => {
-      updateHeight();
-    }, [isCollapsed]);
-
-    // Auto-scale content that overflows
-    const applyScaling = (element: HTMLDivElement) => {
-      if (!element || !element.parentElement) return;
-
-      const parent = element.parentElement;
-      const parentWidth = parent.clientWidth - 14;
-      const contentWidth = element.scrollWidth;
-
-      if (contentWidth > parentWidth) {
-        const scaleFactor = parentWidth / contentWidth;
-        element.style.setProperty('--scale-factor', scaleFactor.toString());
-        element.classList.add('scaled');
-
-        // Recalculate height after scaling
-        requestAnimationFrame(() => {
-          updateHeight();
-        });
-      } else {
-        element.style.removeProperty('--scale-factor');
-        element.classList.remove('scaled');
-
-        // Recalculate height when scaling is removed
-        requestAnimationFrame(() => {
-          updateHeight();
-        });
-      }
-    };
-
-    useEffect(() => {
-      const handleScaling = () => {
-        if (messageContentRef.current) {
-          applyScaling(messageContentRef.current);
-        }
-        if (quotedContentRef.current && showQuotedContent) {
-          applyScaling(quotedContentRef.current);
-        }
-      };
-
-      // Apply scaling after content loads and on resize
-      const timeout = setTimeout(handleScaling, 100);
-
-      const resizeObserver = new ResizeObserver(handleScaling);
-      const panelContainer = containerRef.current?.closest('[data-nav-area="display-panel"]');
-      if (panelContainer) {
-        resizeObserver.observe(panelContainer);
-      }
-
-      window.addEventListener('resize', handleScaling);
-
-      return () => {
-        clearTimeout(timeout);
-        window.removeEventListener('resize', handleScaling);
-        resizeObserver.disconnect();
-      };
-    }, [parsedPayload, showQuotedContent, isCollapsed]);
 
     useEffect(() => {
       const roots = [
         messageContentRef.current,
-        showQuotedContent ? quotedContentRef.current : null
-      ].filter(Boolean) as HTMLDivElement[];
-      if (roots.length === 0) return () => {};
-
-      const images = roots.flatMap((root) => Array.from(root.querySelectorAll('img')));
-
-      const onImageLoad = () => {
-        requestAnimationFrame(updateHeight);
-      };
-
-      images.forEach((img) => {
-        if (img.complete) {
-          onImageLoad();
-        } else {
-          img.addEventListener('load', onImageLoad);
-          img.addEventListener('error', onImageLoad);
-        }
-      });
-
-      return () => {
-        images.forEach((img) => {
-          img.removeEventListener('load', onImageLoad);
-          img.removeEventListener('error', onImageLoad);
-        });
-      };
-    }, [parsedPayload?.content, showQuotedContent]);
-
-    useEffect(() => {
-      const roots = [
-        messageContentRef.current,
-        showQuotedContent ? quotedContentRef.current : null
+        quotedShown ? quotedContentRef.current : null
       ].filter(Boolean) as HTMLDivElement[];
       if (roots.length === 0) return () => {};
 
@@ -717,7 +619,6 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           defaultValue: 'Image unavailable'
         });
         img.parentNode?.insertBefore(fallback, img.nextSibling);
-        requestAnimationFrame(updateHeight);
       };
 
       const images = roots.flatMap((root) =>
@@ -750,20 +651,24 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       return () => {
         cleanups.forEach((cleanup) => cleanup());
       };
-    }, [parsedPayload?.content, showQuotedContent]);
+    }, [parsedPayload?.content, quotedShown]);
 
-    /**
-     * Expand on hover only if the message was collapsed.
-     */
-    const handleMouseEnter = () => {
-      if (!isCollapsed) return; // Do nothing if already expanded.
-      parseIfNeeded();
-    };
-
-    /**
-     * Collapse on mouse leave only if it was auto-expanded by hover.
-     */
-    const handleMouseLeave = () => {};
+    // Pointer resting on a collapsed row: parse its body in idle time, so a
+    // click expands it from the cache. Nothing is rendered for it.
+    const cancelWarmRef = useRef<(() => void) | null>(null);
+    const handleMouseEnter = useCallback(() => {
+      if (!isCollapsed || !payloadHasBodyData(item.payload)) return;
+      cancelWarmRef.current?.();
+      cancelWarmRef.current = whenIdle(() => {
+        cancelWarmRef.current = null;
+        parsePayloadPartWithHighlight(item, globalSearchQuery, shouldTransformEmailForDarkMode);
+      });
+    }, [isCollapsed, item, globalSearchQuery]);
+    const handleMouseLeave = useCallback(() => {
+      cancelWarmRef.current?.();
+      cancelWarmRef.current = null;
+    }, []);
+    useEffect(() => () => cancelWarmRef.current?.(), []);
 
     // Add this function to your MessageCard component
     const hasUnsubscribeTarget =
@@ -859,10 +764,10 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
               currentMessage.id
             );
             if (unsubscribeInfo?.listUnsubscribe) {
-              setCurrentMessage((prev) => ({
-                ...prev,
-                listUnsubscribe: unsubscribeInfo.listUnsubscribe
-              }));
+              setFetchedUnsubscribe({
+                messageId: currentMessage.id,
+                value: unsubscribeInfo.listUnsubscribe
+              });
             }
           } catch (error) {
             console.error('Failed to get provider unsubscribe info:', error);
@@ -908,7 +813,46 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
         account.email.trim().toLowerCase() === currentMessage.from?.email?.trim().toLowerCase()
     );
     const showReplyHint = !!isLastCard && !fromSelf;
-    const showBodySkeleton = !!bodyLoading && !payloadHasBodyData(item.payload);
+    const ownEmails = useMemo(() => accounts.map((account) => account.email), [accounts]);
+    // "to me, Bob +2" in the sender line. A received message with no listed
+    // recipients (Bcc, undisclosed-recipients) still reached you: "to me".
+    const recipientLine = useMemo(() => {
+      const summary = recipientSummary(currentMessage.to, currentMessage.cc, currentMessage.bcc, {
+        ownEmails,
+        meLabel: t('message_card.me', { defaultValue: 'me' }),
+        bccPrefix: `${t('message_card.bcc', { defaultValue: 'Bcc' }).toLowerCase()}: `,
+        fallbackToMe: !fromSelf
+      });
+      const none = t('message_card.undisclosed_recipients', {
+        defaultValue: 'undisclosed recipients'
+      });
+      return {
+        text: t('message_card.to_summary', {
+          defaultValue: 'to {{names}}',
+          names: summary.text || none
+        }),
+        label: `${t('message_card.to')} ${summary.full || none}`
+      };
+    }, [currentMessage.to, currentMessage.cc, currentMessage.bcc, ownEmails, fromSelf, t]);
+    const showBodySkeleton = !isCollapsed && !!bodyLoading && !payloadHasBodyData(item.payload);
+    useEffect(() => {
+      if (showBodySkeleton) markReaderPhase('skeleton shown', item.threadId);
+    }, [showBodySkeleton]);
+    // A meeting message (invitation, reply, cancellation) usually has no text of
+    // its own: the MeetingCard is its content, so an empty sheet under it is
+    // not shown. Any text the sender did write still is. Only meetings need
+    // the (whole-body) check, once per body.
+    const meeting = item.meeting;
+    const bodyHasText = useMemo(
+      () =>
+        !meeting ||
+        !bodyHtml ||
+        /<img\b/i.test(bodyHtml) ||
+        /\S/.test(bodyHtml.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ')),
+      [meeting, bodyHtml]
+    );
+    const hideEmptyBody = !!meeting && !showBodySkeleton && !bodyHasText;
+    const fadeBodyIn = fadeBodyInRef.current;
 
     const senderName =
       currentMessage.from && currentMessage.from.name.length > 0
@@ -955,6 +899,14 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
       >
         <Card
           ref={itemRef}
+          // Focusable, so the reader's arrow-key navigation (registerItem
+          // above) can land on it and mark it .keyboard-focused; a div
+          // without a tab index never got that, and the keyboard position
+          // in a conversation was invisible. One tab stop per message: the
+          // collapsed row's header below isn't another.
+          tabIndex={preview ? undefined : 0}
+          data-message-card=""
+          aria-label={preview ? undefined : senderName}
           className={cn(
             // A sheet of paper on the reader well: white card, hairline edge
             // and a soft two-layer shadow that lifts it off the tinted well
@@ -964,6 +916,9 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             'shadow-[0_1px_2px_hsl(var(--foreground)/0.04),0_10px_28px_-14px_hsl(var(--foreground)/0.14)]',
             'dark:border-white/[0.06] dark:shadow-none',
             ringVariants,
+            // The keyboard position: a ring in the focus colour, on the paper
+            // (not the list rows' tint, which washed the email out).
+            '[&.keyboard-focused]:bg-card [&.keyboard-focused]:ring-2 [&.keyboard-focused]:ring-ring',
             draft && 'mb-2',
             cardClassName,
             stackClasses
@@ -971,9 +926,16 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
           onKeyDown={(e) => {
             // Only when the card itself is focused — Enter on a link, button or
             // attachment chip inside the message must not also collapse it.
-            if (e.key === 'Enter' && e.target === e.currentTarget) setIsCollapsed(!isCollapsed);
+            if (e.target !== e.currentTarget) return;
+            if (e.key === 'Enter' || (e.key === ' ' && isCollapsed)) {
+              // Not also Reply All (Enter) / scroll (Space) in the reader.
+              e.preventDefault();
+              e.stopPropagation();
+              requestCollapsed(!isCollapsed);
+              onFocusRequest?.(item.id);
+            }
           }}
-          style={style}
+          style={zIndex === undefined ? style : { ...style, zIndex }}
         >
           <CardHeader
             className={cn(
@@ -987,15 +949,15 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             {...(isCollapsed
               ? {
                   role: 'button',
-                  tabIndex: 0,
+                  tabIndex: preview ? 0 : -1,
                   'aria-expanded': false,
                   onKeyDown: (e: React.KeyboardEvent) => {
                     if (e.key !== 'Enter' && e.key !== ' ') return;
                     // Not also Reply All (Enter) / scroll (Space) in the reader.
                     e.preventDefault();
                     e.stopPropagation();
-                    setIsCollapsed(false);
-                    onFocusRequest?.();
+                    requestCollapsed(false);
+                    onFocusRequest?.(item.id);
                   }
                 }
               : {})}
@@ -1015,8 +977,8 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   return;
                 }
               }
-              setIsCollapsed(!isCollapsed);
-              onFocusRequest?.();
+              requestCollapsed(!isCollapsed);
+              onFocusRequest?.(item.id);
             }}
           >
             {isCollapsed ? (
@@ -1064,20 +1026,45 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   />
                   <div className="flex-1 overflow-hidden">
                     <div className="flex items-center justify-between gap-2 overflow-hidden text-ellipsis">
-                      <div className="flex items-baseline gap-2 whitespace-nowrap">
+                      {/* Sender, their address, then "to me, Bob +2 ▾" (Gmail-style)
+                          on the same line; at narrow widths the address goes
+                          first, then the summary truncates — never wraps. */}
+                      <div className="flex min-w-0 items-baseline gap-2 whitespace-nowrap">
                         <span
                           data-select-text
-                          className="select-text text-[14px] font-medium tracking-tight text-foreground"
+                          className="min-w-0 shrink-[0.05] select-text truncate text-[14px] font-medium tracking-tight text-foreground"
                         >
                           {senderName}
                         </span>
                         {!isCollapsed && currentMessage.from?.name?.length > 0 && (
                           <span
                             data-select-text
-                            className="hidden select-text text-[12px] text-muted-foreground sm:inline"
+                            className="hidden min-w-0 shrink-[4] select-text truncate text-[12px] text-muted-foreground sm:inline"
                           >
                             {currentMessage.from.email}
                           </span>
+                        )}
+                        {!preview && !isPrinting && (
+                          <button
+                            type="button"
+                            aria-expanded={showRecipientDetails}
+                            aria-label={recipientLine.label}
+                            title={recipientLine.label}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowRecipientDetails((shown) => !shown);
+                            }}
+                            className={cn(
+                              'no-drag inline-flex min-w-[1.75rem] shrink-[2] items-center gap-0.5 rounded text-[12px] text-muted-foreground transition-colors hover:text-foreground',
+                              ringVariants
+                            )}
+                          >
+                            <span className="truncate">{recipientLine.text}</span>
+                            <MonoIcon
+                              type={showRecipientDetails ? 'ChevronUp' : 'ChevronDown'}
+                              className="h-3 w-3 shrink-0"
+                            />
+                          </button>
                         )}
                       </div>
                       {/* {currentMessage.id} / {currentMessage.threadId} */}
@@ -1203,43 +1190,30 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
             )}
           </CardHeader>
 
-          {/* Use currentMessage instead of item in the content */}
-          <div
-            ref={containerRef}
-            className="transition-height overflow-hidden duration-300 ease-bouncy-in-out"
-            {...inertWhen(!!isCollapsed)}
-          >
-            <div ref={contentRef}>
-              <div className={cn('ml-12 grid gap-1 px-4 pb-4 pt-0', isCollapsed ? '' : '')}>
-                {!preview && !showRecipientDetails && (
-                  <button
-                    type="button"
-                    aria-expanded={false}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowRecipientDetails(true);
-                    }}
-                    className="inline-flex w-fit items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <span className="font-medium">{t('message_card.to')}:</span>
-                    <span className="max-w-[52ch] truncate text-foreground">
-                      {currentMessage.to.length === 0
-                        ? `(${t('message_card.no_recipient')})`
-                        : currentMessage.to
-                            .map((r) => r.name || r.email)
-                            .slice(0, 2)
-                            .join(', ')}
-                      {(() => {
-                        const hidden =
-                          Math.max(0, currentMessage.to.length - 2) +
-                          (currentMessage.cc?.length ?? 0);
-                        return hidden > 0 ? ` +${hidden}` : '';
-                      })()}
-                    </span>
-                    <MonoIcon type="ChevronDown" className="h-3 w-3" />
-                  </button>
+          {/* The message itself, only while expanded: a collapsed row used to
+              keep its whole body (and quoted history) mounted in a 0-px box
+              for the height animation. Height is natural (no pinned pixel
+              height animating every change); a body the user expands fades in. */}
+          {!isCollapsed && (
+            <div
+              className={cn(
+                fadeBodyIn &&
+                  'duration-150 ease-out animate-in fade-in-0 motion-reduce:animate-none'
+              )}
+            >
+              {/* With the details closed and no tracking line this block is
+                  empty: no bottom padding then, or the folded "To" row would
+                  leave a blank band in its place. */}
+              <div
+                className={cn(
+                  'ml-12 grid gap-1 px-4 pt-0',
+                  (preview || isPrinting || showRecipientDetails || trackingHistory) && 'pb-4'
                 )}
-                {(preview || showRecipientDetails) && (
+              >
+                {/* Collapsed, the recipients are the "to …" summary in the sender
+                    line above; it toggles these full rows (always shown in a
+                    preview and when printing). */}
+                {(preview || isPrinting || showRecipientDetails) && (
                   <>
                     <div className="inline-flex items-start gap-1 text-xs">
                       <span className="mt-0.5 font-medium text-muted-foreground">
@@ -1287,7 +1261,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                             {t(`message_card.${field}`)}:
                           </span>{' '}
                           {/* Listed like To; only long lists hide behind a toggle. */}
-                          {recipients.length <= INLINE_RECIPIENT_LIMIT || expanded ? (
+                          {recipients.length <= INLINE_RECIPIENT_LIMIT || expanded || isPrinting ? (
                             <div className="flex flex-col">
                               {recipients.map((recipient) => (
                                 <span key={recipient.email} className="mr-1">
@@ -1298,7 +1272,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                                   />
                                 </span>
                               ))}
-                              {recipients.length > INLINE_RECIPIENT_LIMIT && (
+                              {recipients.length > INLINE_RECIPIENT_LIMIT && !isPrinting && (
                                 <Button
                                   className="h-auto w-fit p-0 text-xs"
                                   variant="link"
@@ -1330,7 +1304,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                         </div>
                       ) : null
                     )}
-                    {!preview && (
+                    {!preview && !isPrinting && (
                       <button
                         type="button"
                         aria-expanded={true}
@@ -1480,8 +1454,25 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
               </div>
 
               <CardContent className="p-0">
+                {!preview && !isCollapsed && meeting && accountId && (
+                  <div className="mx-4 mb-3 sm:mx-5">
+                    <MeetingCard
+                      meeting={meeting}
+                      accountId={accountId}
+                      threadId={item.threadId}
+                      messageId={item.id}
+                      sender={currentMessage.from}
+                      fromSelf={fromSelf}
+                      ownEmails={ownEmails}
+                    />
+                  </div>
+                )}
+                {/* An Outlook meeting message (MeetingCard above) can also carry
+                    the sender's invite.ics (Google Calendar invites do): one card
+                    for the meeting, answered through the calendar event. */}
                 {!preview &&
                   !isCollapsed &&
+                  !meeting &&
                   Object.values(currentMessage.attachments).length > 0 &&
                   accountId &&
                   Object.values(currentMessage.attachments).some((att) =>
@@ -1578,7 +1569,7 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                   <div
                     className={cn(
                       'email-document overflow-x-auto bg-white px-4 py-3 text-[#202124] dark:rounded-lg',
-                      showBodySkeleton && 'hidden'
+                      (showBodySkeleton || hideEmptyBody) && 'hidden'
                     )}
                   >
                     <div
@@ -1587,17 +1578,13 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                         'mono-content-reset scale-to-fit',
                         'relative block origin-top-left cursor-auto select-text'
                       )}
-                      dangerouslySetInnerHTML={{
-                        __html:
-                          parsedPayload?.content.replaceAll('\r\n', '\n').replaceAll('\r', '\n') ||
-                          ''
-                      }}
+                      dangerouslySetInnerHTML={{ __html: bodyHtml }}
                     />
                   </div>
                 </div>
-                {!isCollapsed && parsedPayload && parsedPayload.history.length > 0 && (
+                {parsedPayload && parsedPayload.history.length > 0 && (
                   <>
-                    <div className="px-4 pb-4 pt-0 sm:px-5">
+                    <div className="px-4 pb-4 pt-0 sm:px-5 print:hidden">
                       <Button
                         aria-expanded={showQuotedContent}
                         className="h-7 gap-1.5 rounded px-2 text-xs text-muted-foreground hover:text-foreground"
@@ -1624,30 +1611,26 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
                       </Button>
                     </div>
 
-                    <div
-                      className={cn(
-                        'overflow-hidden transition-opacity duration-150',
-                        showQuotedContent ? 'px-4 pb-6 pt-0 opacity-100 sm:px-5' : 'h-0 opacity-0'
-                      )}
-                      {...inertWhen(!showQuotedContent)}
-                    >
-                      <div className="email-document overflow-x-auto bg-white px-4 py-3 text-[#202124] dark:rounded-lg">
-                        <div
-                          ref={quotedContentRef}
-                          className={cn(
-                            'mono-content-reset scale-to-fit relative block origin-top-left select-text'
-                          )}
-                          dangerouslySetInnerHTML={{
-                            __html: (parsedPayload?.history || []).join('')
-                          }}
-                        />
+                    {/* Mounted only when shown: the quoted history is often
+                        most of an Outlook reply's bytes. */}
+                    {quotedShown && (
+                      <div className="overflow-hidden px-4 pb-6 pt-0 duration-150 animate-in fade-in-0 motion-reduce:animate-none sm:px-5">
+                        <div className="email-document overflow-x-auto bg-white px-4 py-3 text-[#202124] dark:rounded-lg">
+                          <div
+                            ref={quotedContentRef}
+                            className={cn(
+                              'mono-content-reset scale-to-fit relative block origin-top-left select-text'
+                            )}
+                            dangerouslySetInnerHTML={{ __html: historyHtml }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </>
                 )}
               </CardContent>
             </div>
-          </div>
+          )}
 
           {/* Attachments: a collapsed row shows a paperclip instead. */}
           {!isCollapsed && attachmentCount > 0 && (
@@ -1702,4 +1685,10 @@ const MessageCard = React.forwardRef<HTMLDivElement, MessageCardProps>(
 );
 
 MessageCard.displayName = 'MessageCard';
-export default MessageCard;
+
+// Memoised: a thread update (labels, a prefetch, a delta) re-renders the
+// reader, and every card used to redo its body work each time. DisplayPanel
+// passes stable callbacks and refs per message id for this to hold.
+const MemoMessageCard = React.memo(MessageCard);
+MemoMessageCard.displayName = 'MessageCard';
+export default MemoMessageCard;

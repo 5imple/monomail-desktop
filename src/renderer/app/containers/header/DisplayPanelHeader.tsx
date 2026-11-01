@@ -1,32 +1,54 @@
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
+import { useAuth } from '@/renderer/app/context/AuthContext';
 import { isComposeDraftId } from '@/main/utils';
 import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
-import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger
 } from '@/renderer/app/components/ui/dropdown-menu';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
-import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useKeyboardRegistration } from '@/renderer/app/context/KeyboardNavigationContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
-import { isElectron } from '@/renderer/app/lib/electronApi';
+import { threadListActions } from '@/renderer/app/lib/threadListActions';
 import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
-import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { readerReturnLayoutAtom, useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import {
+  activeThreadIdAtom,
+  filteredThreadIdsAtom,
+  threadListHasMoreAtom,
+  threadsMapAtom
+} from '@/renderer/app/store/thread/atoms';
+import { useIsSearchView } from '@/renderer/app/hooks/useIsSearchView';
+import {
+  isDoneViewQuery,
+  readerBackTarget,
+  readerPosition
+} from '@/renderer/app/lib/readerBackLabel';
+import { useStepConversation } from '@/renderer/app/hooks/useStepConversation';
+import { pendingAdvanceAtom } from '@/renderer/app/store/thread/readerAdvance';
 import { forwardRef, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useThreadLabelAtom } from '@/renderer/app/store/thread/useThreadLabels';
-import { toast } from 'sonner';
+import { atom, useAtomValue, useSetAtom } from 'jotai';
+
+// Where the open email sits in the list the reader covers, as "index/total"
+// (-1 when it isn't in the list). A string, so the header re-renders only
+// when that changes, not on every update of the thread store.
+const listPositionAtom = atom((get) => {
+  const activeThreadId = get(activeThreadIdAtom);
+  if (!activeThreadId) return '-1/0';
+  const threadsMap = get(threadsMapAtom);
+  const ids = get(filteredThreadIdsAtom).filter((id) => threadsMap[id]);
+  return `${ids.indexOf(activeThreadId)}/${ids.length}`;
+});
 
 // A mouse click shouldn't leave focus on a toolbar button: the header stays
 // mounted while Trash / Done advance to the next email, so the next Enter
@@ -40,39 +62,46 @@ interface DisplayPanelHeaderProps {
   isPrinting: boolean;
   handleCollapseAll: () => void;
   handleExpandAll: () => void;
+  /** Some message is collapsed or folded away. */
+  canExpandAll?: boolean;
+  /** Some message is expanded. */
+  canCollapseAll?: boolean;
 }
 
 const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
-  ({ thread, handlePrint, isPrinting }, ref) => {
-    const {
-      setActiveThreadId,
-      activeThreadId,
-      filteredThreadIds,
-      threadsMap,
-      selectNextThread,
-      selectPreviousThread
-    } = useThreadAtom();
-    const { removeLabelFromThread, addLabelToThread } = useThreadLabelAtom();
+  (
+    {
+      thread,
+      handlePrint,
+      isPrinting,
+      handleCollapseAll,
+      handleExpandAll,
+      canExpandAll = true,
+      canCollapseAll = true
+    },
+    ref
+  ) => {
+    const setActiveThreadId = useSetAtom(activeThreadIdAtom);
+    const stepConversation = useStepConversation();
     const { t } = useTranslation();
-    const { fullscreenDisplayPanel } = useGlobalAtom();
-    const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
+    const { activeLayout, globalSearchQuery } = useGlobalAtom();
+    // Opened from Later: Back returns there (useReaderReturn).
+    const readerReturnLayout = useAtomValue(readerReturnLayoutAtom);
+    const { accounts } = useAuth();
+    const isSearch = useIsSearchView();
     const { openDialog } = useDialogs();
     const executeCommand = useExecuteCommand();
     const { trackEvent } = useUserTrackingData();
     const { labelsMapByAccount } = useLabelAtom();
-    const { accounts } = useAuth();
 
     // Keyboard navigation
-    const { registerItem, unregisterItem, registerAreaRef } = useKeyboardNavigationContext();
+    const { registerItem, unregisterItem, registerAreaRef } = useKeyboardRegistration();
 
     // Refs for keyboard navigation
     const headerContainerRef = useRef<HTMLDivElement>(null);
     const closePanelRef = useRef<HTMLButtonElement>(null);
     const previousThreadRef = useRef<HTMLButtonElement>(null);
     const nextThreadRef = useRef<HTMLButtonElement>(null);
-    const replyRef = useRef<HTMLButtonElement>(null);
-    const replyAllRef = useRef<HTMLButtonElement>(null);
-    const forwardRef = useRef<HTMLButtonElement>(null);
     const reminderRef = useRef<HTMLButtonElement>(null);
     const labelRef = useRef<HTMLButtonElement>(null);
     const starRef = useRef<HTMLButtonElement>(null);
@@ -97,13 +126,10 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
         navigationItems.push(
           { id: 'previous-thread', ref: previousThreadRef.current },
           { id: 'next-thread', ref: nextThreadRef.current },
-          { id: 'reply', ref: replyRef.current },
-          { id: 'reply-all', ref: replyAllRef.current },
-          { id: 'forward', ref: forwardRef.current },
+          { id: 'done-toggle', ref: doneRef.current },
           { id: 'reminder', ref: reminderRef.current },
           { id: 'label', ref: labelRef.current },
           { id: 'star-toggle', ref: starRef.current },
-          { id: 'done-toggle', ref: doneRef.current },
           { id: 'trash-toggle', ref: trashRef.current },
           { id: 'more', ref: moreRef.current }
         );
@@ -124,10 +150,57 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       };
     }, [thread?.id, registerItem, unregisterItem, registerAreaRef]);
 
-    // Reply / Reply all / Forward act on the thread's latest message, the
-    // same targets as the R / Enter / F keys: Reply answers the latest
-    // message from someone else (your own if there is none), the other two
-    // take the newest message.
+    // Previous / Next walk the list the reader covers, in its order; the ends
+    // are disabled so "Next" never wraps back to an earlier conversation.
+    const [positionIndex, positionTotal] = useAtomValue(listPositionAtom).split('/').map(Number);
+    const listHasMore = useAtomValue(threadListHasMoreAtom);
+    const listPosition = {
+      hasPrevious: positionIndex > 0,
+      // At the end of what's loaded, Next loads the next page first.
+      hasNext: positionIndex >= 0 && (positionIndex < positionTotal - 1 || listHasMore),
+      label: readerPosition(positionIndex, positionTotal, listHasMore)
+    };
+
+    // "← Inbox": names the view Back returns to.
+    const backTarget = readerBackTarget(
+      readerReturnLayout ?? activeLayout,
+      globalSearchQuery,
+      isSearch
+    );
+    const backLabel = {
+      inbox: t('nav.inbox', 'Inbox'),
+      later: t('header.display.back_later', 'Later'),
+      starred: t('nav.star', 'Starred'),
+      sent: t('nav.sent', 'Sent'),
+      drafts: t('nav.draft', 'Drafts'),
+      done: t('nav.done', 'Done'),
+      trash: t('nav.trash', 'Trash'),
+      spam: t('nav.spam', 'Spam'),
+      results: t('header.display.back_results', 'Results'),
+      back: t('header.display.close_panel', 'Back')
+    }[backTarget];
+
+    // Next at the last loaded email: load the next page, then step once it
+    // lands (the list itself can't scroll to load while the reader covers it).
+    const pendingNextRef = useRef(false);
+    const goNext = () => {
+      if (stepConversation(1)) return;
+      if (!listHasMore) return;
+      pendingNextRef.current = true;
+      threadListActions.loadMore();
+    };
+    useEffect(() => {
+      if (!pendingNextRef.current) return;
+      if (stepConversation(1) || !listHasMore) pendingNextRef.current = false;
+    }, [positionTotal, listHasMore, stepConversation]);
+    useEffect(() => {
+      pendingNextRef.current = false;
+    }, [thread?.id]);
+
+    // Reply / Reply all / Forward from the More menu: the reply box under the
+    // conversation steps aside while a draft is open there. Same targets as
+    // the R / Enter / F keys: Reply answers the latest message from someone
+    // else (your own if there is none), the other two take the newest.
     const latestMessage = (preferOthers: boolean): MonoMessage | null => {
       if (!thread) return null;
       const messages = thread.items.filter((item) => item.type === 'message') as MonoMessage[];
@@ -139,34 +212,12 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       return pool[pool.length - 1] ?? null;
     };
     const hasMessages = !!thread && thread.items.some((item) => item.type === 'message');
-
-    // Previous / Next walk the list the reader covers, in its order; the ends
-    // are disabled so "Next" never wraps back to an earlier conversation.
-    const listPosition = useMemo(() => {
-      const validIds = filteredThreadIds.filter((id) => threadsMap[id]);
-      const index = activeThreadId ? validIds.indexOf(activeThreadId) : -1;
-      return { hasPrevious: index > 0, hasNext: index >= 0 && index < validIds.length - 1 };
-    }, [activeThreadId, filteredThreadIds, threadsMap]);
-
-    const handleReply = () => {
-      const message = latestMessage(true);
+    const compose = (
+      command: 'COMPOSE_REPLY_MESSAGE' | 'COMPOSE_REPLY_ALL_MESSAGE' | 'COMPOSE_FORWARD_MESSAGE'
+    ) => {
+      const message = latestMessage(command === 'COMPOSE_REPLY_MESSAGE');
       if (!thread || !message) return;
-      executeCommand('COMPOSE_REPLY_MESSAGE', { message, accountId: thread.accountId });
-      trackEvent('thread_reply_toolbar', { thread_id: thread.id });
-    };
-
-    const handleReplyAll = () => {
-      const message = latestMessage(false);
-      if (!thread || !message) return;
-      executeCommand('COMPOSE_REPLY_ALL_MESSAGE', { message, accountId: thread.accountId });
-      trackEvent('thread_reply_all_toolbar', { thread_id: thread.id });
-    };
-
-    const handleForward = () => {
-      const message = latestMessage(false);
-      if (!thread || !message) return;
-      executeCommand('COMPOSE_FORWARD_MESSAGE', { message, accountId: thread.accountId });
-      trackEvent('thread_forward_toolbar', { thread_id: thread.id });
+      executeCommand(command, { message, accountId: thread.accountId });
     };
 
     const handleDone = async () => {
@@ -210,40 +261,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       }
     };
 
-    const handleRemoveLabel = async (labelId: string) => {
-      if (!thread) return;
-      const accountId = thread.accountId;
-      if (!accountId) return;
-      const threadId = thread.id;
-      try {
-        await removeLabelFromThread(accountId, [threadId], labelId);
-      } catch (error) {
-        console.error('Failed to remove label:', error);
-        toast.error(t('toast.error.label_remove'));
-        return;
-      }
-
-      trackEvent('removed_label', { thread_id: threadId });
-      const labelName = labelsMapByAccount[accountId]?.[labelId]?.name?.replace('Mono/', '');
-      toast(
-        t('header.display.label_removed', {
-          defaultValue: 'Removed label {{name}}',
-          name: labelName ?? ''
-        }),
-        {
-          action: {
-            label: t('toast.undo', { defaultValue: 'Undo' }),
-            onClick: () => {
-              addLabelToThread(accountId, [threadId], labelId).catch((error) => {
-                console.error('Failed to re-add label:', error);
-                toast.error(t('toast.error.label_remove'));
-              });
-            }
-          }
-        }
-      );
-    };
-
     // Opening a thread marks it read, so after "Mark as unread" close the
     // reader (like Gmail) instead of letting it be re-marked read at once.
     const handleMarkUnread = () => {
@@ -275,137 +292,148 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
       [threadLabels]
     );
 
-    // Get unique label IDs to avoid React key warnings
-    // Keyed on the label list itself: label edits mutate thread.labelIds on the
-    // same thread object, so memoizing on [thread] left removed/added badges stale.
-    const labelIdsKey = thread?.labelIds.join(',') ?? '';
-    const uniqueLabelIds = useMemo(() => {
-      if (!labelIdsKey) return [];
-      // Create a Set of labelIds that start with 'Label_' to ensure uniqueness
-      return [...new Set(labelIdsKey.split(',').filter((label) => label.includes('Label_')))];
-    }, [labelIdsKey]);
+    const inInbox = !!thread?.labelIds.includes('INBOX');
+    // Outside the Inbox, E moves an email back in only in the Done view (and
+    // for an email opened from Later); in Sent or Starred it's a quiet
+    // "Move to Inbox" icon, not the primary button (useRegisterHotkeys).
+    const eMovesBack =
+      !inInbox && (isDoneViewQuery(globalSearchQuery) || readerReturnLayout === 'LATER');
+    const doneIsPrimary = inInbox || eMovesBack;
+    const starred = !!thread?.labelIds.includes('STARRED');
+    const inTrash = !!thread?.labelIds.includes('TRASH');
+    const isEmail = !!thread && !isComposeDraftId(thread.id);
+    const waitingToLeave = useAtomValue(pendingAdvanceAtom)?.leavingId === thread?.id && !!thread;
+    const iconButton = 'text-muted-foreground hover:bg-muted hover:text-foreground';
 
     return (
       <div className="drag relative">
-        <div ref={ref} className="w-full">
+        {/* One row, lined up with the email below it (the well's mx-3 and the
+            content column's width and padding): where you are on the left,
+            what to do with this email on the right. Reply / Reply all /
+            Forward sit under the conversation (ThreadReplyBar). */}
+        <div ref={ref} className="mx-3">
           <div
             ref={headerContainerRef}
-            className="relative flex h-11 items-center"
+            className="mx-auto flex h-10 max-w-[920px] items-center gap-3 px-6"
             data-focusable-area="display-header"
           >
-            {/* Back button — absolute left */}
-            <div
-              className={cn(
-                'absolute left-0 flex items-center pl-4',
-                !sidebarLoading && 'transition-all duration-200',
-                sidebarCollapsed && isElectron && fullscreenDisplayPanel ? 'translate-x-[88px]' : ''
-              )}
-            >
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
               <Button
                 ref={closePanelRef}
-                className="text-muted-foreground hover:text-foreground"
-                tooltip={t('header.display.close_panel')}
+                className="no-drag -ml-2 h-8 min-w-0 gap-1 px-2 text-[13px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                tooltip={
+                  backTarget === 'back'
+                    ? t('header.display.close_panel', 'Back')
+                    : t('header.display.back_to', {
+                        defaultValue: 'Back to {{view}}',
+                        view: backLabel
+                      })
+                }
                 variant="ghost"
                 shortcut="ESC"
                 sizeVariant="sm"
-                typeVariant="icon"
                 onMouseDown={keepFocus}
                 onClick={handleClosePanel}
                 data-keyboard-item="close-panel"
               >
-                <MonoIcon type="ChevronsLeft" />
+                <MonoIcon type="ArrowLeft" size={16} className="shrink-0" />
+                <span className="truncate">{backLabel}</span>
               </Button>
-              {thread && !isComposeDraftId(thread.id) && (
-                <div className="ml-1 flex items-center">
+              {isEmail && (
+                <div className="no-drag ml-1 flex shrink-0 items-center">
                   <Button
                     ref={previousThreadRef}
-                    className="text-muted-foreground hover:text-foreground"
+                    className={cn(iconButton, 'h-7 w-7')}
                     tooltip={t('header.display.previous_conversation')}
+                    shortcut="K"
                     variant="ghost"
                     sizeVariant="sm"
                     typeVariant="icon"
                     disabled={!listPosition.hasPrevious}
                     onMouseDown={keepFocus}
-                    onClick={() => selectPreviousThread()}
+                    onClick={() => stepConversation(-1)}
                     data-keyboard-item="previous-thread"
                   >
-                    <MonoIcon type="ChevronUp" />
+                    <MonoIcon type="ChevronLeft" size={18} />
                   </Button>
+                  {listPosition.label && (
+                    <span
+                      // Hidden in a narrow window, where the row has no room.
+                      className="hidden min-w-[4.5rem] select-none text-center text-xs tabular-nums text-muted-foreground md:inline"
+                      aria-label={t('header.display.position', {
+                        defaultValue: 'Conversation {{position}}',
+                        position: listPosition.label
+                      })}
+                    >
+                      {listPosition.label}
+                    </span>
+                  )}
                   <Button
                     ref={nextThreadRef}
-                    className="text-muted-foreground hover:text-foreground"
+                    className={cn(iconButton, 'h-7 w-7')}
                     tooltip={t('header.display.next_conversation')}
+                    shortcut="J"
                     variant="ghost"
                     sizeVariant="sm"
                     typeVariant="icon"
                     disabled={!listPosition.hasNext}
                     onMouseDown={keepFocus}
-                    onClick={() => selectNextThread()}
+                    onClick={goNext}
                     data-keyboard-item="next-thread"
                   >
-                    <MonoIcon type="ChevronDown" />
+                    <MonoIcon type="ChevronRight" size={18} />
                   </Button>
                 </div>
               )}
             </div>
 
-            {/* Action buttons — centered */}
-            {thread && !isComposeDraftId(thread.id) && (
-              <div className="flex w-full items-center justify-center gap-[14px]">
-                {/* Reply / Reply all / Forward first: what most people open an
-                    email to do, and the keys (R / Enter / F) and a hover over
-                    the message header were the only ways to them. */}
-                {hasMessages && (
-                  <>
-                    <Button
-                      ref={replyRef}
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground"
-                      tooltip={t('message_card.reply')}
-                      shortcut="R"
-                      sizeVariant="sm"
-                      variant="ghost"
-                      typeVariant="icon"
-                      onMouseDown={keepFocus}
-                      onClick={handleReply}
-                      data-keyboard-item="reply"
-                    >
-                      <MonoIcon type="Reply" />
-                    </Button>
-                    <Button
-                      ref={replyAllRef}
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground"
-                      tooltip={t('message_card.reply_all', { defaultValue: 'Reply all' })}
-                      shortcut="Enter"
-                      sizeVariant="sm"
-                      variant="ghost"
-                      typeVariant="icon"
-                      onMouseDown={keepFocus}
-                      onClick={handleReplyAll}
-                      data-keyboard-item="reply-all"
-                    >
-                      <MonoIcon type="reply_all" />
-                    </Button>
-                    <Button
-                      ref={forwardRef}
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground"
-                      tooltip={t('message_card.forward')}
-                      shortcut="F"
-                      sizeVariant="sm"
-                      variant="ghost"
-                      typeVariant="icon"
-                      onMouseDown={keepFocus}
-                      onClick={handleForward}
-                      data-keyboard-item="forward"
-                    >
-                      <MonoIcon type="Forward" />
-                    </Button>
-                    <div aria-hidden className="mx-1 h-4 w-px bg-border" />
-                  </>
+            {thread && isEmail && (
+              // While the reader waits for the next page after Done, the email
+              // shown has already left: its actions are off (a second Done
+              // made an Undo that undid nothing). A fieldset disables them all.
+              <fieldset
+                disabled={waitingToLeave}
+                aria-busy={waitingToLeave}
+                className={cn(
+                  'no-drag m-0 flex min-w-0 shrink-0 items-center gap-1 border-0 p-0',
+                  waitingToLeave && 'opacity-50'
                 )}
+              >
+                {/* Done is what you do with most email: the one labelled
+                    button. Once done, it moves the email back to the Inbox. */}
+                <Button
+                  ref={doneRef}
+                  className={
+                    doneIsPrimary
+                      ? 'mr-1 h-8 gap-1.5 rounded-full px-3 text-[13px] font-medium'
+                      : iconButton
+                  }
+                  tooltip={
+                    inInbox
+                      ? t('header.display.done_tooltip', {
+                          defaultValue: 'Done: archive and go to the next email'
+                        })
+                      : t('header.display.move_to_inbox', { defaultValue: 'Move to Inbox' })
+                  }
+                  shortcut={doneIsPrimary ? 'E' : undefined}
+                  sizeVariant="sm"
+                  variant={doneIsPrimary ? 'outline' : 'ghost'}
+                  typeVariant={doneIsPrimary ? undefined : 'icon'}
+                  onMouseDown={keepFocus}
+                  onClick={inInbox ? handleDone : handleUnDone}
+                  data-keyboard-item="done-toggle"
+                >
+                  <MonoIcon type={inInbox ? 'Check' : 'Inbox'} size={16} />
+                  <span className={doneIsPrimary ? 'hidden md:inline' : 'sr-only'}>
+                    {inInbox
+                      ? t('header.display.done', 'Done')
+                      : t('header.display.move_to_inbox_short', { defaultValue: 'Inbox' })}
+                  </span>
+                </Button>
                 <Button
                   ref={reminderRef}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground"
-                  tooltip={t('header.display.reminder')}
+                  className={iconButton}
+                  tooltip={t('header.display.later', { defaultValue: 'Later' })}
                   shortcut="H"
                   sizeVariant="sm"
                   variant="ghost"
@@ -414,7 +442,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                     openDialog('commandPalette', { pages: ['REMINDER'] });
                     trackEvent('reminder_opened', { thread_id: thread.id });
                   }}
-                  disabled={!thread}
                   onMouseDown={keepFocus}
                   data-keyboard-item="reminder"
                 >
@@ -423,7 +450,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                 {accountHasLabels && (
                   <Button
                     ref={labelRef}
-                    className="text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className={iconButton}
                     tooltip={t('header.display.label')}
                     shortcut="L"
                     sizeVariant="sm"
@@ -434,7 +461,6 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                       openDialog('commandPalette', { pages: ['LABEL'] });
                       trackEvent('label_dialog_opened', { thread_id: thread.id });
                     }}
-                    disabled={!thread}
                     data-keyboard-item="label"
                   >
                     <MonoIcon type="Label" />
@@ -445,60 +471,28 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                   ref={starRef}
                   className={cn(
                     'hover:bg-muted',
-                    thread.labelIds.includes('STARRED')
+                    starred
                       ? 'text-secondary-accent'
                       : 'text-muted-foreground hover:text-foreground'
                   )}
-                  tooltip={
-                    thread.labelIds.includes('STARRED')
-                      ? t('header.display.unstar')
-                      : t('header.display.star')
-                  }
+                  tooltip={starred ? t('header.display.unstar') : t('header.display.star')}
                   shortcut="S"
                   sizeVariant="sm"
                   variant="ghost"
                   typeVariant="icon"
                   onMouseDown={keepFocus}
-                  onClick={
-                    thread.labelIds.includes('STARRED') ? handleUnstarThread : handleStarThread
-                  }
+                  onClick={starred ? handleUnstarThread : handleStarThread}
                   data-keyboard-item="star-toggle"
                 >
-                  <MonoIcon type="Star" fill={thread.labelIds.includes('STARRED')} />
-                </Button>
-                <Button
-                  ref={doneRef}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground"
-                  // Once done, clicking moves it back to the inbox — say so,
-                  // and show an inbox, not a filled check, like the rows and
-                  // the context menu do.
-                  tooltip={
-                    thread?.labelIds.includes('INBOX')
-                      ? t('header.display.done')
-                      : t('header.display.move_to_inbox', { defaultValue: 'Move to Inbox' })
-                  }
-                  shortcut="E"
-                  sizeVariant="sm"
-                  variant="ghost"
-                  typeVariant="icon"
-                  onMouseDown={keepFocus}
-                  onClick={thread?.labelIds.includes('INBOX') ? handleDone : handleUnDone}
-                  disabled={!thread}
-                  data-keyboard-item="done-toggle"
-                >
-                  <MonoIcon type={thread?.labelIds.includes('INBOX') ? 'CheckCircle' : 'Inbox'} />
+                  <MonoIcon type="Star" fill={starred} />
                 </Button>
                 <Button
                   ref={trashRef}
                   className={cn(
                     'hover:bg-muted hover:text-destructive',
-                    thread.labelIds.includes('TRASH') ? 'text-destructive' : 'text-muted-foreground'
+                    inTrash ? 'text-destructive' : 'text-muted-foreground'
                   )}
-                  tooltip={
-                    thread.labelIds.includes('TRASH')
-                      ? t('header.display.untrash')
-                      : t('header.display.trash')
-                  }
+                  tooltip={inTrash ? t('header.display.untrash') : t('header.display.trash')}
                   shortcut="Backspace"
                   sizeVariant="sm"
                   variant="ghost"
@@ -513,7 +507,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                   <DropdownMenuTrigger asChild>
                     <Button
                       ref={moreRef}
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className={iconButton}
                       tooltip={t('header.display.more', { defaultValue: 'More' })}
                       sizeVariant="sm"
                       variant="ghost"
@@ -538,6 +532,32 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                       moreOpenedByPointerRef.current = false;
                     }}
                   >
+                    {hasMessages && (
+                      <>
+                        <DropdownMenuItem onClick={() => compose('COMPOSE_REPLY_MESSAGE')}>
+                          <MonoIcon type="Reply" className="mr-2 text-muted-foreground" />
+                          {t('message_card.reply')}
+                          <DropdownMenuShortcut>
+                            <ShortcutKeyboard variant={'flat'} shortcut={'R'} />
+                          </DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => compose('COMPOSE_REPLY_ALL_MESSAGE')}>
+                          <MonoIcon type="reply_all" className="mr-2 text-muted-foreground" />
+                          {t('message_card.reply_all', { defaultValue: 'Reply all' })}
+                          <DropdownMenuShortcut>
+                            <ShortcutKeyboard variant={'flat'} shortcut={'Enter'} />
+                          </DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => compose('COMPOSE_FORWARD_MESSAGE')}>
+                          <MonoIcon type="Forward" className="mr-2 text-muted-foreground" />
+                          {t('message_card.forward')}
+                          <DropdownMenuShortcut>
+                            <ShortcutKeyboard variant={'flat'} shortcut={'F'} />
+                          </DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem onClick={handleMarkUnread}>
                       <MonoIcon type="EnvelopeOpen" className="mr-2 text-muted-foreground" />
                       {t('header.display.mark_unread', { defaultValue: 'Mark as unread' })}
@@ -573,6 +593,21 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                         </DropdownMenuShortcut>
                       </DropdownMenuItem>
                     )}
+                    {/* The whole conversation open, or down to one line per message. */}
+                    <DropdownMenuItem disabled={!canExpandAll} onClick={handleExpandAll}>
+                      <MonoIcon type="unfold_more" className="mr-2 text-muted-foreground" />
+                      {t('header.display.expand_all', { defaultValue: 'Expand all' })}
+                      <DropdownMenuShortcut>
+                        <ShortcutKeyboard variant={'flat'} shortcut={';'} />
+                      </DropdownMenuShortcut>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canCollapseAll} onClick={handleCollapseAll}>
+                      <MonoIcon type="unfold_less" className="mr-2 text-muted-foreground" />
+                      {t('header.display.collapse_all', { defaultValue: 'Collapse all' })}
+                      <DropdownMenuShortcut>
+                        <ShortcutKeyboard variant={'flat'} shortcut={':'} />
+                      </DropdownMenuShortcut>
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       disabled={isPrinting}
                       onClick={() => {
@@ -585,65 +620,7 @@ const DisplayPanelHeader = forwardRef<HTMLDivElement, DisplayPanelHeaderProps>(
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>
-            )}
-
-            {/* Labels / badges — absolute right */}
-            {thread && (
-              // Bounded so long label names never run under the centred actions.
-              <div className="absolute right-4 flex max-w-[28%] items-center gap-2 overflow-hidden">
-                {thread.labelIds.some((label) => label.includes('Label_')) && (
-                  <div className="flex min-w-0 items-center gap-1">
-                    {uniqueLabelIds.map((labelId) => {
-                      const label = threadLabels[labelId];
-                      return label && label.name.length > 0 ? (
-                        <Badge
-                          key={labelId}
-                          className={cn('no-drag max-w-[140px] rounded-sm')}
-                          style={{
-                            color: label.color.textColor || '',
-                            backgroundColor: label.color.backgroundColor || ''
-                          }}
-                          onClick={() => {
-                            openDialog('commandPalette', { pages: ['LABEL'] });
-                            trackEvent('label_dialog_opened', { thread_id: thread.id });
-                          }}
-                          sizeVariant={'xs'}
-                        >
-                          <div className="no-drag flex-1 overflow-hidden text-ellipsis">
-                            <span className="whitespace-nowrap">
-                              {label.name.replace('Mono/', '')}
-                            </span>
-                          </div>
-                          <Button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleRemoveLabel(labelId);
-                            }}
-                            className="ml-2 shrink-0 text-primary-foreground hover:text-primary-foreground"
-                            style={{ color: label.color.textColor || '' }}
-                            aria-label={`Remove label ${label.name.replace('Mono/', '')}`}
-                            variant={'text'}
-                            typeVariant={'inline'}
-                          >
-                            <MonoIcon type={'X'} className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ) : null;
-                    })}
-                  </div>
-                )}
-                {thread.labelIds.includes('TRASH') && (
-                  <Badge className={cn('no-drag shrink-0 rounded-sm')} sizeVariant={'xs'}>
-                    <div className="no-drag flex-1 overflow-hidden text-ellipsis">
-                      <span className="whitespace-nowrap">
-                        {t('header.display.in_trash', { defaultValue: 'In Trash' })}
-                      </span>
-                    </div>
-                  </Badge>
-                )}
-              </div>
+              </fieldset>
             )}
           </div>
         </div>
