@@ -1,3 +1,4 @@
+import { messageHasBody, withStoredBody } from '@/main/models/message/bodyData';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { updateContactForMessage } from '@/renderer/app/lib/db/contact/utils';
@@ -128,11 +129,17 @@ export async function DBSaveThread(uid: string, thread: MonoThread) {
   // Save the thread
   await threadsStore.put(threadItems);
 
-  // Process each message in the thread to add or update contacts
+  // Messages, and their contacts. A listing is metadata-only: keep the body
+  // the store already has for the same message (withStoredBody), or every
+  // refresh of the inbox would drop it and the next open would fetch it again.
   for (const item of items) {
     if (item.type === 'message') {
       const message = item as MonoMessage;
-      await messagesStore.put(message.toPlainObject());
+      let record = message.toPlainObject();
+      if (!messageHasBody(record)) {
+        record = withStoredBody(record, await messagesStore.get(message.id));
+      }
+      await messagesStore.put(record);
       await updateContactForMessage(tx, uid, message, threadId);
     }
   }

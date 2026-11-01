@@ -1,5 +1,6 @@
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { initDB } from '../db';
+import { MonoThreadRecord } from '../types';
 import { fetchAndConstructThread } from './utils';
 import { extractSearchTerms } from '@/renderer/app/lib/highlightThreadText';
 
@@ -445,12 +446,13 @@ export async function DBCustomSearchThreadsMultiUser(
   }
 
   const allSearchResults: SearchResult[] = [];
+  const accountByThread = new Map<MonoThread, { uid: string; record: MonoThreadRecord }>();
 
   // Process each user sequentially to avoid database transaction conflicts
   for await (const uid of uids) {
     try {
       const db = await initDB(uid);
-      const tx = db.transaction(['threads', 'messages', 'drafts'], 'readonly');
+      const tx = db.transaction(['threads', 'messages'], 'readonly');
       const threadsStore = tx.objectStore('threads');
       const messagesStore = tx.objectStore('messages');
 
@@ -478,17 +480,14 @@ export async function DBCustomSearchThreadsMultiUser(
       // Search through threads for this user
       const userSearchResults: SearchResult[] = [];
 
-      for await (const threadData of filteredThreads) {
-        const thread = await fetchAndConstructThread(tx, threadData, uid);
-        if (!thread) continue;
-
-        // CRITICAL: Add account ID as non-enumerable property to ensure proper database isolation
-        Object.defineProperty(thread, 'accountId', {
-          value: uid,
-          enumerable: false,
-          configurable: true,
-          writable: false // Make it immutable to prevent accidental changes
-        });
+      // Score the stored thread records as they are: they hold every field
+      // the scorer reads (subject, snippet, from / to / cc / bcc, labels,
+      // attachments). Loading each thread's messages first (bodies and all)
+      // for every cached thread made a search take seconds; only the results
+      // that are returned are loaded in full, below.
+      for (const threadData of filteredThreads) {
+        const thread = new MonoThread({ ...threadData, accountId: uid, items: [] } as never);
+        accountByThread.set(thread, { uid, record: threadData });
 
         const searchResult = await scoreThreadWithBoolean(
           thread,
@@ -524,8 +523,8 @@ export async function DBCustomSearchThreadsMultiUser(
     return b.score - a.score;
   });
 
-  // Apply the limit
-  const limitedResults = sortedResults.slice(0, limit);
+  // Apply the limit, then load the returned threads in full (their messages).
+  const limitedResults = await hydrateResults(sortedResults.slice(0, limit), accountByThread);
 
   return {
     threads: limitedResults.map((result) => result.thread),
@@ -851,8 +850,12 @@ function calculateFuzzyScore(text: string, term: string): number {
     return 1.0; // Exact substring match
   }
 
-  // Calculate simple edit distance based similarity
+  // The edit distance is at least the length difference, so the similarity
+  // can't exceed shorter / longer. Below the 0.6 bar the result is 0 whatever
+  // the distance: skip building the matrix (most fields are far longer than
+  // a search word, and each one allocated a term × text matrix).
   const maxLength = Math.max(text.length, term.length);
+  if (maxLength === 0 || Math.min(text.length, term.length) / maxLength <= 0.6) return 0;
   const similarity = 1 - levenshteinDistance(text, term) / maxLength;
 
   // Only return positive scores for reasonable similarity
@@ -908,4 +911,54 @@ function findMatchingTerms(text: string, searchTerms: string[]): string[] {
   }
 
   return matchingTerms;
+}
+
+/**
+ * The returned results with their threads loaded in full (messages and
+ * drafts), one read transaction per account. Results whose thread can no
+ * longer be read are dropped.
+ */
+async function hydrateResults(
+  results: SearchResult[],
+  accountByThread: Map<MonoThread, { uid: string; record: MonoThreadRecord }>
+): Promise<SearchResult[]> {
+  const byAccount = new Map<string, SearchResult[]>();
+  for (const result of results) {
+    const source = accountByThread.get(result.thread);
+    if (!source) continue;
+    const list = byAccount.get(source.uid) ?? [];
+    list.push(result);
+    byAccount.set(source.uid, list);
+  }
+
+  const hydrated = new Map<SearchResult, MonoThread>();
+  for (const [uid, accountResults] of byAccount) {
+    try {
+      const db = await initDB(uid);
+      const tx = db.transaction(['threads', 'messages', 'drafts'], 'readonly');
+      const threads = await Promise.all(
+        accountResults.map((result) =>
+          fetchAndConstructThread(tx, accountByThread.get(result.thread)!.record, uid)
+        )
+      );
+      await tx.done;
+      threads.forEach((thread, index) => {
+        if (!thread) return;
+        // CRITICAL: account id as a non-enumerable property, for database isolation.
+        Object.defineProperty(thread, 'accountId', {
+          value: uid,
+          enumerable: false,
+          configurable: true,
+          writable: false
+        });
+        hydrated.set(accountResults[index], thread);
+      });
+    } catch (error) {
+      console.error(`Error loading search results for user ${uid}:`, error);
+    }
+  }
+
+  return results
+    .filter((result) => hydrated.has(result))
+    .map((result) => ({ ...result, thread: hydrated.get(result)! }));
 }

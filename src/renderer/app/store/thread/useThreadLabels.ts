@@ -3,10 +3,9 @@ import { useMessage } from '@/renderer/app/context/MessageContext';
 import { useOffline } from '@/renderer/app/context/OfflineContext';
 import electronApi from '@/renderer/app/lib/electronApi';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
-import { useAtom, useSetAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { threadExitIntentAtom, ThreadExitIntent } from '@/renderer/app/store/thread/exitIntentAtom';
 import { useCallback } from 'react';
-import { threadsMapAtom } from './atoms';
 
 async function applyThreadLabelsToGmail(
   uid: string,
@@ -48,7 +47,9 @@ export interface IPerformThreadsAction {
 }
 
 export function useThreadLabelAtom() {
-  const [threadsMap] = useAtom(threadsMapAtom);
+  // No thread-store subscription: the callbacks below never read the map, and
+  // subscribing re-rendered every caller (the reader, its header, commands) on
+  // each thread update.
   // Tells the thread list how a leaving row should animate (see exitIntentAtom).
   const setExitIntents = useSetAtom(threadExitIntentAtom);
   const setExitIntent = useCallback(
@@ -103,6 +104,10 @@ export function useThreadLabelAtom() {
           } catch {
             return;
           }
+          // The server hears of it only now (archive-on-send waits out the
+          // undo-send countdown): keep a refresh from re-listing it until
+          // the change has had time to land.
+          if (threadIds.length > 0) addThreadsToDebounce(threadIds);
         }
         if (!isOnline) {
           // Queue the action for offline sync
@@ -124,6 +129,8 @@ export function useThreadLabelAtom() {
 
         try {
           await applyThreadLabelsToGmail(uid, threadIds, addLabels, removeLabels);
+          // And again from when the server has it: its lists can lag a moment.
+          if (threadIds.length > 0) addThreadsToDebounce(threadIds);
 
           if (addLabels.includes('UNREAD')) {
             electronApi.incrementBadge(threadIds.length);
@@ -144,7 +151,7 @@ export function useThreadLabelAtom() {
         }
       }
     },
-    [updateThreadsState, addThreadsToDebounce, threadsMap, isOnline, queueAction]
+    [updateThreadsState, addThreadsToDebounce, isOnline, queueAction]
   );
 
   // Memoize all exposed functions to prevent recreating them on each render
@@ -170,7 +177,7 @@ export function useThreadLabelAtom() {
         waitFor
       });
     },
-    [performThreadsAction, threadsMap, setExitIntent]
+    [performThreadsAction, setExitIntent]
   );
 
   const unmarkThreadAsDone = useCallback(
@@ -195,7 +202,7 @@ export function useThreadLabelAtom() {
         waitFor
       });
     },
-    [performThreadsAction, threadsMap, setExitIntent]
+    [performThreadsAction, setExitIntent]
   );
 
   const markThreadAsSpam = useCallback(
@@ -220,7 +227,7 @@ export function useThreadLabelAtom() {
         waitFor
       });
     },
-    [performThreadsAction, threadsMap, setExitIntent]
+    [performThreadsAction, setExitIntent]
   );
 
   const unmarkThreadAsSpam = useCallback(
@@ -245,7 +252,7 @@ export function useThreadLabelAtom() {
         waitFor
       });
     },
-    [performThreadsAction, threadsMap, setExitIntent]
+    [performThreadsAction, setExitIntent]
   );
 
   const unmarkThreadsAsUnread = useCallback(
@@ -268,7 +275,7 @@ export function useThreadLabelAtom() {
         afterStateUpdate,
         waitFor
       }),
-    [performThreadsAction, threadsMap]
+    [performThreadsAction]
   );
 
   const markThreadsAsUnread = useCallback(
@@ -291,7 +298,7 @@ export function useThreadLabelAtom() {
         afterStateUpdate,
         waitFor
       }),
-    [performThreadsAction, threadsMap]
+    [performThreadsAction]
   );
 
   const markThreadAsTrash = useCallback(
@@ -316,7 +323,7 @@ export function useThreadLabelAtom() {
         waitFor
       });
     },
-    [performThreadsAction, threadsMap, setExitIntent]
+    [performThreadsAction, setExitIntent]
   );
 
   const unmarkThreadAsTrash = useCallback(
@@ -341,7 +348,7 @@ export function useThreadLabelAtom() {
         waitFor
       });
     },
-    [performThreadsAction, threadsMap, setExitIntent]
+    [performThreadsAction, setExitIntent]
   );
 
   const markThreadAsStar = useCallback(
@@ -364,7 +371,7 @@ export function useThreadLabelAtom() {
         afterStateUpdate,
         waitFor
       }),
-    [performThreadsAction, threadsMap]
+    [performThreadsAction]
   );
 
   const unmarkThreadAsStar = useCallback(
@@ -387,7 +394,7 @@ export function useThreadLabelAtom() {
         afterStateUpdate,
         waitFor
       }),
-    [performThreadsAction, threadsMap]
+    [performThreadsAction]
   );
 
   const addLabelToThread = useCallback(
@@ -411,7 +418,7 @@ export function useThreadLabelAtom() {
         afterStateUpdate,
         waitFor
       }),
-    [performThreadsAction, threadsMap]
+    [performThreadsAction]
   );
 
   const removeLabelFromThread = useCallback(
@@ -435,7 +442,7 @@ export function useThreadLabelAtom() {
         afterStateUpdate,
         waitFor
       }),
-    [performThreadsAction, threadsMap]
+    [performThreadsAction]
   );
 
   const updateLabelFromThread = useCallback(
@@ -461,7 +468,7 @@ export function useThreadLabelAtom() {
         afterStateUpdate,
         waitFor
       }),
-    [performThreadsAction, threadsMap]
+    [performThreadsAction]
   );
 
   return {

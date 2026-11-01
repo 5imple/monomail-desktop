@@ -28,7 +28,9 @@ export default function ThreadListSkeleton({
 
   return (
     <div role="status" className="flex w-full flex-col pt-2">
-      <span className="sr-only">{t('thread_list.loading', { defaultValue: 'Loading emails…' })}</span>
+      <span className="sr-only">
+        {t('thread_list.loading', { defaultValue: 'Loading emails…' })}
+      </span>
       <div className="px-[10%] pb-1 pt-3" aria-hidden="true">
         <Skeleton className="h-2.5 w-16 rounded" />
       </div>
@@ -38,7 +40,9 @@ export default function ThreadListSkeleton({
           aria-hidden="true"
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.9 }}
-          transition={{ delay: Math.min(index * 0.04, 0.4), duration: 0.35, ease: 'easeOut' }}
+          // A short stagger (at most 0.1 s) so the placeholder is there almost
+          // at once; it used to take up to 0.75 s to fill in.
+          transition={{ delay: Math.min(index * 0.015, 0.1), duration: 0.15, ease: 'easeOut' }}
           className="mx-[10%]"
         >
           {/* Same geometry as ThreadListDenseItem / ThreadListCozyItem: 28px
@@ -50,13 +54,13 @@ export default function ThreadListSkeleton({
             )}
           >
             <div className="h-7 w-7 shrink-0" />
-            <Skeleton
-              className={cn('shrink-0 rounded-full', isDense ? 'h-6 w-6' : 'h-8 w-8')}
-            />
+            <Skeleton className={cn('shrink-0 rounded-full', isDense ? 'h-6 w-6' : 'h-8 w-8')} />
             <div className={cn('shrink-0', isDense ? 'w-32 lg:w-40 xl:w-48' : 'w-40')}>
               <Skeleton className="h-3 w-3/4 rounded" />
             </div>
-            <Skeleton className={cn('h-3 rounded', SUBJECT_WIDTHS[index % SUBJECT_WIDTHS.length])} />
+            <Skeleton
+              className={cn('h-3 rounded', SUBJECT_WIDTHS[index % SUBJECT_WIDTHS.length])}
+            />
             <div className="flex-1" />
             <Skeleton className="h-2.5 w-10 shrink-0 rounded" />
           </div>

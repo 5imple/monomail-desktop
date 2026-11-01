@@ -1,4 +1,8 @@
-import React, { createContext, useContext, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useMemo, useEffect, useRef } from 'react';
+import electronApi from '@/renderer/app/lib/electronApi';
+import { useSetAtom } from 'jotai';
+import { threadListHasMoreAtom } from '@/renderer/app/store/thread/atoms';
+import { threadListActions, type LoadMoreResult } from '@/renderer/app/lib/threadListActions';
 import useThreadFetchHandler from '@/renderer/app/hooks/useThreadFetchHandler';
 import {
   LoadingStatus,
@@ -11,8 +15,10 @@ interface ThreadListContextType {
   resetThreadsArray: () => void;
   loadingStatus: LoadingStatus;
   threadIds: string[];
-  loadMore: () => void;
+  loadMore: () => LoadMoreResult;
   hasMore: boolean;
+  /** Checks every account for new mail now; false when none could be reached. */
+  refresh: () => Promise<boolean>;
   updateFromMessageSubscribe: (data: any) => void;
 }
 
@@ -26,7 +32,9 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
     setThreadIds,
     threadIds: rawThreadIds,
     activeFilters,
-    applyFilters
+    applyFilters,
+    refreshFilters,
+    splitKey
   } = useThreadAtom();
   const {
     fetchThreadsHandler,
@@ -34,10 +42,49 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
     resetThreadsArray,
     loadMore,
     hasMore,
+    refresh,
     updateFromMessageSubscribe
   } = useThreadFetchHandler();
 
   const { loadingStatus } = useThreadListAtom();
+
+  // For the reader's position ("3 of 42+"): it lives outside this provider.
+  const setHasMoreAtom = useSetAtom(threadListHasMoreAtom);
+  useEffect(() => {
+    setHasMoreAtom(hasMore);
+  }, [hasMore, setHasMoreAtom]);
+  useEffect(() => {
+    threadListActions.loadMore = loadMore;
+  }, [loadMore]);
+
+  // A send, reply, delete or move went through (main's mailChangeNotifier):
+  // refresh quietly, as the refresh button does, so the list shows it without
+  // a click. One at a time; a change during a refresh runs one more after it.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    let running = false;
+    let again = false;
+    const run = async () => {
+      if (running) {
+        again = true;
+        return;
+      }
+      running = true;
+      try {
+        do {
+          again = false;
+          await refreshRef.current().catch(() => false);
+        } while (again);
+      } finally {
+        running = false;
+      }
+    };
+    threadListActions.refreshNow = () => void run();
+    return electronApi.on('renderer:mail:changed', () => {
+      if (threadListActions.autoRefreshHolds === 0) void run();
+    });
+  }, []);
 
   // Sync the rendered filteredThreadIds from the raw threadIds + active filters.
   // This MUST live in the always-mounted provider, not in FilterOptionDropdownMenu:
@@ -46,7 +93,14 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
   // list never populates).
   useEffect(() => {
     applyFilters();
-  }, [activeFilters, rawThreadIds]);
+  }, [activeFilters, rawThreadIds, splitKey]);
+
+  // A conversation's labels changed without the list changing (a refresh
+  // tagged it Other, it was read…): the tabs must follow, or a cached thread
+  // that became Other never reached the Others tab.
+  useEffect(() => {
+    refreshFilters();
+  }, [threadsMap]);
 
   // Resort the RAW threadIds when threadsMap changes. Sorting the filtered list
   // (what useThreadFetchHandler returns) and writing it back as the raw list
@@ -85,6 +139,7 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
       threadIds,
       loadMore,
       hasMore,
+      refresh,
       updateFromMessageSubscribe
     }),
     [
@@ -94,6 +149,7 @@ export function ThreadListProvider({ children }: { children: React.ReactNode }) 
       threadIds,
       loadMore,
       hasMore,
+      refresh,
       updateFromMessageSubscribe
     ]
   );

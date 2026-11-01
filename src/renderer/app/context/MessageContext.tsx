@@ -6,11 +6,14 @@ import {
   MessageAddedPayload,
   MessageDeletedPayload,
   MessageLabelModificationPayload,
-  PushPayload
+  NotificationClickPayload,
+  PushPayload,
+  ThreadRestoredPayload
 } from '@/main/api/message/push';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
+import { createTaskLimiter } from '@/main/services/push/taskLimiter';
 import {
   DBGetMessage,
   DBRemoveMessage,
@@ -19,6 +22,7 @@ import {
 } from '@/renderer/app/lib/db/message';
 import { DBGetThread, normalizeGmailLabels } from '@/renderer/app/lib/db/thread';
 import electronApi from '@/renderer/app/lib/electronApi';
+import { isAudioType, playSound } from '@/renderer/app/lib/soundManager';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -53,6 +57,16 @@ interface MessageContextType {
 const MessageContext = createContext<MessageContextType | undefined>(undefined);
 // Add a display name for debugging
 MessageContext.displayName = 'MessageContext';
+
+// A delta catch-up after launch or wake can deliver hundreds of MESSAGE_ADDED
+// frames at once. Fetch the unknown messages a few at a time instead of one
+// request per frame all at once. (Not a Graph $batch: the Microsoft adapter's
+// getMessage also resolves folder labels and inline/meeting parts per message,
+// which a raw batch here would have to duplicate.)
+const MESSAGE_FETCH_CONCURRENCY = 4;
+const messageFetchLimiter = createTaskLimiter(MESSAGE_FETCH_CONCURRENCY);
+// 'added' updates arriving within this window reach subscribers as one batch.
+const ADDED_UPDATES_FLUSH_MS = 100;
 
 export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { activeThreadId } = useThreadAtom();
@@ -129,18 +143,121 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
     [setDebouncedThreads]
   );
 
+  // Removals that came in while their conversation was "changed here" (just
+  // above): delivered once that window ends instead of dropped. The cache
+  // already changed, so dropping one left a conversation archived in Outlook
+  // listed for the session. The list reads the cache when it gets one, so a
+  // late removal acts on the conversation as it is by then (back in the Inbox
+  // after an undo: it stays).
+  const heldRemovalsRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const held = heldRemovalsRef.current;
+    return () => {
+      held.forEach((timer) => clearTimeout(timer));
+      held.clear();
+    };
+  }, []);
+
   const notifySubscribers = useCallback(
     (updates: UpdateType[]) => {
       const now = Date.now();
       const filteredUpdates = updates.filter(
         (update) => !debouncedThreads[update.threadId] || debouncedThreads[update.threadId] < now
       );
+      for (const update of updates) {
+        if (update.type !== 'removed' || filteredUpdates.includes(update)) continue;
+        const key = `${update.accountId}:${update.threadId}`;
+        clearTimeout(heldRemovalsRef.current.get(key));
+        const wait = Math.max(0, (debouncedThreads[update.threadId] ?? now) - now) + 1500;
+        heldRemovalsRef.current.set(
+          key,
+          setTimeout(() => {
+            heldRemovalsRef.current.delete(key);
+            // Read when it fires: the ref is set further down (below).
+            notifySubscribersRef.current([update]);
+          }, wait)
+        );
+      }
 
       if (filteredUpdates.length > 0) {
         subscribers.current.forEach((callback) => callback(filteredUpdates));
       }
     },
     [debouncedThreads]
+  );
+
+  // Coalesce 'added' updates: a burst of frames reaches subscribers as one
+  // batch (de-duplicated by thread) instead of one list update per message.
+  const notifySubscribersRef = useRef(notifySubscribers);
+  useEffect(() => {
+    notifySubscribersRef.current = notifySubscribers;
+  }, [notifySubscribers]);
+  const pendingAddedRef = useRef<UpdateType[]>([]);
+  const addedFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (addedFlushTimerRef.current) {
+        clearTimeout(addedFlushTimerRef.current);
+        addedFlushTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const queueAddedUpdate = useCallback((update: UpdateType) => {
+    pendingAddedRef.current.push(update);
+    if (addedFlushTimerRef.current) return;
+    addedFlushTimerRef.current = setTimeout(() => {
+      addedFlushTimerRef.current = null;
+      const seen = new Set<string>();
+      const updates = pendingAddedRef.current.splice(0).filter((u) => {
+        const key = `${u.accountId}:${u.threadId}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (updates.length > 0) notifySubscribersRef.current(updates);
+    }, ADDED_UPDATES_FLUSH_MS);
+  }, []);
+
+  // Threads changed here in the last few seconds (addThreadsToDebounce), read
+  // without re-rendering on every change.
+  const debouncedThreadsRef = useRef(debouncedThreads);
+  useEffect(() => {
+    debouncedThreadsRef.current = debouncedThreads;
+  }, [debouncedThreads]);
+
+  // The Microsoft delta reports a message again when it changes elsewhere
+  // (phone, Outlook on the web): read or marked unread, or moved between
+  // Focused and Other. Its cached copy still has the old state, and skipping
+  // the frame as a duplicate left the row bold (or not), or in the wrong
+  // Focused/Other tab, until a refresh.
+  const syncChangedState = useCallback(
+    async (frame: MessageAddedPayload, cachedLabels: string[], threadId: string) => {
+      if (!frame.aAUid.startsWith('microsoft:') || !threadId) return;
+      const frameLabels = frame.labels ?? '';
+      const add: string[] = [];
+      const remove: string[] = [];
+
+      // Not for a thread read or marked unread here moments ago: the delta
+      // can still carry the state from before that change.
+      const frameUnread = /\bUNREAD\b/.test(frameLabels);
+      const changedHere = (debouncedThreadsRef.current[threadId] ?? 0) > Date.now();
+      if (frameUnread !== cachedLabels.includes('UNREAD') && !changedHere) {
+        (frameUnread ? add : remove).push('UNREAD');
+      }
+
+      const inference = /\binference:(focused|other)\b/.exec(frameLabels)?.[1];
+      if (inference && !cachedLabels.includes(`inference:${inference}`)) {
+        add.push(`inference:${inference}`);
+        remove.push(`inference:${inference === 'focused' ? 'other' : 'focused'}`);
+      }
+
+      if (add.length === 0 && remove.length === 0) return;
+      await DBUpdateMessageLabels(frame.aAUid, frame.id, add, remove);
+      notifySubscribersRef.current([{ type: 'updated', threadId, accountId: frame.aAUid }]);
+    },
+    []
   );
 
   const handleMessageAdded = useCallback(
@@ -159,24 +276,48 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
           !cachedLabels.includes('INBOX') ||
           cachedLabels.includes('TRASH') ||
           cachedLabels.includes('SPAM');
-        if (!(frameSaysInbox && cacheDisagrees)) return;
+        if (!(frameSaysInbox && cacheDisagrees)) {
+          await syncChangedState(addedMessage, cachedLabels, existingMessage.threadId);
+          return;
+        }
       }
 
-      const messageResponse = await mailApi.getMessage(addedMessage.aAUid, addedMessage.id);
+      // Bounded concurrency, and one fetch per message even when duplicate
+      // frames for it arrive while the first fetch is still running.
+      await messageFetchLimiter.runOnce(`${addedMessage.aAUid}:${addedMessage.id}`, async () => {
+        const messageResponse = await mailApi.getMessage(addedMessage.aAUid, addedMessage.id);
 
-      if (messageResponse?.payload) {
-        const monoMessage = MonoMessage.fromGmailMessage(messageResponse);
-        await DBSaveMessage(addedMessage.aAUid, monoMessage);
-        notifySubscribers([
-          {
+        if (messageResponse?.payload) {
+          const monoMessage = MonoMessage.fromGmailMessage(messageResponse);
+          await DBSaveMessage(addedMessage.aAUid, monoMessage);
+          queueAddedUpdate({
             type: 'added',
             threadId: monoMessage.threadId,
             accountId: addedMessage.aAUid
-          }
-        ]);
+          });
+        }
+      });
+    },
+    [queueAddedUpdate, syncChangedState]
+  );
+
+  // A conversation came back to the Inbox with no new message (a due snooze):
+  // re-fetch it so the cached labels include INBOX again, then let the list
+  // pick it up.
+  const handleThreadRestored = useCallback(
+    async ({ aAUid, threadId }: ThreadRestoredPayload) => {
+      if (!aAUid || !threadId) return;
+      try {
+        const response = await mailApi.getThread(aAUid, threadId);
+        if (!response) return;
+        const thread = MonoThread.fromPlainObject(response);
+        await addThread(aAUid, thread);
+        queueAddedUpdate({ type: 'added', threadId: thread.id, accountId: aAUid });
+      } catch (e) {
+        console.error('Error refreshing a thread back from snooze:', e);
       }
     },
-    [notifySubscribers]
+    [addThread, queueAddedUpdate]
   );
 
   const handleAIDraftAdded = useCallback(
@@ -306,16 +447,29 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
           await handleAIDraftAdded(messageData as unknown as AIDraftAddedPayload);
           break;
 
+        case 'THREAD_RESTORED':
+          await handleThreadRestored(messageData as unknown as ThreadRestoredPayload);
+          break;
+
         default:
           console.warn('Unknown message type received:', messageData.type);
           break;
       }
     },
-    [handleMessageAdded, handleMessageDeleted, handleLabelModification]
+    [
+      handleMessageAdded,
+      handleMessageDeleted,
+      handleLabelModification,
+      handleAIDraftAdded,
+      handleThreadRestored
+    ]
   );
 
   const handleNotificationClick = useCallback(
-    async ({ uid, threadId }: { uid: string; threadId: string }) => {
+    async (payload?: NotificationClickPayload) => {
+      const uid = payload?.uid;
+      const threadId = payload?.threadId;
+      if (!uid) return;
       try {
         // Find spaces that contain this account
         const accountSpaces = spaces.filter((space) => space.accountUids.includes(uid));
@@ -343,6 +497,13 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
             // If we're already in the right space but the account isn't active, make it active
             await setActiveAccountsInSpace([...activeSpace.activeAccountUids, uid]);
           }
+        }
+
+        // Not about one conversation ("N new emails" summary, a scheduled send
+        // with no thread): show the inbox.
+        if (!threadId) {
+          searchNewQuery('category:primary', [], false);
+          return;
         }
 
         // Now handle the thread
@@ -376,14 +537,21 @@ export const MessageProvider: React.FC<{ children: ReactNode }> = ({ children })
       handleIncomingMessage
     );
 
-    const removeNotificationClickListener = electronApi.on<{ uid: string; threadId: string }>(
+    const removeNotificationClickListener = electronApi.on<NotificationClickPayload | undefined>(
       'renderer:notification:native:clicked',
       handleNotificationClick
     );
 
+    // New-mail banners are silent; main asks for the chosen alert sound once
+    // per batch so Settings > Notifications > Alert sound applies to new mail.
+    const removeSoundListener = electronApi.on<unknown>('renderer:notification:sound', (sound) => {
+      if (isAudioType(sound)) playSound(sound);
+    });
+
     return () => {
       removePushMessageListener();
       removeNotificationClickListener();
+      removeSoundListener();
     };
   }, [handleIncomingMessage, handleNotificationClick]);
 

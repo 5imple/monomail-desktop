@@ -8,6 +8,19 @@ import {
 import { initDB } from '../db';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 
+/** Recipients of both lists, each address once. */
+function mergeRecipients<T extends { email?: string }>(current: T[], added: T[]): T[] {
+  const seen = new Set(current.map((r) => (r.email ?? '').toLowerCase()));
+  const merged = [...current];
+  for (const r of added) {
+    const key = (r.email ?? '').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(r);
+  }
+  return merged;
+}
+
 export async function DBSaveMessage(uid: string, message: MonoMessage) {
   const db = await initDB(uid);
   const tx = db.transaction(['messages', 'contacts', 'threads', 'drafts'], 'readwrite');
@@ -31,6 +44,9 @@ export async function DBSaveMessage(uid: string, message: MonoMessage) {
       thread.from = [...new Set([...thread.from, ...[message.from]])];
       thread.cc = [...new Set([...thread.cc, ...message.cc])];
       thread.bcc = [...new Set([...thread.bcc, ...message.bcc])];
+      // Was left out: "Sent to" filters and labels then missed recipients
+      // of mail that arrived while the app was open.
+      thread.to = mergeRecipients(thread.to ?? [], message.to ?? []);
 
       // Add draft labels if we have drafts
       if (existingDrafts.length > 0) {
@@ -79,6 +95,7 @@ export async function DBSaveMessage(uid: string, message: MonoMessage) {
       items: [message],
       labelIds: existingDrafts.length > 0 ? [...message.labelIds, 'DRAFT'] : message.labelIds,
       from: [message.from],
+      to: message.to ?? [],
       cc: message.cc,
       bcc: message.bcc,
       subject: message.subject,

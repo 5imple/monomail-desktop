@@ -1,3 +1,5 @@
+import { atom, type WritableAtom } from 'jotai';
+import { unwrap } from 'jotai/utils';
 import { monoLocalStorageDb } from '@/renderer/app/lib/db/localStorage';
 
 type Transform<T> = {
@@ -80,3 +82,28 @@ export const createIndexedDBStorage = <T>(config: StorageConfig<T>): Generalized
     }
   };
 };
+
+/**
+ * Wraps an `atomWithStorage` atom backed by {@link createIndexedDBStorage} so
+ * that reading it never suspends.
+ *
+ * jotai loads an async-storage atom when its first subscriber mounts, by
+ * setting it to the pending `getItem` promise; every reader then suspends.
+ * When that first subscriber mounts in response to a keypress (R opens the
+ * compose card, a key opens the calendar), the suspension lands on a
+ * synchronous update with no Suspense boundary and React replaces the whole
+ * app with "A component suspended while responding to synchronous input".
+ *
+ * Reads return the last known value (or `fallback` before the first load);
+ * writes go straight through to the storage atom.
+ */
+export function nonSuspendingStorageAtom<Value, Args extends unknown[], Result>(
+  storageAtom: WritableAtom<Value | Promise<Value>, Args, Result>,
+  fallback: Value
+): WritableAtom<Value, Args, Result> {
+  const readable = unwrap(storageAtom, (prev) => prev ?? fallback);
+  return atom(
+    (get) => get(readable) as Value,
+    (_get, set, ...args: Args) => set(storageAtom, ...args)
+  );
+}

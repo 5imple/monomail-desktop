@@ -302,6 +302,10 @@ const ThreadSelectionToast = () => {
           id: 'thread-selection-toast',
           duration: Infinity, // Keep it visible until dismissed
           position: 'bottom-center',
+          // Its own card: the other toasts are plain lines in the bottom-left
+          // corner (components/ui/sonner.tsx).
+          className:
+            'p-3 min-h-14 rounded-xl border border-border bg-gradient-to-t from-secondary to-background text-foreground shadow-xl dark:from-background dark:to-secondary',
           // Swiping it away left the rows selected with no bar to act on them.
           dismissible: false
         }

@@ -59,7 +59,7 @@ export function useMessageOperationAtom() {
 
           return {
             ...prev,
-            [threadId]: new MonoThread({ ...thread, items: updatedItems })
+            [threadId]: new MonoThread({ ...thread.toPlainObject(), items: updatedItems })
           };
         });
 
@@ -93,7 +93,10 @@ export function useMessageOperationAtom() {
           const updatedThreads = { ...prev };
 
           if (updatedItems.length > 0) {
-            updatedThreads[threadId] = new MonoThread({ ...thread, items: updatedItems });
+            updatedThreads[threadId] = new MonoThread({
+              ...thread.toPlainObject(),
+              items: updatedItems
+            });
           } else {
             delete updatedThreads[threadId]; // Remove thread if no items remain
           }
@@ -127,7 +130,7 @@ export function useMessageOperationAtom() {
 
         return {
           ...prev,
-          [threadId]: new MonoThread({ ...thread, items: updatedItems })
+          [threadId]: new MonoThread({ ...thread.toPlainObject(), items: updatedItems })
         };
       });
 
@@ -149,7 +152,10 @@ export function useMessageOperationAtom() {
           ];
           return {
             ...prev,
-            [newMessage.threadId]: new MonoThread({ ...thread, items: updatedItems })
+            [newMessage.threadId]: new MonoThread({
+              ...thread.toPlainObject(),
+              items: updatedItems
+            })
           };
         }
 
@@ -190,7 +196,7 @@ export function useMessageOperationAtom() {
 
         return {
           ...prev,
-          [threadId]: new MonoThread({ ...thread, items: updatedItems })
+          [threadId]: new MonoThread({ ...thread.toPlainObject(), items: updatedItems })
         };
       });
 

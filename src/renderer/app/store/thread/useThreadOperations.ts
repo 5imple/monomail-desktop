@@ -1,3 +1,4 @@
+import { withCachedBodies } from '@/main/models/message/bodyData';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { isThreadItemWithLabels } from '@/main/models/thread/ThreadItem';
 import { DBUpdateMessageLabels } from '@/renderer/app/lib/db/message';
@@ -7,23 +8,49 @@ import {
   DBSaveThread,
   DBSaveThreads
 } from '@/renderer/app/lib/db/thread';
-import { useAtom, useSetAtom } from 'jotai';
+import { useSetAtom, useStore } from 'jotai';
 import { useCallback } from 'react';
-import {
-  activeThreadIdAtom,
-  filteredThreadIdsAtom,
-  threadIdsAtom,
-  threadsMapAtom
-} from './atoms';
+import { activeThreadIdAtom, filteredThreadIdsAtom, threadIdsAtom, threadsMapAtom } from './atoms';
 
 // A label change, each label once: an undo can add back a label that the
 // action it reverses already restored (when that action failed and rolled back).
 const withLabels = (labelIds: string[], add: string[], remove: string[]) =>
   Array.from(new Set([...add, ...labelIds.filter((id) => !remove.includes(id))])).sort();
 
+// A copy of `value` (same prototype, so a MonoThread / MonoMessage stays one)
+// with `patch` applied. List rows subscribe to their own thread object
+// (useThreadRowAtom), so a label change must produce a new object: mutating
+// the cached one in place leaves the row showing the old read/unread state.
+// Every own property is copied as defined (search results carry accountId as a
+// non-enumerable property, which a plain Object.assign would drop).
+const copyWith = <T extends object>(value: T, patch: Partial<T>): T =>
+  Object.assign(
+    Object.create(Object.getPrototypeOf(value), Object.getOwnPropertyDescriptors(value)),
+    patch
+  );
+
+/** `thread` and its labelled items with the label change applied, as new objects. */
+export const relabelThread = (
+  thread: MonoThread,
+  addLabelIds: string[],
+  removeLabelIds: string[]
+): MonoThread =>
+  copyWith(thread, {
+    labelIds: withLabels(thread.labelIds, addLabelIds, removeLabelIds),
+    items: thread.items.map((item) =>
+      isThreadItemWithLabels(item)
+        ? copyWith(item, { labelIds: withLabels(item.labelIds, addLabelIds, removeLabelIds) })
+        : item
+    )
+  });
+
 export function useThreadOperationAtom() {
-  const [threadsMap, setThreadsMap] = useAtom(threadsMapAtom);
-  const [activeThreadId, setActiveThreadId] = useAtom(activeThreadIdAtom);
+  // Setters and on-demand reads only. Subscribing to threadsMap here re-rendered
+  // every consumer of this hook (and recreated every callback below) on each
+  // thread update; the callbacks read the current map from the store instead.
+  const store = useStore();
+  const setThreadsMap = useSetAtom(threadsMapAtom);
+  const setActiveThreadId = useSetAtom(activeThreadIdAtom);
   // useSetAtom — setters only, WITHOUT subscribing to the value. Subscribing here
   // (via useAtom) made every consumer of this hook — AuthContext, the fetch
   // handler, command hooks — re-render on every threadIds/filteredThreadIds
@@ -39,22 +66,26 @@ export function useThreadOperationAtom() {
       saveToLocal: boolean = true
     ) => {
       setThreadsMap((prev) => {
+        // A listing is metadata-only; keep the bodies already loaded for the
+        // same messages, or every refresh would make the next open of a read
+        // email fetch its body again.
+        const threads = newThreads.map((thread) => withCachedBodies(thread, prev[thread.id]));
         const updatedMap = replace
-          ? Object.fromEntries(newThreads.map((thread) => [thread.id, thread]))
+          ? Object.fromEntries(threads.map((thread) => [thread.id, thread]))
           : {
               ...prev,
-              ...Object.fromEntries(newThreads.map((thread) => [thread.id, thread]))
+              ...Object.fromEntries(threads.map((thread) => [thread.id, thread]))
             };
 
         if (saveToLocal) {
           // Group threads by their actual accountId to ensure proper database
-          // isolation. Persist only the incoming `newThreads` — the rest of
+          // isolation. Persist only the incoming `threads` — the rest of
           // `updatedMap` was already saved by earlier calls, so re-writing the
           // whole accumulated map on every page turned paginated load into
           // O(n^2) IndexedDB writes.
           const threadsByAccount: Record<string, MonoThread[]> = {};
 
-          newThreads.forEach((thread) => {
+          threads.forEach((thread) => {
             // Use thread's accountId if available, otherwise fall back to uid
             const accountId =
               Object.getOwnPropertyDescriptor(thread, 'accountId')?.value ||
@@ -76,68 +107,79 @@ export function useThreadOperationAtom() {
         return updatedMap;
       });
     },
-    [threadsMap]
+    [setThreadsMap]
   );
 
   const addThreads = useCallback(
     async (uid: string, newThreads: MonoThread[], saveToLocal: boolean = true) => {
       setThreadsMap((prev) => {
+        const threads = newThreads.map((thread) => withCachedBodies(thread, prev[thread.id]));
         const updatedMap = {
           ...prev,
-          ...Object.fromEntries(newThreads.map((thread) => [thread.id, thread]))
+          ...Object.fromEntries(threads.map((thread) => [thread.id, thread]))
         };
         if (saveToLocal) {
           // Persist only the incoming batch, not the whole accumulated map.
-          DBSaveThreads(uid, newThreads);
+          DBSaveThreads(uid, threads);
         }
         return updatedMap;
       });
     },
-    [threadsMap]
+    [setThreadsMap]
   );
 
   const addThread = useCallback(
     async (uid: string, newThread: MonoThread, saveToLocal: boolean = true) => {
+      let thread = newThread;
+      setThreadsMap((prev) => {
+        thread = withCachedBodies(newThread, prev[newThread.id]);
+        return { ...prev, [newThread.id]: thread };
+      });
       if (saveToLocal) {
-        await DBSaveThread(uid, newThread);
+        await DBSaveThread(uid, thread);
       }
-      setThreadsMap((prev) => ({ ...prev, [newThread.id]: newThread }));
     },
-    []
+    [setThreadsMap]
   );
 
   const addThreadsFromIds = useCallback(
     async (uid: string, threadIds: string[]) => {
-      const updatedMap = { ...threadsMap };
+      const loaded: Record<string, MonoThread> = {};
       for (const threadId of threadIds) {
         const thread = await DBGetThread(uid, threadId);
         if (thread) {
-          updatedMap[threadId] = thread;
+          loaded[threadId] = thread;
         }
       }
-      setThreadsMap(updatedMap);
+      // Merge into the map as it is now, not as it was before the awaits.
+      setThreadsMap((prev) => ({ ...prev, ...loaded }));
     },
-    [threadsMap]
+    [setThreadsMap]
   );
 
   const updateThread = useCallback(
     async (uid: string, updatedThread: MonoThread, saveToLocal: boolean = true) => {
+      // Memory first: the reader shows a body the moment it lands, not once the
+      // IndexedDB write (and its contact bookkeeping) has gone through.
+      let thread = updatedThread;
+      setThreadsMap((prev) => {
+        thread = withCachedBodies(updatedThread, prev[updatedThread.id]);
+        return { ...prev, [updatedThread.id]: thread };
+      });
       if (saveToLocal) {
         // Use the thread's accountId if available, otherwise fall back to the provided uid
-        const accountToUse = updatedThread.accountId || uid;
-        await DBSaveThread(accountToUse, updatedThread);
+        await DBSaveThread(updatedThread.accountId || uid, thread);
       }
-
-      setThreadsMap((prev) => ({ ...prev, [updatedThread.id]: updatedThread }));
     },
-    [threadsMap]
+    [setThreadsMap]
   );
 
   const updateThreads = useCallback(
     async (uid: string, newThreads: MonoThread[], saveToLocal: boolean = true) => {
       setThreadsMap((prev) => {
         const updatedMap = { ...prev };
-        newThreads.forEach((thread) => {
+        const threads = newThreads.map((thread) => withCachedBodies(thread, prev[thread.id]));
+        threads.forEach((thread) => {
           updatedMap[thread.id] = thread;
         });
 
@@ -145,7 +187,7 @@ export function useThreadOperationAtom() {
           // Group threads by accountId
           const threadsByAccount: Record<string, MonoThread[]> = {};
 
-          newThreads.forEach((thread) => {
+          threads.forEach((thread) => {
             const accountId = thread.accountId || uid;
             if (!threadsByAccount[accountId]) {
               threadsByAccount[accountId] = [];
@@ -162,21 +204,7 @@ export function useThreadOperationAtom() {
         return updatedMap;
       });
     },
-    [threadsMap]
-  );
-
-  const removeThread = useCallback(
-    async (uid: string, threadId: string, saveToLocal: boolean = true) => {
-      // Get the thread to determine its accountId before removing it
-      const thread = threadsMap[threadId];
-      const accountToUse = thread?.accountId || uid;
-
-      if (saveToLocal) {
-        await DBRemoveThread(accountToUse, threadId);
-      }
-      await removeThreadFromMap(threadId);
-    },
-    [threadsMap]
+    [setThreadsMap]
   );
 
   const resetThreadsMap = () => {
@@ -186,7 +214,7 @@ export function useThreadOperationAtom() {
 
   const removeThreadFromMap = useCallback(
     async (threadId: string) => {
-      if (activeThreadId === threadId) {
+      if (store.get(activeThreadIdAtom) === threadId) {
         setActiveThreadId(null);
       }
 
@@ -196,11 +224,12 @@ export function useThreadOperationAtom() {
         return updatedMap;
       });
     },
-    [activeThreadId, setActiveThreadId, threadsMap]
+    [store, setActiveThreadId, setThreadsMap]
   );
 
   const removeThreadsFromMap = useCallback(
     async (threadIds: string[]) => {
+      const activeThreadId = store.get(activeThreadIdAtom);
       if (activeThreadId && threadIds.includes(activeThreadId)) {
         setActiveThreadId(null);
       }
@@ -213,13 +242,28 @@ export function useThreadOperationAtom() {
         return updatedMap;
       });
     },
-    [activeThreadId, setActiveThreadId, threadsMap]
+    [store, setActiveThreadId, setThreadsMap]
+  );
+
+  const removeThread = useCallback(
+    async (uid: string, threadId: string, saveToLocal: boolean = true) => {
+      // Get the thread to determine its accountId before removing it
+      const thread = store.get(threadsMapAtom)[threadId];
+      const accountToUse = thread?.accountId || uid;
+
+      if (saveToLocal) {
+        await DBRemoveThread(accountToUse, threadId);
+      }
+      await removeThreadFromMap(threadId);
+    },
+    [store, removeThreadFromMap]
   );
 
   // Helper function to group threads by accountId
   const groupThreadsByAccount = useCallback(
     (threadIds: string[]): Record<string, string[]> => {
       const threadsByAccount: Record<string, string[]> = {};
+      const threadsMap = store.get(threadsMapAtom);
 
       threadIds.forEach((threadId) => {
         const thread = threadsMap[threadId];
@@ -233,7 +277,7 @@ export function useThreadOperationAtom() {
 
       return threadsByAccount;
     },
-    [threadsMap]
+    [store]
   );
 
   const updateThreadState = useCallback(
@@ -245,32 +289,24 @@ export function useThreadOperationAtom() {
       saveToLocal: boolean = true
     ) => {
       // Get the thread and determine the correct accountId
-      const existingThread = threadsMap[threadId];
+      const existingThread = store.get(threadsMapAtom)[threadId];
       const accountToUse = existingThread?.accountId || uid;
 
-      const thread = existingThread || (await DBGetThread(accountToUse, threadId));
+      const stored = existingThread || (await DBGetThread(accountToUse, threadId));
 
-      if (thread) {
-        // Update thread labels
-        thread.labelIds = [
-          ...thread.labelIds.filter((id) => !removeLabelIds.includes(id)),
-          ...addLabelIds
-        ].sort();
+      if (stored) {
+        const thread = relabelThread(stored, addLabelIds, removeLabelIds);
         // Update thread in state
         setThreadsMap((prev) => ({ ...prev, [threadId]: thread }));
 
-        // Update labels in thread items
-        thread.items.forEach(async (item) => {
-          if (isThreadItemWithLabels(item)) {
-            item.labelIds = [
-              ...item.labelIds.filter((id) => !removeLabelIds.includes(id)),
-              ...addLabelIds
-            ].sort();
-            if (saveToLocal && item.type === 'message') {
+        // Update labels of the stored messages
+        if (saveToLocal) {
+          thread.items.forEach(async (item) => {
+            if (isThreadItemWithLabels(item) && item.type === 'message') {
               await DBUpdateMessageLabels(accountToUse, item.id, addLabelIds, removeLabelIds);
             }
-          }
-        });
+          });
+        }
 
         if (saveToLocal) {
           await DBSaveThread(accountToUse, thread);
@@ -279,7 +315,7 @@ export function useThreadOperationAtom() {
         console.error(`Conversation with ID ${threadId} not found`);
       }
     },
-    [threadsMap]
+    [store, setThreadsMap]
   );
 
   const updateThreadsState = useCallback(
@@ -295,10 +331,7 @@ export function useThreadOperationAtom() {
         skipUIUpdate?: boolean;
       } = {}
     ) => {
-      const {
-        shouldRemoveThreads = false,
-        shouldRestoreThreads = false
-      } = options;
+      const { shouldRemoveThreads = false, shouldRestoreThreads = false } = options;
 
       // Use functional state update to work with current state
       setThreadsMap((currentThreadsMap) => {
@@ -367,26 +400,19 @@ export function useThreadOperationAtom() {
               continue;
             }
 
-            // Update thread labels
-            thread.labelIds = withLabels(thread.labelIds, addLabelIds, removeLabelIds);
+            // New objects, so the row and the reader see the change.
+            const relabeled = relabelThread(thread, addLabelIds, removeLabelIds);
+            updatedMap[threadId] = relabeled;
 
-            // Update thread items
-            thread.items.forEach((item) => {
-              if (isThreadItemWithLabels(item)) {
-                item.labelIds = withLabels(item.labelIds, addLabelIds, removeLabelIds);
-
-                // Schedule DB operations
-                if (saveToLocal && item.type === 'message') {
+            if (saveToLocal) {
+              relabeled.items.forEach((item) => {
+                if (isThreadItemWithLabels(item) && item.type === 'message') {
                   dbOperations.push(() =>
                     DBUpdateMessageLabels(accountId, item.id, addLabelIds, removeLabelIds)
                   );
                 }
-              }
-            });
-
-            // Schedule thread save
-            if (saveToLocal) {
-              dbOperations.push(() => DBSaveThread(accountId, thread));
+              });
+              dbOperations.push(() => DBSaveThread(accountId, relabeled));
             }
           }
         }
@@ -439,7 +465,7 @@ export function useThreadOperationAtom() {
         }
       }
     },
-    [threadsMap, setThreadsMap, setThreadIds, setFilteredThreadIds]
+    [setThreadsMap, setThreadIds, setFilteredThreadIds]
   );
 
   return {

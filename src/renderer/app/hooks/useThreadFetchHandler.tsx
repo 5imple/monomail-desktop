@@ -2,14 +2,26 @@ import { apiClient } from '@/main/api/apiClient';
 import log from 'electron-log';
 import { UserPreference } from '@/main/api/auth/types/user';
 import mailApi from '@/main/api/mail/mailApi';
-import { microsoftMailProvider } from '@/main/api/mail/providers/microsoftMailProvider';
-import { MonoThread } from '@/main/models/thread/MonoThread';
+import {
+  listFolderMessageIds,
+  microsoftMailProvider
+} from '@/main/api/mail/providers/microsoftMailProvider';
+import { MonoThread, type IMonoThread } from '@/main/models/thread/MonoThread';
+import type { ThreadItemWithLabels } from '@/main/models/thread/ThreadItem';
 import { authCache } from '@/renderer/app/context/AuthCache';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { UpdateType, useMessage } from '@/renderer/app/context/MessageContext';
 import { useSyncHistory } from '@/renderer/app/context/SyncHistoryContext';
 import { useSyncThread } from '@/renderer/app/context/SyncThreadContext';
 import { convertToAccurateQuery } from '@/renderer/app/lib/convertToAccurateQuery';
+import electronApi from '@/renderer/app/lib/electronApi';
+import type { LoadMoreResult } from '@/renderer/app/lib/threadListActions';
+import { mergeListing } from '@/renderer/app/lib/listingMerge';
+import { cachedInFolder, leftFolder } from '@/renderer/app/lib/listingPrune';
+import { INBOX_VIEW_QUERIES, normalizeQuery } from '@/renderer/app/hooks/useIsSearchView';
+import { DBUpdateMessageLabels } from '@/renderer/app/lib/db/message';
+import { getDefaultStore } from 'jotai';
+import { threadsMapAtom } from '@/renderer/app/store/thread/atoms';
 import { DBGetAllDraftThreadsMultiUser } from '@/renderer/app/lib/db/draft';
 import {
   DBGetAllThreadsMultiUser,
@@ -31,6 +43,13 @@ import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { OperationPriority, useThreadOperationsQueue } from './useThreadOperationsQueue';
+
+// The refresh button stops spinning on a Gmail sync that never reports back.
+const REFRESH_GMAIL_TIMEOUT_MS = 15_000;
+
+// Newest cached Inbox conversations the Inbox check looks at (its listing
+// covers the folder's 250 newest messages).
+const PRUNE_CACHE_LIMIT = 300;
 
 const useThreadFetchHandler = () => {
   const FETCH_THREADS_LIMIT = 25;
@@ -80,7 +99,12 @@ const useThreadFetchHandler = () => {
   const activeSpaceRef = useRef(activeSpace);
   const { syncThreads, abortSync } = useSyncThread();
   const { syncThreadHistory, subscribe: historySubscribe } = useSyncHistory();
-  const { subscribe: messageSubscribe } = useMessage();
+  const { subscribe: messageSubscribe, debouncedThreads } = useMessage();
+  // Conversations changed here in the last few seconds (archived, trashed,
+  // moved): a refresh's listing may not show that yet on the server, and
+  // merging it would bring an archived email back for a moment.
+  const debouncedThreadsRef = useRef(debouncedThreads);
+  debouncedThreadsRef.current = debouncedThreads;
   const apiCallsRef = useRef<AbortController | null>(null);
   const cacheOffsetRef = useRef<number>(0);
   const [pageTokens, setPageTokens] = useState<Record<string, Record<string, string | undefined>>>(
@@ -287,59 +311,53 @@ const useThreadFetchHandler = () => {
       void reset();
       return;
     }
-    enqueueOperation(
-      reset,
-      {
-        priority: OperationPriority.HIGH,
-        type: 'reset-threads-array',
-        batch: false
-      }
-    );
+    enqueueOperation(reset, {
+      priority: OperationPriority.HIGH,
+      type: 'reset-threads-array',
+      batch: false
+    });
   }, [setThreadIds, enqueueOperation]);
 
   const updateThreadIds = useCallback(
     (newThreads: string[]) => {
       const apply = async () => {
-          setThreadIds((prev) => {
-            // Start with previous thread IDs
-            const allThreadIds = [...prev];
+        setThreadIds((prev) => {
+          // Start with previous thread IDs
+          const allThreadIds = [...prev];
 
-            // Add new thread IDs if they don't already exist
-            newThreads.forEach((id) => {
-              if (!allThreadIds.includes(id)) {
-                allThreadIds.push(id);
-              }
-            });
-
-            // Sort all threads by timestamp (newest first)
-            return allThreadIds.sort((idA, idB) => {
-              const threadA = threadsMapRef.current[idA];
-              const threadB = threadsMapRef.current[idB];
-
-              // Handle cases where thread data might not be available yet
-              if (!threadA && !threadB) return 0;
-              if (!threadA) return 1; // Put threads without data at the end
-              if (!threadB) return -1;
-
-              // Sort by timestamp (descending order - newest first)
-              return threadB.timestamp - threadA.timestamp;
-            });
+          // Add new thread IDs if they don't already exist
+          newThreads.forEach((id) => {
+            if (!allThreadIds.includes(id)) {
+              allThreadIds.push(id);
+            }
           });
-        };
+
+          // Sort all threads by timestamp (newest first)
+          return allThreadIds.sort((idA, idB) => {
+            const threadA = threadsMapRef.current[idA];
+            const threadB = threadsMapRef.current[idB];
+
+            // Handle cases where thread data might not be available yet
+            if (!threadA && !threadB) return 0;
+            if (!threadA) return 1; // Put threads without data at the end
+            if (!threadB) return -1;
+
+            // Sort by timestamp (descending order - newest first)
+            return threadB.timestamp - threadA.timestamp;
+          });
+        });
+      };
       if (applyNowDepthRef.current > 0) {
         void apply();
         return;
       }
-      enqueueOperation(
-        apply,
-        {
-          priority: OperationPriority.MEDIUM,
-          type: 'update-thread-ids',
-          batch: true,
-          batchKey: 'update-thread-ids',
-          data: { newThreads }
-        }
-      );
+      enqueueOperation(apply, {
+        priority: OperationPriority.MEDIUM,
+        type: 'update-thread-ids',
+        batch: true,
+        batchKey: 'update-thread-ids',
+        data: { newThreads }
+      });
     },
     [setThreadIds, enqueueOperation, threadsMapRef]
   );
@@ -366,6 +384,155 @@ const useThreadFetchHandler = () => {
   // load-more. A present token = that account/view has more pages.
   const msPageTokensRef = useRef<Record<string, Record<string, string>>>({});
 
+  // Mail archived / moved / deleted in Outlook whose change never reached the
+  // app (listingPrune): compare the cached Inbox with the ids of the folder's
+  // newest messages, drop the folder label in the cache from those that left
+  // (so they don't come back at the next start), and take conversations with
+  // nothing left in the folder off the list. One small request; skipped when
+  // nothing cached claims to be in the folder.
+  const pruneInFlightRef = useRef(new Set<string>());
+  const pruneRerunRef = useRef(new Map<string, () => boolean>());
+  const pruneLeftFolderRef = useRef<
+    (uid: string, folderLabel: 'INBOX', isStale: () => boolean) => Promise<void>
+  >(async () => {});
+  const pruneLeftFolder = useCallback(
+    async (uid: string, folderLabel: 'INBOX', isStale: () => boolean) => {
+      if (pruneInFlightRef.current.has(uid)) {
+        pruneRerunRef.current.set(uid, isStale);
+        return;
+      }
+      pruneInFlightRef.current.add(uid);
+      try {
+        const isProtected = (id: string) => (debouncedThreadsRef.current[id] ?? 0) > Date.now();
+        // What the cache says is in the folder (the rows that come back at the
+        // next start), plus what the list holds now. At startup the list can
+        // still be empty when the server answers.
+        const loaded = getDefaultStore().get(threadsMapAtom);
+        const byId = new Map<string, Map<string, ThreadItemWithLabels>>();
+        const addItems = (id: string, items: unknown[]) => {
+          const merged = byId.get(id) ?? new Map<string, ThreadItemWithLabels>();
+          for (const item of items as ThreadItemWithLabels[]) merged.set(item.id, item);
+          byId.set(id, merged);
+        };
+        const cachedInbox = await DBGetThreadsByLabelMultiUser(
+          [uid],
+          folderLabel,
+          PRUNE_CACHE_LIMIT
+        ).catch(() => [] as MonoThread[]);
+        for (const thread of cachedInbox) addItems(thread.id, thread.items);
+        for (const thread of Object.values(loaded)) {
+          if (thread?.accountId !== uid) continue;
+          const items = thread.items as ThreadItemWithLabels[];
+          if (!items.some((item) => cachedInFolder(item, folderLabel))) continue;
+          // The list's copy can be the listing's (one page's Inbox messages):
+          // add the cached conversation's other messages.
+          if (!byId.has(thread.id)) {
+            const cached = await DBGetThread(uid, thread.id).catch(() => null);
+            if (cached) addItems(thread.id, cached.items);
+          }
+          addItems(thread.id, thread.items);
+        }
+        const shown = [...byId.entries()]
+          .map(([id, items]) => ({ id, items: [...items.values()] }))
+          .filter(
+            (thread) =>
+              !isProtected(thread.id) &&
+              thread.items.some((item) => cachedInFolder(item, folderLabel))
+          );
+        if (shown.length === 0) return;
+        const startedAt = Date.now();
+        const listing = await listFolderMessageIds(uid, 'inbox');
+        if (isStale()) return;
+        const left = leftFolder({
+          shown,
+          listed: listing.messages,
+          complete: listing.complete,
+          folderLabel,
+          startedAt,
+          isProtected
+        });
+        if (left.length === 0 || isStale()) return;
+        log.info(
+          `[ms-inbox] ${left.reduce((n, l) => n + l.messageIds.length, 0)} cached message(s) no longer in ${folderLabel}`
+        );
+        const goneIds = new Set(left.flatMap((l) => l.messageIds));
+        // The list first, while this is still the view it was judged for, and
+        // against the list as it is now: a conversation that meanwhile got an
+        // Inbox message this check never saw (a new reply) stays.
+        const current = getDefaultStore().get(threadsMapAtom);
+        const gone = new Set(
+          left
+            .filter((l) => l.emptied)
+            .map((l) => l.threadId)
+            .filter((id) => {
+              const entry = current[id];
+              if (!entry) return true;
+              if (entry.accountId !== uid) return false;
+              return !(entry.items as ThreadItemWithLabels[]).some(
+                (item) => cachedInFolder(item, folderLabel) && !goneIds.has(item.id)
+              );
+            })
+        );
+        // Partly left: the list's copy drops the label from those messages
+        // too, so it doesn't put them back in the cache or the next check.
+        const partly = new Set(left.filter((l) => !gone.has(l.threadId)).map((l) => l.threadId));
+        setThreadIds((prev) => (gone.size > 0 ? prev.filter((id) => !gone.has(id)) : prev));
+        setThreadsMap((prev) => {
+          const next = { ...prev };
+          gone.forEach((id) => delete next[id]);
+          partly.forEach((id) => {
+            const entry = prev[id];
+            if (!entry) return;
+            const plain = entry.toPlainObject();
+            next[id] = MonoThread.fromPlainObject({
+              ...plain,
+              items: (plain.items as ThreadItemWithLabels[]).map((item) =>
+                goneIds.has(item.id)
+                  ? { ...item, labelIds: (item.labelIds ?? []).filter((l) => l !== folderLabel) }
+                  : item
+              )
+            } as IMonoThread);
+          });
+          return next;
+        });
+        // A conversation with nothing left in the folder: also your replies and
+        // drafts the app labelled with it ("Move to Inbox" labels them all;
+        // in Outlook they never are). Left labelled, the conversation came
+        // back at the next start and no later check would judge it.
+        const strays = left
+          .filter((l) => l.emptied)
+          .flatMap((l) =>
+            (shown.find((t) => t.id === l.threadId)?.items ?? [])
+              .filter(
+                (item) =>
+                  (!item.type || item.type === 'message') &&
+                  item.labelIds?.includes(folderLabel) &&
+                  !cachedInFolder(item, folderLabel)
+              )
+              .map((item) => item.id)
+          );
+        for (const id of [...goneIds, ...strays]) {
+          try {
+            await DBUpdateMessageLabels(uid, id, [], [folderLabel]);
+          } catch (error) {
+            log.warn('[ms-inbox] cache label update failed:', error);
+          }
+        }
+      } catch (error) {
+        log.warn('[ms-inbox] Inbox check failed:', error);
+      } finally {
+        pruneInFlightRef.current.delete(uid);
+        // Asked again while this ran (another view, a refresh): once more,
+        // for the newest request, unless its view is gone too.
+        const rerun = pruneRerunRef.current.get(uid);
+        pruneRerunRef.current.delete(uid);
+        if (rerun && !rerun()) void pruneLeftFolderRef.current(uid, folderLabel, rerun);
+      }
+    },
+    [setThreadIds, setThreadsMap]
+  );
+  pruneLeftFolderRef.current = pruneLeftFolder;
+
   // Fetch the Microsoft inbox for the active label/folder view and commit it
   // through the standard setThreads → updateThreadIds → DB pipeline. Called from
   // the main query/space effect AFTER resetThreadsArray + fetchThreadsHandler, so
@@ -373,57 +540,101 @@ const useThreadFetchHandler = () => {
   // that made the inbox load only after a manual refresh). The Gmail workers
   // can't run Microsoft (empty worker provider registry), so this fills the gap
   // on the main thread; free-text search already fetches Microsoft separately.
-  const fetchMicrosoftInbox = useCallback(async () => {
-    const microsoftUids = computeAccountUids(
-      accounts.filter((acc) => acc.provider === 'microsoft')
-    );
-    if (microsoftUids.length === 0) return;
+  //
+  // `quiet` (the refresh button): rows are already on screen, so no loading
+  // state (the button spins instead), and the load-more position is kept: the
+  // first page is only merged in. Returns true when at least one account was
+  // reached, false when every one failed, null when nothing was fetched (no
+  // Microsoft account, not a folder view, or the view changed meanwhile).
 
-    const currentQuery = globalSearchQueryRef.current || '';
-    // Runs outside the operation queue, so the view can change while this is
-    // in flight: never apply results to a different view than requested.
-    const isStale = () => (globalSearchQueryRef.current || '') !== currentQuery;
-    const { field } = parseQueryFieldLabel(currentQuery, true);
-    const isLabelView =
-      !currentQuery.trim() || field === 'in' || field === 'is' || field === 'category';
-    if (!isLabelView) return;
+  const fetchMicrosoftInbox = useCallback(
+    async ({ quiet = false } = {}): Promise<boolean | null> => {
+      const microsoftUids = computeAccountUids(
+        accounts.filter((acc) => acc.provider === 'microsoft')
+      );
+      if (microsoftUids.length === 0) return null;
 
-    // Show the skeleton (not "All caught up") while the Graph fetch is in flight.
-    setLoadingStatus('LOADING');
-    const queryKey = currentQuery || 'default';
-    msPageTokensRef.current[queryKey] = msPageTokensRef.current[queryKey] || {};
+      const currentQuery = globalSearchQueryRef.current || '';
+      const currentSpaceId = activeSpaceRef.current?.id;
+      // Runs outside the operation queue, so the view can change while this is
+      // in flight: never apply results to a different view (another query, or
+      // another space with other accounts) than requested.
+      const isStale = () =>
+        (globalSearchQueryRef.current || '') !== currentQuery ||
+        activeSpaceRef.current?.id !== currentSpaceId;
+      const { field } = parseQueryFieldLabel(currentQuery, true);
+      const isLabelView =
+        !currentQuery.trim() || field === 'in' || field === 'is' || field === 'category';
+      if (!isLabelView) return null;
+      // Only the Inbox view itself (category:primary or in:inbox, nothing
+      // more): a search or filter within it ("in:inbox invoice") lists only
+      // what matches, and must not take the rest out of the Inbox.
+      const normalized = normalizeQuery(currentQuery);
+      const checkInbox = !normalized || INBOX_VIEW_QUERIES.has(normalized);
 
-    for (const uid of microsoftUids) {
-      try {
-        // Call the Microsoft adapter DIRECTLY, not via mailApi: mailApi dispatches
-        // by getProviderForUid(uid), and the provider registry can still be
-        // unpopulated for this uid at mount (it then defaults to the Gmail adapter
-        // → "No Google account token"). We already know these uids are Microsoft.
-        const response = await microsoftMailProvider.getThreads(
-          uid,
-          currentQuery,
-          undefined,
-          FETCH_THREADS_LIMIT.toString()
-        );
-        // Remember the continuation token (or clear it) for load-more.
-        if (response?.nextPageToken) {
-          msPageTokensRef.current[queryKey][uid] = response.nextPageToken;
-        } else {
-          delete msPageTokensRef.current[queryKey][uid];
+      // Show the skeleton (not "All caught up") while the Graph fetch is in flight.
+      if (!quiet) setLoadingStatus('LOADING');
+      const queryKey = currentQuery || 'default';
+      msPageTokensRef.current[queryKey] = msPageTokensRef.current[queryKey] || {};
+
+      let failed = 0;
+      for (const uid of microsoftUids) {
+        try {
+          // Call the Microsoft adapter DIRECTLY, not via mailApi: mailApi dispatches
+          // by getProviderForUid(uid), and the provider registry can still be
+          // unpopulated for this uid at mount (it then defaults to the Gmail adapter
+          // → "No Google account token"). We already know these uids are Microsoft.
+          const response = await microsoftMailProvider.getThreads(
+            uid,
+            currentQuery,
+            undefined,
+            FETCH_THREADS_LIMIT.toString()
+          );
+          // Remember the continuation token (or clear it) for load-more. A
+          // refresh keeps the current one: it points past the rows already
+          // loaded, and page 1's would have load-more fetch them all again.
+          if (!quiet) {
+            if (response?.nextPageToken) {
+              msPageTokensRef.current[queryKey][uid] = response.nextPageToken;
+            } else {
+              delete msPageTokensRef.current[queryKey][uid];
+            }
+          }
+          if (isStale()) return null;
+          // In the background: the list shows meanwhile.
+          if (checkInbox) void pruneLeftFolder(uid, 'INBOX', isStale);
+          if (!response?.threads?.length) continue;
+          const now = Date.now();
+          const loaded = getDefaultStore().get(threadsMapAtom);
+          const monoThreads = response.threads
+            .map((thread) => MonoThread.fromPlainObject(thread))
+            .filter((thread) => !quiet || (debouncedThreadsRef.current[thread.id] ?? 0) <= now)
+            .flatMap((thread) => {
+              // A refresh (quiet) only adds: a loaded conversation keeps its
+              // messages from other folders (mergeListing).
+              if (!quiet || !loaded[thread.id]) return [thread];
+              const merged = mergeListing(
+                loaded[thread.id].toPlainObject(),
+                thread.toPlainObject()
+              );
+              return merged ? [MonoThread.fromPlainObject(merged)] : [];
+            });
+          if (monoThreads.length === 0) continue;
+          await setThreads(uid, monoThreads, false, true);
+          updateThreadIds(monoThreads.map((thread) => thread.id));
+        } catch (error) {
+          failed++;
+          console.error(`[ms-inbox] fetch failed for ${uid}:`, error);
         }
-        if (isStale()) return;
-        if (!response?.threads?.length) continue;
-        const monoThreads = response.threads.map((thread) => MonoThread.fromPlainObject(thread));
-        await setThreads(uid, monoThreads, false, true);
-        updateThreadIds(monoThreads.map((thread) => thread.id));
-      } catch (error) {
-        console.error(`[ms-inbox] fetch failed for ${uid}:`, error);
       }
-    }
-    if (isStale()) return;
-    if (Object.values(msPageTokensRef.current[queryKey]).some(Boolean)) setHasMore(true);
-    setLoadingStatus('DONE');
-  }, [accounts, computeAccountUids, setThreads, updateThreadIds, setLoadingStatus]);
+      if (isStale()) return null;
+      if (!quiet && Object.values(msPageTokensRef.current[queryKey]).some(Boolean))
+        setHasMore(true);
+      setLoadingStatus('DONE');
+      return failed < microsoftUids.length;
+    },
+    [accounts, computeAccountUids, setThreads, updateThreadIds, setLoadingStatus, pruneLeftFolder]
+  );
 
   // Implementation of updateFromMessageSubscribe with space awareness and category handling
   const updateFromMessageSubscribe = useCallback(
@@ -435,8 +646,12 @@ const useThreadFetchHandler = () => {
       const currentActiveSpace = activeSpaceRef.current;
       if (!currentActiveSpace) return;
 
-      // Get limited account IDs based on user plan
-      const activeAccountUids = getLimitedAccountUids();
+      // Every account of the space, Microsoft included: these updates are
+      // applied here on the main renderer thread from IndexedDB, not in the
+      // Gmail-only sync workers (getLimitedAccountUids). With the Google-only
+      // list, new Microsoft mail from the delta poller was saved but never
+      // joined the visible list until the next inbox fetch.
+      const activeAccountUids = getFetchableAccountUids();
 
       // Filter updates for accounts that are active and within plan limits
       const relevantUpdates = updates.filter((update) =>
@@ -501,8 +716,7 @@ const useThreadFetchHandler = () => {
                     // re-added here, undoing the optimistic removal.
                     const hiddenByTrash =
                       thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
-                    const hiddenBySpam =
-                      thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
+                    const hiddenBySpam = thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
 
                     let shouldShow = false;
                     if (label.toLowerCase() === 'all') {
@@ -544,10 +758,8 @@ const useThreadFetchHandler = () => {
                   const upperLabel = label.toUpperCase();
                   // See the 'updated' case: trashed/spam threads keep INBOX and the
                   // category labels, so exclude them from every non-trash/spam view.
-                  const hiddenByTrash =
-                    thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
-                  const hiddenBySpam =
-                    thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
+                  const hiddenByTrash = thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
+                  const hiddenBySpam = thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
 
                   if (hiddenByTrash || hiddenBySpam) {
                     shouldShow = false;
@@ -573,18 +785,46 @@ const useThreadFetchHandler = () => {
                 }
 
                 case 'removed': {
+                  if (!threadId) continue;
                   const thread = await DBGetThread(accountId, threadId);
-                  if (!thread) continue;
+                  // Its last message is gone (archived or deleted elsewhere: the
+                  // cache dropped the whole conversation). This used to skip it,
+                  // so a one-message email archived in Outlook stayed listed.
+                  if (!thread) {
+                    // Only where leaving the Inbox hides it (Microsoft removals
+                    // come from the Inbox's changes): Flagged, All or a search
+                    // keep the row until their next fetch.
+                    const inboxView =
+                      field === 'category' || (isValidQuery && label.toUpperCase() === 'INBOX');
+                    if (
+                      inboxView &&
+                      (threadsMapRef.current[threadId] || threadIdsRef.current.includes(threadId))
+                    )
+                      threadsToRemove.push(threadId);
+                    continue;
+                  }
+                  accountThreadsToUpdate.push(thread);
+                  if (!threadIdsRef.current.includes(threadId)) break;
+                  const isAll = label.toLowerCase() === 'all';
                   // For "in:all", only remove if thread is moved to trash
-                  if (
-                    (isValidQuery &&
-                      label.toLowerCase() !== 'all' &&
-                      threadIdsRef.current.includes(threadId)) ||
-                    (label.toLowerCase() === 'all' &&
-                      threadIdsRef.current.includes(threadId) &&
-                      thread.labelIds.includes('TRASH'))
-                  ) {
-                    threadsToRemove.push(threadId);
+                  if (isAll) {
+                    if (thread.labelIds.includes('TRASH')) threadsToRemove.push(threadId);
+                  } else if (isValidQuery) {
+                    // Another message of the conversation still in this view
+                    // (say a second Inbox message) keeps it listed.
+                    // As in 'updated': Gmail keeps INBOX and the category on a
+                    // trashed / spam thread (a 'removed' comes with TRASH added).
+                    const upperLabel = label.toUpperCase();
+                    const hiddenByTrash =
+                      thread.labelIds.includes('TRASH') && upperLabel !== 'TRASH';
+                    const hiddenBySpam = thread.labelIds.includes('SPAM') && upperLabel !== 'SPAM';
+                    const stillShown =
+                      !hiddenByTrash &&
+                      !hiddenBySpam &&
+                      (field === 'category'
+                        ? threadMatchesCategory(thread, label, preference)
+                        : thread.labelIds.includes(upperLabel));
+                    if (!stillShown) threadsToRemove.push(threadId);
                   }
                   break;
                 }
@@ -641,7 +881,9 @@ const useThreadFetchHandler = () => {
       setThreadIds,
       setThreadsMap,
       setThreads,
-      enqueueOperation
+      enqueueOperation,
+      // Was missing: the account list was frozen at the first render.
+      getFetchableAccountUids
     ]
   );
 
@@ -652,203 +894,415 @@ const useThreadFetchHandler = () => {
     // first) read BEHIND the running operation, so on startup the inbox waited
     // for the Microsoft network fetch (~5 s) before showing cached threads.
     async (loadMore = false, options?: { immediate?: boolean }) => {
-      const operation =
-        async () => {
-          setLoadingStatus('LOADING');
-          if (!loadMore) {
-            setLastQuery(globalSearchQueryRef.current);
+      const operation = async () => {
+        setLoadingStatus('LOADING');
+        if (!loadMore) {
+          setLastQuery(globalSearchQueryRef.current);
+        }
+
+        // Abort previous API call if exists
+        if (apiCallsRef.current) {
+          apiCallsRef.current.abort();
+        }
+        const abortController = new AbortController();
+        apiCallsRef.current = abortController;
+
+        const currentQuery = globalSearchQueryRef.current;
+        const queryKey = currentQuery || 'default';
+        const { field, label } = parseQueryFieldLabel(currentQuery);
+
+        // Reset pagination if query changed and not loading more
+        if (currentQuery !== lastQuery && !loadMore) {
+          setLastTimestamps((prev) => ({ ...prev, [queryKey]: undefined }));
+          setQueriesLoaded((prev) => ({ ...prev, [queryKey]: false }));
+          setPageTokens({});
+          cacheOffsetRef.current = 0;
+        }
+
+        let threads: MonoThread[] = [];
+        try {
+          // Determine if this is a valid label query that can use cache
+          const isValidLabel =
+            (field === 'in' || field === 'is' || field === 'category') &&
+            (validLabels.includes(label.toUpperCase() as ValidLabel) ||
+              label.toLowerCase() === 'all');
+          // Initial fetch runs on the main thread (provider-routed), so
+          // include all providers — a connected Microsoft account's inbox
+          // loads via the Graph adapter here too.
+          const activeAccountUids = getFetchableAccountUids();
+
+          if (activeAccountUids.length === 0) {
+            setLoadingStatus('DONE');
+            setHasMore(false);
+            return;
           }
 
-          // Abort previous API call if exists
-          if (apiCallsRef.current) {
-            apiCallsRef.current.abort();
-          }
-          const abortController = new AbortController();
-          apiCallsRef.current = abortController;
+          if (label === 'draft') {
+            // Use the multi-user draft threads function
+            threads = await DBGetAllDraftThreadsMultiUser(
+              activeAccountUids,
+              label,
+              FETCH_THREADS_LIMIT,
+              loadMore ? lastTimestampsRef.current[queryKey] : undefined
+            );
 
-          const currentQuery = globalSearchQueryRef.current;
-          const queryKey = currentQuery || 'default';
-          const { field, label } = parseQueryFieldLabel(currentQuery);
+            if (!abortController.signal.aborted) {
+              if (threads.length > 0) {
+                // Update cache offset for load more tracking
+                cacheOffsetRef.current += threads.length;
 
-          // Reset pagination if query changed and not loading more
-          if (currentQuery !== lastQuery && !loadMore) {
-            setLastTimestamps((prev) => ({ ...prev, [queryKey]: undefined }));
-            setQueriesLoaded((prev) => ({ ...prev, [queryKey]: false }));
-            setPageTokens({});
-            cacheOffsetRef.current = 0;
-          }
+                // Group threads by user ID
+                const threadsByUser = threads.reduce(
+                  (acc, thread) => {
+                    // Get userId from the non-enumerable property we added
+                    const userId =
+                      Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
+                    if (!acc[userId]) acc[userId] = [];
+                    acc[userId].push(thread);
+                    return acc;
+                  },
+                  {} as Record<string, MonoThread[]>
+                );
 
-          let threads: MonoThread[] = [];
-          try {
-            // Determine if this is a valid label query that can use cache
-            const isValidLabel =
-              (field === 'in' || field === 'is' || field === 'category') &&
-              (validLabels.includes(label.toUpperCase() as ValidLabel) ||
-                label.toLowerCase() === 'all');
-            // Initial fetch runs on the main thread (provider-routed), so
-            // include all providers — a connected Microsoft account's inbox
-            // loads via the Graph adapter here too.
-            const activeAccountUids = getFetchableAccountUids();
+                // Update threads for each user
+                Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
+                  // Always set replace to false when handling multiple users
+                  setThreads(userId, userThreads, false, false);
+                });
 
-            if (activeAccountUids.length === 0) {
+                // Update thread IDs in the global state
+                const newThreadIds = threads.map((thread) => thread.id);
+                updateThreadIds(newThreadIds);
+
+                // Update the last timestamp for pagination
+                const oldestTimestamp = Math.min(...threads.map((thread) => thread.timestamp));
+                setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
+
+                // Check if we might have more results
+                setHasMore(threads.length === FETCH_THREADS_LIMIT);
+              } else {
+                // No more results
+                setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
+                setHasMore(false);
+              }
               setLoadingStatus('DONE');
-              setHasMore(false);
-              return;
             }
-
-            if (label === 'draft') {
-              // Use the multi-user draft threads function
-              threads = await DBGetAllDraftThreadsMultiUser(
+          } else if (isValidLabel) {
+            if (label.toLowerCase() === 'all') {
+              // Special handling for 'in:all' query
+              threads = await DBGetAllThreadsMultiUser(
                 activeAccountUids,
-                label,
-                FETCH_THREADS_LIMIT,
+                FETCH_THREADS_LIMIT, // Reduced from 50 since we're supplementing local results
                 loadMore ? lastTimestampsRef.current[queryKey] : undefined
               );
-
-              if (!abortController.signal.aborted) {
-                if (threads.length > 0) {
-                  // Update cache offset for load more tracking
-                  cacheOffsetRef.current += threads.length;
-
-                  // Group threads by user ID
-                  const threadsByUser = threads.reduce(
-                    (acc, thread) => {
-                      // Get userId from the non-enumerable property we added
-                      const userId =
-                        Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
-                      if (!acc[userId]) acc[userId] = [];
-                      acc[userId].push(thread);
-                      return acc;
-                    },
-                    {} as Record<string, MonoThread[]>
-                  );
-
-                  // Update threads for each user
-                  Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
-                    // Always set replace to false when handling multiple users
-                    setThreads(userId, userThreads, false, false);
-                  });
-
-                  // Update thread IDs in the global state
-                  const newThreadIds = threads.map((thread) => thread.id);
-                  updateThreadIds(newThreadIds);
-
-                  // Update the last timestamp for pagination
-                  const oldestTimestamp = Math.min(...threads.map((thread) => thread.timestamp));
-                  setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
-
-                  // Check if we might have more results
-                  setHasMore(threads.length === FETCH_THREADS_LIMIT);
-                } else {
-                  // No more results
-                  setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
-                  setHasMore(false);
-                }
-                setLoadingStatus('DONE');
-              }
-            } else if (isValidLabel) {
-              if (label.toLowerCase() === 'all') {
-                // Special handling for 'in:all' query
-                threads = await DBGetAllThreadsMultiUser(
-                  activeAccountUids,
-                  FETCH_THREADS_LIMIT, // Reduced from 50 since we're supplementing local results
-                  loadMore ? lastTimestampsRef.current[queryKey] : undefined
-                );
-              } else {
-                // Regular label-based query
-                threads = await DBGetThreadsByLabelMultiUser(
-                  activeAccountUids,
-                  label,
-                  FETCH_THREADS_LIMIT, // Reduced from 50 since we're supplementing local results
-                  loadMore ? lastTimestampsRef.current[queryKey] : undefined
-                );
-              }
-
-              if (!abortController.signal.aborted) {
-                const isLimited = checkThreadAge(threads);
-                if (threads.length > 0) {
-                  // Update cache offset for load more tracking
-                  cacheOffsetRef.current += threads.length;
-
-                  // Group threads by user ID
-                  const threadsByUser = threads.reduce(
-                    (acc, thread) => {
-                      // Get userId from the non-enumerable property we added
-                      const userId =
-                        Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
-                      if (!acc[userId]) acc[userId] = [];
-                      acc[userId].push(thread);
-                      return acc;
-                    },
-                    {} as Record<string, MonoThread[]>
-                  );
-
-                  // Update threads for each user
-                  Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
-                    // Always set replace to false when handling multiple users
-                    setThreads(userId, userThreads, false, false);
-                  });
-
-                  // Update thread IDs in the global state
-                  const newThreadIds = threads.map((thread) => thread.id);
-                  updateThreadIds(newThreadIds);
-
-                  // Update the last timestamp for pagination
-                  const oldestTimestamp = Math.min(...threads.map((thread) => thread.timestamp));
-                  setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
-
-                  // Check if we might have more results
-
-                  setHasMore(!isLimited && threads.length === FETCH_THREADS_LIMIT);
-                } else {
-                  // No more results
-                  setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
-                  setHasMore(false);
-                }
-                setLoadingStatus('DONE');
-                if (!isLimited) setLoadingStatus('DONE');
-              }
             } else {
-              // NEW: Use hybrid search strategy for custom queries
-              const searchClassification = classifySearchQuery(currentQuery);
+              // Regular label-based query
+              threads = await DBGetThreadsByLabelMultiUser(
+                activeAccountUids,
+                label,
+                FETCH_THREADS_LIMIT, // Reduced from 50 since we're supplementing local results
+                loadMore ? lastTimestampsRef.current[queryKey] : undefined
+              );
+            }
 
-              if (
-                searchClassification.strategy === 'hybrid' ||
-                searchClassification.hasSearchTerms
-              ) {
-                // NEW APPROACH: Always try local search first for immediate results
-                console.log(`Starting local search for query: "${currentQuery}"`);
-                console.log('limitedAccountUids: ', activeAccountUids);
-                try {
-                  // 1. IMMEDIATE LOCAL SEARCH - Show results ASAP
-                  const localResults = await DBCustomSearchThreadsMultiUser(
-                    activeAccountUids,
+            if (!abortController.signal.aborted) {
+              const isLimited = checkThreadAge(threads);
+              if (threads.length > 0) {
+                // Update cache offset for load more tracking
+                cacheOffsetRef.current += threads.length;
 
-                    currentQuery,
-                    {
-                      limit: FETCH_THREADS_LIMIT,
-                      lastTimestamp: loadMore ? lastTimestampsRef.current[queryKey] : undefined,
-                      searchType: 'fuzzy',
-                      searchFields: ['subject', 'snippet', 'from', 'to', 'cc'],
-                      minScore: 0.1 // Lower threshold for immediate results
-                    }
-                  );
+                // Group threads by user ID
+                const threadsByUser = threads.reduce(
+                  (acc, thread) => {
+                    // Get userId from the non-enumerable property we added
+                    const userId =
+                      Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
+                    if (!acc[userId]) acc[userId] = [];
+                    acc[userId].push(thread);
+                    return acc;
+                  },
+                  {} as Record<string, MonoThread[]>
+                );
 
+                // Update threads for each user
+                Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
+                  // Always set replace to false when handling multiple users
+                  setThreads(userId, userThreads, false, false);
+                });
+
+                // Update thread IDs in the global state
+                const newThreadIds = threads.map((thread) => thread.id);
+                updateThreadIds(newThreadIds);
+
+                // Update the last timestamp for pagination
+                const oldestTimestamp = Math.min(...threads.map((thread) => thread.timestamp));
+                setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
+
+                // Check if we might have more results
+
+                setHasMore(!isLimited && threads.length === FETCH_THREADS_LIMIT);
+              } else {
+                // No more results
+                setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
+                setHasMore(false);
+              }
+              setLoadingStatus('DONE');
+              if (!isLimited) setLoadingStatus('DONE');
+            }
+          } else {
+            // NEW: Use hybrid search strategy for custom queries
+            const searchClassification = classifySearchQuery(currentQuery);
+
+            if (searchClassification.strategy === 'hybrid' || searchClassification.hasSearchTerms) {
+              // NEW APPROACH: Always try local search first for immediate results
+              console.log(`Starting local search for query: "${currentQuery}"`);
+              console.log('limitedAccountUids: ', activeAccountUids);
+              try {
+                // 1. IMMEDIATE LOCAL SEARCH - Show results ASAP
+                const localResults = await DBCustomSearchThreadsMultiUser(
+                  activeAccountUids,
+
+                  currentQuery,
+                  {
+                    limit: FETCH_THREADS_LIMIT,
+                    lastTimestamp: loadMore ? lastTimestampsRef.current[queryKey] : undefined,
+                    searchType: 'fuzzy',
+                    searchFields: ['subject', 'snippet', 'from', 'to', 'cc'],
+                    minScore: 0.1 // Lower threshold for immediate results
+                  }
+                );
+
+                console.log(
+                  `Local search found ${localResults.threads.length} results immediately`
+                );
+
+                // Show local results immediately if we have any
+                if (localResults.threads.length > 0) {
+                  threads = localResults.threads;
+
+                  // Update UI immediately with local results
+                  if (!abortController.signal.aborted) {
+                    cacheOffsetRef.current += threads.length;
+
+                    // Group threads by user ID (accountId property is set by DBCustomSearchThreadsMultiUser)
+                    // This ensures threads are saved to the correct account's database
+                    const threadsByUser = threads.reduce(
+                      (acc, thread) => {
+                        const userId =
+                          Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
+                        if (!acc[userId]) acc[userId] = [];
+                        acc[userId].push(thread);
+                        return acc;
+                      },
+                      {} as Record<string, MonoThread[]>
+                    );
+
+                    // Update threads for each user (no need to save to DB yet, wait for API supplement)
+                    Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
+                      setThreads(userId, userThreads, false, false); // saveToLocal=false, will save after API supplement
+                    });
+
+                    // Update thread IDs in the global state IMMEDIATELY (no batching for immediate local results)
+                    const newThreadIds = threads.map((thread) => thread.id);
+                    setThreadIds((prev) => {
+                      // Start with previous thread IDs
+                      const allThreadIds = [...prev];
+
+                      // Add new thread IDs if they don't already exist
+                      newThreadIds.forEach((id) => {
+                        if (!allThreadIds.includes(id)) {
+                          allThreadIds.push(id);
+                        }
+                      });
+
+                      // Sort all threads by timestamp (newest first)
+                      return allThreadIds.sort((idA, idB) => {
+                        const threadA = threadsMapRef.current[idA];
+                        const threadB = threadsMapRef.current[idB];
+
+                        // Handle cases where thread data might not be available yet
+                        if (!threadA && !threadB) return 0;
+                        if (!threadA) return 1; // Put threads without data at the end
+                        if (!threadB) return -1;
+
+                        // Sort by timestamp (descending order - newest first)
+                        return threadB.timestamp - threadA.timestamp;
+                      });
+                    });
+
+                    // Update the last timestamp for pagination
+                    const oldestTimestamp = Math.min(...threads.map((thread) => thread.timestamp));
+                    setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
+
+                    // Force UI update by setting loading status
+                    setLoadingStatus(threads.length === FETCH_THREADS_LIMIT ? 'DONE' : 'LOADING');
+                    setHasMore(threads.length === FETCH_THREADS_LIMIT);
+
+                    console.log(`✅ Displayed ${threads.length} local results immediately`);
+                  }
+                } else {
+                  // No local results found, but we'll still try API search
+                  console.log(`🔍 No local results found, will rely on API search`);
+                  threads = []; // Initialize empty threads array
+                }
+
+                // 2. BACKGROUND API SEARCH - Supplement with API results
+                // Only run API search if we have few local results or user wants comprehensive results
+                const shouldRunAPISearch =
+                  localResults.threads.length < FETCH_THREADS_LIMIT ||
+                  searchClassification.hasOperators;
+
+                if (shouldRunAPISearch && !abortController.signal.aborted) {
                   console.log(
-                    `Local search found ${localResults.threads.length} results immediately`
+                    `🔄 Running background API search to supplement ${localResults.threads.length} local results`
                   );
 
-                  // Show local results immediately if we have any
-                  if (localResults.threads.length > 0) {
-                    threads = localResults.threads;
+                  // Create API search function
+                  const fetchAPIResults = async (): Promise<MonoThread[]> => {
+                    const fetchWithRetry = async (
+                      accountId: string,
+                      maxRetries = 3,
+                      baseDelay = 1000
+                    ) => {
+                      const accountQueryKey = `${accountId}-${queryKey}`;
+                      const pageToken = loadMore
+                        ? pageTokensRef.current[accountQueryKey]?.[queryKey] || undefined
+                        : undefined;
 
-                    // Update UI immediately with local results
-                    if (!abortController.signal.aborted) {
-                      cacheOffsetRef.current += threads.length;
+                      const q = convertToAccurateQuery(
+                        currentQuery,
+                        preference.display.inbox.category?.[accountId] || {
+                          showUpdates: true,
+                          showSocial: true,
+                          showPromotions: true,
+                          showForums: true
+                        }
+                      );
+                      apiClient.setApiActiveUid(accountId);
 
-                      // Group threads by user ID (accountId property is set by DBCustomSearchThreadsMultiUser)
-                      // This ensures threads are saved to the correct account's database
-                      const threadsByUser = threads.reduce(
+                      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                        try {
+                          const response = await mailApi.getThreads(
+                            accountId,
+                            q,
+                            pageToken,
+                            FETCH_THREADS_LIMIT.toString(), // Reduced from 50 since we're supplementing local results
+                            abortController.signal
+                          );
+
+                          if (!abortController.signal.aborted) {
+                            if (response.nextPageToken) {
+                              setPageTokens((prev) => ({
+                                ...prev,
+                                [accountQueryKey]: {
+                                  ...(prev[accountQueryKey] || {}),
+                                  [queryKey]: response.nextPageToken
+                                }
+                              }));
+                            }
+
+                            if (response.threads && response.threads.length > 0) {
+                              const accountThreads = response.threads.map((thread) =>
+                                MonoThread.fromPlainObject(thread)
+                              );
+                              return {
+                                accountId,
+                                threads: accountThreads,
+                                hasMore: !!response.nextPageToken,
+                                status: 'success'
+                              };
+                            }
+                          }
+                          return {
+                            accountId,
+                            threads: [],
+                            hasMore: false,
+                            status: 'success'
+                          };
+                        } catch (error: any) {
+                          const statusCode = error?.status || 500;
+
+                          if (attempt === maxRetries || statusCode !== 429) {
+                            throw error;
+                          }
+
+                          if (statusCode === 429) {
+                            const retryAfter =
+                              error?.headers?.['retry-after'] ||
+                              error?.response?.headers?.['retry-after'];
+                            let delay = baseDelay * Math.pow(2, attempt);
+
+                            if (retryAfter) {
+                              delay = parseInt(retryAfter) * 1000;
+                            } else {
+                              delay += Math.random() * 1000;
+                            }
+
+                            console.warn(
+                              `Rate limited for account ${accountId}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`
+                            );
+
+                            await new Promise((resolve) => setTimeout(resolve, delay));
+                            continue;
+                          }
+                        }
+                      }
+
+                      throw new Error('Max retries exceeded');
+                    };
+
+                    const accountsResults = await Promise.all(
+                      activeAccountUids.map(async (accountId) => {
+                        try {
+                          return await fetchWithRetry(accountId);
+                        } catch (error: any) {
+                          const statusCode = error?.status || 500;
+                          console.error(
+                            `Error fetching threads for account ${accountId}:`,
+                            error?.data?.message
+                          );
+
+                          if (statusCode === 429) {
+                            return {
+                              accountId,
+                              threads: [],
+                              hasMore: false,
+                              status: 'rate_limited',
+                              errorMessage: 'Rate limit exceeded. Please try again later.'
+                            };
+                          }
+
+                          return {
+                            accountId,
+                            threads: [],
+                            hasMore: false,
+                            status: 'error',
+                            errorMessage: error?.data?.message || 'Unknown error'
+                          };
+                        }
+                      })
+                    );
+
+                    const successfulAccounts = accountsResults.filter(
+                      (result) => result.status === 'success'
+                    );
+
+                    const allThreads = successfulAccounts.flatMap((result) => result.threads);
+                    return allThreads.sort((a, b) => b.timestamp - a.timestamp);
+                  };
+
+                  // Run API search in background
+                  try {
+                    const apiThreads = await fetchAPIResults();
+
+                    if (!abortController.signal.aborted && apiThreads.length > 0) {
+                      console.log(
+                        `💾 Saving ${apiThreads.length} API results to database for future searches`
+                      );
+
+                      // SAVE API RESULTS TO DATABASE FIRST
+                      // Group all API threads by user ID for database storage
+                      const allAPIThreadsByUser = apiThreads.reduce(
                         (acc, thread) => {
                           const userId =
                             Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
@@ -859,214 +1313,49 @@ const useThreadFetchHandler = () => {
                         {} as Record<string, MonoThread[]>
                       );
 
-                      // Update threads for each user (no need to save to DB yet, wait for API supplement)
-                      Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
-                        setThreads(userId, userThreads, false, false); // saveToLocal=false, will save after API supplement
-                      });
-
-                      // Update thread IDs in the global state IMMEDIATELY (no batching for immediate local results)
-                      const newThreadIds = threads.map((thread) => thread.id);
-                      setThreadIds((prev) => {
-                        // Start with previous thread IDs
-                        const allThreadIds = [...prev];
-
-                        // Add new thread IDs if they don't already exist
-                        newThreadIds.forEach((id) => {
-                          if (!allThreadIds.includes(id)) {
-                            allThreadIds.push(id);
-                          }
-                        });
-
-                        // Sort all threads by timestamp (newest first)
-                        return allThreadIds.sort((idA, idB) => {
-                          const threadA = threadsMapRef.current[idA];
-                          const threadB = threadsMapRef.current[idB];
-
-                          // Handle cases where thread data might not be available yet
-                          if (!threadA && !threadB) return 0;
-                          if (!threadA) return 1; // Put threads without data at the end
-                          if (!threadB) return -1;
-
-                          // Sort by timestamp (descending order - newest first)
-                          return threadB.timestamp - threadA.timestamp;
-                        });
-                      });
-
-                      // Update the last timestamp for pagination
-                      const oldestTimestamp = Math.min(
-                        ...threads.map((thread) => thread.timestamp)
-                      );
-                      setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
-
-                      // Force UI update by setting loading status
-                      setLoadingStatus(threads.length === FETCH_THREADS_LIMIT ? 'DONE' : 'LOADING');
-                      setHasMore(threads.length === FETCH_THREADS_LIMIT);
-
-                      console.log(`✅ Displayed ${threads.length} local results immediately`);
-                    }
-                  } else {
-                    // No local results found, but we'll still try API search
-                    console.log(`🔍 No local results found, will rely on API search`);
-                    threads = []; // Initialize empty threads array
-                  }
-
-                  // 2. BACKGROUND API SEARCH - Supplement with API results
-                  // Only run API search if we have few local results or user wants comprehensive results
-                  const shouldRunAPISearch =
-                    localResults.threads.length < FETCH_THREADS_LIMIT ||
-                    searchClassification.hasOperators;
-
-                  if (shouldRunAPISearch && !abortController.signal.aborted) {
-                    console.log(
-                      `🔄 Running background API search to supplement ${localResults.threads.length} local results`
-                    );
-
-                    // Create API search function
-                    const fetchAPIResults = async (): Promise<MonoThread[]> => {
-                      const fetchWithRetry = async (
-                        accountId: string,
-                        maxRetries = 3,
-                        baseDelay = 1000
-                      ) => {
-                        const accountQueryKey = `${accountId}-${queryKey}`;
-                        const pageToken = loadMore
-                          ? pageTokensRef.current[accountQueryKey]?.[queryKey] || undefined
-                          : undefined;
-
-                        const q = convertToAccurateQuery(
-                          currentQuery,
-                          preference.display.inbox.category?.[accountId] || {
-                            showUpdates: true,
-                            showSocial: true,
-                            showPromotions: true,
-                            showForums: true
-                          }
-                        );
-                        apiClient.setApiActiveUid(accountId);
-
-                        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                      // Save all API threads to database immediately (parallel operations)
+                      const savePromises = Object.entries(allAPIThreadsByUser).map(
+                        async ([userId, userThreads]) => {
                           try {
-                            const response = await mailApi.getThreads(
-                              accountId,
-                              q,
-                              pageToken,
-                              FETCH_THREADS_LIMIT.toString(), // Reduced from 50 since we're supplementing local results
-                              abortController.signal
+                            // Save to database with replace=false to avoid overwriting existing data
+                            await setThreads(userId, userThreads, false, true); // saveToLocal=true
+                            console.log(
+                              `💾 Saved ${userThreads.length} threads to database for account ${userId}`
                             );
-
-                            if (!abortController.signal.aborted) {
-                              if (response.nextPageToken) {
-                                setPageTokens((prev) => ({
-                                  ...prev,
-                                  [accountQueryKey]: {
-                                    ...(prev[accountQueryKey] || {}),
-                                    [queryKey]: response.nextPageToken
-                                  }
-                                }));
-                              }
-
-                              if (response.threads && response.threads.length > 0) {
-                                const accountThreads = response.threads.map((thread) =>
-                                  MonoThread.fromPlainObject(thread)
-                                );
-                                return {
-                                  accountId,
-                                  threads: accountThreads,
-                                  hasMore: !!response.nextPageToken,
-                                  status: 'success'
-                                };
-                              }
-                            }
-                            return {
-                              accountId,
-                              threads: [],
-                              hasMore: false,
-                              status: 'success'
-                            };
-                          } catch (error: any) {
-                            const statusCode = error?.status || 500;
-
-                            if (attempt === maxRetries || statusCode !== 429) {
-                              throw error;
-                            }
-
-                            if (statusCode === 429) {
-                              const retryAfter =
-                                error?.headers?.['retry-after'] ||
-                                error?.response?.headers?.['retry-after'];
-                              let delay = baseDelay * Math.pow(2, attempt);
-
-                              if (retryAfter) {
-                                delay = parseInt(retryAfter) * 1000;
-                              } else {
-                                delay += Math.random() * 1000;
-                              }
-
-                              console.warn(
-                                `Rate limited for account ${accountId}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`
-                              );
-
-                              await new Promise((resolve) => setTimeout(resolve, delay));
-                              continue;
-                            }
+                          } catch (saveError) {
+                            console.error(
+                              `Failed to save threads for account ${userId}:`,
+                              saveError
+                            );
                           }
                         }
-
-                        throw new Error('Max retries exceeded');
-                      };
-
-                      const accountsResults = await Promise.all(
-                        activeAccountUids.map(async (accountId) => {
-                          try {
-                            return await fetchWithRetry(accountId);
-                          } catch (error: any) {
-                            const statusCode = error?.status || 500;
-                            console.error(
-                              `Error fetching threads for account ${accountId}:`,
-                              error?.data?.message
-                            );
-
-                            if (statusCode === 429) {
-                              return {
-                                accountId,
-                                threads: [],
-                                hasMore: false,
-                                status: 'rate_limited',
-                                errorMessage: 'Rate limit exceeded. Please try again later.'
-                              };
-                            }
-
-                            return {
-                              accountId,
-                              threads: [],
-                              hasMore: false,
-                              status: 'error',
-                              errorMessage: error?.data?.message || 'Unknown error'
-                            };
-                          }
-                        })
                       );
 
-                      const successfulAccounts = accountsResults.filter(
-                        (result) => result.status === 'success'
+                      // Wait for all database saves to complete
+                      await Promise.all(savePromises);
+                      console.log(`✅ All API results saved to database`);
+
+                      // THEN UPDATE UI STATE
+                      // Combine with existing local results, removing duplicates
+                      const existingThreadIds = new Set(threads.map((t) => t.id));
+                      const newAPIThreads = apiThreads.filter((t) => !existingThreadIds.has(t.id));
+
+                      console.log(
+                        `🔍 Debug: existingThreadIds.size=${existingThreadIds.size}, apiThreads.length=${apiThreads.length}, newAPIThreads.length=${newAPIThreads.length}`
                       );
 
-                      const allThreads = successfulAccounts.flatMap((result) => result.threads);
-                      return allThreads.sort((a, b) => b.timestamp - a.timestamp);
-                    };
-
-                    // Run API search in background
-                    try {
-                      const apiThreads = await fetchAPIResults();
-
-                      if (!abortController.signal.aborted && apiThreads.length > 0) {
+                      if (newAPIThreads.length > 0 || localResults.threads.length === 0) {
                         console.log(
-                          `💾 Saving ${apiThreads.length} API results to database for future searches`
+                          `📈 Found ${newAPIThreads.length} additional API results to supplement ${localResults.threads.length} local results`
                         );
 
-                        // SAVE API RESULTS TO DATABASE FIRST
-                        // Group all API threads by user ID for database storage
-                        const allAPIThreadsByUser = apiThreads.reduce(
+                        // Merge and re-sort all threads
+                        const combinedThreads = [...threads, ...newAPIThreads]
+                          .sort((a, b) => b.timestamp - a.timestamp)
+                          .slice(0, FETCH_THREADS_LIMIT);
+
+                        // Group new threads by user ID for UI state update (no database save needed)
+                        const newThreadsByUser = newAPIThreads.reduce(
                           (acc, thread) => {
                             const userId =
                               Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
@@ -1077,397 +1366,342 @@ const useThreadFetchHandler = () => {
                           {} as Record<string, MonoThread[]>
                         );
 
-                        // Save all API threads to database immediately (parallel operations)
-                        const savePromises = Object.entries(allAPIThreadsByUser).map(
-                          async ([userId, userThreads]) => {
-                            try {
-                              // Save to database with replace=false to avoid overwriting existing data
-                              await setThreads(userId, userThreads, false, true); // saveToLocal=true
-                              console.log(
-                                `💾 Saved ${userThreads.length} threads to database for account ${userId}`
-                              );
-                            } catch (saveError) {
-                              console.error(
-                                `Failed to save threads for account ${userId}:`,
-                                saveError
-                              );
-                            }
-                          }
+                        // Update UI state only (skipSave since we already saved above)
+                        Object.entries(newThreadsByUser).forEach(([userId, userThreads]) => {
+                          setThreads(userId, userThreads, false, false); // saveToLocal=false since already saved
+                        });
+
+                        // Update thread IDs with combined results
+                        const allThreadIds = combinedThreads.map((thread) => thread.id);
+                        updateThreadIds(allThreadIds);
+
+                        // Update final thread list
+                        threads = combinedThreads;
+
+                        // Update pagination state for combined results
+                        const oldestTimestamp = Math.min(
+                          ...combinedThreads.map((thread) => thread.timestamp)
                         );
+                        setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
+                        setHasMore(combinedThreads.length === FETCH_THREADS_LIMIT);
 
-                        // Wait for all database saves to complete
-                        await Promise.all(savePromises);
-                        console.log(`✅ All API results saved to database`);
-
-                        // THEN UPDATE UI STATE
-                        // Combine with existing local results, removing duplicates
-                        const existingThreadIds = new Set(threads.map((t) => t.id));
-                        const newAPIThreads = apiThreads.filter(
-                          (t) => !existingThreadIds.has(t.id)
+                        setLoadingStatus(
+                          combinedThreads.length === FETCH_THREADS_LIMIT ? 'DONE' : 'LOADING'
                         );
 
                         console.log(
-                          `🔍 Debug: existingThreadIds.size=${existingThreadIds.size}, apiThreads.length=${apiThreads.length}, newAPIThreads.length=${newAPIThreads.length}`
+                          `✅ Final result: ${threads.length} threads (${localResults.threads.length} local + ${newAPIThreads.length} API, all saved to DB)`
                         );
 
-                        if (newAPIThreads.length > 0 || localResults.threads.length === 0) {
-                          console.log(
-                            `📈 Found ${newAPIThreads.length} additional API results to supplement ${localResults.threads.length} local results`
-                          );
+                        // Final save of complete combined results to ensure everything is in DB
+                        const finalThreadsByUser = combinedThreads.reduce(
+                          (acc, thread) => {
+                            const userId =
+                              Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
+                            if (!acc[userId]) acc[userId] = [];
+                            acc[userId].push(thread);
+                            return acc;
+                          },
+                          {} as Record<string, MonoThread[]>
+                        );
 
-                          // Merge and re-sort all threads
-                          const combinedThreads = [...threads, ...newAPIThreads]
-                            .sort((a, b) => b.timestamp - a.timestamp)
-                            .slice(0, FETCH_THREADS_LIMIT);
-
-                          // Group new threads by user ID for UI state update (no database save needed)
-                          const newThreadsByUser = newAPIThreads.reduce(
-                            (acc, thread) => {
-                              const userId =
-                                Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
-                              if (!acc[userId]) acc[userId] = [];
-                              acc[userId].push(thread);
-                              return acc;
-                            },
-                            {} as Record<string, MonoThread[]>
-                          );
-
-                          // Update UI state only (skipSave since we already saved above)
-                          Object.entries(newThreadsByUser).forEach(([userId, userThreads]) => {
-                            setThreads(userId, userThreads, false, false); // saveToLocal=false since already saved
-                          });
-
-                          // Update thread IDs with combined results
-                          const allThreadIds = combinedThreads.map((thread) => thread.id);
-                          updateThreadIds(allThreadIds);
-
-                          // Update final thread list
-                          threads = combinedThreads;
-
-                          // Update pagination state for combined results
-                          const oldestTimestamp = Math.min(
-                            ...combinedThreads.map((thread) => thread.timestamp)
-                          );
-                          setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
-                          setHasMore(combinedThreads.length === FETCH_THREADS_LIMIT);
-
-                          setLoadingStatus(
-                            combinedThreads.length === FETCH_THREADS_LIMIT ? 'DONE' : 'LOADING'
-                          );
-
-                          console.log(
-                            `✅ Final result: ${threads.length} threads (${localResults.threads.length} local + ${newAPIThreads.length} API, all saved to DB)`
-                          );
-
-                          // Final save of complete combined results to ensure everything is in DB
-                          const finalThreadsByUser = combinedThreads.reduce(
-                            (acc, thread) => {
-                              const userId =
-                                Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
-                              if (!acc[userId]) acc[userId] = [];
-                              acc[userId].push(thread);
-                              return acc;
-                            },
-                            {} as Record<string, MonoThread[]>
-                          );
-
-                          // Final database save for complete result set
-                          Object.entries(finalThreadsByUser).forEach(([userId, userThreads]) => {
-                            setThreads(userId, userThreads, false, false); // Final save with saveToLocal=true
-                          });
-                        }
-                        setLoadingStatus('DONE');
-                      } else {
-                        // No API results or aborted
-                        console.log(`🔍 No API results found or request was aborted`);
-                        if (localResults.threads.length === 0) {
-                          // No local results and no API results
-                          setHasMore(false);
-                        }
-                        setLoadingStatus('DONE');
+                        // Final database save for complete result set
+                        Object.entries(finalThreadsByUser).forEach(([userId, userThreads]) => {
+                          setThreads(userId, userThreads, false, false); // Final save with saveToLocal=true
+                        });
                       }
-                    } catch (apiError) {
-                      console.warn('API search failed, using local results only:', apiError);
-                      // Keep using local results if API fails
+                      setLoadingStatus('DONE');
+                    } else {
+                      // No API results or aborted
+                      console.log(`🔍 No API results found or request was aborted`);
+                      if (localResults.threads.length === 0) {
+                        // No local results and no API results
+                        setHasMore(false);
+                      }
+                      setLoadingStatus('DONE');
                     }
-                  } else {
-                    console.log(
-                      `✅ Using local results only (${localResults.threads.length} results, sufficient for user needs)`
-                    );
-
-                    // Ensure local-only results are also saved to DB for future searches
-                    if (localResults.threads.length > 0) {
-                      const localThreadsByUser = localResults.threads.reduce(
-                        (acc, thread) => {
-                          const userId =
-                            Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
-                          if (!acc[userId]) acc[userId] = [];
-                          acc[userId].push(thread);
-                          return acc;
-                        },
-                        {} as Record<string, MonoThread[]>
-                      );
-
-                      // Save local results to database
-                      Object.entries(localThreadsByUser).forEach(([userId, userThreads]) => {
-                        setThreads(userId, userThreads, false, true); // saveToLocal=true
-                      });
-
-                      console.log(
-                        `💾 Ensured ${localResults.threads.length} local results are saved to database`
-                      );
-                    }
-
-                    // Update final state for local-only results
-                    setHasMore(localResults.threads.length === FETCH_THREADS_LIMIT);
-                    setLoadingStatus(
-                      localResults.threads.length === FETCH_THREADS_LIMIT ? 'DONE' : 'LOADING'
-                    );
+                  } catch (apiError) {
+                    console.warn('API search failed, using local results only:', apiError);
+                    // Keep using local results if API fails
                   }
-                } catch (localError) {
-                  console.error('Local search failed, falling back to API only:', localError);
-                  // Fall through to API-only approach below
-                }
-
-                // Return early to prevent falling through to API-only section
-                return;
-              } else {
-                // Fallback to original API-only strategy
-                const fetchWithRetry = async (
-                  accountId: string,
-                  maxRetries = 3,
-                  baseDelay = 1000
-                ) => {
-                  const accountQueryKey = `${accountId}-${queryKey}`;
-                  const pageToken = loadMore
-                    ? pageTokensRef.current[accountQueryKey]?.[queryKey] || undefined
-                    : undefined;
-
-                  const q = convertToAccurateQuery(
-                    currentQuery,
-                    preference.display.inbox.category?.[accountId] || {
-                      showUpdates: true,
-                      showSocial: true,
-                      showPromotions: true,
-                      showForums: true
-                    }
+                } else {
+                  console.log(
+                    `✅ Using local results only (${localResults.threads.length} results, sufficient for user needs)`
                   );
-                  apiClient.setApiActiveUid(accountId);
 
-                  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-                    try {
-                      const response = await mailApi.getThreads(
-                        accountId,
-                        q,
-                        pageToken,
-                        FETCH_THREADS_LIMIT.toString(), // Reduced from 50 since we're supplementing local results
-                        abortController.signal
-                      );
+                  // Ensure local-only results are also saved to DB for future searches
+                  if (localResults.threads.length > 0) {
+                    const localThreadsByUser = localResults.threads.reduce(
+                      (acc, thread) => {
+                        const userId =
+                          Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
+                        if (!acc[userId]) acc[userId] = [];
+                        acc[userId].push(thread);
+                        return acc;
+                      },
+                      {} as Record<string, MonoThread[]>
+                    );
 
-                      if (!abortController.signal.aborted) {
-                        if (response.nextPageToken) {
-                          setPageTokens((prev) => ({
-                            ...prev,
-                            [accountQueryKey]: {
-                              ...(prev[accountQueryKey] || {}),
-                              [queryKey]: response.nextPageToken
-                            }
-                          }));
-                        }
+                    // Save local results to database
+                    Object.entries(localThreadsByUser).forEach(([userId, userThreads]) => {
+                      setThreads(userId, userThreads, false, true); // saveToLocal=true
+                    });
 
-                        if (response.threads && response.threads.length > 0) {
-                          const accountThreads = response.threads.map((thread) =>
-                            MonoThread.fromPlainObject(thread)
-                          );
-                          return {
-                            accountId,
-                            threads: accountThreads,
-                            hasMore: !!response.nextPageToken,
-                            status: 'success'
-                          };
-                        }
-                      }
-                      return {
-                        accountId,
-                        threads: [],
-                        hasMore: false,
-                        status: 'success'
-                      };
-                    } catch (error: any) {
-                      const statusCode = error?.status || 500;
-
-                      // If this is the last attempt or not a retryable error, throw
-                      if (attempt === maxRetries || statusCode !== 429) {
-                        throw error;
-                      }
-
-                      // For 429 errors, implement exponential backoff with jitter
-                      if (statusCode === 429) {
-                        // Check for Retry-After header (in seconds)
-                        const retryAfter =
-                          error?.headers?.['retry-after'] ||
-                          error?.response?.headers?.['retry-after'];
-                        let delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
-
-                        if (retryAfter) {
-                          // If server provides Retry-After, use that (convert to ms)
-                          delay = parseInt(retryAfter) * 1000;
-                        } else {
-                          // Add jitter to prevent thundering herd
-                          delay += Math.random() * 1000;
-                        }
-
-                        console.warn(
-                          `Rate limited for account ${accountId}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`
-                        );
-
-                        // Wait for the calculated delay
-                        await new Promise((resolve) => setTimeout(resolve, delay));
-                        continue;
-                      }
-                    }
+                    console.log(
+                      `💾 Ensured ${localResults.threads.length} local results are saved to database`
+                    );
                   }
 
-                  // This should never be reached, but just in case
-                  throw new Error('Max retries exceeded');
-                };
+                  // Update final state for local-only results
+                  setHasMore(localResults.threads.length === FETCH_THREADS_LIMIT);
+                  setLoadingStatus(
+                    localResults.threads.length === FETCH_THREADS_LIMIT ? 'DONE' : 'LOADING'
+                  );
+                }
+              } catch (localError) {
+                console.error('Local search failed, falling back to API only:', localError);
+                // Fall through to API-only approach below
+              }
 
-                // For API-based queries, handle account-level errors gracefully
-                const accountsResults = await Promise.all(
-                  activeAccountUids.map(async (accountId) => {
-                    try {
-                      return await fetchWithRetry(accountId);
-                    } catch (error: any) {
-                      const statusCode = error?.status || 500;
-                      console.error(
-                        `Error fetching threads for account ${accountId}:`,
-                        error?.data?.message
-                      );
+              // Return early to prevent falling through to API-only section
+              return;
+            } else {
+              // Fallback to original API-only strategy
+              const fetchWithRetry = async (
+                accountId: string,
+                maxRetries = 3,
+                baseDelay = 1000
+              ) => {
+                const accountQueryKey = `${accountId}-${queryKey}`;
+                const pageToken = loadMore
+                  ? pageTokensRef.current[accountQueryKey]?.[queryKey] || undefined
+                  : undefined;
 
-                      if (statusCode === 429) {
-                        // Rate limit exceeded even after retries
+                const q = convertToAccurateQuery(
+                  currentQuery,
+                  preference.display.inbox.category?.[accountId] || {
+                    showUpdates: true,
+                    showSocial: true,
+                    showPromotions: true,
+                    showForums: true
+                  }
+                );
+                apiClient.setApiActiveUid(accountId);
+
+                for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                  try {
+                    const response = await mailApi.getThreads(
+                      accountId,
+                      q,
+                      pageToken,
+                      FETCH_THREADS_LIMIT.toString(), // Reduced from 50 since we're supplementing local results
+                      abortController.signal
+                    );
+
+                    if (!abortController.signal.aborted) {
+                      if (response.nextPageToken) {
+                        setPageTokens((prev) => ({
+                          ...prev,
+                          [accountQueryKey]: {
+                            ...(prev[accountQueryKey] || {}),
+                            [queryKey]: response.nextPageToken
+                          }
+                        }));
+                      }
+
+                      if (response.threads && response.threads.length > 0) {
+                        const accountThreads = response.threads.map((thread) =>
+                          MonoThread.fromPlainObject(thread)
+                        );
                         return {
                           accountId,
-                          threads: [],
-                          hasMore: false,
-                          status: 'rate_limited',
-                          errorMessage: 'Rate limit exceeded. Please try again later.'
+                          threads: accountThreads,
+                          hasMore: !!response.nextPageToken,
+                          status: 'success'
                         };
                       }
+                    }
+                    return {
+                      accountId,
+                      threads: [],
+                      hasMore: false,
+                      status: 'success'
+                    };
+                  } catch (error: any) {
+                    const statusCode = error?.status || 500;
 
+                    // If this is the last attempt or not a retryable error, throw
+                    if (attempt === maxRetries || statusCode !== 429) {
+                      throw error;
+                    }
+
+                    // For 429 errors, implement exponential backoff with jitter
+                    if (statusCode === 429) {
+                      // Check for Retry-After header (in seconds)
+                      const retryAfter =
+                        error?.headers?.['retry-after'] ||
+                        error?.response?.headers?.['retry-after'];
+                      let delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
+
+                      if (retryAfter) {
+                        // If server provides Retry-After, use that (convert to ms)
+                        delay = parseInt(retryAfter) * 1000;
+                      } else {
+                        // Add jitter to prevent thundering herd
+                        delay += Math.random() * 1000;
+                      }
+
+                      console.warn(
+                        `Rate limited for account ${accountId}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`
+                      );
+
+                      // Wait for the calculated delay
+                      await new Promise((resolve) => setTimeout(resolve, delay));
+                      continue;
+                    }
+                  }
+                }
+
+                // This should never be reached, but just in case
+                throw new Error('Max retries exceeded');
+              };
+
+              // For API-based queries, handle account-level errors gracefully
+              const accountsResults = await Promise.all(
+                activeAccountUids.map(async (accountId) => {
+                  try {
+                    return await fetchWithRetry(accountId);
+                  } catch (error: any) {
+                    const statusCode = error?.status || 500;
+                    console.error(
+                      `Error fetching threads for account ${accountId}:`,
+                      error?.data?.message
+                    );
+
+                    if (statusCode === 429) {
+                      // Rate limit exceeded even after retries
                       return {
                         accountId,
                         threads: [],
                         hasMore: false,
-                        status: 'error',
-                        errorMessage: error?.data?.message || 'Unknown error'
+                        status: 'rate_limited',
+                        errorMessage: 'Rate limit exceeded. Please try again later.'
                       };
                     }
-                  })
+
+                    return {
+                      accountId,
+                      threads: [],
+                      hasMore: false,
+                      status: 'error',
+                      errorMessage: error?.data?.message || 'Unknown error'
+                    };
+                  }
+                })
+              );
+
+              // Track account statuses
+              const rateLimitedAccounts = accountsResults.filter(
+                (result) => result.status === 'rate_limited'
+              );
+              const successfulAccounts = accountsResults.filter(
+                (result) => result.status === 'success'
+              );
+
+              // Log rate limited accounts for debugging
+              if (rateLimitedAccounts.length > 0) {
+                console.warn(
+                  `Rate limited accounts: ${rateLimitedAccounts.map((r) => r.accountId).join(', ')}`
                 );
-
-                // Track account statuses
-                const rateLimitedAccounts = accountsResults.filter(
-                  (result) => result.status === 'rate_limited'
-                );
-                const successfulAccounts = accountsResults.filter(
-                  (result) => result.status === 'success'
-                );
-
-                // Log rate limited accounts for debugging
-                if (rateLimitedAccounts.length > 0) {
-                  console.warn(
-                    `Rate limited accounts: ${rateLimitedAccounts.map((r) => r.accountId).join(', ')}`
-                  );
-                }
-
-                // Only use successful results for threads
-                const allThreads = successfulAccounts.flatMap((result) => result.threads);
-                threads = allThreads.sort((a, b) => b.timestamp - a.timestamp);
-
-                // Apply timestamp filtering for pagination in API results
-                if (loadMore && lastTimestampsRef.current[queryKey]) {
-                  threads = threads.filter(
-                    (thread) => thread.timestamp < lastTimestampsRef.current[queryKey]!
-                  );
-                }
-
-                // Limit to 50 results for this batch
-                threads = threads.slice(0, FETCH_THREADS_LIMIT);
               }
 
-              if (!abortController.signal.aborted) {
-                // Set loading status based on results
-                if (threads.length > 0) {
-                  console.log(
-                    `💾 Saving ${threads.length} API-only results to database for future searches`
-                  );
+              // Only use successful results for threads
+              const allThreads = successfulAccounts.flatMap((result) => result.threads);
+              threads = allThreads.sort((a, b) => b.timestamp - a.timestamp);
 
-                  // Update cache offset for load more tracking
-                  cacheOffsetRef.current += threads.length;
-
-                  // Group threads by user ID
-                  const threadsByUser = threads.reduce(
-                    (acc, thread) => {
-                      // Get userId from the non-enumerable property we added
-                      const userId =
-                        Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
-                      if (!acc[userId]) acc[userId] = [];
-                      acc[userId].push(thread);
-                      return acc;
-                    },
-                    {} as Record<string, MonoThread[]>
-                  );
-
-                  // Save to database AND update UI state
-                  Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
-                    // Save to database with replace=false to avoid overwriting existing data
-                    setThreads(userId, userThreads, false, true); // saveToLocal=true
-                    console.log(
-                      `💾 Saved ${userThreads.length} API-only threads to database for account ${userId}`
-                    );
-                  });
-
-                  // Update thread IDs in the global state
-                  const newThreadIds = threads.map((thread) => thread.id);
-                  updateThreadIds(newThreadIds);
-
-                  // Update the last timestamp for pagination
-                  const oldestTimestamp = Math.min(...threads.map((thread) => thread.timestamp));
-                  setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
-
-                  // Set hasMore based on whether we have more results
-                  setHasMore(threads.length === FETCH_THREADS_LIMIT);
-                  setLoadingStatus('DONE');
-
-                  console.log(
-                    `✅ ${threads.length} API-only results saved to database and displayed`
-                  );
-                } else {
-                  // No results
-                  setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
-                  setHasMore(false);
-                  setLoadingStatus('DONE');
-                }
+              // Apply timestamp filtering for pagination in API results
+              if (loadMore && lastTimestampsRef.current[queryKey]) {
+                threads = threads.filter(
+                  (thread) => thread.timestamp < lastTimestampsRef.current[queryKey]!
+                );
               }
+
+              // Limit to 50 results for this batch
+              threads = threads.slice(0, FETCH_THREADS_LIMIT);
             }
-          } catch (error: any) {
+
             if (!abortController.signal.aborted) {
-              console.error('Error fetching threads:', error?.data?.message);
+              // Set loading status based on results
+              if (threads.length > 0) {
+                console.log(
+                  `💾 Saving ${threads.length} API-only results to database for future searches`
+                );
 
-              // Even if there was an error, try to show whatever threads we could get
-              if (threads && threads.length > 0) {
-                // Still show threads we were able to load
+                // Update cache offset for load more tracking
+                cacheOffsetRef.current += threads.length;
+
+                // Group threads by user ID
+                const threadsByUser = threads.reduce(
+                  (acc, thread) => {
+                    // Get userId from the non-enumerable property we added
+                    const userId =
+                      Object.getOwnPropertyDescriptor(thread, 'accountId')?.value || '';
+                    if (!acc[userId]) acc[userId] = [];
+                    acc[userId].push(thread);
+                    return acc;
+                  },
+                  {} as Record<string, MonoThread[]>
+                );
+
+                // Save to database AND update UI state
+                Object.entries(threadsByUser).forEach(([userId, userThreads]) => {
+                  // Save to database with replace=false to avoid overwriting existing data
+                  setThreads(userId, userThreads, false, true); // saveToLocal=true
+                  console.log(
+                    `💾 Saved ${userThreads.length} API-only threads to database for account ${userId}`
+                  );
+                });
+
+                // Update thread IDs in the global state
+                const newThreadIds = threads.map((thread) => thread.id);
+                updateThreadIds(newThreadIds);
+
+                // Update the last timestamp for pagination
+                const oldestTimestamp = Math.min(...threads.map((thread) => thread.timestamp));
+                setLastTimestamps((prev) => ({ ...prev, [queryKey]: oldestTimestamp }));
+
+                // Set hasMore based on whether we have more results
+                setHasMore(threads.length === FETCH_THREADS_LIMIT);
                 setLoadingStatus('DONE');
-              } else {
-                setLoadingStatus('ERROR');
-              }
 
-              setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
+                console.log(
+                  `✅ ${threads.length} API-only results saved to database and displayed`
+                );
+              } else {
+                // No results
+                setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
+                setHasMore(false);
+                setLoadingStatus('DONE');
+              }
             }
           }
-          updateBadgeWithLabelCount(accounts.map((account) => account.uid));
-        };
+        } catch (error: any) {
+          if (!abortController.signal.aborted) {
+            console.error('Error fetching threads:', error?.data?.message);
+
+            // Even if there was an error, try to show whatever threads we could get
+            if (threads && threads.length > 0) {
+              // Still show threads we were able to load
+              setLoadingStatus('DONE');
+            } else {
+              setLoadingStatus('ERROR');
+            }
+
+            setQueriesLoaded((prev) => ({ ...prev, [queryKey]: true }));
+          }
+        }
+        updateBadgeWithLabelCount(accounts.map((account) => account.uid));
+      };
       if (options?.immediate) return operation();
       enqueueOperation(operation, {
         priority: OperationPriority.HIGH, // User-initiated search should be high priority
@@ -1494,10 +1728,15 @@ const useThreadFetchHandler = () => {
   // path doesn't page Microsoft, so this runs alongside it (directly via the
   // provider, like the initial Microsoft fetch).
   const loadMoreMicrosoft = useCallback(async () => {
-    const queryKey = (globalSearchQueryRef.current || '') || 'default';
+    const queryKey = globalSearchQueryRef.current || '' || 'default';
     const tokens = msPageTokensRef.current[queryKey] || {};
     const uids = Object.keys(tokens).filter((uid) => tokens[uid]);
-    if (uids.length === 0) return;
+    if (uids.length === 0) {
+      // Nothing to page here (a search: Microsoft results come in one go).
+      // Without a Gmail account to page either, there is no more.
+      if (!accounts.some((acc) => acc.provider === 'google')) setHasMore(false);
+      return;
+    }
     const currentQuery = globalSearchQueryRef.current || '';
 
     await Promise.all(
@@ -1515,7 +1754,9 @@ const useThreadFetchHandler = () => {
             delete msPageTokensRef.current[queryKey][uid];
           }
           if (response?.threads?.length) {
-            const monoThreads = response.threads.map((thread) => MonoThread.fromPlainObject(thread));
+            const monoThreads = response.threads.map((thread) =>
+              MonoThread.fromPlainObject(thread)
+            );
             await setThreads(uid, monoThreads, false, true);
             updateThreadIds(monoThreads.map((thread) => thread.id));
           }
@@ -1532,16 +1773,39 @@ const useThreadFetchHandler = () => {
     if (!microsoftHasMore && !hasGoogle) setHasMore(false);
   }, [accounts, setThreads, updateThreadIds]);
 
-  const loadMore = useCallback(() => {
-    if (loadingStatusRef.current !== 'DONE' || !hasMore || isLoadingMore) return;
-    setIsLoadingMore(true);
+  // A ref as well as state: two calls in one tick (the list's scroll and the
+  // reader's Done at the end) both saw the state false and loaded twice.
+  const loadingMoreRef = useRef(false);
+  const loadMore = useCallback((): LoadMoreResult => {
+    const settled = Promise.resolve();
+    if (!hasMore) return { state: 'none', done: settled };
+    if (loadingStatusRef.current !== 'DONE' || isLoadingMore || loadingMoreRef.current) {
+      return { state: 'busy', done: settled };
+    }
     // Gmail pages via the worker-backed handler; Microsoft via its own paginator.
     // Skip the Gmail handler when there are no Google accounts so it can't reset
     // Microsoft's hasMore.
     const hasGoogle = accounts.some((acc) => acc.provider === 'google');
+    const queryKey = globalSearchQueryRef.current || '' || 'default';
+    const microsoftCanPage = Object.values(msPageTokensRef.current[queryKey] || {}).some(Boolean);
+    if (!hasGoogle && !microsoftCanPage) {
+      setHasMore(false);
+      return { state: 'none', done: settled };
+    }
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
     const tasks: Promise<unknown>[] = [loadMoreMicrosoft()];
     if (hasGoogle) tasks.push(Promise.resolve(fetchThreadsHandler(true)));
-    Promise.all(tasks).finally(() => setIsLoadingMore(false));
+    const done = Promise.all(tasks)
+      .then(
+        () => undefined,
+        () => undefined
+      )
+      .finally(() => {
+        loadingMoreRef.current = false;
+        setIsLoadingMore(false);
+      });
+    return { state: 'started', done };
   }, [loadingStatusRef, hasMore, isLoadingMore, accounts, fetchThreadsHandler, loadMoreMicrosoft]);
 
   const handlePostSync = useCallback(
@@ -1687,28 +1951,28 @@ const useThreadFetchHandler = () => {
     const timer = setTimeout(() => {
       toReconcile.forEach((uid) => reconciledUidsRef.current.add(uid));
       enqueueOperation(
-      async () => {
-        let removed = 0;
-        let normalized = 0;
-        for (const uid of toReconcile) {
-          try {
-            removed += await DBPurgeStubThreads(uid);
-            normalized += await DBNormalizeCachedLabels(uid);
-          } catch (e) {
-            log.warn('[cache] reconcile failed for', uid, e);
+        async () => {
+          let removed = 0;
+          let normalized = 0;
+          for (const uid of toReconcile) {
+            try {
+              removed += await DBPurgeStubThreads(uid);
+              normalized += await DBNormalizeCachedLabels(uid);
+            } catch (e) {
+              log.warn('[cache] reconcile failed for', uid, e);
+            }
           }
-        }
-        if (removed > 0 || normalized > 0) {
-          log.info(
-            `[cache] reconciled: purged ${removed} stub thread(s), normalized labels on ${normalized} record(s)`
-          );
-          await runApplyingNow(async () => {
-            resetThreadsArray();
-            await fetchThreadsHandler(false, { immediate: true });
-          });
-        }
-      },
-      { priority: OperationPriority.LOW, type: 'reconcile-cache', batch: false }
+          if (removed > 0 || normalized > 0) {
+            log.info(
+              `[cache] reconciled: purged ${removed} stub thread(s), normalized labels on ${normalized} record(s)`
+            );
+            await runApplyingNow(async () => {
+              resetThreadsArray();
+              await fetchThreadsHandler(false, { immediate: true });
+            });
+          }
+        },
+        { priority: OperationPriority.LOW, type: 'reconcile-cache', batch: false }
       );
     }, 2000);
     return () => clearTimeout(timer);
@@ -1730,14 +1994,33 @@ const useThreadFetchHandler = () => {
     );
   }, [activeSpace?.id]);
 
+  // The space's accounts as a stable string: the effect below was keyed on the
+  // array itself, and the space object is rebuilt (with an equal, new array)
+  // after the cached one, so the whole query handler ran again at startup.
+  const activeAccountUidsKey = (activeSpace?.activeAccountUids ?? []).slice().sort().join(',');
+  const lastQueryRunRef = useRef<{ query: string; spaceId?: string; uids: string[] } | null>(null);
+
   // Only initialize the query fetching without history sync when search query changes
   useEffect(() => {
+    // Clear the list only when what it shows changes: another query, another
+    // space, or an account taken away. When accounts are only added (or their
+    // list arrives after startup) the fetch below merges into the rows already
+    // on screen; clearing first wiped the cached inbox and flashed the
+    // skeleton on every launch.
+    const uids = [...activeAccountUidsKey.split(','), ...microsoftAccountUidsKey.split(',')].filter(
+      Boolean
+    );
+    const last = lastQueryRunRef.current;
+    const sameView = !!last && last.query === globalSearchQuery && last.spaceId === activeSpace?.id;
+    const accountsOnlyAdded = sameView && last.uids.every((uid) => uids.includes(uid));
+    lastQueryRunRef.current = { query: globalSearchQuery, spaceId: activeSpace?.id, uids };
+
     enqueueOperation(
       async () => {
         // We're inside a queued operation: apply the reset and the cached
         // threads now (cache-first paint).
         await runApplyingNow(async () => {
-          resetThreadsArray();
+          if (!accountsOnlyAdded) resetThreadsArray();
           await fetchThreadsHandler(false, { immediate: true });
         });
         // Microsoft inbox: started AFTER the reset + cache read, so its threads
@@ -1775,7 +2058,53 @@ const useThreadFetchHandler = () => {
     };
     // microsoftAccountUidsKey: re-run when Microsoft accounts finish loading
     // (their uids appear after the initial render), so the inbox fetches them.
-  }, [globalSearchQuery, activeSpace?.id, activeSpace?.activeAccountUids, microsoftAccountUidsKey]);
+  }, [globalSearchQuery, activeSpace?.id, activeAccountUidsKey, microsoftAccountUidsKey]);
+
+  // The refresh button: check every account for new mail now, without
+  // clearing the list. Microsoft: the background delta sync runs at once
+  // (mail read, moved or deleted elsewhere) and this view's first page is
+  // fetched again (new mail in views the delta sync doesn't cover). Gmail: an
+  // incremental history sync. Resolves false when every account it tried
+  // failed (offline), true otherwise.
+  const refresh = useCallback(async (): Promise<boolean> => {
+    void electronApi.refreshMail();
+    const gmail = getLimitedAccountUids().map(
+      (uid) =>
+        new Promise<boolean>((resolve) => {
+          // The sync can end without calling back (no worker, no token):
+          // don't keep the button spinning on it.
+          const timer = setTimeout(() => resolve(true), REFRESH_GMAIL_TIMEOUT_MS);
+          const done = (ok: boolean) => {
+            clearTimeout(timer);
+            resolve(ok);
+          };
+          void syncThreadHistory(
+            uid,
+            () => {
+              handlePostSync(uid);
+              done(true);
+            },
+            (status) => {
+              // Only a lost history (404) needs the full-sync recovery. A
+              // passing failure of a background refresh (rate limit, 5xx) is
+              // reported here and must not put the list into its error state.
+              if (status === 404) handleSyncError(status, uid);
+              done(false);
+            }
+          );
+        })
+    );
+    const results = await Promise.all([fetchMicrosoftInbox({ quiet: true }), ...gmail]);
+    // null: nothing to fetch there (no Microsoft account, a search view).
+    const tried = results.filter((r): r is boolean => r !== null);
+    return tried.length === 0 || tried.some(Boolean);
+  }, [
+    getLimitedAccountUids,
+    syncThreadHistory,
+    handlePostSync,
+    handleSyncError,
+    fetchMicrosoftInbox
+  ]);
 
   return {
     resetThreadsArray,
@@ -1784,6 +2113,7 @@ const useThreadFetchHandler = () => {
     fetchThreadsHandler,
     loadMore,
     hasMore,
+    refresh,
     updateFromMessageSubscribe
   };
 };

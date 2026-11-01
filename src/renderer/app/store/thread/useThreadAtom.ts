@@ -8,6 +8,7 @@ import {
 } from './atoms';
 
 import { useCallback } from 'react';
+import { advanceReaderFrom } from '@/renderer/app/store/thread/readerAdvance';
 import { useThreadFilter } from './useThreadFilter';
 
 export function useThreadAtom() {
@@ -16,19 +17,49 @@ export function useThreadAtom() {
   const [threadIds, setThreadIds] = useAtom(threadIdsAtom);
   const [threadsMap, setThreadsMap] = useAtom(threadsMapAtom);
   const [filteredThreadIds, setFilteredThreadIds] = useAtom(filteredThreadIdsAtom);
-  const { filterThreadIds, activeFilters, setActiveFilters } = useThreadFilter();
+  const {
+    filterThreadIds,
+    activeFilters,
+    setActiveFilters,
+    applyFilters: threadPassesFilters,
+    isHiddenBySplit,
+    isFiltering,
+    splitKey
+  } = useThreadFilter();
 
-  // Then, apply any custom filters from the activeFilters state
+  // Then, apply any custom filters from the activeFilters state (and the
+  // "only show here" labels, see useThreadFilter).
   const applyFilters = useCallback(() => {
-    // Apply custom filters if there are any
-    if (activeFilters.length > 0) {
-      const filteredIds = filterThreadIds(threadIds);
-      setFilteredThreadIds(filteredIds);
-    } else {
-      // Otherwise just use the thread IDs directly
-      setFilteredThreadIds(threadIds);
-    }
-  }, [threadIds, filterThreadIds, activeFilters, setFilteredThreadIds]);
+    setFilteredThreadIds(filterThreadIds(threadIds));
+  }, [threadIds, filterThreadIds, setFilteredThreadIds]);
+
+  /**
+   * After a conversation's labels change (a refresh tagged it Other, it was
+   * read…): add the ones that now match, and drop the ones a split label now
+   * claims. One that merely stopped matching stays until the tab or list
+   * changes, so reading mail on Unread doesn't pull it out from under you.
+   */
+  const refreshFilters = useCallback(() => {
+    if (!isFiltering) return;
+    setFilteredThreadIds((prev) => {
+      const shown = new Set(prev);
+      const next = threadIds.filter((id) => {
+        const thread = threadsMap[id];
+        if (!thread) return shown.has(id);
+        if (isHiddenBySplit(thread)) return false;
+        return shown.has(id) || threadPassesFilters(thread);
+      });
+      const same = next.length === prev.length && next.every((id, i) => id === prev[i]);
+      return same ? prev : next;
+    });
+  }, [
+    isFiltering,
+    threadIds,
+    threadsMap,
+    isHiddenBySplit,
+    threadPassesFilters,
+    setFilteredThreadIds
+  ]);
 
   const selectNextThread = useCallback(
     (keepPrevious = false) => {
@@ -60,6 +91,10 @@ export function useThreadAtom() {
           setActiveThreadId(nextThreadId);
           // focusThreadById(nextThreadId);
         }
+      } else if (!keepPrevious && activeThreadId) {
+        // The open email is the last one loaded (Later on it): fetch the next
+        // page and continue there, or the one above at the real end.
+        advanceReaderFrom(activeThreadId, validThreadIds, setActiveThreadId);
       } else if (!keepPrevious) {
         // The current thread is the last one in the list. When it is removed
         // (e.g. trashed/archived from the reader) there is no "next", so land
@@ -139,6 +174,8 @@ export function useThreadAtom() {
     setThreadIds,
     selectNextThread,
     selectPreviousThread,
-    applyFilters
+    applyFilters,
+    refreshFilters,
+    splitKey
   };
 }

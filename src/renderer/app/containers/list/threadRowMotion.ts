@@ -109,7 +109,10 @@ const offset = (y: number, scale = 1) => `translateY(${y}px) scale(${scale})`;
  * instead (it settles back a little and fades), then the next one rises into
  * its place, as the rows below glide up to close the gap in the inbox. It
  * comes down from above when the reader stepped up the list (the email was
- * the last one). Ordinary thread switches just cross-fade quickly.
+ * the last one). An ordinary thread switch swaps at once: no exit wait (with
+ * mode="wait" the next email can't mount until the old one has left) and a
+ * fade-in short enough to only soften the swap; the time to the text is what
+ * opening an email is judged on.
  */
 export const readerVariants = (reduceMotion: boolean): Variants => ({
   enter: ({ advance, direction }: ReaderTransition) =>
@@ -125,7 +128,7 @@ export const readerVariants = (reduceMotion: boolean): Variants => ({
             opacity: { duration: 0.18, ease: 'easeOut' }
           }
         }
-      : { opacity: 1, transition: { duration: 0.18, ease: 'easeOut' } },
+      : { opacity: 1, transition: { duration: 0.1, ease: 'easeOut' } },
   exit: ({ advance, direction }: ReaderTransition) =>
     advance && !reduceMotion
       ? {
@@ -133,5 +136,5 @@ export const readerVariants = (reduceMotion: boolean): Variants => ({
           transform: [offset(0), offset(direction * -8, 0.97)],
           transition: { duration: 0.14, ease: PUT_AWAY_EASE }
         }
-      : { opacity: 0, transition: { duration: 0.08 } }
+      : { opacity: 0, transition: { duration: 0 } }
 });
