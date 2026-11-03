@@ -8,7 +8,7 @@ import {
   MonoSpace,
   spacesAtom
 } from '@/renderer/app/store/space/atom';
-import { useAtom } from 'jotai';
+import { useAtom, useStore } from 'jotai';
 import { useCallback } from 'react';
 
 // Cache key for spaces
@@ -80,6 +80,7 @@ export function useSpaceAtom() {
   const [spaces, setSpaces] = useAtom(spacesAtom);
 
   const [activeSpace, setActiveSpace] = useAtom(activeSpaceAtom);
+  const store = useStore();
   const [isLoadingSpaces, setIsLoadingSpaces] = useAtom(isLoadingSpacesAtom);
 
   // Load cached spaces when offline
@@ -122,6 +123,19 @@ export function useSpaceAtom() {
         // Standalone Google mode: bypass backend and synthesise a local space from
         // the provided account UIDs so thread sync resolves accounts without a backend.
         if (accountUids?.length) {
+          // Same space and accounts as the one already active (normally the
+          // cached copy loaded a moment earlier): keep that object. A new one
+          // with equal arrays re-ran the inbox query and re-wrote the cache.
+          const current = store.get(activeSpaceAtom);
+          const sameUids = (a: string[] = [], b: string[] = []) =>
+            a.length === b.length && a.every((uid) => b.includes(uid));
+          if (
+            current?.id === 'local-space' &&
+            sameUids(current.accountUids, accountUids) &&
+            sameUids(current.activeAccountUids, accountUids)
+          ) {
+            return;
+          }
           const localSpace: MonoSpace = {
             id: 'local-space',
             name: 'Inbox',
@@ -222,7 +236,7 @@ export function useSpaceAtom() {
         setIsLoadingSpaces(false);
       }
     },
-    [setActiveSpace, setSpaces, setIsLoadingSpaces, loadCachedSpaces]
+    [setActiveSpace, setSpaces, setIsLoadingSpaces, loadCachedSpaces, store]
   );
 
   // Create a new space

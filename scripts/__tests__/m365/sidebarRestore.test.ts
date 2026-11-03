@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { CustomNavItem, CustomSidebarState } from '@/main/api/space/types';
-import { restoreSidebarSubtree } from '@/renderer/app/lib/sidebarRestore';
+import {
+  restoreSidebarSubtree,
+  withSidebarDefaults,
+  SIDEBAR_DEFAULTS_VERSION
+} from '@/renderer/app/lib/sidebarRestore';
 
 const item = (id: string, extra: Partial<CustomNavItem> = {}): CustomNavItem =>
   ({ id, type: 'primary', title: id, position: 0, ...extra }) as CustomNavItem;
@@ -60,4 +64,26 @@ test('a child whose folder is gone comes back at the root', () => {
   const restored = restoreSidebarSubtree(before, after, 'label-a');
   assert.equal(restored.items['label-a'].parentId, undefined);
   assert.ok(restored.order.includes('label-a'));
+});
+
+// Done and Trash join saved sidebars once (sidebar defaults v2).
+
+const navItem = (id: string, position: number) =>
+  ({ id, type: 'primary', title: id, icon: 'Inbox', query: id, position }) as never;
+
+test('withSidebarDefaults: an old sidebar gets Done and Trash at the end, once', () => {
+  const old = { items: { primary: navItem('primary', 0) }, order: ['primary'] };
+  const next = withSidebarDefaults(old, [navItem('done', 5), navItem('trash', 6)]);
+  assert.deepEqual(next.order, ['primary', 'done', 'trash']);
+  assert.equal(next.defaultsVersion, SIDEBAR_DEFAULTS_VERSION);
+  // Removed later: stays removed.
+  const removed = { ...next, items: { primary: next.items.primary }, order: ['primary'] };
+  assert.equal(withSidebarDefaults(removed, [navItem('done', 5)]), removed);
+});
+
+test('withSidebarDefaults: rows already there are kept as they are', () => {
+  const old = { items: { done: navItem('done', 0) }, order: ['done'] };
+  const next = withSidebarDefaults(old, [navItem('done', 5), navItem('trash', 6)]);
+  assert.deepEqual(next.order, ['done', 'trash']);
+  assert.equal(next.items.done.position, 0);
 });

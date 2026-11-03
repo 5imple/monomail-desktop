@@ -24,6 +24,11 @@ import {
   type SchedulePreset
 } from '@/renderer/app/containers/queue/schedulePresets';
 import { QueueRow } from '@/renderer/app/containers/queue/QueueRow';
+import { DBGetThread } from '@/renderer/app/lib/db/thread';
+import { activeLayoutAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import { activeThreadIdAtom, threadsMapAtom } from '@/renderer/app/store/thread/atoms';
+import { useSetAtom, useStore } from 'jotai';
+import { readerReturnLayoutAtom } from '@/renderer/app/store/layout/readerReturnAtom';
 
 /**
  * Piece 2 of P8 — Later Queue UI.
@@ -149,6 +154,29 @@ const QueueContainer: FC = () => {
     rescheduleSend,
     sendScheduledNow
   } = useQueueAtom();
+  const store = useStore();
+  const setThreadsMap = useSetAtom(threadsMapAtom);
+  const setActiveThreadId = useSetAtom(activeThreadIdAtom);
+  const setActiveLayout = useSetAtom(activeLayoutAtom);
+  const setReaderReturnLayout = useSetAtom(readerReturnLayoutAtom);
+
+  // Read a snoozed email without bringing it back: open it in the reader.
+  // Snoozed threads are out of the inbox list, so the thread is loaded from
+  // the cache into memory first (the reader then fetches its bodies).
+  const openSnoozed = async (item: SnoozedItem) => {
+    if (!store.get(threadsMapAtom)[item.threadId]) {
+      const loaded = await DBGetThread(item.accountId, item.threadId);
+      if (!loaded) {
+        toast.error(t('later.toast.open_error', { defaultValue: 'Couldn’t open this email' }));
+        return;
+      }
+      setThreadsMap((prev) => (prev[loaded.id] ? prev : { ...prev, [loaded.id]: loaded }));
+    }
+    // Closing the email (Esc, U) comes back here, not to the Inbox.
+    setReaderReturnLayout('LATER');
+    setActiveLayout('MAIL');
+    setActiveThreadId(item.threadId);
+  };
 
   // Chosen once, when Later opens: Scheduled when only it has items, or when
   // a send was just scheduled (Send later opens this view right after). It
@@ -225,6 +253,7 @@ const QueueContainer: FC = () => {
           presets={presets}
           reschedulingItemId={reschedulingItemId}
           onOpenRescheduleFor={setReschedulingItemId}
+          onOpen={openSnoozed}
           onBringBackNow={async (id) => {
             const res = await unsnooze(id);
             if (!res.ok) toast.error(t('later.toast.bring_back_error', { error: res.error }));
@@ -348,6 +377,7 @@ interface SnoozedTabProps {
   presets: SchedulePreset[];
   reschedulingItemId: string | null;
   onOpenRescheduleFor: (id: string | null) => void;
+  onOpen: (item: SnoozedItem) => void;
   onBringBackNow: (id: string) => void;
   onRescheduleSnooze: (id: string, snoozeUntil: string) => void;
 }
@@ -358,6 +388,7 @@ function SnoozedTab({
   presets,
   reschedulingItemId,
   onOpenRescheduleFor,
+  onOpen,
   onBringBackNow,
   onRescheduleSnooze
 }: SnoozedTabProps) {
@@ -399,6 +430,7 @@ function SnoozedTab({
                     reschedulePresets={presets}
                     isRescheduling={reschedulingItemId === item.id}
                     onPrimaryAction={() => onBringBackNow(item.id)}
+                    onOpen={() => onOpen(item)}
                     onOpenReschedule={() => onOpenRescheduleFor(item.id)}
                     onCloseReschedule={() => onOpenRescheduleFor(null)}
                     onPickReschedule={(preset) => {

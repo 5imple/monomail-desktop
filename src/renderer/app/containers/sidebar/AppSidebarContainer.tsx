@@ -1,5 +1,5 @@
 import AppSidebar from '@/renderer/app/containers/sidebar/AppSidebar';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useKeyboardRegistration } from '@/renderer/app/context/KeyboardNavigationContext';
 import { cn } from '@/renderer/app/lib/utils';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { FC, useCallback, useEffect, useRef } from 'react';
@@ -75,7 +75,7 @@ const AppSidebarContainer: FC<AppSidebarContainerProps> = ({ className }) => {
     }
   }, [sidebarCollapsed, clearTimeouts, setSidebarHovered]);
 
-  const { registerAreaRef } = useKeyboardNavigationContext();
+  const { registerAreaRef } = useKeyboardRegistration();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Register container ref with navigation system

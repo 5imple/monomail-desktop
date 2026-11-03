@@ -10,14 +10,15 @@ import {
 import { DisplayPanel } from '@/renderer/app/containers/panel/DisplayPanel';
 import ListPanel from '@/renderer/app/containers/panel/ListPanel';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useKeyboardRegistration } from '@/renderer/app/context/KeyboardNavigationContext';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { shortName } from '@/renderer/app/lib/shortName';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpacePinAtom } from '@/renderer/app/store/space/pin/useSpacePinAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { activeThreadIdAtom } from '@/renderer/app/store/thread/atoms';
+import { useAtomValue } from 'jotai';
 import {
   Active,
   defaultDropAnimationSideEffects,
@@ -101,7 +102,9 @@ const READER_PANEL_TRANSITION_MS = 280;
 
 export function MailLayout({}: MailLayoutProps) {
   const { pinEmailInSpace } = useSpacePinAtom();
-  const { activeThreadId } = useThreadAtom();
+  // Only the open thread's id: the whole thread store re-rendered the layout
+  // (and the list and reader under it) on every thread update.
+  const activeThreadId = useAtomValue(activeThreadIdAtom);
   const { preference } = useAuth();
   const { fullscreenDisplayPanel, setFullscreenDisplayPanel } = useGlobalAtom();
 
@@ -254,7 +257,7 @@ export function MailLayout({}: MailLayoutProps) {
     setDraftsByThread(threadMapByAccount);
   }, [draftsMapByAccount]);
 
-  const { registerAreaRef } = useKeyboardNavigationContext();
+  const { registerAreaRef } = useKeyboardRegistration();
 
   // Register container refs with navigation system
   useEffect(() => {
@@ -379,7 +382,11 @@ export function MailLayout({}: MailLayoutProps) {
               // 'transition-all ease-in-out will-change-auto'
               isReaderFullscreen ? 'flex-grow basis-[100%]' : '',
               // isDraggingHandle ? 'duration-0' : 'duration-300',
-              isDraggingHandle ? 'duration-0' : 'duration-300 ease-bouncy-in-out',
+              // No fade while the reader is up: opening an email faded the
+              // whole panel in over 300 ms on top of the content's own fade.
+              isDraggingHandle || isReaderFullscreen
+                ? 'duration-0'
+                : 'duration-300 ease-bouncy-in-out',
               isGroupedPanelExpanded || isReaderMounted ? 'opacity-100' : 'opacity-0'
               // Reader open/close motion lives in DisplayPanel (center fade+scale),
               // not here — transforms on the resizable panel read as layout movement

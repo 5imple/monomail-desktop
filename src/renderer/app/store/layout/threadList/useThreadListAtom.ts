@@ -1,5 +1,5 @@
 import { MonoIconType } from '@/renderer/app/components/icons/icons';
-import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
+import { createIndexedDBStorage, nonSuspendingStorageAtom } from '@/renderer/app/lib/db/jotai-idb';
 import { atom, useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 
@@ -15,19 +15,22 @@ export interface MonoNotificationAlert {
 }
 
 // Store dismissed alert IDs
-const dismissedAlertsAtom = atomWithStorage<string[]>(
-  'alerts:dismissed',
-  [],
-  createIndexedDBStorage<string[]>({
-    defaultValue: []
-  })
+const dismissedAlertsAtom = nonSuspendingStorageAtom(
+  atomWithStorage<string[]>(
+    'alerts:dismissed',
+    [],
+    createIndexedDBStorage<string[]>({
+      defaultValue: []
+    })
+  ),
+  []
 );
 
 const notificationAlertAtom = atom<MonoNotificationAlert[]>([]);
 
 export type LoadingStatus = 'INIT' | 'LOADING' | 'ERROR' | 'DONE';
 
-const loadingStatusAtom = atom<LoadingStatus>('INIT');
+export const loadingStatusAtom = atom<LoadingStatus>('INIT');
 
 export function useThreadListAtom() {
   const [notificationAlert, setNotificationAlert] = useAtom(notificationAlertAtom);

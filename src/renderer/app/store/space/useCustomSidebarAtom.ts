@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { useSidebarMigration } from '@/renderer/app/store/space/migrateSidebarAtom';
 
 // Re-export types for other components to use
+import { SIDEBAR_DEFAULTS_VERSION, withSidebarDefaults } from '@/renderer/app/lib/sidebarRestore';
 export type { CustomNavItem, CustomSidebarState };
 
 /**
@@ -149,42 +150,42 @@ export const getDefaultNavItemProperties = (
       icon: 'Inbox',
       iconColor: NAV_ICON_COLOR.primary,
       query: 'category:primary',
-      hotkey: 'G+P'
+      hotkey: 'G>I'
     },
     starred: {
       title: t('sidebar.nav.star'),
       icon: 'Star',
       iconColor: NAV_ICON_COLOR.warning,
       query: 'is:starred',
-      hotkey: 'G+S'
+      hotkey: 'G>S'
     },
     sent: {
       title: t('sidebar.nav.sent'),
       icon: 'SendHorizontal',
       iconColor: NAV_ICON_COLOR.primary,
       query: 'in:sent',
-      hotkey: 'G+T'
+      hotkey: 'G>T'
     },
     draft: {
       title: t('sidebar.nav.draft'),
       icon: 'Pen',
       iconColor: NAV_ICON_COLOR.primary,
       query: 'in:draft',
-      hotkey: 'G+D'
+      hotkey: 'G>D'
     },
     'all-mail': {
       title: t('sidebar.nav.all_mail'),
       icon: 'Envelope',
       iconColor: NAV_ICON_COLOR.primary,
       query: 'in:all -in:trash',
-      hotkey: 'G+A'
+      hotkey: 'G>A'
     },
     done: {
       title: t('sidebar.nav.done'),
       icon: 'CheckCircle',
       iconColor: NAV_ICON_COLOR.positive,
       query: 'NOT in:inbox',
-      hotkey: 'G+E'
+      hotkey: 'G>E'
     },
     trash: {
       title: t('sidebar.nav.trash'),
@@ -241,7 +242,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     icon: 'Inbox',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'category:primary',
-    hotkey: 'G+P',
+    hotkey: 'G>I',
     position: 0
   },
   {
@@ -251,7 +252,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     icon: 'Star',
     iconColor: NAV_ICON_COLOR.warning,
     query: 'is:starred',
-    hotkey: 'G+S',
+    hotkey: 'G>S',
     position: 1
   },
   {
@@ -261,7 +262,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     icon: 'SendHorizontal',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'in:sent',
-    hotkey: 'G+T',
+    hotkey: 'G>T',
     position: 2
   },
   {
@@ -271,7 +272,7 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     icon: 'Pen',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'in:draft',
-    hotkey: 'G+D',
+    hotkey: 'G>D',
     position: 3
   },
   {
@@ -281,9 +282,14 @@ export const getDefaultNavItems = (t: any): CustomNavItem[] => [
     icon: 'Envelope',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'in:all -in:trash',
-    hotkey: 'G+A',
+    hotkey: 'G>A',
     position: 4
-  }
+  },
+  // Done and Trash by default (sidebar defaults v2): where an email went after
+  // E or Delete, visible without opening "More".
+  ...getAvailableNavItems(t)
+    .filter((item) => item.id === 'done' || item.id === 'trash')
+    .map((item, index) => ({ ...item, position: 5 + index }))
 ];
 
 // Available nav items that can be added via "More" dropdown
@@ -296,7 +302,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     icon: 'Inbox',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'category:primary',
-    hotkey: 'G+P',
+    hotkey: 'G>I',
     position: 0
   },
   {
@@ -306,7 +312,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     icon: 'Star',
     iconColor: NAV_ICON_COLOR.warning,
     query: 'is:starred',
-    hotkey: 'G+S',
+    hotkey: 'G>S',
     position: 1
   },
   {
@@ -316,7 +322,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     icon: 'SendHorizontal',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'in:sent',
-    hotkey: 'G+T',
+    hotkey: 'G>T',
     position: 2
   },
   {
@@ -326,7 +332,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     icon: 'Pen',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'in:draft',
-    hotkey: 'G+D',
+    hotkey: 'G>D',
     position: 3
   },
   {
@@ -336,7 +342,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     icon: 'Envelope',
     iconColor: NAV_ICON_COLOR.primary,
     query: 'in:all -in:trash',
-    hotkey: 'G+A',
+    hotkey: 'G>A',
     position: 4
   },
   // Additional nav items
@@ -347,7 +353,7 @@ export const getAvailableNavItems = (t: any): CustomNavItem[] => [
     icon: 'CheckCircle',
     iconColor: NAV_ICON_COLOR.positive,
     query: 'NOT in:inbox',
-    hotkey: 'G+E',
+    hotkey: 'G>E',
     position: 5
   },
   {
@@ -428,7 +434,7 @@ export function useCustomSidebarAtom() {
         order.push(item.id);
       });
 
-      return { items, order };
+      return { items, order, defaultsVersion: SIDEBAR_DEFAULTS_VERSION };
     },
     [t, migrateToCustomSidebar]
   );
@@ -464,7 +470,17 @@ export function useCustomSidebarAtom() {
       // 2. Try cache if not in atom
       // An empty cached sidebar is the residue of the empty-stub bug above
       // (no Inbox/Sent/Drafts on a fresh install) — ignore it so defaults load.
-      const cachedSidebar = await getCachedCustomSidebar(spaceId);
+      const storedSidebar = await getCachedCustomSidebar(spaceId);
+      // A sidebar saved before Done / Trash were defaults gets them once.
+      const cachedSidebar = storedSidebar?.order?.length
+        ? withSidebarDefaults(
+            storedSidebar,
+            getAvailableNavItems(t).filter((item) => item.id === 'done' || item.id === 'trash')
+          )
+        : storedSidebar;
+      if (cachedSidebar && cachedSidebar !== storedSidebar) {
+        await cacheCustomSidebar(spaceId, cachedSidebar, setSidebarsBySpace);
+      }
       if (cachedSidebar?.order?.length) {
         console.log('Using cached sidebar for space:', spaceId);
 
@@ -519,7 +535,7 @@ export function useCustomSidebarAtom() {
 
       return defaultSidebar;
     },
-    [sidebarsBySpace, setSidebarsBySpace, initializeDefaultSidebar]
+    [sidebarsBySpace, setSidebarsBySpace, initializeDefaultSidebar, t]
   );
 
   // Update sidebar state for a space - OPTIMISTIC UPDATES

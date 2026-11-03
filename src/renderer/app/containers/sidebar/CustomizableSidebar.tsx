@@ -22,7 +22,10 @@ import {
 } from '@/renderer/app/components/ui/dropdown-menu';
 import NavItem from '@/renderer/app/containers/sidebar/NavItem';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import {
+  useKeyboardRegistration,
+  useIsKeyboardMode
+} from '@/renderer/app/context/KeyboardNavigationContext';
 import { cn } from '@/renderer/app/lib/utils';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
@@ -61,6 +64,8 @@ import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/renderer/app/components/ui/scroll-area';
 import { DBGetThreadCountsByLabelSets, ValidLabel } from '@/renderer/app/lib/db/thread';
+import { inboxUnreadCountAtom } from '@/renderer/app/store/thread/inboxUnreadAtom';
+import { useSetAtom } from 'jotai';
 import { restoreSidebarSubtree } from '@/renderer/app/lib/sidebarRestore';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
@@ -183,7 +188,7 @@ const SortableNavItem: FC<SortableNavItemProps> = ({
     disabled: isEditing // Disable dragging when in editing mode to prevent focus interference
   });
   const { t } = useTranslation();
-  const { isKeyboardMode } = useKeyboardNavigationContext();
+  const isKeyboardMode = useIsKeyboardMode();
   // Combined ref function to handle both sortable and keyboard navigation
   const combinedRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -687,7 +692,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   const { activeSpace, setActiveAccountsInSpace } = useSpaceAtom();
   const { searchNewQuery, globalSearchQuery, activeLayout } = useGlobalAtom();
   const { labelsMapByAccount, defaultLabels } = useLabelAtom();
-  const { registerAreaRef } = useKeyboardNavigationContext();
+  const { registerAreaRef } = useKeyboardRegistration();
   const containerRef = useRef<HTMLDivElement>(null);
   const {
     getSidebarForSpace,
@@ -733,6 +738,7 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
   }, []);
   useEffect(() => clearSpringTimer, [clearSpringTimer]);
   const [labelCounts, setLabelCounts] = useState<Record<string, number>>({});
+  const setInboxUnreadCount = useSetAtom(inboxUnreadCountAtom);
   const { threadsMap } = useThreadAtom();
   const { getDraftsForAccount } = useDraftAtom();
   const { t } = useTranslation();
@@ -1930,12 +1936,25 @@ const CustomizableSidebar: FC<CustomizableSidebarProps> = () => {
     });
 
     setLabelCounts(counts);
-  }, [sidebarState, activeSpace, getDraftsForAccount]);
+    setInboxUnreadCount(sidebarState?.items?.primary ? (counts.primary ?? 0) : null);
+  }, [sidebarState, activeSpace, getDraftsForAccount, setInboxUnreadCount]);
 
-  // Re-fetch counts when threads or sidebar change (bursts coalesce)
+  // Re-count when threads or the sidebar change. Each count reads every cached
+  // thread, so a burst (triage: E, E, E…, bodies landing) is coalesced into
+  // one count a second later, when the app is idle, not one per change.
   useEffect(() => {
-    const timer = window.setTimeout(() => void fetchLabelCounts(), 150);
-    return () => window.clearTimeout(timer);
+    let idleId: number | undefined;
+    const timer = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idleId = window.requestIdleCallback(() => void fetchLabelCounts(), { timeout: 2000 });
+      } else {
+        void fetchLabelCounts();
+      }
+    }, 1000);
+    return () => {
+      window.clearTimeout(timer);
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+    };
   }, [threadsMap, sidebarState, activeSpace, fetchLabelCounts]);
 
   // Render count badge. A closed folder sums what's inside it (drafts aside),

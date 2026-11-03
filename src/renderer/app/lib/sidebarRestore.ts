@@ -46,3 +46,28 @@ export function restoreSidebarSubtree(
 
   return { items, order };
 }
+
+/** The defaults version that added Done and Trash to the sidebar. */
+export const SIDEBAR_DEFAULTS_VERSION = 2;
+
+/**
+ * Gives a sidebar saved before Done and Trash were default rows those rows,
+ * once: after Done (E) or Delete there was no visible place the email went.
+ * Rows already present (anywhere, also inside a folder) are left alone, and
+ * the version is recorded so a row the user then removes stays removed.
+ * Returns the same object when there is nothing to do.
+ */
+export function withSidebarDefaults(
+  sidebar: CustomSidebarState,
+  newDefaults: CustomNavItem[]
+): CustomSidebarState {
+  if ((sidebar.defaultsVersion ?? 1) >= SIDEBAR_DEFAULTS_VERSION) return sidebar;
+  const items = { ...sidebar.items };
+  const order = [...sidebar.order];
+  for (const item of newDefaults) {
+    if (items[item.id]) continue;
+    items[item.id] = { ...item, position: order.length };
+    order.push(item.id);
+  }
+  return { ...sidebar, items, order, defaultsVersion: SIDEBAR_DEFAULTS_VERSION };
+}

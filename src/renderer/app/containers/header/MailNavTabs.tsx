@@ -8,7 +8,23 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/app/componen
 import { cn } from '@/renderer/app/lib/utils';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import {
+  activeThreadIdAtom,
+  selectedThreadsAtom,
+  threadsMapAtom
+} from '@/renderer/app/store/thread/atoms';
+import { inboxUnreadCountAtom } from '@/renderer/app/store/thread/inboxUnreadAtom';
+import { atom, useAtomValue, useSetAtom } from 'jotai';
+
+// Unread Inbox conversations among those loaded (the fallback count). A
+// derived atom, so the tabs re-render when the number changes, not on every
+// thread update.
+const loadedInboxUnreadAtom = atom(
+  (get) =>
+    Object.values(get(threadsMapAtom)).filter(
+      (t) => t && t.labelIds.includes('INBOX') && t.labelIds.includes('UNREAD')
+    ).length
+);
 import { useSpaceAtom } from '@/renderer/app/store/space/useSpaceAtom';
 
 type MailNavItemBase = {
@@ -40,17 +56,18 @@ const NAV_ITEMS: MailNavItem[] = [
     label: 'Inbox',
     Icon: Inbox,
     query: 'category:primary',
-    shortcut: 'G+I'
+    shortcut: 'G>I'
   },
   {
     id: 'snooze',
     label: 'Later',
     Icon: Clock3,
     layout: 'LATER' as const,
-    description: 'Snoozed and scheduled mail'
+    description: 'Snoozed and scheduled mail',
+    shortcut: 'G>L'
   },
-  { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G+S' },
-  { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G+T' }
+  { id: 'starred', label: 'Starred', Icon: Star, query: 'is:starred', shortcut: 'G>S' },
+  { id: 'sent', label: 'Sent', Icon: Send, query: 'in:sent', shortcut: 'G>T' }
 ];
 
 const normalizeSearchQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -68,18 +85,17 @@ const queryMatchesInbox = (normalizedQuery: string) => {
 const MailNavTabs = React.memo(() => {
   const { t } = useTranslation();
   const { activeLayout, globalSearchQuery, searchNewQuery, setActiveLayout } = useGlobalAtom();
-  const { threadsMap, setActiveThreadId, setSelectedThreads } = useThreadAtom();
+  const setActiveThreadId = useSetAtom(activeThreadIdAtom);
+  const setSelectedThreads = useSetAtom(selectedThreadsAtom);
+  // The sidebar's count over the whole cache; the loaded threads only when
+  // the sidebar has no Inbox row to count it.
+  const cachedInboxUnread = useAtomValue(inboxUnreadCountAtom);
+  const loadedInboxUnread = useAtomValue(loadedInboxUnreadAtom);
   const { activeSpace, setActiveAccountsInSpace } = useSpaceAtom();
   const { sidebarCollapsed } = useSidebarAtom();
   const [loadingTabId, setLoadingTabId] = useState<string | null>(null);
 
-  const inboxUnreadCount = useMemo(
-    () =>
-      Object.values(threadsMap).filter(
-        (t) => t && t.labelIds.includes('INBOX') && t.labelIds.includes('UNREAD')
-      ).length,
-    [threadsMap]
-  );
+  const inboxUnreadCount = cachedInboxUnread ?? loadedInboxUnread;
 
   const activeId = useMemo(() => {
     if (activeLayout === 'LATER') return 'snooze';

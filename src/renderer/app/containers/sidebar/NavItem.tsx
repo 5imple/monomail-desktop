@@ -2,12 +2,17 @@ import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/SidebarI
 import { Button } from '@/renderer/app/components/ui/button';
 import { ringVariants } from '@/renderer/app/components/ui/constants';
 import { Input } from '@/renderer/app/components/ui/input';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useKeyboardRegistration } from '@/renderer/app/context/KeyboardNavigationContext';
 import useWindowFocus from '@/renderer/app/hooks/useWindowFocus';
 import { cn } from '@/renderer/app/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Keys, useHotkeys } from 'react-hotkeys-hook';
+import {
+  COMMAND_GO_TO_SEQUENCES,
+  isComposeExpanded,
+  toGoToSequence
+} from '@/renderer/app/lib/hotkeyGuards';
 import { useTranslation } from 'react-i18next';
 
 // Fills use the foreground-alpha scale of the thread rows, so selected always
@@ -103,7 +108,7 @@ const NavItem = React.memo<NavItemProps>(
   }) => {
     const { t } = useTranslation();
     const { isWindowFocused } = useWindowFocus();
-    const { registerItem, unregisterItem } = useKeyboardNavigationContext();
+    const { registerItem, unregisterItem } = useKeyboardRegistration();
 
     // Use ref to store the element reference
     const elementRef = useRef<HTMLDivElement>(null);
@@ -157,6 +162,8 @@ const NavItem = React.memo<NavItemProps>(
 
     const onClickHotkey = useCallback(
       (event: KeyboardEvent) => {
+        // Not under an expanded compose (sequences skip ignoreEventWhen).
+        if (isComposeExpanded()) return;
         event.preventDefault();
         onClick?.();
       },
@@ -166,11 +173,19 @@ const NavItem = React.memo<NavItemProps>(
     // Always called, and switched off without a hotkey: a hook inside an `if`
     // breaks React's hook order when a mounted item gains or loses one (the
     // sidebar re-renders with its stored items after the defaults).
+    // Stored items may say "G+P" (both keys held); the go-to is G, then P.
+    // Sequences the GOTO_* commands own (G then I, S, T, D, E, L) are left to
+    // them: bound here too, one key press ran both.
+    const sequence = toGoToSequence(hotkey);
+    const ownHotkey =
+      typeof sequence === 'string' && COMMAND_GO_TO_SEQUENCES.has(sequence.toUpperCase())
+        ? undefined
+        : sequence;
     useHotkeys(
-      hotkey ?? '',
+      ownHotkey ?? '',
       onClickHotkey,
-      { preventDefault: true, enabled: !!(hotkey && onClick) },
-      [onClickHotkey, hotkey, onClick]
+      { preventDefault: true, enabled: !!(ownHotkey && onClick) },
+      [onClickHotkey, ownHotkey, onClick]
     );
 
     const handleEditConfirm = useCallback(() => {

@@ -8,8 +8,8 @@ import type {
   ThreadSnapshot,
   DraftSnapshot
 } from '@/main/api/queue/types';
-import { atomWithStorage } from 'jotai/utils';
-import { getDefaultStore, useAtom } from 'jotai';
+import { atomWithStorage, unwrap } from 'jotai/utils';
+import { getDefaultStore, useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect, useMemo } from 'react';
 
 /**
@@ -60,6 +60,40 @@ export const queueAtom = atomWithStorage<QueueState>(
   QUEUE_DEFAULT,
   createIndexedDBStorage<QueueState>({ defaultValue: QUEUE_DEFAULT })
 );
+
+// The stored value loads from IndexedDB asynchronously. Reading `queueAtom`
+// directly suspends until it arrives, and when the first reader mounts from a
+// keypress (R/Enter opens compose, whose Send-later button reads the queue)
+// React throws "A component suspended while responding to synchronous input".
+// Components read this view instead: the defaults until the load finishes.
+const queueReadAtom = unwrap(queueAtom, (prev) => prev ?? QUEUE_DEFAULT);
+
+/**
+ * Asks the scheduler whether the conversation has a reminder still to come.
+ * It holds every account's reminders (the cache has the primary account's
+ * only). null when it can't say.
+ */
+export async function checkPendingReminder(
+  accountId: string,
+  threadId: string
+): Promise<boolean | null> {
+  if (!electronApi || typeof electronApi.queueListSnoozed !== 'function') return null;
+  const res = await electronApi.queueListSnoozed(accountId);
+  if (!res.ok) return null;
+  const now = Date.now();
+  return res.data.items.some(
+    (item) => item.threadId === threadId && new Date(item.snoozeUntil).getTime() > now
+  );
+}
+
+/** Whether the cache knows of a reminder (a snooze) still to come. */
+export function hasPendingReminder(threadId: string): boolean {
+  const { snoozed } = getDefaultStore().get(queueReadAtom);
+  const now = Date.now();
+  return Object.values(snoozed).some(
+    (item) => item.threadId === threadId && new Date(item.snoozeUntil).getTime() > now
+  );
+}
 
 // ---- mapping: server record → cache item ---------------------------------
 
@@ -170,8 +204,8 @@ function ensurePushSubscribed() {
 // ---- hook -----------------------------------------------------------------
 
 export function useQueueAtom() {
-  const [rawState, setState] = useAtom(queueAtom);
-  const state: QueueState = rawState instanceof Promise ? QUEUE_DEFAULT : rawState;
+  const state = useAtomValue(queueReadAtom);
+  const setState = useSetAtom(queueAtom);
   const { accounts } = useAuth();
   const primaryAccountId = accounts[0]?.uid ?? '';
 

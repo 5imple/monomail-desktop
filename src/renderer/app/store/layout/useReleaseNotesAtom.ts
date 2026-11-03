@@ -1,4 +1,4 @@
-import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
+import { createIndexedDBStorage, nonSuspendingStorageAtom } from '@/renderer/app/lib/db/jotai-idb';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { atom, useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
@@ -14,12 +14,15 @@ export interface ReleaseNote {
 }
 
 // Stores an array of seen release note UIDs in local storage (empty array as default)
-const seenReleaseNoteUIDsAtom = atomWithStorage<string[]>(
-  'global:release:notes',
-  [],
-  createIndexedDBStorage<string[]>({
-    defaultValue: []
-  })
+const seenReleaseNoteUIDsAtom = nonSuspendingStorageAtom(
+  atomWithStorage<string[]>(
+    'global:release:notes',
+    [],
+    createIndexedDBStorage<string[]>({
+      defaultValue: []
+    })
+  ),
+  []
 );
 
 // Main atoms for release note state
@@ -41,7 +44,10 @@ export function useReleaseNotesAtom() {
     try {
       const homepageDomain = import.meta.env.MONO_ENV_HOMEPAGE_DOMAIN?.replace(/\/$/, '');
       const appVersion = import.meta.env.MONO_ENV_APP_VERSION || '1.0.0-dev';
-      if (!homepageDomain) return;
+      // No homepage, or a local development stub that isn't running: skip.
+      if (!homepageDomain || /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(homepageDomain)) {
+        return;
+      }
 
       const response = await fetch(
         `${homepageDomain}/api/release-note?version=${appVersion.split('-')[0]}`

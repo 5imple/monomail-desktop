@@ -27,6 +27,8 @@ interface QueueRowProps {
   isRescheduling: boolean;
 
   onPrimaryAction?: () => void;
+  /** Opens the email in the reader (snoozed rows). Without it the row opens nothing. */
+  onOpen?: () => void;
   onCancel?: () => void;
   onOpenReschedule?: () => void;
   onCloseReschedule?: () => void;
@@ -51,6 +53,7 @@ export function QueueRow({
   reschedulePresets,
   isRescheduling,
   onPrimaryAction,
+  onOpen,
   onCancel,
   onOpenReschedule,
   onCloseReschedule,
@@ -70,11 +73,26 @@ export function QueueRow({
   const rescheduleButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
-    // Not a button: the rows open nothing (they looked clickable, with a
-    // pointer and Enter, and did nothing). Their actions are the buttons.
+    // A snoozed row opens its email (click or Enter) without bringing it
+    // back; it used to open nothing, so a snoozed email could not be read.
+    // Scheduled rows have no onOpen and stay plain: their actions are the buttons.
     <div
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen}
+      onKeyDown={
+        onOpen
+          ? (e) => {
+              if (e.key === 'Enter' && e.target === e.currentTarget) {
+                e.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
       className={cn(
-        'group relative mx-[10%] rounded-md transition-colors pointer-hover:bg-foreground/[0.045] dark:pointer-hover:bg-foreground/[0.07]',
+        'group relative mx-[10%] rounded-md outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring pointer-hover:bg-foreground/[0.045] dark:pointer-hover:bg-foreground/[0.07]',
+        onOpen && 'cursor-pointer',
         isRescheduling && 'bg-foreground/[0.045] dark:bg-foreground/[0.07]'
       )}
     >

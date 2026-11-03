@@ -14,15 +14,17 @@ import MailNavTabs from '@/renderer/app/containers/header/MailNavTabs';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useAccountErrors } from '@/renderer/app/hooks/useAccountErrors';
 import { useRegisterHotkeys } from '@/renderer/app/hooks/useRegisterHotkeys';
+import { useReaderReturn } from '@/renderer/app/store/layout/readerReturnAtom';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { cn } from '@/renderer/app/lib/utils';
 import { useComposeWindowAtom } from '@/renderer/app/store/compose/useComposeWindowAtom';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { calendarDisplayPanelAtom } from '@/renderer/app/store/layout/useGlobalAtom';
+import { activeThreadIdAtom, selectedThreadsAtom } from '@/renderer/app/store/thread/atoms';
 import { CommandType } from '@/renderer/app/types';
+import { useAtom, useSetAtom, useStore } from 'jotai';
 import { CalendarDays, CircleUserRound, SquarePen } from 'lucide-react';
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,15 +44,31 @@ const splitAddresses = (value?: string) =>
 
 type MailtoPayload = { email?: string; params: Record<string, string | undefined> };
 
+/**
+ * The app-wide keyboard shortcuts. A component of its own (rendering nothing)
+ * because the hotkeys read the thread store and the command table: in the
+ * layout itself they re-rendered the whole app on every thread change.
+ */
+const GlobalHotkeys: FC = () => {
+  useRegisterHotkeys();
+  // Also here, for the same reason: closing an email opened from Later goes
+  // back to Later (readerReturnAtom).
+  useReaderReturn();
+  return null;
+};
+
 const AppLayout: FC<AppLayoutProps> = ({}) => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const threadIdParam = searchParams.get('tid');
-  const { calendarDisplayPanel, setCalendarDisplayPanel } = useGlobalAtom();
+  const [calendarDisplayPanel, setCalendarDisplayPanel] = useAtom(calendarDisplayPanelAtom);
   const { sidebarCollapsed, sidebarLoading } = useSidebarAtom();
   const { globalDraftWindows } = useComposeWindowAtom();
-  const { activeThreadId, setActiveThreadId, selectedThreads, setSelectedThreads } =
-    useThreadAtom();
+  // Setters and on-demand reads only: subscribing the layout to the open
+  // thread or the selection re-rendered everything under it.
+  const store = useStore();
+  const setActiveThreadId = useSetAtom(activeThreadIdAtom);
+  const setSelectedThreads = useSetAtom(selectedThreadsAtom);
   const [isLoaded, setIsLoaded] = useState(false);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
   const [startupSlow, setStartupSlow] = useState(false);
@@ -58,7 +76,6 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
   const accountErrors = useAccountErrors();
   const executeCommand = useExecuteCommand();
   const { openDialog } = useDialogs();
-  useRegisterHotkeys();
 
   useEffect(() => {
     if (threadIdParam) {
@@ -96,10 +113,10 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
         return;
       }
 
-      if (activeThreadId) {
+      if (store.get(activeThreadIdAtom)) {
         e.preventDefault();
         setActiveThreadId(null);
-      } else if (selectedThreads.length > 0) {
+      } else if (store.get(selectedThreadsAtom).length > 0) {
         // Back on the list, Escape clears a multi-selection.
         e.preventDefault();
         setSelectedThreads([]);
@@ -108,7 +125,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
 
     document.addEventListener('keydown', handleEscape, true);
     return () => document.removeEventListener('keydown', handleEscape, true);
-  }, [activeThreadId, setActiveThreadId, selectedThreads, setSelectedThreads]);
+  }, [store, setActiveThreadId, setSelectedThreads]);
 
   // The trigger listener below is registered once, so read the latest
   // executeCommand through a ref. Capturing it directly froze the command
@@ -173,7 +190,9 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
     }
   }, [accounts, composeFromMailto]);
 
-  // Proper loading animation with slight delay
+  // The panels fade in over 100 ms once the sidebar state is known (it was
+  // 300 ms, on top of the wait). The placeholder before this (AuthGuard)
+  // already draws the same chrome, so nothing jumps.
   useEffect(() => {
     // Wait for sidebar state to be loaded before showing UI
     if (!sidebarLoading) {
@@ -216,6 +235,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
 
   return (
     <>
+      <GlobalHotkeys />
       <div className={cn('no-drag h-screen bg-white dark:bg-background')}>
         <div className="flex h-full flex-col overflow-hidden">
           {/* Unified titlebar — spans the full window width. `drag` allows
@@ -317,13 +337,13 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
             {/* Remove individual transition classes - inherit from parent */}
             <AppSidebarContainer
               className={cn(
-                'transition-opacity duration-300 ease-out',
+                'transition-opacity duration-100 ease-out',
                 isLoaded ? 'opacity-100' : 'opacity-0'
               )}
             />
             <AppMainPanelContainer
               className={cn(
-                'transition-opacity duration-300 ease-out',
+                'transition-opacity duration-100 ease-out',
                 isLoaded ? 'opacity-100' : 'opacity-0'
               )}
             />
@@ -355,7 +375,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
               >
                 <AppCalendarPanelContainer
                   className={cn(
-                    'transition-opacity duration-300 ease-out',
+                    'transition-opacity duration-100 ease-out',
                     isLoaded ? 'opacity-100' : 'opacity-0'
                   )}
                 />
@@ -398,7 +418,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                         window.location.reload();
                       }}
                     >
-                      Reload
+                      {t('layout.startup.reload', { defaultValue: 'Reload' })}
                     </Button>
                     {isElectron && (
                       <Button
@@ -409,7 +429,7 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
                           void electronApi.openLogFolder();
                         }}
                       >
-                        Open Logs
+                        {t('layout.startup.open_logs', { defaultValue: 'Open logs' })}
                       </Button>
                     )}
                   </div>

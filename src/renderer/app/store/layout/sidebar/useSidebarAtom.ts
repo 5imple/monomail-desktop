@@ -1,14 +1,17 @@
-import { createIndexedDBStorage } from '@/renderer/app/lib/db/jotai-idb';
+import { createIndexedDBStorage, nonSuspendingStorageAtom } from '@/renderer/app/lib/db/jotai-idb';
 import { atom, useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 import { useEffect } from 'react';
 
-export const sidebarCollapsedAtom = atomWithStorage<boolean>(
-  'layout:sidebar:collapsed',
-  false,
-  createIndexedDBStorage<boolean>({
-    defaultValue: false
-  })
+export const sidebarCollapsedAtom = nonSuspendingStorageAtom(
+  atomWithStorage<boolean>(
+    'layout:sidebar:collapsed',
+    false,
+    createIndexedDBStorage<boolean>({
+      defaultValue: false
+    })
+  ),
+  false
 );
 export const sidebarHoveredAtom = atom<boolean>(false);
 export const sidebarLoadingAtom = atom<boolean>(true);
@@ -27,21 +30,27 @@ export interface AccountNavState {
 }
 
 // Store the navigation state for each space
-export const navStateBySpaceAtom = atomWithStorage<Record<string, NavState>>(
-  'layout:sidebar:nav:space',
-  {},
-  createIndexedDBStorage<Record<string, NavState>>({
-    defaultValue: {}
-  })
+export const navStateBySpaceAtom = nonSuspendingStorageAtom(
+  atomWithStorage<Record<string, NavState>>(
+    'layout:sidebar:nav:space',
+    {},
+    createIndexedDBStorage<Record<string, NavState>>({
+      defaultValue: {}
+    })
+  ),
+  {}
 );
 
 // Store the navigation state for each account
-export const accountNavStateAtom = atomWithStorage<Record<string, AccountNavState>>(
-  'layout:sidebar:nav:account',
-  {},
-  createIndexedDBStorage<Record<string, AccountNavState>>({
-    defaultValue: {}
-  })
+export const accountNavStateAtom = nonSuspendingStorageAtom(
+  atomWithStorage<Record<string, AccountNavState>>(
+    'layout:sidebar:nav:account',
+    {},
+    createIndexedDBStorage<Record<string, AccountNavState>>({
+      defaultValue: {}
+    })
+  ),
+  {}
 );
 
 export function useSidebarAtom() {

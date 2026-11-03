@@ -3,7 +3,6 @@ import MonoIcon from '@/renderer/app/components/icons/InboxIcon';
 import { Alert, AlertDescription } from '@/renderer/app/components/ui/alert';
 import { Button } from '@/renderer/app/components/ui/button';
 import { ringVariants } from '@/renderer/app/components/ui/constants';
-import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import InboxFilterTabs from '@/renderer/app/containers/filter/InboxFilterTabs';
 import PinHeader from '@/renderer/app/containers/header/PinHeader';
 import ThreadSelectionToast from '@/renderer/app/containers/list/ThreadSelectionToast';
@@ -13,9 +12,10 @@ import { cn } from '@/renderer/app/lib/utils';
 import { useDialogs } from '@/renderer/app/store/dialog/useDialogAtom';
 import { useSidebarAtom } from '@/renderer/app/store/layout/sidebar/useSidebarAtom';
 import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useCustomSidebarAtom } from '@/renderer/app/store/space/useCustomSidebarAtom';
+import { useIsSearchView } from '@/renderer/app/hooks/useIsSearchView';
+import { useAuth } from '@/renderer/app/context/AuthContext';
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface ListPanelHeaderProps {
@@ -24,105 +24,47 @@ interface ListPanelHeaderProps {
 
 // Queries the titlebar tabs and the sidebar's built-in rows open: a list
 // showing one of these is a named view, not a search.
-const NAMED_VIEW_QUERIES = new Set([
-  'category:primary',
-  'in:inbox',
-  'is:starred',
-  'in:sent',
-  'in:draft',
-  'in:all -in:trash',
-  'not in:inbox',
-  'in:trash',
-  'in:spam',
-  'is:important',
-  'is:snoozed',
-  'category:social',
-  'category:promotions',
-  'category:updates',
-  'category:forums'
-]);
-
-const normalizeQuery = (query: string) => query.trim().replace(/\s+/g, ' ').toLowerCase();
-
 /**
- * The search field at the top of the list. Search used to live only in the
- * sidebar (gone when it's collapsed) and behind ⌘F / ⌘K, and once a search
- * was running nothing on screen said so — no query in sight, no way out but
- * clicking a view. Now the field shows the query being viewed, with a clear
- * button back to the Inbox; a named view (Inbox, Sent, a sidebar label…)
- * just shows the placeholder.
+ * Shown only while a search is running. Search itself lives behind ⌘F / ⌘K and
+ * in the sidebar, so a named view carries no field; but once a search ran
+ * nothing on screen said so — no query in sight, no way out but clicking a
+ * view. This strip names the query (click to refine it in the palette) and
+ * clears it back to the Inbox.
  */
-const ListSearchBar = () => {
+const ActiveSearchStrip = () => {
   const { t } = useTranslation();
   const { globalSearchQuery, searchNewQuery } = useGlobalAtom();
   const { openDialog } = useDialogs();
-  const { getCurrentSidebarState } = useCustomSidebarAtom();
-
-  const sidebarQueries = useMemo(() => {
-    const state = getCurrentSidebarState();
-    return new Set(
-      Object.values(state?.items ?? {})
-        .map((item) => (item.query ? normalizeQuery(item.query) : ''))
-        .filter(Boolean)
-    );
-  }, [getCurrentSidebarState]);
-
-  const normalized = normalizeQuery(globalSearchQuery);
-  const isSearch =
-    normalized.length > 0 && !NAMED_VIEW_QUERIES.has(normalized) && !sidebarQueries.has(normalized);
-  const placeholder = t('thread_list.search_placeholder', { defaultValue: 'Search mail' });
 
   return (
     <div className="no-drag flex items-center gap-1">
       <button
         type="button"
-        aria-label={
-          isSearch
-            ? t('thread_list.search_showing', {
-                defaultValue: 'Showing results for {{query}}. Edit search',
-                query: globalSearchQuery
-              })
-            : placeholder
-        }
+        aria-label={t('thread_list.search_showing', {
+          defaultValue: 'Showing results for {{query}}. Edit search',
+          query: globalSearchQuery
+        })}
         onClick={() =>
-          openDialog('commandPalette', {
-            pages: ['SEARCH'],
-            // The current search comes along to be refined; a named view
-            // starts a fresh one.
-            searchQuery: isSearch ? globalSearchQuery : ''
-          })
+          openDialog('commandPalette', { pages: ['SEARCH'], searchQuery: globalSearchQuery })
         }
         className={cn(
-          'group flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border/70 bg-muted/40 px-3 text-left text-[13px] transition-colors hover:bg-muted/70',
-          ringVariants,
-          isSearch ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+          'flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border/70 bg-muted/40 px-3 text-left text-[13px] text-foreground transition-colors hover:bg-muted/70',
+          ringVariants
         )}
       >
         <MonoIcon type="Search" className="h-4 w-4 shrink-0" />
-        <span className={cn('min-w-0 flex-1 truncate', isSearch && 'font-medium')}>
-          {isSearch ? globalSearchQuery : placeholder}
-        </span>
-        {!isSearch && (
-          <ShortcutKeyboard
-            variant="flat"
-            sizeVariant="xs"
-            shortcut="MOD+F"
-            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-          />
-        )}
+        <span className="min-w-0 flex-1 truncate font-medium">{globalSearchQuery}</span>
       </button>
-      {isSearch && (
-        <Button
-          variant="ghost"
-          sizeVariant="sm"
-          typeVariant="icon"
-          className="text-muted-foreground hover:text-foreground"
-          tooltip={t('thread_list.clear_search', { defaultValue: 'Clear search' })}
-          onClick={() => searchNewQuery('category:primary', undefined, false)}
-        >
-          <MonoIcon type="X" />
-        </Button>
-      )}
+      <Button
+        variant="ghost"
+        sizeVariant="sm"
+        typeVariant="icon"
+        className="text-muted-foreground hover:text-foreground"
+        tooltip={t('thread_list.clear_search', { defaultValue: 'Clear search' })}
+        onClick={() => searchNewQuery('category:primary', undefined, false)}
+      >
+        <MonoIcon type="X" />
+      </Button>
     </div>
   );
 };
@@ -132,17 +74,30 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
     const { sidebarCollapsed } = useSidebarAtom();
     const { globalSearchQuery } = useGlobalAtom();
     const { t } = useTranslation();
+    const isSearch = useIsSearchView();
+    // "Deleted after 30 days" is Gmail's rule; Microsoft 365 retention is set
+    // by the organisation, so the notice shows only when every account is Gmail.
+    const { accounts } = useAuth();
+    const allGmail = accounts.length > 0 && accounts.every((a) => a.provider !== 'microsoft');
 
     return (
       <div ref={ref} className="z-10">
         <ThreadSelectionToast />
-        {/* The strip under the titlebar: the search field, aligned with the
-            rows (px-[10%]). The rest of it still drags the window. */}
-        <div className="drag flex items-center gap-2 px-[10%] pb-1 pt-3 sm:pt-4">
+        {/* The strip under the titlebar, aligned with the rows (px-[10%]): the
+            running search, when there is one; otherwise just the breathing
+            room above the tabs. It drags the window either way. */}
+        <div
+          className={cn(
+            'drag flex items-center gap-2 px-[10%] pt-3 sm:pt-4',
+            isSearch ? 'pb-1' : 'pb-2'
+          )}
+        >
           {!isElectron && sidebarCollapsed && <SidebarCollapseButton className="mr-2" />}
-          <div className="min-w-0 flex-1">
-            <ListSearchBar />
-          </div>
+          {isSearch && (
+            <div className="min-w-0 flex-1">
+              <ActiveSearchStrip />
+            </div>
+          )}
           {/* Account-error and offline status live in the titlebar, where they
               stay visible while reading or in Later. */}
         </div>
@@ -153,7 +108,7 @@ const ListPanelHeader = React.forwardRef<HTMLDivElement, ListPanelHeaderProps>(
           </div>
         )}
         <InboxFilterTabs />
-        {globalSearchQuery === 'in:trash' && (
+        {globalSearchQuery === 'in:trash' && allGmail && (
           <div
             className={cn(
               'no-drag px-[10%] pb-2 pt-2 transition-all',

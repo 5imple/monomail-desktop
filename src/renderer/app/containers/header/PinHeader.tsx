@@ -11,7 +11,10 @@ import {
 import RecipientAvatar from '@/renderer/app/components/ui/recipient-avatar';
 import { ScrollArea, ScrollBar } from '@/renderer/app/components/ui/scroll-area';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import {
+  useKeyboardRegistration,
+  useIsKeyboardMode
+} from '@/renderer/app/context/KeyboardNavigationContext';
 import { useUserTrackingData } from '@/renderer/app/hooks/useUserTrackingData';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { shortName } from '@/renderer/app/lib/shortName';
@@ -120,7 +123,8 @@ export const SortableEmailContact = ({
     opacity: isDragging && !isOverlay ? 0.5 : 1
   };
 
-  const { registerItem, unregisterItem, isKeyboardMode } = useKeyboardNavigationContext();
+  const { registerItem, unregisterItem } = useKeyboardRegistration();
+  const isKeyboardMode = useIsKeyboardMode();
   const elementRef = useRef<HTMLDivElement | null>(null);
 
   // Combined ref function to handle both sortable and keyboard navigation
@@ -384,7 +388,7 @@ const PinHeader: FC = () => {
     }
   };
 
-  const { registerAreaRef } = useKeyboardNavigationContext();
+  const { registerAreaRef } = useKeyboardRegistration();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Register container ref with navigation system
