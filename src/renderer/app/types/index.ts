@@ -10,6 +10,7 @@ export type CommandType =
   | 'GOTO_STARRED'
   | 'GOTO_SENT'
   | 'GOTO_DRAFTS'
+  | 'GOTO_LATER'
   | 'COMPOSE_NEW_MESSAGE'
   | 'COMPOSE_REPLY_MESSAGE'
   | 'COMPOSE_REPLY_ALL_MESSAGE'
@@ -84,7 +85,11 @@ export type FilterType =
   | 'cc'
   | 'bcc'
   | 'subject'
-  | 'date';
+  | 'date'
+  // Focused Inbox: value 'focused' or 'other'.
+  | 'inbox_type'
+  // Written by someone else at this domain (value 'example.edu'): the Team split.
+  | 'team';
 
 // Define the filter criteria
 export interface FilterCriteria {

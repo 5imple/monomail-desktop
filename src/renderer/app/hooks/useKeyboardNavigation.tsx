@@ -1,5 +1,9 @@
 // Types for our navigation system (Enhanced)
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { useStepConversation } from '@/renderer/app/hooks/useStepConversation';
+import { navigationKeysBlocked } from '@/renderer/app/lib/hotkeyGuards';
+import { cycleSplit } from '@/renderer/app/lib/splitCycle';
+import { activeThreadIdAtom, selectedThreadsAtom } from '@/renderer/app/store/thread/atoms';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import {
@@ -104,6 +108,10 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
   // The thread row the mouse is over, so arrow nav can start from it when the
   // user switches from mouse hover to the keyboard.
   const hoveredThreadIdRef = useRef<string | null>(null);
+  // The thread row the keyboard cursor was last drawn on (applyRealFocus), so
+  // a change to the list can tell "the row moved" from "the row left".
+  const focusedThreadIdRef = useRef<string | null>(null);
+  const applyRealFocusRef = useRef<() => void>(() => {});
 
   // Track if we're currently applying programmatic focus to prevent loops
 
@@ -168,7 +176,14 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
   // Refs to main container elements for scrolling and focus visualization
   const areaRefs = useRef<Partial<AreaRefsMap>>({});
 
-  const { setSelectedThreads, selectedThreads, activeThreadId } = useThreadAtom();
+  // The selection and the open thread only: this hook backs the provider that
+  // wraps the whole app, and the whole thread store re-rendered it (and every
+  // consumer of its context) on each thread change.
+  const selectedThreads = useAtomValue(selectedThreadsAtom);
+  const setSelectedThreads = useSetAtom(selectedThreadsAtom);
+  const activeThreadId = useAtomValue(activeThreadIdAtom);
+  const setActiveThreadIdAtom = useSetAtom(activeThreadIdAtom);
+  const stepConversation = useStepConversation();
 
   // Define area configurations with orientation and navigation relationships
   const areaConfigs: Record<FocusableArea, AreaConfig> = {
@@ -548,6 +563,27 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     if (safeIndex === -1) {
       // No items in current area, stay at current position but don't focus
       return;
+    }
+
+    // The list changed under the keyboard cursor. Follow the row it was on if
+    // that row only moved (new mail above it); if the row left (E, ⌫), stay at
+    // the same place so the cursor lands on the row that took its spot, and
+    // draw it there: the index alone did not change, so nothing re-applied
+    // the highlight and the next E acted on a row no one could see.
+    if (focusPosition.area === 'thread-list' && isKeyboardModeRef.current) {
+      const items = getItemList('thread-list');
+      const cursorId = focusedThreadIdRef.current;
+      if (cursorId && items[focusPosition.index]?.id !== cursorId) {
+        const movedTo = items.findIndex((item) => item.id === cursorId);
+        const nextIndex = movedTo >= 0 ? movedTo : safeIndex;
+        if (nextIndex !== focusPosition.index) {
+          setFocusPosition({ area: 'thread-list', index: nextIndex });
+          updatePivotIndex('thread-list', nextIndex);
+        } else {
+          applyRealFocusRef.current();
+        }
+        return;
+      }
     }
 
     if (focusPosition.index !== safeIndex) {
@@ -958,6 +994,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
 
     const currentItemList = getItemList(area);
     const currentRef = currentItemList[index]?.ref || null;
+    if (area === 'thread-list') focusedThreadIdRef.current = currentItemList[index]?.id ?? null;
 
     if (currentRef && isFocusable(currentRef)) {
       try {
@@ -996,6 +1033,8 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       areaRef.setAttribute('data-focused-container', 'true');
     }
   }, [focusPosition, getItemList, isKeyboardMode, isFocusable, isAreaDisabled]);
+
+  applyRealFocusRef.current = applyRealFocus;
 
   // Apply focus when position changes
   useEffect(() => {
@@ -1064,24 +1103,32 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     document.body.dataset.navMode = isKeyboardMode ? 'keyboard' : 'pointer';
   }, [isKeyboardMode]);
 
-  // Set up global hotkeys for arrow navigation with key repeat support
-  useHotkeys(
-    'down',
-    (e) => {
+  // Up / down (and J / K, as in Superhuman and Gmail). On the list they move
+  // the cursor. With an email open the list is hidden behind the reader, and
+  // they move the reader to the next / previous conversation instead of a
+  // cursor no one can see. Once Tab has moved into the reader's messages the
+  // arrows step through those; J / K always change conversation.
+  const handleVerticalKey = useCallback(
+    (e: KeyboardEvent, key: 'ArrowDown' | 'ArrowUp') => {
       e.preventDefault();
-      handleArrowNavigation('ArrowDown');
+      const isLetter = e.key === 'j' || e.key === 'k' || e.key === 'J' || e.key === 'K';
+      if (activeThreadId && (isLetter || focusPosition.area === 'thread-list')) {
+        stepConversation(key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      handleArrowNavigation(key);
     },
-    { scopes: ['GLOBAL'] }
+    [activeThreadId, focusPosition.area, handleArrowNavigation, stepConversation]
   );
+  const navigationKeyOptions = { scopes: ['GLOBAL'], ignoreEventWhen: navigationKeysBlocked };
 
-  useHotkeys(
-    'up',
-    (e) => {
-      e.preventDefault();
-      handleArrowNavigation('ArrowUp');
-    },
-    { scopes: ['GLOBAL'] }
-  );
+  useHotkeys('down, j', (e) => handleVerticalKey(e, 'ArrowDown'), navigationKeyOptions, [
+    handleVerticalKey
+  ]);
+
+  useHotkeys('up, k', (e) => handleVerticalKey(e, 'ArrowUp'), navigationKeyOptions, [
+    handleVerticalKey
+  ]);
 
   useHotkeys(
     'left',
@@ -1089,7 +1136,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       e.preventDefault();
       handleArrowNavigation('ArrowLeft');
     },
-    { scopes: ['GLOBAL'] }
+    navigationKeyOptions
   );
 
   useHotkeys(
@@ -1098,7 +1145,7 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       e.preventDefault();
       handleArrowNavigation('ArrowRight');
     },
-    { scopes: ['GLOBAL'] }
+    navigationKeyOptions
   );
 
   // Shift+↑/↓ in the thread list: move the keyboard cursor and grow (or
@@ -1226,22 +1273,36 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     [isAreaDisabled, getSafeIndex, updatePivotIndex]
   );
 
+  // Not while compose or a dialog / menu is open: Tab moved focus out of them
+  // into the sidebar or the hidden list.
+  // On the list (no email open, not in the sidebar) Tab / Shift+Tab move to
+  // the next / previous Inbox split, as in Superhuman; Left reaches the
+  // sidebar. In the reader Tab still moves between its areas.
+  const cycleSplitFromList = useCallback(
+    (step: 1 | -1) => !activeThreadId && focusPosition.area !== 'sidebar-nav' && cycleSplit(step),
+    [activeThreadId, focusPosition.area]
+  );
+
   useHotkeys(
     'tab',
     (e) => {
       e.preventDefault();
+      if (cycleSplitFromList(1)) return;
       handleTabNavigation('forward');
     },
-    { scopes: ['GLOBAL'] }
+    navigationKeyOptions,
+    [cycleSplitFromList, handleTabNavigation]
   );
 
   useHotkeys(
     'shift+tab',
     (e) => {
       e.preventDefault();
+      if (cycleSplitFromList(-1)) return;
       handleTabNavigation('backward');
     },
-    { scopes: ['GLOBAL'] }
+    navigationKeyOptions,
+    [cycleSplitFromList, handleTabNavigation]
   );
 
   /**
@@ -1262,7 +1323,6 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
       // Check if the current ref is actually the focused element
       // If not, focus it first before activating
       const activeElement = document.activeElement;
-      console.log('activeElement: ', activeElement);
 
       if (activeElement !== currentRef && !currentRef.contains(activeElement)) {
         // The navigation system's tracked element is not the currently focused element
@@ -1303,27 +1363,79 @@ export function useKeyboardNavigation(pivotContext?: NavigationPivotContext) {
     );
   }, [focusPosition, getItemList, setSelectedThreads, activateFocusedItem]);
 
-  // Enter opens the focused item. With the reader open the thread list is
-  // hidden behind it, and Enter means Reply All there (useRegisterHotkeys).
+  // The row the keyboard cursor is on, or else the row under the pointer.
+  // Opening it directly (not by clicking the row element) works whether or
+  // not the row holds DOM focus, which it does not when the mouse put the
+  // cursor there.
+  const openHighlightedThread = useCallback((): boolean => {
+    if (activeThreadId) return false;
+    if (isKeyboardModeRef.current && focusPosition.area !== 'thread-list') return false;
+    const threadId = getHighlightedItemId('thread-list');
+    if (!threadId) return false;
+    setSelectionAnchor(threadId);
+    setActiveThreadIdAtom(threadId);
+    return true;
+  }, [activeThreadId, focusPosition.area, getHighlightedItemId, setActiveThreadIdAtom]);
+
+  // A focused control keeps its own Enter / Space (a button presses itself).
+  const focusedControlOwnsKey = () => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body || el.closest('[data-thread]')) return false;
+    if (el.closest('.keyboard-focused')) return false;
+    return !!el.closest(
+      'button, a[href], input, textarea, select, summary, [contenteditable="true"], [role="button"], [role="menuitem"], [role="option"], [role="tab"], [role="checkbox"], [role="switch"]'
+    );
+  };
+
+  // Enter (and O) opens the highlighted item. With the reader open the thread
+  // list is hidden behind it, and Enter means Reply All there
+  // (useRegisterHotkeys).
   useHotkeys(
-    'enter',
-    () => {
+    'enter, o',
+    (e) => {
       if (activeThreadId && focusPosition.area === 'thread-list') return;
-      activateFocusedItem();
+      if (e.key === 'Enter' && focusedControlOwnsKey()) return;
+      if (openHighlightedThread()) {
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter') activateFocusedItem();
     },
-    { scopes: ['GLOBAL'] }
+    navigationKeyOptions,
+    [activeThreadId, focusPosition.area, openHighlightedThread, activateFocusedItem]
   );
 
   // Space selects/deselects the focused thread. With the reader open the list
-  // is hidden behind it and Space scrolls the email (DisplayPanel) instead.
+  // is hidden behind it and Space scrolls the email (DisplayPanel) instead. A
+  // focused button keeps Space: it used to be swallowed before anything
+  // decided there was a row to toggle.
   useHotkeys(
     'space',
     (e) => {
       if (activeThreadId && focusPosition.area === 'thread-list') return;
+      if (focusedControlOwnsKey()) return;
       e.preventDefault();
       toggleSelectFocusedThread();
     },
-    { scopes: ['GLOBAL'] }
+    navigationKeyOptions,
+    [activeThreadId, focusPosition.area, toggleSelectFocusedThread]
+  );
+
+  // X toggles the highlighted row's checkbox (Superhuman / Gmail), like Space.
+  useHotkeys(
+    'x',
+    (e) => {
+      if (activeThreadId) return;
+      const threadId = getHighlightedItemId('thread-list');
+      if (!threadId) return;
+      e.preventDefault();
+      setSelectionAnchor(threadId);
+      setSelectedThreads((prev) =>
+        prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
+      );
+    },
+    navigationKeyOptions,
+    [activeThreadId, getHighlightedItemId, setSelectedThreads]
   );
 
   // Alternative approach: Add an initialization method to the hook's return object

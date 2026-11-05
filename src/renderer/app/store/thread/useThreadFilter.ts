@@ -1,12 +1,16 @@
-/* eslint-disable no-case-declarations */
-import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
-import { isCalendarAttachment } from '@/renderer/app/lib/icsParser';
-import { threadHasFileAttachments } from '@/renderer/app/lib/threadAttachments';
+import { INBOX_VIEW_QUERIES, normalizeQuery } from '@/renderer/app/hooks/useIsSearchView';
+import { BUILT_IN_TAB_IDS, orderTabIds } from '@/renderer/app/lib/filterTabOrder';
+import {
+  hiddenBySplitLabel,
+  splitLabelsFor,
+  threadMatchesFilters
+} from '@/renderer/app/lib/threadFilters';
+import { currentSearchQueryAtom } from '@/renderer/app/store/layout/useGlobalAtom';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { useCallback, useMemo } from 'react';
-import { activeFiltersAtom, threadsMapAtom } from './atoms';
+import { activeFiltersAtom, customLabelsAtom, filterTabOrderAtom, threadsMapAtom } from './atoms';
 
 export function useThreadFilter() {
   const [activeFilters, setActiveFilters] = useAtom(activeFiltersAtom);
@@ -31,230 +35,41 @@ export function useThreadFilter() {
     [labelsMapByAccount]
   );
 
-  /**
-   * Applies all active filters to determine if a thread should be included
-   */
+  // Labels set to "only show here" (e.g. Others) take their mail out of every
+  // other tab in the Inbox (All, Unread, the user's own labels…), like
+  // Outlook's Other tab. Their own tab still shows it.
+  const globalSearchQuery = useAtomValue(currentSearchQueryAtom);
+  const customLabels = useAtomValue(customLabelsAtom);
+  const savedTabOrder = useAtomValue(filterTabOrderAtom);
+  const inInbox = INBOX_VIEW_QUERIES.has(normalizeQuery(globalSearchQuery ?? ''));
+  // The tabs as shown: between two splits, the earlier one keeps the mail both match.
+  const tabOrder = useMemo(
+    () => orderTabIds(savedTabOrder, [...BUILT_IN_TAB_IDS, ...customLabels.map((l) => l.id)]),
+    [savedTabOrder, customLabels]
+  );
+  const splitLabels = useMemo(
+    () => splitLabelsFor(activeFilters, customLabels, inInbox, tabOrder),
+    [activeFilters, customLabels, inInbox, tabOrder]
+  );
+  // Changes when the set of split labels does: the list is filtered again.
+  const splitKey = useMemo(
+    () => splitLabels.map((l) => `${l.id}:${JSON.stringify(l.rules)}`).join('|'),
+    [splitLabels]
+  );
+  const isFiltering = activeFilters.length > 0 || splitLabels.length > 0;
+
+  /** Whether a split label claims the thread (it then shows only under that label). */
+  const isHiddenBySplit = useCallback(
+    (thread: MonoThread): boolean =>
+      splitLabels.length > 0 && hiddenBySplitLabel(thread, splitLabels, getLabelIdsByName),
+    [splitLabels, getLabelIdsByName]
+  );
+
+  /** Whether a thread passes the active filters (rules: lib/threadFilters). */
   const applyFilters = useCallback(
-    (thread: MonoThread): boolean => {
-      // If no filters are active, include all threads
-      if (activeFilters.length === 0) {
-        return true;
-      }
-
-      // Check if we have both read and unread filters active
-      const hasReadFilter = activeFilters.some(
-        (f) => f.type === 'read_status' && f.value === 'read' && f.operator === 'is'
-      );
-      const hasUnreadFilter = activeFilters.some(
-        (f) => f.type === 'read_status' && f.value === 'unread' && f.operator === 'is'
-      );
-
-      // If both read and unread filters are active, we'll consider this filter type as satisfied
-      // and focus on other filters only
-      let filtersToApply = activeFilters;
-      if (hasReadFilter && hasUnreadFilter) {
-        // Remove both read and unread filters from consideration
-        filtersToApply = activeFilters.filter((f) => f.value !== 'read' && f.value !== 'unread');
-
-        // If no other filters remain, include all threads
-        if (filtersToApply.length === 0) {
-          return true;
-        }
-      }
-
-      // Group filters by type for OR logic within the same filter type
-      const filtersByType: Record<string, typeof activeFilters> = {};
-      filtersToApply.forEach((filter) => {
-        if (!filtersByType[filter.type]) {
-          filtersByType[filter.type] = [];
-        }
-        filtersByType[filter.type].push(filter);
-      });
-
-      // Apply each filter type - thread must match ALL filter types (AND logic)
-      // but for each filter type, the thread only needs to match ONE of the filters (OR logic)
-      return Object.values(filtersByType).every((filtersOfType) => {
-        // OR logic for filters of the same type
-        return filtersOfType.some((filter) => {
-          switch (filter.type) {
-            case 'read_status':
-              if (filter.operator === 'is') {
-                if (filter.value === 'read') {
-                  return !thread.labelIds.includes('UNREAD');
-                } else {
-                  return thread.labelIds.includes('UNREAD');
-                }
-              }
-              break;
-
-            case 'attachment':
-              if (filter.operator === 'has') {
-                return threadHasFileAttachments(thread);
-              } else if (filter.operator === 'does_not_have') {
-                return !threadHasFileAttachments(thread);
-              }
-              break;
-
-            case 'calendar':
-              const hasCalendarEvent = thread.items.some((item) => {
-                if (item.type === 'message') {
-                  return Object.values((item as MonoMessage).attachments).some((attachment) =>
-                    isCalendarAttachment(attachment)
-                  );
-                }
-                return false;
-              });
-
-              if (filter.operator === 'has') {
-                return hasCalendarEvent;
-              } else if (filter.operator === 'does_not_have') {
-                return !hasCalendarEvent;
-              }
-              break;
-
-            case 'label':
-              if (filter.operator === 'contains' && filter.value) {
-                // Get all label IDs that match this label name across all accounts
-                const matchingLabelIds = getLabelIdsByName(filter.value);
-
-                // Check if thread has any of these label IDs
-                return (
-                  matchingLabelIds.length > 0 &&
-                  thread.labelIds.some((labelId) => matchingLabelIds.includes(labelId))
-                );
-              } else if (filter.operator === 'does_not_contain' && filter.value) {
-                // Get all label IDs that match this label name across all accounts
-                const matchingLabelIds = getLabelIdsByName(filter.value);
-
-                // Check that thread doesn't have any of these label IDs
-                return (
-                  matchingLabelIds.length === 0 ||
-                  !thread.labelIds.some((labelId) => matchingLabelIds.includes(labelId))
-                );
-              }
-              break;
-
-            case 'from':
-              if (filter.operator === 'contains' && filter.value) {
-                return thread.from.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              } else if (filter.operator === 'does_not_contain' && filter.value) {
-                return !thread.from.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              }
-              break;
-
-            case 'to':
-              if (filter.operator === 'contains' && filter.value) {
-                return thread.to.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              } else if (filter.operator === 'does_not_contain' && filter.value) {
-                return !thread.to.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              }
-              break;
-
-            case 'cc':
-              if (filter.operator === 'contains' && filter.value) {
-                return thread.cc.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              } else if (filter.operator === 'does_not_contain' && filter.value) {
-                return !thread.cc.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              }
-              break;
-
-            case 'bcc':
-              if (filter.operator === 'contains' && filter.value) {
-                return thread.bcc.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              } else if (filter.operator === 'does_not_contain' && filter.value) {
-                return !thread.bcc.some(
-                  (recipient) =>
-                    recipient.email.toLowerCase().includes(filter.value!.toLowerCase()) ||
-                    (recipient.name &&
-                      recipient.name.toLowerCase().includes(filter.value!.toLowerCase()))
-                );
-              }
-              break;
-
-            case 'subject':
-              if (filter.operator === 'contains' && filter.value) {
-                return thread.subject.toLowerCase().includes(filter.value.toLowerCase());
-              } else if (filter.operator === 'does_not_contain' && filter.value) {
-                return !thread.subject.toLowerCase().includes(filter.value.toLowerCase());
-              }
-              break;
-
-            case 'date':
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-
-              const yesterday = new Date(today);
-              yesterday.setDate(yesterday.getDate() - 1);
-
-              const thisWeekStart = new Date(today);
-              thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
-
-              const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
-              const threadDate = new Date(thread.timestamp);
-
-              if (filter.operator === 'is') {
-                switch (filter.value) {
-                  case 'today':
-                    return threadDate >= today;
-
-                  case 'yesterday':
-                    return threadDate >= yesterday && threadDate < today;
-
-                  case 'this_week':
-                    return threadDate >= thisWeekStart;
-
-                  case 'this_month':
-                    return threadDate >= thisMonthStart;
-
-                  default:
-                    return true;
-                }
-              }
-              break;
-          }
-
-          // If the filter logic isn't handled, default to including the thread
-          return true;
-        });
-      });
-    },
-    [activeFilters, getLabelIdsByName]
+    (thread: MonoThread): boolean =>
+      threadMatchesFilters(thread, activeFilters, getLabelIdsByName) && !isHiddenBySplit(thread),
+    [activeFilters, getLabelIdsByName, isHiddenBySplit]
   );
 
   /**
@@ -262,7 +77,7 @@ export function useThreadFilter() {
    */
   const filterThreadIds = useCallback(
     (threadIds: string[]): string[] => {
-      if (activeFilters.length === 0) {
+      if (!isFiltering) {
         return threadIds;
       }
       return threadIds.filter((id) => {
@@ -271,7 +86,7 @@ export function useThreadFilter() {
         return applyFilters(thread);
       });
     },
-    [activeFilters, threadsMap]
+    [isFiltering, threadsMap, applyFilters]
   );
 
   /**
@@ -281,9 +96,15 @@ export function useThreadFilter() {
 
   return {
     applyFilters,
+    isHiddenBySplit,
+    isFiltering,
+    splitKey,
+    inInbox,
+    tabOrder,
     filterThreadIds,
     hasActiveFilters,
     activeFilters,
-    setActiveFilters
+    setActiveFilters,
+    getLabelIdsByName
   };
 }

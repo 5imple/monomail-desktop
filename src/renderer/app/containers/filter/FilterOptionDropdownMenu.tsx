@@ -17,6 +17,10 @@ import LabelFilterOption from './LabelFilterOption';
 import { Button } from '@/renderer/app/components/ui/button';
 import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
 import { useThreadFilter } from '@/renderer/app/store/thread/useThreadFilter';
+import { sameFilters } from '@/renderer/app/lib/threadFilters';
+import { BUILT_IN_TAB_RULES } from '@/renderer/app/lib/filterTabOrder';
+import { customLabelEditorAtom, customLabelsAtom } from '@/renderer/app/store/thread/atoms';
+import { useAtomValue, useSetAtom } from 'jotai';
 
 interface FilterOptionConfig {
   type: string;
@@ -36,152 +40,165 @@ interface FilterOptionDropdownMenuProps {
   className?: string;
 }
 
-const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(
-  ({ className }) => {
-    const { t } = useTranslation();
-    const { activeFilters, setActiveFilters } = useThreadFilter();
-    const { setSelectedThreads } = useThreadAtom();
+const FilterOptionDropdownMenu = React.memo<FilterOptionDropdownMenuProps>(({ className }) => {
+  const { t } = useTranslation();
+  const { activeFilters, setActiveFilters } = useThreadFilter();
+  const { setSelectedThreads } = useThreadAtom();
+  const customLabels = useAtomValue(customLabelsAtom);
+  const setLabelEditor = useSetAtom(customLabelEditorAtom);
+  // Filters picked here that aren't a label yet can be kept as one.
+  const canSaveAsLabel =
+    activeFilters.length > 0 &&
+    !Object.values(BUILT_IN_TAB_RULES).some((rules) => sameFilters(activeFilters, rules)) &&
+    !customLabels.some((l) => sameFilters(activeFilters, l.rules));
 
-    // The threadIds → filteredThreadIds sync used to live here, but this
-    // component is only mounted when the list is non-empty, which deadlocked an
-    // empty list (no sync → never populates). It now lives in ThreadListProvider,
-    // which is always mounted.
+  // The threadIds → filteredThreadIds sync used to live here, but this
+  // component is only mounted when the list is non-empty, which deadlocked an
+  // empty list (no sync → never populates). It now lives in ThreadListProvider,
+  // which is always mounted.
 
-    // Define all available filter options
-    const allFilterOptions: FilterOptionConfig[] = [
-      {
-        type: 'read_status',
-        icon: 'Envelope',
-        translationKey: 'filter.read_status',
-        filterType: 'read_status', // This will be adjusted for unread/read
-        subOptions: [
-          {
-            operator: 'is',
-            value: 'unread',
-            translationKey: 'filter.unread',
-            icon: 'Envelope'
-          },
-          { operator: 'is', value: 'read', translationKey: 'filter.read', icon: 'EnvelopeOpen' }
-        ]
-      },
-      {
-        type: 'attachment',
-        icon: 'Paperclip',
-        translationKey: 'filter.attachment',
-        filterType: 'attachment',
-        subOptions: [
-          { operator: 'has', translationKey: 'filter.has_attachment', icon: 'Paperclip' },
-          { operator: 'does_not_have', translationKey: 'filter.no_attachment' }
-        ]
-      },
-      // {
-      //   type: 'from',
-      //   icon: 'UserCircle',
-      //   translationKey: 'filter.from',
-      //   filterType: 'from',
-      //   subOptions: [{ operator: 'contains', translationKey: 'filter.enter_email', inputField: true }]
-      // },
-      {
-        type: 'calendar',
-        icon: 'GoogleCalendar',
-        translationKey: 'filter.calendar',
-        filterType: 'calendar',
-        subOptions: [
-          { operator: 'has', translationKey: 'filter.has_calendar', icon: 'GoogleCalendar' },
-          { operator: 'does_not_have', translationKey: 'filter.no_calendar' }
-        ]
-      },
-      {
-        type: 'date',
-        icon: 'Calendar',
-        translationKey: 'filter.date',
-        filterType: 'date',
-        subOptions: [
-          { operator: 'is', value: 'today', translationKey: 'filter.today', icon: 'Calendar' },
-          {
-            operator: 'is',
-            value: 'yesterday',
-            translationKey: 'filter.yesterday',
-            icon: 'Calendar'
-          },
-          {
-            operator: 'is',
-            value: 'this_week',
-            translationKey: 'filter.this_week',
-            icon: 'Calendar'
-          },
-          {
-            operator: 'is',
-            value: 'this_month',
-            translationKey: 'filter.this_month',
-            icon: 'Calendar'
-          }
-        ]
-      }
-    ];
+  // Define all available filter options
+  const allFilterOptions: FilterOptionConfig[] = [
+    {
+      type: 'read_status',
+      icon: 'Envelope',
+      translationKey: 'filter.read_status',
+      filterType: 'read_status', // This will be adjusted for unread/read
+      subOptions: [
+        {
+          operator: 'is',
+          value: 'unread',
+          translationKey: 'filter.unread',
+          icon: 'Envelope'
+        },
+        { operator: 'is', value: 'read', translationKey: 'filter.read', icon: 'EnvelopeOpen' }
+      ]
+    },
+    {
+      type: 'attachment',
+      icon: 'Paperclip',
+      translationKey: 'filter.attachment',
+      filterType: 'attachment',
+      subOptions: [
+        { operator: 'has', translationKey: 'filter.has_attachment', icon: 'Paperclip' },
+        { operator: 'does_not_have', translationKey: 'filter.no_attachment' }
+      ]
+    },
+    // {
+    //   type: 'from',
+    //   icon: 'UserCircle',
+    //   translationKey: 'filter.from',
+    //   filterType: 'from',
+    //   subOptions: [{ operator: 'contains', translationKey: 'filter.enter_email', inputField: true }]
+    // },
+    {
+      type: 'calendar',
+      icon: 'GoogleCalendar',
+      translationKey: 'filter.calendar',
+      filterType: 'calendar',
+      subOptions: [
+        { operator: 'has', translationKey: 'filter.has_calendar', icon: 'GoogleCalendar' },
+        { operator: 'does_not_have', translationKey: 'filter.no_calendar' }
+      ]
+    },
+    {
+      type: 'date',
+      icon: 'Calendar',
+      translationKey: 'filter.date',
+      filterType: 'date',
+      subOptions: [
+        { operator: 'is', value: 'today', translationKey: 'filter.today', icon: 'Calendar' },
+        {
+          operator: 'is',
+          value: 'yesterday',
+          translationKey: 'filter.yesterday',
+          icon: 'Calendar'
+        },
+        {
+          operator: 'is',
+          value: 'this_week',
+          translationKey: 'filter.this_week',
+          icon: 'Calendar'
+        },
+        {
+          operator: 'is',
+          value: 'this_month',
+          translationKey: 'filter.this_month',
+          icon: 'Calendar'
+        }
+      ]
+    }
+  ];
 
-    // Filtering is client-side: clearing is instant, no reset + refetch.
-    const handleClearAll = () => {
-      setActiveFilters([]);
-      setSelectedThreads([]);
-    };
+  // Filtering is client-side: clearing is instant, no reset + refetch.
+  const handleClearAll = () => {
+    setActiveFilters([]);
+    setSelectedThreads([]);
+  };
 
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            sizeVariant="sm"
-            tooltip={t('filter.filters', { defaultValue: 'Filters' })}
-            aria-label={t('filter.filters', { defaultValue: 'Filters' })}
-            className={cn(
-              'flex h-7 items-center bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground',
-              activeFilters.length > 0 && 'text-foreground hover:text-foreground',
-              className
-            )}
-          >
-            <MonoIcon type="Filter" size={16} />
-            {activeFilters.length > 0 && (
-              <Badge className="ml-1 h-4 bg-accent px-1 text-xs text-accent-foreground hover:bg-accent">
-                {activeFilters.length}
-              </Badge>
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuPortal>
-          <DropdownMenuContent
-            align="end"
-            className="no-drag dark mr-2 min-w-56 origin-top-right duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1"
-          >
-            {/* One fixed order: active categories are marked by their count
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          sizeVariant="sm"
+          tooltip={t('filter.filters', { defaultValue: 'Filters' })}
+          aria-label={t('filter.filters', { defaultValue: 'Filters' })}
+          className={cn(
+            'flex h-7 items-center bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground',
+            activeFilters.length > 0 && 'text-foreground hover:text-foreground',
+            className
+          )}
+        >
+          <MonoIcon type="Filter" size={16} />
+          {activeFilters.length > 0 && (
+            <Badge className="ml-1 h-4 bg-accent px-1 text-xs text-accent-foreground hover:bg-accent">
+              {activeFilters.length}
+            </Badge>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuContent
+          align="end"
+          className="no-drag dark mr-2 min-w-56 origin-top-right duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1"
+        >
+          {/* One fixed order: active categories are marked by their count
                 badge instead of jumping to the top while the menu is open. */}
-            {allFilterOptions.map((option) => (
-              <FilterOption
-                key={option.type}
-                type={option.type}
-                icon={option.icon}
-                translationKey={option.translationKey}
-                filterType={option.filterType}
-                subOptions={option.subOptions}
-              />
-            ))}
-            <LabelFilterOption />
+          {allFilterOptions.map((option) => (
+            <FilterOption
+              key={option.type}
+              type={option.type}
+              icon={option.icon}
+              translationKey={option.translationKey}
+              filterType={option.filterType}
+              subOptions={option.subOptions}
+            />
+          ))}
+          <LabelFilterOption />
 
-            {/* Clear all filters button */}
-            {activeFilters.length > 0 && (
-              <>
-                <DropdownMenuSeparator className="my-1" />
-                <DropdownMenuItem className="text-muted-foreground" onClick={handleClearAll}>
-                  {t('filter.clear_all')}
+          {/* Clear all filters button */}
+          {activeFilters.length > 0 && (
+            <>
+              <DropdownMenuSeparator className="my-1" />
+              {canSaveAsLabel && (
+                <DropdownMenuItem
+                  onClick={() => setLabelEditor({ open: true, initialRules: activeFilters })}
+                >
+                  <MonoIcon type="Tag" size={14} className="mr-2" />
+                  {t('filter.custom.save_as_label', 'Save as label…')}
                 </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenuPortal>
-      </DropdownMenu>
-    );
-  }
-);
+              )}
+              <DropdownMenuItem className="text-muted-foreground" onClick={handleClearAll}>
+                {t('filter.clear_all')}
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenuPortal>
+    </DropdownMenu>
+  );
+});
 
 FilterOptionDropdownMenu.displayName = 'FilterOptionDropdownMenu';
 
