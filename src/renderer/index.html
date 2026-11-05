@@ -27,10 +27,14 @@
     <base href="/" />
 
     <title>Mail</title>
+    <!-- The saved theme, applied before the first paint (see the file). -->
+    <script src="/themeBoot.js"></script>
   </head>
 
   <body>
     <div id="root"></div>
+    <!-- Draws a centered Refresh if #root stays empty (see blankGuard.ts). -->
+    <script type="module" src="/blankGuard.ts"></script>
     <script type="module" src="/app/main.tsx"></script>
   </body>
 </html>

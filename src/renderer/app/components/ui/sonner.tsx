@@ -5,32 +5,35 @@ import { Toaster as Sonner } from 'sonner';
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
+/**
+ * The messages after an action ("Sending in 5s · Undo", "Archived · Undo",
+ * errors) sit in the bottom-left corner as one plain line: no card gradient,
+ * a text-style action, no check mark on a success (the words say it). Their
+ * look is in global.css (".toaster" bottom-left rules). The selection bar is
+ * a toast too, but bottom-center with its own look (ThreadSelectionToast).
+ */
 const Toaster = ({ ...props }: ToasterProps) => {
   // 'black' and 'pure-light' are dark/light variants respectively — sonner only
   // understands light/dark/system, so fold the app's 4-theme model down to that.
   const { currentTheme } = useTheme();
-  const sonnerTheme: ToasterProps['theme'] = currentTheme === 'black' ? 'dark' : currentTheme === 'pure-light' ? 'light' : currentTheme;
+  const sonnerTheme: ToasterProps['theme'] =
+    currentTheme === 'black' ? 'dark' : currentTheme === 'pure-light' ? 'light' : currentTheme;
 
   return (
     <Sonner
       theme={sonnerTheme}
       className="toaster no-drag group ease-bouncy-in-out"
-      position={'bottom-center'}
+      position="bottom-left"
       pauseWhenPageIsHidden
-      offset={50}
+      offset={16}
       gap={8}
       toastOptions={{
         classNames: {
-          icon: '[&>svg]:w-[1.1rem] [&>svg]:h-[1.1rem] m-0 mx-1 w-4 h-4 group-data-[type=error]:text-destructive group-data-[type=success]:text-chart-1 group-data-[type=warning]:text-secondary-accent group-data-[type=info]:text-foreground',
-          toast:
-            'group p-3 min-h-14 toast group-[.toaster]:bg-gradient-to-t from-secondary dark:from-background dark:to-secondary to-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-xl border rounded-xl group-[.toaster]:pointer-events-auto',
-          description: 'group-[.toast]:text-muted-foreground',
-          actionButton: 'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
-          cancelButton: 'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground'
+          icon: '[&>svg]:w-4 [&>svg]:h-4 m-0 w-4 h-4 group-data-[type=error]:text-destructive group-data-[type=warning]:text-secondary-accent group-data-[type=info]:text-muted-foreground',
+          toast: 'group toast group-[.toaster]:pointer-events-auto',
+          description: 'group-[.toast]:text-muted-foreground'
         }
       }}
-      // Theme tokens for the icon colors above (rose, lime, amber), and a
-      // warning icon of ours rather than sonner's own triangle.
       icons={{
         info: <MonoIcon type={'AlertCircle'} />,
         warning: <MonoIcon type={'AlertCircle'} />,

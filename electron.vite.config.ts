@@ -104,6 +104,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
           index_offline: resolve(__dirname, 'src/renderer/index_offline.html'),
+          reload: resolve(__dirname, 'src/renderer/reload.html'),
           notification: resolve(__dirname, 'src/renderer/notification.html'),
           update: resolve(__dirname, 'src/renderer/update.html'),
           '404': resolve(__dirname, 'src/renderer/404.html')

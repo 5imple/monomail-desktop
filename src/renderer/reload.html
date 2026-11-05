@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mail</title>
+    <style>
+      :root {
+        --background: 0 0% 99%;
+        --foreground: 240 10% 0%;
+        --muted-foreground: 240 3.8% 46%;
+        --sans-serif-font:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+          sans-serif, ui-sans-serif, system-ui;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: 30 0% 10%;
+          --foreground: 0 0% 98%;
+          --muted-foreground: 240 5% 64.9%;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+        user-select: none;
+        -webkit-font-smoothing: antialiased;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        font-family: var(--sans-serif-font);
+        font-size: 14px;
+        font-weight: 500;
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
+        -webkit-app-region: no-drag;
+      }
+
+      header {
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 44px;
+        -webkit-app-region: drag;
+      }
+
+      main {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        text-align: center;
+        padding: 0 24px;
+      }
+
+      .muted {
+        color: hsl(var(--muted-foreground));
+      }
+
+      button {
+        margin-top: 12px;
+        padding: 8px 18px;
+        background-color: hsl(var(--foreground));
+        color: hsl(var(--background));
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 550;
+        transition: opacity 0.2s;
+      }
+
+      button:hover {
+        opacity: 0.8;
+      }
+
+      ::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header></header>
+    <main>
+      <div>Mail stopped responding</div>
+      <div class="muted">The window had to be closed. Refresh to open it again.</div>
+      <button id="reload-button" type="button" autofocus>Refresh</button>
+    </main>
+    <script type="module" src="/reload.ts"></script>
+  </body>
+</html>

@@ -395,6 +395,8 @@ interface IpcRenderer {
   getAllSplitCategoryPreferences: () => Promise<Record<string, SplitCategoryPreferences>>;
   unsubscribeFetch: (url: string) => Promise<{ ok: boolean; status?: number; error?: string }>;
   setKnownAccountUids: (uids: string[]) => Promise<void>;
+  /** Runs the Microsoft 365 background mail sync now (the refresh button). */
+  refreshMail: () => Promise<void>;
 }
 
 /**
@@ -876,6 +878,11 @@ const electronApi: IpcRenderer = {
 
   setKnownAccountUids: async (uids) => {
     if (isElectron) return window.electronBridge.setKnownAccountUids(uids);
+  },
+
+  refreshMail: async () => {
+    // Optional: a window still running an older preload has no such call.
+    if (isElectron) return window.electronBridge.refreshMail?.();
   }
 };
 

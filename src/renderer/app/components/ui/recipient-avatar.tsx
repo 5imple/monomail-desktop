@@ -45,7 +45,33 @@ function getPersonPhotoUrl(person: any): string | null {
   return photo?.url ?? null;
 }
 
-async function fetchStoredContactPhotoUrl(
+// The stored-contact lookup per (account, email), including "no photo": every
+// row mount (scrolling, switching views) ran an IndexedDB query again, mostly
+// to learn there is none. Concurrent mounts share one lookup.
+const storedPhotoCache = new LRUCache<string, string | false>({
+  max: 2000,
+  ttl: 60 * 60 * 1000
+});
+const storedPhotoInFlight = new Map<string, Promise<string | null>>();
+
+function fetchStoredContactPhotoUrl(email: string, accountId: string): Promise<string | null> {
+  const cacheKey = getCacheKey(email, accountId);
+  const cached = storedPhotoCache.get(cacheKey);
+  if (cached !== undefined) return Promise.resolve(cached || null);
+  const pending = storedPhotoInFlight.get(cacheKey);
+  if (pending) return pending;
+  const lookup = lookupStoredContactPhotoUrl(email, accountId)
+    .then((url) => {
+      storedPhotoCache.set(cacheKey, url ?? false);
+      return url;
+    })
+    .catch(() => null)
+    .finally(() => storedPhotoInFlight.delete(cacheKey));
+  storedPhotoInFlight.set(cacheKey, lookup);
+  return lookup;
+}
+
+async function lookupStoredContactPhotoUrl(
   email: string,
   accountId: string
 ): Promise<string | null> {

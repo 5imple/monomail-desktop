@@ -36,6 +36,12 @@ const ICON_MAP: Partial<Record<MonoIconType, MaterialSymbol>> = {
   Building: 'corporate_fare',
   Cake: 'cake',
   Calendar: 'calendar_month',
+  // These four had no entry, so the font drew the raw name as text: the
+  // meeting card's Join link showed a large "EXTERNAL" over the button.
+  ExternalLink: 'open_in_new',
+  Loader2: 'progress_activity',
+  ArrowRight: 'arrow_forward',
+  ArrowLeft: 'arrow_back',
   ChatBubble: 'chat_bubble',
   Check: 'check',
   CheckCheck: 'done_all',
@@ -151,7 +157,16 @@ const stripSizeClasses = (className?: string) =>
 const resolveSymbol = (type?: InboxIconType, symbol?: MaterialSymbol): MaterialSymbol => {
   if (symbol) return symbol;
   if (!type) return 'help';
-  return ICON_MAP[type as MonoIconType] ?? (type as MaterialSymbol);
+  const mapped = ICON_MAP[type as MonoIconType];
+  if (mapped) return mapped;
+  // Material Symbols names are lower_snake_case. A PascalCase name here is a
+  // MonoIcon type missing from ICON_MAP, and the font would print it as text
+  // (a large "EXTERNAL" for ExternalLink): draw nothing instead.
+  if (/^[A-Z]/.test(type)) {
+    if (import.meta.env?.DEV) console.warn(`[InboxIcon] no symbol mapped for "${type}"`);
+    return '' as MaterialSymbol;
+  }
+  return type as MaterialSymbol;
 };
 
 const InboxIcon = memo<InboxIconProps>(

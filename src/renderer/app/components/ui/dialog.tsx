@@ -3,6 +3,7 @@ import * as React from 'react';
 
 import MonoIcon from '@/renderer/app/components/icons/icons';
 import { cn } from '@/renderer/app/lib/utils';
+import i18n from 'i18next';
 import { ringVariants } from '@/renderer/app/components/ui/constants';
 
 const Dialog = DialogPrimitive.Root;
@@ -57,7 +58,7 @@ const DialogContent = React.forwardRef<
         )}
       >
         <MonoIcon type={'X'} className="h-4 w-4" />
-        <span className="sr-only">Close</span>
+        <span className="sr-only">{i18n.t('common.close', { defaultValue: 'Close' })}</span>
       </DialogPrimitive.Close>
     )}
   </DialogPrimitive.Content>

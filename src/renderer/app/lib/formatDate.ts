@@ -43,10 +43,33 @@ export const formatFullDateTime = (
   return formatInTimeZone(date, timeZone, "eee, MMM d, yyyy 'at' h:mm a");
 };
 
-export const formatListDate = (
-  timestamp: number,
-  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone
-): string => {
+// The list formats a date per row per render. Resolving the time zone
+// (Intl.DateTimeFormat().resolvedOptions()) and formatting through date-fns-tz
+// each time added up over a hundred rows; the zone is re-read at most once a
+// minute and each (timestamp, zone, day) is formatted once.
+let zoneCache = { zone: '', readAt: 0 };
+const localTimeZone = (): string => {
+  const now = Date.now();
+  if (!zoneCache.zone || now - zoneCache.readAt > 60_000) {
+    zoneCache = { zone: Intl.DateTimeFormat().resolvedOptions().timeZone, readAt: now };
+  }
+  return zoneCache.zone;
+};
+const listDateCache = new Map<string, string>();
+const LIST_DATE_CACHE_LIMIT = 4000;
+
+export const formatListDate = (timestamp: number, timeZone: string = localTimeZone()): string => {
+  // "Today" decides the format, so the day is part of the key.
+  const key = `${timestamp}|${timeZone}|${new Date().toDateString()}`;
+  const cached = listDateCache.get(key);
+  if (cached !== undefined) return cached;
+  const formatted = formatListDateUncached(timestamp, timeZone);
+  if (listDateCache.size >= LIST_DATE_CACHE_LIMIT) listDateCache.clear();
+  listDateCache.set(key, formatted);
+  return formatted;
+};
+
+const formatListDateUncached = (timestamp: number, timeZone: string): string => {
   const dt = toZonedTime(new Date(timestamp), timeZone);
   const now = toZonedTime(new Date(), timeZone);
 

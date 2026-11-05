@@ -12,6 +12,7 @@ import templateApi from '@/main/api/template/templateApi';
 import { MonoDraft } from '@/main/models/draft/MonoDraft';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { auth, MonoUser as User, onAuthStateChanged } from '@/renderer/app/lib/monoAuth';
+import { setOwnAddresses } from '@/renderer/app/lib/threadFilters';
 import { updateBadgeWithLabelCount } from '@/renderer/app/lib/updateAppBadgeWithThread';
 import { useBookmarkAtom } from '@/renderer/app/store/bookmark/useBookmarkAtom';
 import { useSignatureAtom } from '@/renderer/app/store/compose/useSignatureAtom';
@@ -269,6 +270,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Extract destructured variables for convenience
   const { isLoggedIn, user, accounts, member, preference, isLoading, idToken } = authState;
+
+  // Your own addresses, for the Team split (it leaves out your own messages).
+  // Set while rendering, so the list never filters with an older set.
+  useMemo(() => setOwnAddresses(accounts.map((account) => account.email ?? '')), [accounts]);
 
   const { t } = useTranslation();
 
@@ -647,9 +652,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
+        // The technical detail goes to the log; the toast says what happened.
         console.error('Error during authentication: ', (error as Error).message);
         toast.error(
-          'Error during authentication' + (error instanceof Error ? `: ${error.message}` : '')
+          t('auth.toast.sign_in_failed', {
+            defaultValue: 'Sign-in didn’t complete. Please sign in again.'
+          })
         );
         await signOut();
       } finally {
@@ -688,7 +696,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('An error occurred during sign-out.', error);
       toast.error(
-        'An error occurred during sign-out: ' + (error instanceof Error ? error.message : '')
+        t('auth.toast.sign_out_failed', {
+          defaultValue: 'Couldn’t finish signing out. Please try again.'
+        })
       );
       await clearLocalAuthState();
     }

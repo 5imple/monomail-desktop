@@ -1,6 +1,5 @@
 // src/components/AuthGuard.tsx
 import Loader from '@/renderer/app/components/ui/loader';
-import BaseHeader from '@/renderer/app/containers/header/BaseHeader';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import React from 'react';
 import { Navigate } from 'react-router-dom';
@@ -26,20 +25,18 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, to }) => {
   const tokenReady = !isLoggedIn || !!idToken;
 
   if (isLoading || (isLoggedIn && isLoadingSpaces) || !tokenReady) {
+    // The app's own chrome (52 px titlebar, sidebar column, flat list area),
+    // so the inbox slots in without the layout jumping. It used to be a
+    // frosted card with a 32 px header that snapped to the real layout.
     return (
-      <div className="no-drag h-screen bg-gradient-to-tr from-background/90 to-background/80 backdrop-blur-lg">
-        <div className="h-full flex-col items-center justify-center">
-          <BaseHeader />
-          <div className="flex h-full">
-            <aside
-              className={cn('transition-all duration-300', sidebarCollapsed ? 'w-0' : 'w-[220px]')}
-            ></aside>
-            <div className="m-1 flex-1 rounded-lg border bg-card/70 shadow-sm dark:bg-card/60"></div>
-
-            {sidebarCollapsed && (
-              <Loader className="absolute left-1/2 top-1/2 mb-8 h-[1.1rem] w-[1.1rem] text-foreground/60" />
-            )}
-          </div>
+      <div className="no-drag flex h-screen flex-col bg-white dark:bg-background">
+        <div className="drag h-[52px] w-full shrink-0" />
+        <div className="relative flex flex-1">
+          <aside className={cn('shrink-0', sidebarCollapsed ? 'w-0' : 'w-[220px]')} />
+          <div className="flex-1" />
+          {sidebarCollapsed && (
+            <Loader className="absolute left-1/2 top-1/2 mb-8 h-[1.1rem] w-[1.1rem] text-foreground/60" />
+          )}
         </div>
       </div>
     );

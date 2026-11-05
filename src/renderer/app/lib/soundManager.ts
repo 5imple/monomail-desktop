@@ -15,6 +15,10 @@ const audioMap: Record<AudioType, string> = {
   Ripple
 };
 
+/** Guards a sound name that arrived over IPC before it is played. */
+export const isAudioType = (value: unknown): value is AudioType =>
+  typeof value === 'string' && Object.prototype.hasOwnProperty.call(audioMap, value);
+
 export const playSound = (audioName: AudioType = 'Mono') => {
   if (audioName === 'Off') return;
   const audio = new Audio(audioMap[audioName]);

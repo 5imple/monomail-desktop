@@ -3,6 +3,7 @@ import { Button } from '@/renderer/app/components/ui/button';
 import electronApi, { isElectron } from '@/renderer/app/lib/electronApi';
 import { getSupportEmail } from '@/renderer/app/lib/runtimeBranding';
 import i18n from '@/renderer/assets/locales';
+import log from 'electron-log';
 import React from 'react';
 
 interface AppErrorBoundaryState {
@@ -24,6 +25,13 @@ export default class AppErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     console.error('[AppErrorBoundary] renderer crashed:', error, info.componentStack);
+    // Also into the app log (main.log), where it can be read after the fact;
+    // the console alone was lost unless someone copied the details.
+    log.error(
+      '[AppErrorBoundary] renderer crashed:',
+      error?.stack ?? String(error),
+      info.componentStack
+    );
   }
 
   private copyDetails = () => {

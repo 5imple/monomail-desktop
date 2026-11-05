@@ -104,6 +104,15 @@ export interface MultipleSelectorProps {
 // Marks the typed-text ("create") item for the filter, which ranks it.
 const CREATABLE_KEYWORD = '__creatable__';
 
+// A stable default: a fresh `[]` per render re-ran the options effect on
+// every render of every recipient field.
+const NO_OPTIONS: Option[] = [];
+
+// Suggestions mounted at once while typing. The list shows ~7; mounting every
+// matching contact (each with an avatar and an IntersectionObserver) made the
+// first letters typed into To lag with a large address book.
+const MAX_RENDERED_SUGGESTIONS = 20;
+
 export interface MultipleSelectorRef {
   selectedValue: Option[];
   input: HTMLInputElement;
@@ -199,7 +208,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
       defaultValue,
       onChange,
       placeholder,
-      defaultOptions: arrayDefaultOptions = [],
+      defaultOptions: arrayDefaultOptions = NO_OPTIONS,
       options: arrayOptions,
       delay,
       onSearch,
@@ -379,16 +388,32 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
       }
     }, [value]);
 
+    // Controlled `options` are the list (cmdk filters it as you type). Kept in
+    // step by identity: the JSON.stringify comparison this replaces
+    // serialised every contact twice on every render of every field.
+    const syncedOptionsRef = React.useRef<{
+      source: Option[];
+      groupBy?: string;
+      result: GroupOption;
+    } | null>(null);
     useEffect(() => {
       /** If `onSearch` is provided, do not trigger options updated. */
       if (!arrayOptions || onSearch) {
         return;
       }
-      const newOption = transToGroupOption(arrayOptions || [], groupBy);
-      if (JSON.stringify(newOption) !== JSON.stringify(options)) {
-        setOptions(newOption);
+      const synced = syncedOptionsRef.current;
+      if (
+        synced &&
+        synced.source === arrayOptions &&
+        synced.groupBy === groupBy &&
+        synced.result === options
+      ) {
+        return;
       }
-    }, [arrayDefaultOptions, arrayOptions, groupBy, onSearch, options]);
+      const result = transToGroupOption(arrayOptions, groupBy);
+      syncedOptionsRef.current = { source: arrayOptions, groupBy, result };
+      setOptions(result);
+    }, [arrayOptions, groupBy, onSearch, options]);
 
     useEffect(() => {
       /** sync search */
@@ -400,6 +425,10 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
 
       const exec = async () => {
         if (!onSearchSync || !open) return;
+        // With controlled `options` the effect above puts the full list back
+        // straight after, so the sync search's result was never shown — only
+        // paid for (O(n²) in the contact field).
+        if (arrayOptions && !onSearch) return;
 
         if (triggerSearchOnFocus) {
           doSearchSync();
@@ -545,6 +574,29 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
 
     const creatableItem = CreatableItem();
 
+    const shouldFilter =
+      commandProps?.shouldFilter !== undefined ? commandProps.shouldFilter : !onSearch;
+    const activeFilter = React.useMemo(() => commandFilter(), [commandFilter]);
+    // The first matches only, in list order — what cmdk shows first (its
+    // filters here score a match 1, so its sort keeps that order).
+    const renderedSelectables = React.useMemo<GroupOption>(() => {
+      if (!shouldFilter || !activeFilter || !inputValue) return selectables;
+      let budget = MAX_RENDERED_SUGGESTIONS;
+      const result: GroupOption = {};
+      for (const [key, list] of Object.entries(selectables)) {
+        const kept: Option[] = [];
+        for (const option of list) {
+          if (budget <= 0) break;
+          if (activeFilter(`${option.label} (${option.value})`, inputValue, undefined) > 0) {
+            kept.push(option);
+            budget -= 1;
+          }
+        }
+        if (kept.length > 0) result[key] = kept;
+      }
+      return result;
+    }, [selectables, shouldFilter, activeFilter, inputValue]);
+
     return (
       <Command
         ref={dropdownRef}
@@ -557,10 +609,9 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
           'h-auto overflow-visible bg-transparent dark:bg-transparent',
           commandProps?.className
         )}
-        shouldFilter={
-          commandProps?.shouldFilter !== undefined ? commandProps.shouldFilter : !onSearch
-        } // When onSearch is provided, we don't want to filter the options. You can still override it.
-        filter={commandFilter()}
+        // When onSearch is provided, we don't want to filter the options. You can still override it.
+        shouldFilter={shouldFilter}
+        filter={activeFilter}
       >
         <div
           className={cn(
@@ -683,17 +734,16 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
           </div>
         </div>
         <div className="relative">
-          {open && (
+          {/* Mounted only while it shows: focusing an empty To field mounted
+              (hidden) every contact in the address book. */}
+          {suggestionsVisible && (
             <CommandList
               className={cn(
                 // Follows the theme (a forced `dark` made a black slab on the
                 // light compose card). No overflow class here: it would
                 // replace CommandList's overflow-y-auto and stop the wheel
                 // from scrolling a long list.
-                'absolute top-1 z-10 w-full rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md outline-none animate-in',
-
-                inputValue.length < (minLetters || 0) ? 'hidden' : '',
-                hideOnEmpty && inputValue.length === 0 ? 'hidden' : ''
+                'absolute top-1 z-10 w-full rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md outline-none animate-in'
               )}
               onMouseLeave={() => {
                 setOnScrollbar(false);
@@ -711,7 +761,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
                 <>
                   {EmptyItem()}
                   {!selectFirstItem && <CommandItem value="-" className="hidden" />}
-                  {Object.entries(selectables).map(([key, dropdowns]) => (
+                  {Object.entries(renderedSelectables).map(([key, dropdowns]) => (
                     <CommandGroup key={key} value={`options:${key}`} heading={key}>
                       <>
                         {dropdowns.map((option, index) => {

@@ -4,6 +4,7 @@ import electronApi from '@/renderer/app/lib/electronApi';
 import { useThreadOperationAtom } from '@/renderer/app/store/thread/useThreadOperations';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { threadListActions } from '@/renderer/app/lib/threadListActions';
 
 interface OfflineAction {
   id: string;
@@ -119,47 +120,56 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     console.log(`Syncing ${queue.length} queued actions...`);
     let successCount = 0;
+    // One refresh once the whole queue is through, not one between replays.
+    threadListActions.autoRefreshHolds++;
+    try {
+      for (const action of queue) {
+        try {
+          if (action.type === 'THREAD_LABEL_ACTION') {
+            const { uid, threadIds, addLabels = [], removeLabels = [] } = action.data;
 
-    for (const action of queue) {
-      try {
-        if (action.type === 'THREAD_LABEL_ACTION') {
-          const { uid, threadIds, addLabels = [], removeLabels = [] } = action.data;
+            await applyThreadLabelsToGmail(uid, threadIds, addLabels, removeLabels);
 
-          await applyThreadLabelsToGmail(uid, threadIds, addLabels, removeLabels);
+            // Update badge counts
+            if (addLabels.includes('UNREAD')) {
+              electronApi.incrementBadge(threadIds.length);
+            }
+            if (removeLabels.includes('UNREAD')) {
+              electronApi.decrementBadge(threadIds.length);
+            }
 
-          // Update badge counts
-          if (addLabels.includes('UNREAD')) {
-            electronApi.incrementBadge(threadIds.length);
+            successCount++;
           }
-          if (removeLabels.includes('UNREAD')) {
-            electronApi.decrementBadge(threadIds.length);
+        } catch (error) {
+          console.error('Failed to sync action:', action, error);
+
+          // Revert the state changes for failed actions
+          if (action.type === 'THREAD_LABEL_ACTION') {
+            const { uid, threadIds, addLabels = [], removeLabels = [] } = action.data;
+
+            // Revert by swapping add/remove labels
+            const revertAddLabels = removeLabels; // What we removed, we now add back
+            const revertRemoveLabels = addLabels; // What we added, we now remove
+
+            try {
+              await updateThreadsState(uid, threadIds, revertAddLabels, revertRemoveLabels, true, {
+                shouldRemoveThreads: false,
+                shouldRestoreThreads: false
+              });
+              console.log('State changes reverted for failed action:', action.id);
+            } catch (revertError) {
+              console.error('Failed to revert state changes for action:', action.id, revertError);
+            }
           }
 
-          successCount++;
+          // Do not add to failedActions - we don't want to retry
         }
-      } catch (error) {
-        console.error('Failed to sync action:', action, error);
-
-        // Revert the state changes for failed actions
-        if (action.type === 'THREAD_LABEL_ACTION') {
-          const { uid, threadIds, addLabels = [], removeLabels = [] } = action.data;
-
-          // Revert by swapping add/remove labels
-          const revertAddLabels = removeLabels; // What we removed, we now add back
-          const revertRemoveLabels = addLabels; // What we added, we now remove
-
-          try {
-            await updateThreadsState(uid, threadIds, revertAddLabels, revertRemoveLabels, true, {
-              shouldRemoveThreads: false,
-              shouldRestoreThreads: false
-            });
-            console.log('State changes reverted for failed action:', action.id);
-          } catch (revertError) {
-            console.error('Failed to revert state changes for action:', action.id, revertError);
-          }
-        }
-
-        // Do not add to failedActions - we don't want to retry
+      }
+    } finally {
+      threadListActions.autoRefreshHolds--;
+      // As after any change: give the server a moment, then refresh once.
+      if (threadListActions.autoRefreshHolds === 0) {
+        setTimeout(() => threadListActions.refreshNow(), 1500);
       }
     }
 
