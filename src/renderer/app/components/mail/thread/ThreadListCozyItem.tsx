@@ -11,13 +11,17 @@ import {
 } from '@/renderer/app/components/mail/thread/ThreadRowParts';
 import { useThreadReadMotion } from '@/renderer/app/components/mail/thread/useThreadReadMotion';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useKeyboardRegistration } from '@/renderer/app/context/KeyboardNavigationContext';
 import { highlightThreadText } from '@/renderer/app/lib/highlightThreadText';
 import { cn } from '@/renderer/app/lib/utils';
 import { setSelectionAnchor } from '@/renderer/app/store/thread/threadRangeSelection';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import {
+  currentSearchQueryAtom,
+  useSearchNewQuery
+} from '@/renderer/app/store/layout/useGlobalAtom';
+import { useAtomValue } from 'jotai';
+import { useThreadRowAtom } from '@/renderer/app/store/thread/useThreadRowAtom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
@@ -28,20 +32,29 @@ import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 interface ThreadListCozyItemProps {
   threadId: string;
   onClick: (e: React.MouseEvent, id: string) => void;
-  index?: number;
+  /** In the first screenful: render content at once, not after the observer's first pass. */
+  eager?: boolean;
 }
 
 export const ThreadListCozyItem = React.memo(
   React.forwardRef<HTMLDivElement, ThreadListCozyItemProps>(
-    ({ threadId, onClick }, ref) => {
-      const { activeThreadId, selectedThreads, setSelectedThreads, threadsMap } = useThreadAtom();
+    ({ threadId, onClick, eager = false }, ref) => {
+      // Narrow subscriptions (see useThreadRowAtom): this row's thread, active
+      // and checked state only.
+      const {
+        thread: liveThread,
+        isActive,
+        isChecked,
+        setSelectedThreads
+      } = useThreadRowAtom(threadId);
       const { labelsMapByAccount } = useLabelAtom();
-      const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
+      const searchNewQuery = useSearchNewQuery();
+      const globalSearchQuery = useAtomValue(currentSearchQueryAtom);
       const { t } = useTranslation();
       const { accounts } = useAuth();
       const { showAvatar, showSnippet } = useThreadListDisplay();
 
-      const [isRendering, setIsRendering] = useState(false);
+      const [isRendering, setIsRendering] = useState(eager);
       // Start fully visible so the first screenful paints at once. This used to
       // begin at 0 and fade to 100 per row; staggered by list index, that read as
       // a left-to-right "sweep" as the inbox loaded. The IntersectionObserver still
@@ -53,7 +66,6 @@ export const ThreadListCozyItem = React.memo(
       const lastThreadRef = useRef<MonoThread | null>(null);
 
       // No memo on currentThread to ensure it always has the latest data
-      const liveThread = threadsMap[threadId] ?? null;
       if (liveThread) lastThreadRef.current = liveThread;
       const currentThread = liveThread ?? lastThreadRef.current;
 
@@ -99,7 +111,7 @@ export const ThreadListCozyItem = React.memo(
       }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery, t]);
       const snippetHtml = showSnippet ? highlightedContent.snippet : null;
 
-      const { registerItem, unregisterItem } = useKeyboardNavigationContext();
+      const { registerItem, unregisterItem } = useKeyboardRegistration();
 
       // Re-created only when the row itself appears/changes id — keyed on the
       // whole threadsMap, every update to any thread rebuilt every row's
@@ -161,8 +173,6 @@ export const ThreadListCozyItem = React.memo(
       );
 
       const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
-      const isChecked = selectedThreads.includes(threadId);
-      const isActive = activeThreadId === threadId;
       const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null, isActive);
 
       // Done/Trash deletes the thread from threadsMap while its id can still be
@@ -210,7 +220,9 @@ export const ThreadListCozyItem = React.memo(
                     className="absolute inset-y-[3px] left-0 z-20 w-[3px] rounded-r-full bg-selection"
                   />
                 )}
-                {/* Unread is indicated by the bold font only — no left accent bar. */}
+                {/* Unread: bold sender, semibold subject and the dot; read rows are regular
+                    weight in the muted colour. No left bar: that edge belongs to the
+                    selection (blue) and keyboard-cursor bars. */}
                 {/* Single-line Newton row: avatar · sender (fixed) · subject – snippet · date */}
                 <div
                   ref={ref}
@@ -257,7 +269,7 @@ export const ThreadListCozyItem = React.memo(
                         isChecked
                           ? 'opacity-100'
                           : cn(
-                              'pointer-hover:!opacity-100 focus-visible:!opacity-100 group-pointer-hover:!opacity-100',
+                              'focus-visible:!opacity-100 pointer-hover:!opacity-100 group-pointer-hover:!opacity-100',
                               isUnread ? 'opacity-0' : 'opacity-20'
                             )
                       )}
@@ -275,7 +287,9 @@ export const ThreadListCozyItem = React.memo(
                           className={cn(
                             'stroke-[1.5]',
                             isChecked ? 'h-3.5 w-3.5' : 'h-3 w-3',
-                            isChecked ? 'opacity-100' : 'opacity-80 group-pointer-hover:text-foreground'
+                            isChecked
+                              ? 'opacity-100'
+                              : 'opacity-80 group-pointer-hover:text-foreground'
                           )}
                         />
                       </div>
@@ -298,8 +312,8 @@ export const ThreadListCozyItem = React.memo(
                       className={cn(
                         'truncate text-[13px] tracking-tight',
                         isUnread
-                          ? 'font-semibold text-foreground'
-                          : 'font-medium text-muted-foreground'
+                          ? 'font-bold text-foreground'
+                          : 'font-normal text-muted-foreground'
                       )}
                     >
                       <ThreadSenderNames thread={currentThread} accounts={accounts} />
@@ -319,9 +333,7 @@ export const ThreadListCozyItem = React.memo(
                         // it overflowed and was clipped mid-letter, no ellipsis.
                         'shrink-0 truncate text-[13px] tracking-tight',
                         snippetHtml ? 'max-w-[65%]' : 'max-w-full',
-                        isUnread
-                          ? 'font-medium text-foreground'
-                          : 'font-normal text-foreground/80'
+                        isUnread ? 'font-semibold text-foreground' : 'font-normal text-muted-foreground'
                       )}
                       dangerouslySetInnerHTML={{
                         __html:
@@ -347,9 +359,7 @@ export const ThreadListCozyItem = React.memo(
                     thread={currentThread}
                     accountLabels={accountLabels}
                     labelCap={2}
-                    onLabelClick={(name) =>
-                      searchNewQuery(buildLabelQuery(name), undefined, false)
-                    }
+                    onLabelClick={(name) => searchNewQuery(buildLabelQuery(name), undefined, false)}
                   />
                 </div>
               </div>

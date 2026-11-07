@@ -4,8 +4,8 @@ import MonoIcon, { MonoIconType } from '@/renderer/app/components/icons/InboxIco
 import { LabelButton, SnoozeButton } from '@/renderer/app/components/mail/thread/ThreadRowActions';
 import { Badge } from '@/renderer/app/components/ui/badge';
 import { Button } from '@/renderer/app/components/ui/button';
+import { useRowCommand } from '@/renderer/app/components/mail/thread/RowCommandContext';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { formatListDate } from '@/renderer/app/lib/formatDate';
 import { threadHasFileAttachments } from '@/renderer/app/lib/threadAttachments';
 import { CommandType } from '@/renderer/app/types';
@@ -16,7 +16,7 @@ import {
 } from '@/renderer/app/components/mail/thread/threadRowModel';
 import { isBackendConfigured } from '@/main/api/apiClient';
 import { useDraggable } from '@dnd-kit/core';
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 // Pieces shared by the compact (ThreadListDenseItem) and comfortable
@@ -227,7 +227,9 @@ export const ThreadRowMeta = ({
   onLabelClick: (labelName: string) => void;
 }) => {
   const { t } = useTranslation();
-  const executeCommand = useExecuteCommand();
+  // The list's shared runner (RowCommandContext), not useExecuteCommand: that
+  // hook rebuilds every command in every row on every thread change.
+  const executeCommand = useRowCommand();
   const { showLabels } = useThreadListDisplay();
 
   const userLabels = [
@@ -244,6 +246,20 @@ export const ThreadRowMeta = ({
   const shownCategories = categories.slice(0, Math.max(0, cap - shownLabels.length));
 
   const run = (command: CommandType) => executeCommand(command, { threadIds: [thread.id] });
+
+  // The hover actions (each button with its tooltip, the Label and Snooze
+  // popovers) mount the first time the pointer enters the row, then stay.
+  // Mounted for every row at rest, they were most of a list render's work.
+  const metaRef = useRef<HTMLDivElement>(null);
+  const [actionsMounted, setActionsMounted] = useState(false);
+  useEffect(() => {
+    if (actionsMounted) return;
+    const row = metaRef.current?.closest('[data-thread]');
+    if (!row) return;
+    const mount = () => setActionsMounted(true);
+    row.addEventListener('pointerenter', mount, { once: true });
+    return () => row.removeEventListener('pointerenter', mount);
+  }, [actionsMounted]);
   const inTrash = thread.labelIds.includes('TRASH');
 
   return (
@@ -304,7 +320,7 @@ export const ThreadRowMeta = ({
         </Button>
       )}
 
-      <div className="relative flex min-w-[140px] items-center justify-end">
+      <div ref={metaRef} className="relative flex min-w-[140px] items-center justify-end">
         <span className="flex items-center gap-2 transition-opacity duration-150 group-has-[[data-row-action][data-state=open]]:opacity-0 group-pointer-hover:opacity-0 group-pointer-hover:duration-0">
           {threadHasFileAttachments(thread) && (
             <MonoIcon type="Paperclip" className="h-3 w-3 text-muted-foreground/60" />
@@ -314,58 +330,60 @@ export const ThreadRowMeta = ({
           </span>
         </span>
 
-        <div className="absolute right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-0 has-[[data-row-action][data-state=open]]:opacity-100 group-pointer-hover:opacity-100 group-pointer-hover:duration-150">
-          {/* Done only means something for mail that's in the Inbox. */}
-          {thread.labelIds.includes('INBOX') && (
-            <RowActionButton
-              label={t('command.thread_done')}
-              shortcut="E"
-              icon="CheckCircle"
-              onAction={() => run('THREAD_DONE')}
-            />
-          )}
-          {/* A starred row keeps its star on the left of the date (click it to
+        {actionsMounted && (
+          <div className="absolute right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-0 has-[[data-row-action][data-state=open]]:opacity-100 group-pointer-hover:opacity-100 group-pointer-hover:duration-150">
+            {/* Done only means something for mail that's in the Inbox. */}
+            {thread.labelIds.includes('INBOX') && (
+              <RowActionButton
+                label={t('command.thread_done')}
+                shortcut="E"
+                icon="CheckCircle"
+                onAction={() => run('THREAD_DONE')}
+              />
+            )}
+            {/* A starred row keeps its star on the left of the date (click it to
               unstar); an unstarred one offers Star here. */}
-          {!thread.labelIds.includes('STARRED') && (
-            <RowActionButton
-              label={t('command.thread_star')}
-              shortcut="S"
-              icon="Star"
-              onAction={() => run('THREAD_STAR')}
-            />
-          )}
-          {thread.labelIds.includes('UNREAD') ? (
-            <RowActionButton
-              label={t('command.thread_mark_read')}
-              shortcut="U"
-              icon="EnvelopeOpen"
-              onAction={() => run('THREAD_MARK_READ')}
-            />
-          ) : (
-            <RowActionButton
-              label={t('command.thread_mark_unread')}
-              shortcut="U"
-              icon="Envelope"
-              onAction={() => run('THREAD_MARK_UNREAD')}
-            />
-          )}
-          <LabelButton thread={thread} buttonClassName={ACTION_BUTTON_CLASS} />
-          <SnoozeButton thread={thread} buttonClassName={ACTION_BUTTON_CLASS} />
-          {inTrash ? (
-            <RowActionButton
-              label={t('command.thread_untrash')}
-              icon="TrashRestore"
-              onAction={() => run('THREAD_UNTRASH')}
-            />
-          ) : (
-            <RowActionButton
-              label={t('command.thread_trash')}
-              shortcut="Backspace"
-              icon="Trash"
-              onAction={() => run('THREAD_TRASH')}
-            />
-          )}
-        </div>
+            {!thread.labelIds.includes('STARRED') && (
+              <RowActionButton
+                label={t('command.thread_star')}
+                shortcut="S"
+                icon="Star"
+                onAction={() => run('THREAD_STAR')}
+              />
+            )}
+            {thread.labelIds.includes('UNREAD') ? (
+              <RowActionButton
+                label={t('command.thread_mark_read')}
+                shortcut="U"
+                icon="EnvelopeOpen"
+                onAction={() => run('THREAD_MARK_READ')}
+              />
+            ) : (
+              <RowActionButton
+                label={t('command.thread_mark_unread')}
+                shortcut="U"
+                icon="Envelope"
+                onAction={() => run('THREAD_MARK_UNREAD')}
+              />
+            )}
+            <LabelButton thread={thread} buttonClassName={ACTION_BUTTON_CLASS} />
+            <SnoozeButton thread={thread} buttonClassName={ACTION_BUTTON_CLASS} />
+            {inTrash ? (
+              <RowActionButton
+                label={t('command.thread_untrash')}
+                icon="TrashRestore"
+                onAction={() => run('THREAD_UNTRASH')}
+              />
+            ) : (
+              <RowActionButton
+                label={t('command.thread_trash')}
+                shortcut="Backspace"
+                icon="Trash"
+                onAction={() => run('THREAD_TRASH')}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

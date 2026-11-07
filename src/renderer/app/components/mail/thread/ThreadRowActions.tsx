@@ -12,10 +12,20 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
+// Both buttons below render in every row of the list, so the row itself holds
+// only the trigger and its open state. The popover's inside — and the hooks
+// that reach into the thread, queue and undo stores — mount only while it is
+// open. Mounted per row, those hooks re-rendered every row on every change to
+// any thread, and opening an email redrew the whole list before the reader
+// could show it.
+
 interface ThreadActionButtonProps {
   thread: MonoThread;
   buttonClassName?: string;
 }
+
+const TRIGGER_CLASS =
+  'shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100';
 
 /**
  * The row's Snooze: a popover of presets (or a custom time). The snooze
@@ -26,20 +36,9 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [customMode, setCustomMode] = useState(false);
-  const { snoozeThreads } = useSnoozeThreads();
-  const presets = useMemo(() => buildSchedulePresets(new Date()), [open]);
   const snoozeLabel = t('command.reminder', { defaultValue: 'Snooze' });
   const heading = t('thread_list.snooze_until', { defaultValue: 'Snooze until' });
-
-  const handlePickPreset = useCallback(
-    async (preset: { id: string; scheduledFor: string | null }) => {
-      if (!preset.scheduledFor) return;
-      // Close right away; the toast reports the outcome.
-      setOpen(false);
-      await snoozeThreads([thread], preset.scheduledFor);
-    },
-    [thread, snoozeThreads]
-  );
+  const close = useCallback(() => setOpen(false), []);
 
   return (
     <Popover
@@ -55,10 +54,7 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
           typeVariant="inline"
           sizeVariant="xs"
           tabIndex={-1}
-          className={
-            buttonClassName ??
-            'shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100'
-          }
+          className={buttonClassName ?? TRIGGER_CLASS}
           onClick={(e) => {
             e.stopPropagation();
           }}
@@ -77,22 +73,14 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
         className="w-auto border-none bg-transparent p-0 shadow-none"
         onClick={(e) => e.stopPropagation()}
       >
-        {customMode ? (
-          <CustomDateTimePicker
+        {open && (
+          <SnoozePopoverBody
+            thread={thread}
             heading={heading}
             confirmLabel={snoozeLabel}
-            onBack={() => setCustomMode(false)}
-            onConfirm={(iso) => {
-              setCustomMode(false);
-              handlePickPreset({ id: 'custom', scheduledFor: iso });
-            }}
-          />
-        ) : (
-          <ReschedulePopover
-            presets={presets}
-            heading={heading}
-            onPickPreset={handlePickPreset}
-            onPickCustom={() => setCustomMode(true)}
+            customMode={customMode}
+            onCustomMode={setCustomMode}
+            onClose={close}
           />
         )}
       </PopoverContent>
@@ -101,40 +89,72 @@ export const SnoozeButton = React.memo<ThreadActionButtonProps>(({ thread, butto
 });
 SnoozeButton.displayName = 'SnoozeButton';
 
+const SnoozePopoverBody = ({
+  thread,
+  heading,
+  confirmLabel,
+  customMode,
+  onCustomMode,
+  onClose
+}: {
+  thread: MonoThread;
+  heading: string;
+  confirmLabel: string;
+  customMode: boolean;
+  onCustomMode: (custom: boolean) => void;
+  onClose: () => void;
+}) => {
+  const { snoozeThreads } = useSnoozeThreads();
+  // Presets are relative to now: built when the popover opens.
+  const presets = useMemo(() => buildSchedulePresets(new Date()), []);
+
+  const handlePickPreset = useCallback(
+    async (preset: { id: string; scheduledFor: string | null }) => {
+      if (!preset.scheduledFor) return;
+      // Close right away; the toast reports the outcome.
+      onClose();
+      await snoozeThreads([thread], preset.scheduledFor);
+    },
+    [thread, snoozeThreads, onClose]
+  );
+
+  return customMode ? (
+    <CustomDateTimePicker
+      heading={heading}
+      confirmLabel={confirmLabel}
+      onBack={() => onCustomMode(false)}
+      onConfirm={(iso) => {
+        onCustomMode(false);
+        handlePickPreset({ id: 'custom', scheduledFor: iso });
+      }}
+    />
+  ) : (
+    <ReschedulePopover
+      presets={presets}
+      heading={heading}
+      onPickPreset={handlePickPreset}
+      onPickCustom={() => onCustomMode(true)}
+    />
+  );
+};
+
+type UserLabel = { id: string; name: string };
+
 export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, buttonClassName }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { labelsMapByAccount } = useLabelAtom();
-  const { addLabelToThread } = useThreadLabelAtom();
   const labelTitle = t('command.label', { defaultValue: 'Label' });
+  const close = useCallback(() => setOpen(false), []);
 
   // Only user-created labels (Gmail's are `Label_*`); system labels like
   // INBOX/UNREAD aren't things you "add" from here.
-  const userLabels = useMemo(() => {
+  const userLabels = useMemo<UserLabel[]>(() => {
     const accountLabels = labelsMapByAccount[thread.accountId] || {};
     return Object.values(accountLabels)
       .filter((label) => label.id.startsWith('Label_'))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [labelsMapByAccount, thread.accountId]);
-
-  const handleAdd = useCallback(
-    async (labelId: string, labelName: string) => {
-      setOpen(false);
-      if (!thread.accountId || thread.labelIds?.includes(labelId)) return;
-      try {
-        await addLabelToThread(thread.accountId, [thread.id], labelId);
-        toast.success(
-          t('toast.label.added', {
-            defaultValue: 'Added label {{name}}',
-            name: labelName.replace('Mono/', '')
-          })
-        );
-      } catch {
-        toast.error(t('toast.error.label_add', { defaultValue: "Couldn't add label" }));
-      }
-    },
-    [thread, addLabelToThread, t]
-  );
 
   // No user labels (e.g. Microsoft 365, where labels aren't loaded): the
   // popover could only ever say "No labels yet", so don't offer it.
@@ -148,10 +168,7 @@ export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, button
           typeVariant="inline"
           sizeVariant="xs"
           tabIndex={-1}
-          className={
-            buttonClassName ??
-            'shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100'
-          }
+          className={buttonClassName ?? TRIGGER_CLASS}
           onClick={(e) => {
             e.stopPropagation();
           }}
@@ -174,37 +191,75 @@ export const LabelButton = React.memo<ThreadActionButtonProps>(({ thread, button
           {t('thread_list.add_label', { defaultValue: 'Add label' })}
         </div>
         <div className="max-h-64 overflow-y-auto">
-          {userLabels.map((label) => {
-            const applied = thread.labelIds?.includes(label.id) ?? false;
-            return (
-              <button
-                key={label.id}
-                type="button"
-                tabIndex={-1}
-                disabled={applied}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-50"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAdd(label.id, label.name);
-                }}
-              >
-                <MonoIcon
-                  type="Folder"
-                  size={16}
-                  weight={300}
-                  grade={0}
-                  className="shrink-0 text-muted-foreground"
-                />
-                <span className="truncate">{label.name.replace('Mono/', '')}</span>
-                {applied && (
-                  <MonoIcon type="Check" size={14} className="ml-auto text-muted-foreground" />
-                )}
-              </button>
-            );
-          })}
+          {open && <LabelPopoverBody thread={thread} userLabels={userLabels} onClose={close} />}
         </div>
       </PopoverContent>
     </Popover>
   );
 });
 LabelButton.displayName = 'LabelButton';
+
+const LabelPopoverBody = ({
+  thread,
+  userLabels,
+  onClose
+}: {
+  thread: MonoThread;
+  userLabels: UserLabel[];
+  onClose: () => void;
+}) => {
+  const { t } = useTranslation();
+  const { addLabelToThread } = useThreadLabelAtom();
+
+  const handleAdd = useCallback(
+    async (labelId: string, labelName: string) => {
+      onClose();
+      if (!thread.accountId || thread.labelIds?.includes(labelId)) return;
+      try {
+        await addLabelToThread(thread.accountId, [thread.id], labelId);
+        toast.success(
+          t('toast.label.added', {
+            defaultValue: 'Added label {{name}}',
+            name: labelName.replace('Mono/', '')
+          })
+        );
+      } catch {
+        toast.error(t('toast.error.label_add', { defaultValue: "Couldn't add label" }));
+      }
+    },
+    [thread, addLabelToThread, t, onClose]
+  );
+
+  return (
+    <>
+      {userLabels.map((label) => {
+        const applied = thread.labelIds?.includes(label.id) ?? false;
+        return (
+          <button
+            key={label.id}
+            type="button"
+            tabIndex={-1}
+            disabled={applied}
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAdd(label.id, label.name);
+            }}
+          >
+            <MonoIcon
+              type="Folder"
+              size={16}
+              weight={300}
+              grade={0}
+              className="shrink-0 text-muted-foreground"
+            />
+            <span className="truncate">{label.name.replace('Mono/', '')}</span>
+            {applied && (
+              <MonoIcon type="Check" size={14} className="ml-auto text-muted-foreground" />
+            )}
+          </button>
+        );
+      })}
+    </>
+  );
+};

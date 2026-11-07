@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { relabelThread } from '@/renderer/app/store/thread/useThreadOperations';
+import { MonoThread } from '@/main/models/thread/MonoThread';
 import {
   isAllMine,
   rowAvatarRecipient,
@@ -75,4 +77,41 @@ test('stripExternalBanner drops Microsoft first-contact safety tips', () => {
     'Hi'
   );
   assert.equal(stripExternalBanner('You don’t say!'), 'You don’t say!');
+});
+
+// Label changes make new thread / item objects (list rows subscribe by identity).
+
+test('relabelThread: new thread and item objects, prototype and hidden accountId kept', () => {
+  const thread = new MonoThread({
+    id: 't1',
+    accountId: 'acc',
+    labelIds: ['INBOX', 'UNREAD'],
+    items: [
+      {
+        id: 'm1',
+        type: 'message',
+        threadId: 't1',
+        labelIds: ['INBOX', 'UNREAD'],
+        payload: { mimeType: 'text/plain', headers: [], body: { size: 0, data: null } }
+      } as never
+    ]
+  });
+  // Search results define accountId as non-enumerable.
+  Object.defineProperty(thread, 'accountId', { value: 'acc', enumerable: false, writable: false });
+  const next = relabelThread(thread, [], ['UNREAD']);
+  assert.notEqual(next, thread);
+  assert.ok(next instanceof MonoThread);
+  assert.deepEqual(next.labelIds, ['INBOX']);
+  assert.deepEqual(thread.labelIds, ['INBOX', 'UNREAD'], 'the original is untouched');
+  assert.equal(next.accountId, 'acc');
+  assert.notEqual(next.items[0], thread.items[0]);
+  assert.deepEqual((next.items[0] as { labelIds: string[] }).labelIds, ['INBOX']);
+  assert.equal(typeof next.getLastMessage, 'function');
+});
+
+test('MonoThread.toPlainObject keeps a non-enumerable accountId (copies keep their account)', () => {
+  const thread = new MonoThread({ id: 't2', accountId: 'acc', labelIds: [] });
+  Object.defineProperty(thread, 'accountId', { value: 'acc', enumerable: false });
+  const copy = new MonoThread({ ...thread.toPlainObject(), items: [] });
+  assert.equal(copy.accountId, 'acc');
 });

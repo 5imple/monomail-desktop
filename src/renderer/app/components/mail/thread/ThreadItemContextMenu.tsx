@@ -13,16 +13,16 @@ import {
 } from '@/renderer/app/components/ui/context-menu';
 import ShortcutKeyboard from '@/renderer/app/components/ui/shortcut-keyboard';
 import { useExecuteCommand } from '@/renderer/app/lib/commands/useExcuteCommands';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import { useSearchNewQuery } from '@/renderer/app/store/layout/useGlobalAtom';
+import { selectedThreadsAtom } from '@/renderer/app/store/thread/atoms';
 import { useDraftAtom } from '@/renderer/app/store/draft/useDraftAtom';
 import { useAuth } from '@/renderer/app/context/AuthContext';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
 import { contextMenuSelectionAtom } from '@/renderer/app/store/thread/contextMenuAtom';
 import { CommandType } from '@/renderer/app/types';
 import { isBackendConfigured } from '@/main/api/apiClient';
-import { useSetAtom } from 'jotai';
-import React, { FC, useMemo, useCallback, useRef } from 'react';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
+import React, { FC, useMemo, useCallback, useRef, useState } from 'react';
 import { Keys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 
@@ -31,33 +31,42 @@ interface ThreadItemContextMenuProps {
   thread: MonoThread;
 }
 
+type MenuItem = {
+  icon?: MonoIconType;
+  label: string;
+  title?: string;
+  shortcut?: Keys;
+  command?: CommandType;
+  disabled?: boolean;
+};
+
+/**
+ * A row's right-click menu. Every rendered row mounts this shell: the trigger
+ * and the selection hand-off. The items, and the hooks that drive them (the
+ * command table, drafts, labels, accounts), live in ThreadContextMenuItems and
+ * mount only while the menu is open. Mounted per row, they ran for every row
+ * on every change to any thread, and opening an email redrew the whole list
+ * before the reader could show it.
+ */
 const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ children, thread }) => {
-  const { selectedThreads, setSelectedThreads } = useThreadAtom();
-  const { t } = useTranslation();
-  const { searchNewQuery } = useGlobalAtom();
-  const executeCommand = useExecuteCommand();
-  const { removeDraft, sendDraftQueue } = useDraftAtom();
-  const { getUidFromEmail } = useAuth();
-  const { accounts } = useAuth();
-  const { labelsMapByAccount } = useLabelAtom();
+  const store = useStore();
+  const setSelectedThreads = useSetAtom(selectedThreadsAtom);
   const setContextMenuSelection = useSetAtom(contextMenuSelectionAtom);
-
-  const isDraft = isComposeDraftId(thread.id);
-  const accountId = isDraft ? getUidFromEmail(thread.from[0]?.email) : null;
-
-  // Memoize target threads calculation
+  const [open, setOpen] = useState(false);
 
   // Right-clicking a row outside the selection selects just that row, so the
   // menu's commands target it. When the menu closes the previous selection
-  // comes back either way: every command below gets its targets passed
-  // explicitly when picked, and a selection left behind made E / U / ⌫ hit
-  // that row instead of the open or highlighted one.
+  // comes back either way: every command gets its targets passed explicitly
+  // when picked, and a selection left behind made E / U / ⌫ hit that row
+  // instead of the open or highlighted one.
   const implicitSelectionRef = useRef<string[] | null>(null);
-  const handleContextMenuOpenChange = useCallback(
-    (open: boolean) => {
-      if (open) {
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      setOpen(isOpen);
+      if (isOpen) {
         implicitSelectionRef.current = null;
-        if (!selectedThreads.some((t) => t === thread.id)) {
+        const selectedThreads = store.get(selectedThreadsAtom);
+        if (!selectedThreads.includes(thread.id)) {
           implicitSelectionRef.current = selectedThreads;
           setSelectedThreads([thread.id]);
           setContextMenuSelection(true);
@@ -70,8 +79,44 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
       implicitSelectionRef.current = null;
       setContextMenuSelection(false);
     },
-    [selectedThreads, thread.id, setSelectedThreads, setContextMenuSelection]
+    [store, thread.id, setSelectedThreads, setContextMenuSelection]
   );
+
+  // Snooze / Move / Label open a palette page that acts on the live selection,
+  // so the rows the menu was opened for stay selected: the close that follows
+  // must not put the previous selection back.
+  const keepSelection = useCallback(() => {
+    implicitSelectionRef.current = null;
+  }, []);
+
+  return (
+    <ContextMenu onOpenChange={handleOpenChange}>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      {/* Portaled, but React events still bubble to the row: without this a
+          menu click also opened the email. */}
+      <ContextMenuContent className="dark w-64" onClick={(e) => e.stopPropagation()}>
+        {open && <ThreadContextMenuItems thread={thread} keepSelection={keepSelection} />}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+});
+
+const ThreadContextMenuItems: FC<{ thread: MonoThread; keepSelection: () => void }> = ({
+  thread,
+  keepSelection
+}) => {
+  const selectedThreads = useAtomValue(selectedThreadsAtom);
+  const setSelectedThreads = useSetAtom(selectedThreadsAtom);
+  const { t } = useTranslation();
+  const searchNewQuery = useSearchNewQuery();
+  const executeCommand = useExecuteCommand();
+  const { removeDraft, sendDraftQueue } = useDraftAtom();
+  const { getUidFromEmail, accounts } = useAuth();
+  const { labelsMapByAccount } = useLabelAtom();
+  const setContextMenuSelection = useSetAtom(contextMenuSelectionAtom);
+
+  const isDraft = isComposeDraftId(thread.id);
+  const accountId = isDraft ? getUidFromEmail(thread.from[0]?.email) : null;
 
   // The Label page has nothing to offer for an account without user labels
   // (Microsoft 365 labels aren't loaded); Move covers folders there.
@@ -94,10 +139,10 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
     return first && !own.has(first.email?.toLowerCase()) ? first : null;
   }, [thread, accounts]);
 
-  // The targetThreads can now be simplified since selection is updated on open
-  const targetThreads = useMemo(() => selectedThreads, [selectedThreads]);
-  // Memoize menu items to prevent recreation on each render
-  const menuItems = useMemo(() => {
+  // The selection is updated on open, so the targets are simply the selection.
+  const targetThreads = selectedThreads;
+
+  const menuItems = useMemo((): MenuItem[] => {
     const singleThreadSelected = selectedThreads.length === 1;
     const fromRecipient = contactRecipient;
     // Done / Move to Inbox don't apply to Trash, or to threads you only sent
@@ -121,14 +166,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
           command: 'DISCARD_DRAFT',
           disabled: isSending
         }
-      ].filter(Boolean) as {
-        icon?: MonoIconType;
-        label: string;
-        title?: string;
-        shortcut?: Keys;
-        command?: CommandType;
-        disabled?: boolean;
-      }[];
+      ];
     }
 
     // Original thread-related actions
@@ -275,14 +313,7 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
             shortcut: 'Backspace',
             command: 'THREAD_TRASH'
           }
-    ].filter(Boolean) as {
-      icon?: MonoIconType;
-      label: string;
-      title?: string;
-      shortcut?: Keys;
-      command?: CommandType;
-      disabled?: boolean;
-    }[];
+    ].filter(Boolean) as MenuItem[];
   }, [
     selectedThreads,
     thread,
@@ -294,30 +325,12 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
     accountHasLabels
   ]);
 
-  // Memoize the command handler to prevent recreation on each render
   const handleContextMenuCommand = useCallback(
     async (command: CommandType, disabled: boolean | undefined) => {
       if (disabled) return;
 
       if (isDraft) {
-        // Handle draft-specific commands
         switch (command) {
-          // case 'EDIT_DRAFT':
-          //   executeCommand('COMPOSE_NEW_MESSAGE', {
-          //     draft: thread,
-          //     accountId: accountId
-          //   });
-          //   break;
-
-          // case 'SEND_DRAFT':
-          //   // Implementation would depend on how you handle draft sending
-          //   // This is just a placeholder based on what I can infer
-          //   executeCommand('SEND_DRAFT', {
-          //     draftId: thread.id,
-          //     accountId: accountId
-          //   });
-          //   break;
-
           case 'DISCARD_DRAFT':
             if (accountId) {
               // If multiple drafts are selected, remove all of them
@@ -335,71 +348,69 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
             console.error(`Unknown command: ${command}`);
             break;
         }
-      } else {
-        // Handle thread-specific commands
-        switch (command) {
-          case 'COMPOSE_REPLY_MESSAGE':
-          case 'COMPOSE_FORWARD_MESSAGE': {
-            const messages = thread.items.filter(
-              (item) => item.type === 'message'
-            ) as MonoMessage[];
-            // Reply prefers the latest message from someone else; Forward (like
-            // the F hotkey) takes the latest message. Both fall back to the last
-            // message so threads of only your own mail (Sent) still work.
-            const fromOthers = messages.filter(
-              (message) => !accounts.some((account) => account.email === message.from.email)
-            );
-            const pool =
-              command === 'COMPOSE_REPLY_MESSAGE' && fromOthers.length > 0 ? fromOthers : messages;
-            const item = pool[pool.length - 1];
-            if (item) {
-              executeCommand(command, { message: item, accountId: thread.accountId });
-            }
-            break;
+        return;
+      }
+
+      switch (command) {
+        case 'COMPOSE_REPLY_MESSAGE':
+        case 'COMPOSE_FORWARD_MESSAGE': {
+          const messages = thread.items.filter((item) => item.type === 'message') as MonoMessage[];
+          // Reply prefers the latest message from someone else; Forward (like
+          // the F hotkey) takes the latest message. Both fall back to the last
+          // message so threads of only your own mail (Sent) still work.
+          const fromOthers = messages.filter(
+            (message) => !accounts.some((account) => account.email === message.from.email)
+          );
+          const pool =
+            command === 'COMPOSE_REPLY_MESSAGE' && fromOthers.length > 0 ? fromOthers : messages;
+          const item = pool[pool.length - 1];
+          if (item) {
+            executeCommand(command, { message: item, accountId: thread.accountId });
           }
-
-          case 'THREAD_MARK_READ':
-          case 'THREAD_MARK_UNREAD':
-          case 'THREAD_TRASH':
-          case 'THREAD_UNTRASH':
-          case 'THREAD_DONE':
-          case 'THREAD_UNDONE':
-          case 'THREAD_STAR':
-          case 'THREAD_UNSTAR':
-          case 'THREAD_REPORT_SPAM':
-            executeCommand(command, { threadIds: targetThreads });
-            break;
-
-          case 'REMINDER':
-          case 'MOVE':
-          case 'LABEL':
-            // These open a palette page that acts on the live selection, so
-            // the rows the menu was opened for stay selected: the menu's
-            // close must not put the previous selection back.
-            implicitSelectionRef.current = null;
-            setContextMenuSelection(false);
-            setSelectedThreads(targetThreads);
-            executeCommand(command);
-            break;
-
-          case 'PIN_CONTACT':
-            if (contactRecipient) {
-              executeCommand('PIN_CONTACT', { pinContact: contactRecipient.email });
-            }
-            break;
-
-          case 'SEARCH':
-            // The address, not the display name: a nameless sender produced a
-            // bare "from:" and "Jane Doe" became `from:Jane Doe` (two terms).
-            if (contactRecipient) {
-              searchNewQuery(`from:${contactRecipient.email}`, undefined, false);
-            }
-            break;
-
-          default:
-            console.error(`Unknown command: ${command}`);
-            break;
+          break;
         }
+
+        case 'THREAD_MARK_READ':
+        case 'THREAD_MARK_UNREAD':
+        case 'THREAD_TRASH':
+        case 'THREAD_UNTRASH':
+        case 'THREAD_DONE':
+        case 'THREAD_UNDONE':
+        case 'THREAD_STAR':
+        case 'THREAD_UNSTAR':
+        case 'THREAD_REPORT_SPAM':
+          executeCommand(command, { threadIds: targetThreads });
+          break;
+
+        case 'REMINDER':
+        case 'MOVE':
+        case 'LABEL':
+          // These open a palette page that acts on the live selection, so
+          // the rows the menu was opened for stay selected: the menu's
+          // close must not put the previous selection back.
+          keepSelection();
+          setContextMenuSelection(false);
+          setSelectedThreads(targetThreads);
+          executeCommand(command);
+          break;
+
+        case 'PIN_CONTACT':
+          if (contactRecipient) {
+            executeCommand('PIN_CONTACT', { pinContact: contactRecipient.email });
+          }
+          break;
+
+        case 'SEARCH':
+          // The address, not the display name: a nameless sender produced a
+          // bare "from:" and "Jane Doe" became `from:Jane Doe` (two terms).
+          if (contactRecipient) {
+            searchNewQuery(`from:${contactRecipient.email}`, undefined, false);
+          }
+          break;
+
+        default:
+          console.error(`Unknown command: ${command}`);
+          break;
       }
     },
     [
@@ -412,50 +423,47 @@ const ThreadItemContextMenu: FC<ThreadItemContextMenuProps> = React.memo(({ chil
       removeDraft,
       contactRecipient,
       setSelectedThreads,
-      setContextMenuSelection
+      setContextMenuSelection,
+      keepSelection,
+      accounts
     ]
   );
 
   return (
-    <ContextMenu onOpenChange={handleContextMenuOpenChange}>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      {/* Portaled, but React events still bubble to the row: without this a
-          menu click also opened the email. */}
-      <ContextMenuContent className="dark w-64" onClick={(e) => e.stopPropagation()}>
-        {menuItems.map((menuItem, index) => (
-          <div key={`${menuItem.label}-${index}`}>
-            {menuItem.label === 'Separator' ? (
-              <ContextMenuSeparator />
-            ) : (
-              <ContextMenuItem
-                role="menuitem"
-                onClick={() => {
-                  if (menuItem.command) {
-                    handleContextMenuCommand(menuItem.command, menuItem.disabled);
-                  }
-                }}
-                tabIndex={0}
-                disabled={menuItem.disabled}
-                title={menuItem.title}
-                className={menuItem.disabled ? 'cursor-not-allowed opacity-50' : ''}
-              >
-                {menuItem.icon && (
-                  <MonoIcon className="mr-2 text-muted-foreground" type={menuItem.icon} />
-                )}
-                <span className="min-w-0 flex-1 truncate">{menuItem.label}</span>
-                {menuItem.shortcut && (
-                  <ContextMenuShortcut>
-                    <ShortcutKeyboard variant={'flat'} shortcut={menuItem.shortcut} />
-                  </ContextMenuShortcut>
-                )}
-              </ContextMenuItem>
-            )}
-          </div>
-        ))}
-      </ContextMenuContent>
-    </ContextMenu>
+    <>
+      {menuItems.map((menuItem, index) => (
+        <div key={`${menuItem.label}-${index}`}>
+          {menuItem.label === 'Separator' ? (
+            <ContextMenuSeparator />
+          ) : (
+            <ContextMenuItem
+              role="menuitem"
+              onClick={() => {
+                if (menuItem.command) {
+                  handleContextMenuCommand(menuItem.command, menuItem.disabled);
+                }
+              }}
+              tabIndex={0}
+              disabled={menuItem.disabled}
+              title={menuItem.title}
+              className={menuItem.disabled ? 'cursor-not-allowed opacity-50' : ''}
+            >
+              {menuItem.icon && (
+                <MonoIcon className="mr-2 text-muted-foreground" type={menuItem.icon} />
+              )}
+              <span className="min-w-0 flex-1 truncate">{menuItem.label}</span>
+              {menuItem.shortcut && (
+                <ContextMenuShortcut>
+                  <ShortcutKeyboard variant={'flat'} shortcut={menuItem.shortcut} />
+                </ContextMenuShortcut>
+              )}
+            </ContextMenuItem>
+          )}
+        </div>
+      ))}
+    </>
   );
-});
+};
 
 // Display name for debugging
 ThreadItemContextMenu.displayName = 'ThreadItemContextMenu';

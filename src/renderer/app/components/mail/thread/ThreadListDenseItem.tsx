@@ -12,13 +12,17 @@ import {
 } from '@/renderer/app/components/mail/thread/ThreadRowParts';
 import { useThreadReadMotion } from '@/renderer/app/components/mail/thread/useThreadReadMotion';
 import { useAuth } from '@/renderer/app/context/AuthContext';
-import { useKeyboardNavigationContext } from '@/renderer/app/context/KeyboardNavigationContext';
+import { useKeyboardRegistration } from '@/renderer/app/context/KeyboardNavigationContext';
 import { highlightThreadText } from '@/renderer/app/lib/highlightThreadText';
 import { cn } from '@/renderer/app/lib/utils';
 import { setSelectionAnchor } from '@/renderer/app/store/thread/threadRangeSelection';
 import { useLabelAtom } from '@/renderer/app/store/label/useLabelAtom';
-import { useGlobalAtom } from '@/renderer/app/store/layout/useGlobalAtom';
-import { useThreadAtom } from '@/renderer/app/store/thread/useThreadAtom';
+import {
+  currentSearchQueryAtom,
+  useSearchNewQuery
+} from '@/renderer/app/store/layout/useGlobalAtom';
+import { useAtomValue } from 'jotai';
+import { useThreadRowAtom } from '@/renderer/app/store/thread/useThreadRowAtom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
@@ -26,33 +30,41 @@ import { buildLabelQuery } from '@/renderer/app/lib/queryUtils';
 interface ThreadListDenseItemProps {
   threadId: string;
   onClick: (e: React.MouseEvent, id: string) => void;
-  index?: number;
+  /** In the first screenful: render content at once, not after the observer's first pass. */
+  eager?: boolean;
 }
 
 export const ThreadListDenseItem = React.memo(
   React.forwardRef<HTMLDivElement, ThreadListDenseItemProps>(
-    ({ threadId, onClick }, forwardedRef) => {
-      const [isRendering, setIsRendering] = useState(false);
+    ({ threadId, onClick, eager = false }, forwardedRef) => {
+      const [isRendering, setIsRendering] = useState(eager);
       // Start fully visible so the first screenful paints at once. This used to
       // begin at 0 and fade to 100 per row; staggered by list index, that read as
       // a left-to-right "sweep" as the inbox loaded. The IntersectionObserver still
       // gates content rendering (isRendering) for long-list virtualization.
       const [opacity, setOpacity] = useState(100);
-      const { searchNewQuery, globalSearchQuery } = useGlobalAtom();
+      const searchNewQuery = useSearchNewQuery();
+      const globalSearchQuery = useAtomValue(currentSearchQueryAtom);
       const { t } = useTranslation();
       const { accounts } = useAuth();
       const { showAvatar, showSnippet, showAttachments } = useThreadListDisplay();
       const memoizedSearchQuery = useCallback(searchNewQuery, [searchNewQuery]);
 
       const { labelsMapByAccount } = useLabelAtom();
-      const { activeThreadId, threadsMap, selectedThreads, setSelectedThreads } = useThreadAtom();
+      // Narrow subscriptions (see useThreadRowAtom): this row's thread, active
+      // and checked state only.
+      const {
+        thread: liveThread,
+        isActive,
+        isChecked,
+        setSelectedThreads
+      } = useThreadRowAtom(threadId);
       const containerRef = useRef<HTMLDivElement | null>(null);
       // Last measured height; the default approximates a rendered row.
       const placeholderHeightRef = useRef<number | null>(null);
       const lastThreadRef = useRef<MonoThread | null>(null);
 
       // Use direct access to thread instead of memoizing to ensure we always have latest data
-      const liveThread = threadsMap[threadId] ?? null;
       if (liveThread) lastThreadRef.current = liveThread;
       const currentThread = liveThread ?? lastThreadRef.current;
 
@@ -93,7 +105,7 @@ export const ThreadListDenseItem = React.memo(
       }, [currentThread?.subject, currentThread?.snippet, globalSearchQuery, t]);
       const snippetHtml = showSnippet ? highlightedContent.snippet : null;
 
-      const { registerItem, unregisterItem } = useKeyboardNavigationContext();
+      const { registerItem, unregisterItem } = useKeyboardRegistration();
 
       const accountLabels = useMemo(
         () => (currentThread ? labelsMapByAccount[currentThread.accountId] || {} : {}),
@@ -181,8 +193,6 @@ export const ThreadListDenseItem = React.memo(
       );
 
       const isUnread = currentThread?.labelIds.includes('UNREAD') ?? false;
-      const isChecked = selectedThreads.includes(threadId);
-      const isActive = activeThreadId === threadId;
       const readMotion = useThreadReadMotion(threadId, currentThread ? isUnread : null, isActive);
 
       // Done/Trash deletes the thread from threadsMap while its id can still be
@@ -219,7 +229,7 @@ export const ThreadListDenseItem = React.memo(
           {!currentThread || !isRendering ? (
             <div
               className="transition-[height] duration-200 ease-bouncy-in-out"
-              style={{ height: placeholderHeightRef.current ?? 33 }}
+              style={{ height: placeholderHeightRef.current ?? 37 }}
             />
           ) : (
             <ThreadItemContextMenu thread={currentThread}>
@@ -230,7 +240,9 @@ export const ThreadListDenseItem = React.memo(
                     className="absolute inset-y-[3px] left-0 z-20 w-[3px] rounded-r-full bg-selection"
                   />
                 )}
-                {/* Unread is indicated by the bold font only — no left accent bar. */}
+                {/* Unread: bold sender, semibold subject and the dot; read rows are regular
+                    weight in the muted colour. No left bar: that edge belongs to the
+                    selection (blue) and keyboard-cursor bars. */}
                 {/* The divider sits on the wrapper so a line of attachment chips
                     stays inside its own row instead of under the next one. */}
                 <div
@@ -323,8 +335,8 @@ export const ThreadListDenseItem = React.memo(
                           className={cn(
                             'block truncate text-[13px] tracking-tight',
                             isUnread
-                              ? 'font-semibold text-foreground'
-                              : 'font-medium text-muted-foreground'
+                              ? 'font-bold text-foreground'
+                              : 'font-normal text-muted-foreground'
                           )}
                         >
                           <ThreadSenderNames thread={currentThread} accounts={accounts} />
@@ -344,8 +356,8 @@ export const ThreadListDenseItem = React.memo(
                           'shrink-0 truncate text-[13px] tracking-tight',
                           snippetHtml ? 'max-w-[60%]' : 'max-w-full',
                           isUnread
-                            ? 'font-medium text-foreground'
-                            : 'font-normal text-foreground/80'
+                            ? 'font-semibold text-foreground'
+                            : 'font-normal text-muted-foreground'
                         )}
                         dangerouslySetInnerHTML={{
                           __html:
