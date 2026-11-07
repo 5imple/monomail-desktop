@@ -23,6 +23,9 @@ interface UndoableActionOptions {
  * a Microsoft move takes a second or two, and until then Undo did nothing.
  * If the server refuses, the toast turns into the error, with no Undo.
  */
+/** How long an action's Undo toast (and so its Undo / Z) stays. */
+export const UNDO_TOAST_MS = 6000;
+
 export function runUndoableAction({
   perform,
   undo,
@@ -51,7 +54,10 @@ export function runUndoableAction({
 
   toast.success(message, {
     id: toastId,
-    action: { label: undoLabel, onClick: () => runUndo() }
+    action: { label: undoLabel, onClick: () => runUndo() },
+    // Long enough to reach for Z (sonner's default is 4 s). No countdown bar:
+    // the user asked for the plain line.
+    duration: UNDO_TOAST_MS
   });
   addUndoAction({ execute: runUndo, timestamp: Date.now(), toastId });
 
