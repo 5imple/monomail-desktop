@@ -113,6 +113,15 @@ module.exports = {
         'reader-well': 'hsl(var(--reader-well))',
         // The unread marker (the dot on an unread row).
         unread: 'hsl(var(--unread))',
+        // Split Inbox tab colours (lib/splitColors).
+        split: {
+          violet: 'hsl(var(--split-violet))',
+          teal: 'hsl(var(--split-teal))',
+          amber: 'hsl(var(--split-amber))',
+          rose: 'hsl(var(--split-rose))',
+          green: 'hsl(var(--split-green))',
+          blue: 'hsl(var(--split-blue))'
+        },
         selection: {
           DEFAULT: 'hsl(var(--selection))',
           foreground: 'hsl(var(--selection-foreground))'

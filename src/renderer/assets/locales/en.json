@@ -82,6 +82,15 @@
     },
     "display": {
       "close_panel": "Back",
+      "back_to": "Back to {{view}}",
+      "back_later": "Later",
+      "back_results": "Results",
+      "position": "Conversation {{position}}",
+      "done_tooltip": "Done: archive and go to the next email",
+      "move_to_inbox_short": "Inbox",
+      "already_done": "Already out of your Inbox",
+      "remove_label": "Remove label {{name}}",
+      "later": "Later",
       "previous_conversation": "Previous conversation",
       "next_conversation": "Next conversation",
       "expand": "Expand",
@@ -103,7 +112,9 @@
       "print": "Print",
       "more": "More",
       "move_to_inbox": "Move to Inbox",
-      "in_trash": "In Trash"
+      "in_trash": "In Trash",
+      "expand_all": "Expand all",
+      "collapse_all": "Collapse all"
     },
     "list": {
       "all_mail": "All mail",
@@ -185,7 +196,8 @@
     "reminder_ellipsis": "Snooze…",
     "move_ellipsis": "Move to…",
     "label_ellipsis": "Label…",
-    "goto_inbox": "Go to Inbox"
+    "goto_inbox": "Go to Inbox",
+    "goto_later": "Go to Later"
   },
   "settings": {
     "title": "Preferences",
@@ -289,8 +301,14 @@
         "open": "Open; Reply all in the reader",
         "back": "Back, or clear the selection",
         "undo": "Undo",
-        "palette": "Command palette"
-      }
+        "palette": "Command palette",
+        "next": "Next conversation (list or reader)",
+        "previous": "Previous conversation (list or reader)",
+        "open_row": "Open the highlighted conversation",
+        "select_row": "Select or deselect",
+        "split": "Next / previous split (Inbox tabs)"
+      },
+      "then": "then"
     },
     "email": {
       "title": "Email"
@@ -1234,6 +1252,10 @@
       "canceled_subscription": "You've canceled your subscription. It will remain active until",
       "end_of_billing_period": "end of billing period",
       "reactivate": "Reactivate"
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "hint": "Open this list any time with"
     }
   },
   "layout": {
@@ -1297,7 +1319,9 @@
     },
     "startup": {
       "slow_title": "Taking longer than usual…",
-      "slow_description": "Mono Mail is still getting ready. Reload if it doesn’t open in a moment."
+      "slow_description": "Mono Mail is still getting ready. Reload if it doesn’t open in a moment.",
+      "reload": "Reload",
+      "open_logs": "Open logs"
     }
   },
   "thread_list": {
@@ -1337,7 +1361,6 @@
     "loading": "Loading emails…",
     "snooze_until": "Snooze until",
     "add_label": "Add label",
-    "search_placeholder": "Search mail",
     "search_showing": "Showing results for {{query}}. Edit search",
     "clear_search": "Clear search",
     "group": {
@@ -1346,6 +1369,13 @@
       "last_week": "Last week",
       "this_month": "This month",
       "older": "Older"
+    },
+    "empty": {
+      "no_results": "No results for “{{query}}”",
+      "no_results_hint": "Check the spelling or try other words.",
+      "edit_search": "Edit search",
+      "inbox_body": "Nothing left in your inbox.",
+      "view_title": "Nothing here"
     }
   },
   "later": {
@@ -1410,7 +1440,8 @@
       "sent": "Sent",
       "send_now_error": "Couldn’t send now: {{error}}",
       "cancelled": "Scheduled send cancelled",
-      "cancel_error": "Couldn’t cancel: {{error}}"
+      "cancel_error": "Couldn’t cancel: {{error}}",
+      "open_error": "Couldn’t open this email"
     },
     "preset": {
       "in_1_hour": "In 1 hour",
@@ -1436,6 +1467,18 @@
     "hide_details": "Hide details",
     "forward": "Forward",
     "reply_to": "Reply to",
+    "reply_to_name": "Reply to {{name}}…",
+    "reply_ellipsis": "Reply…",
+    "quick_reply_to": "To {{names}}",
+    "quick_reply_one": "Only {{name}}",
+    "quick_reply_draft": "Draft",
+    "quick_reply_hint": "Esc to close",
+    "open_full_editor": "Open in full editor",
+    "send": "Send",
+    "discard_reply": "Discard",
+    "me": "me",
+    "to_summary": "to {{names}}",
+    "undisclosed_recipients": "undisclosed recipients",
     "to": "To",
     "cc": "Cc",
     "bcc": "Bcc",
@@ -1546,7 +1589,8 @@
     "original_failed": "Couldn’t load the original message, so it won’t be included.",
     "status": {
       "saving": "Saving",
-      "save_failed": "Save failed"
+      "save_failed": "Save failed",
+      "saved": "Saved"
     },
     "attachments": {
       "title": "Attachments",
@@ -1557,7 +1601,13 @@
       "failed": "Couldn’t attach file",
       "retry": "Retry",
       "remove": "Remove attachment"
-    }
+    },
+    "unfilled_variables": "This message still has {{names}} to fill in.",
+    "send_anyway": "Send anyway",
+    "reply_all": "Reply all (+{{count}})",
+    "reply_all_tooltip": "Add everyone on the original message ({{count}} more)",
+    "reply_sender_only": "Sender only",
+    "reply_sender_only_tooltip": "Reply to the sender only"
   },
   "contact_card": {
     "new_email": "New email",
@@ -1656,6 +1706,10 @@
   },
   "filter": {
     "filter": "Filter",
+    "refresh": "Check for new mail",
+    "refreshing": "Checking for new mail…",
+    "refreshed": "Up to date",
+    "refresh_error": "Couldn’t check for new mail. Check your connection and try again.",
     "applied_filters": "Applied Filters",
     "active_filters": "Active Filters",
     "available_filters": "Available Filters",
@@ -1708,7 +1762,72 @@
     "filters": "Filters",
     "all": "All",
     "with_attachments": "With attachments",
-    "inbox_filters": "Inbox filters"
+    "inbox_filters": "Inbox filters",
+    "custom": {
+      "new_title": "New label",
+      "edit_title": "Edit label",
+      "new_tooltip": "New label",
+      "description": "A tab next to All, Unread and With attachments that shows only the conversations matching every condition below.",
+      "name": "Name",
+      "name_placeholder": "e.g. Students, Registrar, VIP",
+      "name_taken": "You already have a label with this name.",
+      "conditions": "Show conversations where",
+      "add_condition": "Add condition",
+      "remove_condition": "Remove condition",
+      "logic_hint": "All conditions must match. Two values for the same field match either one (From alice or From bob).",
+      "match_count_one": "{{count}} conversation in the current list matches",
+      "match_count_other": "{{count}} conversations in the current list match",
+      "field": "Field",
+      "condition": "Condition",
+      "from": "From",
+      "to": "Sent to (To or Cc)",
+      "subject": "Subject",
+      "status": "Status",
+      "attachment": "Has attachment",
+      "calendar": "Has calendar invite",
+      "date": "Received",
+      "folder_label": "Label",
+      "contains": "contains",
+      "does_not_contain": "doesn't contain",
+      "is": "is",
+      "is_not": "is not",
+      "has_one": "yes",
+      "has_none": "no",
+      "person_placeholder": "Name, email or @domain",
+      "subject_placeholder": "Words in the subject",
+      "create": "Create label",
+      "save": "Save",
+      "edit": "Edit label…",
+      "delete": "Delete label",
+      "deleted": "Deleted \"{{name}}\"",
+      "save_as_label": "Save as label…",
+      "move_left": "Move left",
+      "move_right": "Move right",
+      "inbox_type": "Focused Inbox",
+      "other": "Other",
+      "focused": "Focused",
+      "others_name": "Others",
+      "duplicate": "The \"{{name}}\" tab already shows these conversations.",
+      "conversation_count_one": "{{count}} conversation",
+      "conversation_count_other": "{{count}} conversations",
+      "conversation_count_more_one": "at least {{count}} conversation",
+      "conversation_count_more_other": "at least {{count}} conversations",
+      "split": "Only show here",
+      "split_hint": "In the Inbox, these conversations show only under this tab, not under All, Unread or your other labels, like Outlook’s Other tab. When two such labels match a conversation, the one further left keeps it.",
+      "unread_count": "{{count}} unread",
+      "unread_count_more": "at least {{count}} unread",
+      "calendar_name": "Calendar",
+      "team_name": "Team",
+      "team": "From my team (domain)",
+      "team_placeholder": "example.edu",
+      "color": "Color",
+      "color_violet": "Violet",
+      "color_teal": "Teal",
+      "color_amber": "Amber",
+      "color_rose": "Rose",
+      "color_green": "Green",
+      "color_blue": "Blue"
+    }
   },
   "toast": {
     "clipboard_copy": "Copied to clipboard",
@@ -1749,10 +1868,10 @@
       }
     },
     "compose": {
-      "sending": "Sending message...",
-      "sent": "Message sent",
-      "cancel": "Cancel",
-      "sending_delay": "Mail will be sent in {{delay}}s",
+      "sending": "Sending…",
+      "sent": "Sent",
+      "cancel": "Undo",
+      "sending_delay": "Sending in {{delay}}s",
       "error": "Failed to send the message",
       "canceled": "Send canceled",
       "discarded": "Draft discarded",
@@ -1792,7 +1911,7 @@
       "done_success": "Conversation marked as done",
       "done_error": "Error marking conversation as done",
       "undone": "Marking conversation as not done...",
-      "undone_success": "Conversation marked as not done",
+      "undone_success": "Moved to Inbox",
       "undone_error": "Error marking conversation as not done",
       "spam": "Marking conversation as spam...",
       "spammed": "Conversation marked as spam",
@@ -1801,7 +1920,15 @@
       "moving_to_multiple": "Moving {{count}} conversations to {{destination}}...",
       "moved_to": "Conversation moved to {{destination}}",
       "moved_to_multiple": "{{count}} conversations moved to {{destination}}",
-      "move_error": "Error moving conversation to {{destination}}"
+      "move_error": "Error moving conversation to {{destination}}",
+      "marked_unread_other": "{{count}} conversations marked as unread",
+      "starred_other": "{{count}} conversations starred",
+      "unstarred_other": "{{count}} conversations unstarred",
+      "trashed_other": "{{count}} conversations moved to trash",
+      "untrashed_other": "{{count}} conversations restored",
+      "done_success_other": "{{count}} conversations marked as done",
+      "undone_success_other": "{{count}} conversations moved to Inbox",
+      "spammed_other": "{{count}} conversations marked as spam"
     },
     "info": {
       "sync_limited_365_days": "Sync limited to 365 days",
@@ -2121,7 +2248,8 @@
     "copy": "Copy",
     "copied": "Copied",
     "time": "Time",
-    "no_results": "No results"
+    "no_results": "No results",
+    "close": "Close"
   },
   "error_boundary": {
     "title": "Something went wrong",
@@ -2139,6 +2267,37 @@
     "no_response": "No response",
     "show_fewer": "Show fewer",
     "more_attendees": "+{{count}} more"
+  },
+  "meeting_card": {
+    "invitation": "Meeting invitation",
+    "cancelled": "Meeting canceled",
+    "accepted_by": "{{name}} accepted",
+    "tentative_by": "{{name}} tentatively accepted",
+    "declined_by": "{{name}} declined",
+    "you_organizer": "You organized this meeting",
+    "you_accepted": "You accepted",
+    "you_tentative": "You tentatively accepted",
+    "you_declined": "You declined",
+    "no_response": "You haven't responded",
+    "out_of_date": "A newer version of this invitation has been sent.",
+    "when": "When",
+    "where": "Where",
+    "organizer": "Organizer",
+    "attendees": "Attendees",
+    "proposed_time": "Proposed new time",
+    "all_day": "All day",
+    "time_unknown": "Time not available",
+    "join": "Join meeting",
+    "accept": "Accept",
+    "tentative": "Tentative",
+    "decline": "Decline",
+    "rsvp_sent": "Response sent to the organizer",
+    "no_event": "This meeting is no longer on your calendar.",
+    "your_answer": "Your answer",
+    "decline_held": "Declining in a few seconds. Once sent, Outlook removes the meeting from your calendar and it can’t be changed.",
+    "change_hint": "Changed your mind? Pick another answer.",
+    "gone_error": "This meeting is no longer on your calendar. It may have been declined or deleted in Outlook.",
+    "declined_final": "Outlook removed this meeting from your calendar when you declined. To go after all, ask the organizer to send the invitation again."
   },
   "compose": {
     "signature": {
@@ -2241,5 +2400,14 @@
       "meet": "Join Google Meet",
       "zoom": "Join Zoom meeting"
     }
+  },
+  "auth": {
+    "toast": {
+      "sign_in_failed": "Sign-in didn’t complete. Please sign in again.",
+      "sign_out_failed": "Couldn’t finish signing out. Please try again."
+    }
+  },
+  "account_link": {
+    "failed": "Couldn’t connect the {{provider}} account. Please try again."
   }
 }

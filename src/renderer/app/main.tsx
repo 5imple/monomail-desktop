@@ -4,6 +4,15 @@ import { MessageProvider } from '@/renderer/app/context/MessageContext';
 import { SyncHistoryProvider } from '@/renderer/app/context/SyncHistoryContext';
 import { UndoProvider } from '@/renderer/app/lib/commands/useUndoManager';
 import InternetConnection from '@/renderer/app/middlewares/InternetConnection';
+// Inter and IBM Plex Mono ship with the app (no fonts.googleapis.com round
+// trip): bundled by Vite and served from the app itself, so text renders in
+// the right face on the first frame, offline too.
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import '@/renderer/app/tippy.css';
 import '@/renderer/assets/locales';
 import '@/renderer/global.css';
@@ -36,11 +45,17 @@ import { AuthProvider } from './context/AuthContext';
 import './global.css';
 import RouteLogger from './middlewares/RouteLogger';
 import { KeyboardNavigationProvider } from '@/renderer/app/context/KeyboardNavigationContext';
+import { CommandRunnerProvider } from '@/renderer/app/lib/commands/useExcuteCommands';
 import { SyncThreadProvider } from '@/renderer/app/context/SyncThreadContext';
 import { initializeServiceWorker, initializeNetworkMonitoring } from '@/renderer/app/lib/pwa';
+import { isElectron } from '@/renderer/app/lib/electronApi';
 
-// Initialize Service Worker for Network First caching strategy
-initializeServiceWorker();
+// The PWA service worker is for the web build only. In the desktop app the
+// custom scheme doesn't allow service workers, and in dev / http it put
+// NetworkFirst timeouts in front of the app's own assets.
+if (!isElectron) {
+  initializeServiceWorker();
+}
 
 // Initialize network monitoring for better offline/online detection
 initializeNetworkMonitoring();
@@ -76,8 +91,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                         <HotkeysProvider initiallyActiveScopes={['GLOBAL']}>
                           <HotkeyScopeProvider>
                             <KeyboardNavigationProvider>
-                              <Toaster />
-                              <AppRouter />
+                              <CommandRunnerProvider>
+                                <Toaster />
+                                <AppRouter />
+                              </CommandRunnerProvider>
                             </KeyboardNavigationProvider>
                           </HotkeyScopeProvider>
                         </HotkeysProvider>
