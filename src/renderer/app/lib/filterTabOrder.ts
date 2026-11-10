@@ -66,3 +66,19 @@ export function moveTabId(saved: string[], shown: string[], from: number, to: nu
   }
   return moved;
 }
+
+/**
+ * How far a dragged tab may move sideways: it stays inside the visible row.
+ * Unbounded, the moved tab widened the scrollable row, auto-scroll followed
+ * it, and the two chased each other off past the last tab into empty space.
+ */
+export function clampTabDragX(
+  x: number,
+  tab: { left: number; right: number },
+  row: { left: number; right: number }
+): number {
+  const min = row.left - tab.left;
+  const max = row.right - tab.right;
+  if (min > max) return 0; // A tab wider than the row: don't move it.
+  return Math.min(max, Math.max(min, x));
+}

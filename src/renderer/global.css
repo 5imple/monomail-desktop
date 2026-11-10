@@ -403,6 +403,15 @@
   .no-drag {
     -webkit-app-region: no-drag;
   }
+  /* A split tab is being dragged (InboxFilterTabs): no window-drag regions,
+     so the release always reaches the tab. */
+  body[data-tab-dragging='true'] .drag {
+    -webkit-app-region: no-drag;
+  }
+  body[data-tab-dragging='true'],
+  body[data-tab-dragging='true'] * {
+    cursor: grabbing !important;
+  }
 }
 
 @keyframes loading {

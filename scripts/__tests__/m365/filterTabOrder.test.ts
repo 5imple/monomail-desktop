@@ -67,3 +67,17 @@ test('moveTabId moves a shown tab like arrayMove', async () => {
   assert.deepEqual(moveTabId([], shown, 3, 0), ['label-a', 'all', 'unread', 'attachments']);
   assert.deepEqual(moveTabId(shown, shown, 0, 2), ['unread', 'attachments', 'all', 'label-a']);
 });
+
+test('a dragged tab stays inside the visible row', async () => {
+  const { clampTabDragX } = await import('@/renderer/app/lib/filterTabOrder');
+  const row = { left: 100, right: 500 };
+  const tab = { left: 200, right: 260 };
+  // Inside: unchanged.
+  assert.equal(clampTabDragX(50, tab, row), 50);
+  // Past the right end: stops with its right edge on the row's.
+  assert.equal(clampTabDragX(10_000, tab, row), 240);
+  // Past the left end.
+  assert.equal(clampTabDragX(-10_000, tab, row), -100);
+  // A tab wider than the row doesn't move.
+  assert.equal(clampTabDragX(30, { left: 0, right: 900 }, row), 0);
+});

@@ -38,6 +38,7 @@ import { useAuth } from '@/renderer/app/context/AuthContext';
 import {
   BUILT_IN_TAB_IDS,
   BUILT_IN_TAB_RULES,
+  clampTabDragX,
   moveTabId,
   orderTabIds
 } from '@/renderer/app/lib/filterTabOrder';
@@ -118,8 +119,14 @@ const firstTime = (key: string): boolean | null => {
   }
 };
 
-// Tabs move sideways only.
-const horizontalOnly: Modifier = ({ transform }) => ({ ...transform, y: 0 });
+// While a tab is dragged: the window-drag strips (the titlebar, and the
+// strip right above the tabs) stop being drag regions (global.css). Over one,
+// Electron took the mouse for moving the window, so the release never reached
+// the tab and it kept following the pointer.
+const setTabDragging = (on: boolean) => {
+  if (on) document.body.dataset.tabDragging = 'true';
+  else delete document.body.dataset.tabDragging;
+};
 
 interface SortableTabProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   id: string;
@@ -190,7 +197,12 @@ const SortableTab = React.forwardRef<HTMLButtonElement, SortableTabProps>(
           transform: transform ? `translate3d(${Math.round(transform.x)}px, 0, 0)` : undefined,
           transition
         }}
-        className={cn(className, isDragging && 'z-10 cursor-grabbing opacity-80')}
+        className={cn(
+          className,
+          // Lifted: a solid, softly tinted chip over the row (it was
+          // see-through, and the tabs under it showed through). No outline.
+          isDragging && 'z-10 cursor-grabbing bg-muted'
+        )}
       >
         <span className="flex items-baseline gap-1.5 px-1.5">
           {color && (
@@ -311,10 +323,7 @@ const InboxFilterTabs = React.memo(() => {
   // known. Personal addresses (gmail.com, outlook.com…) have no team, so
   // nothing is made until a work account is connected.
   const { accounts } = useAuth();
-  const teamDomains = useMemo(
-    () => teamDomainsFor(accounts.map((a) => a.email ?? '')),
-    [accounts]
-  );
+  const teamDomains = useMemo(() => teamDomainsFor(accounts.map((a) => a.email ?? '')), [accounts]);
   useEffect(() => {
     if (teamDomains.length === 0 || !firstTime(TEAM_ADDED_KEY)) return;
     setCustomLabels((current) =>
@@ -401,7 +410,7 @@ const InboxFilterTabs = React.memo(() => {
   // isn't a tab, Tab goes to the first tab and Shift+Tab to the last.
   const cycleRef = useRef<(step: 1 | -1) => boolean>(() => false);
   cycleRef.current = (step) => {
-    if (tabIds.length < 2) return false;
+    if (!inInbox || tabIds.length < 2) return false;
     const current = tabIds.indexOf(mode.startsWith('label:') ? mode.slice(6) : mode);
     const next =
       current < 0
@@ -422,13 +431,44 @@ const InboxFilterTabs = React.memo(() => {
   const dragEndedAtRef = useRef(0);
   const ignoreClick = () => Date.now() - dragEndedAtRef.current < 300;
 
+  // The row the tabs scroll in. A dragged tab moves sideways only and stays
+  // inside it; auto-scroll near its ends scrolls this row and nothing else
+  // (it also scrolled the thread list, which loaded more mail as it went).
+  const rowRef = useRef<HTMLDivElement>(null);
+  const rowRectRef = useRef<{ left: number; right: number } | null>(null);
+  const keepInRow: Modifier = ({ transform, draggingNodeRect }) => {
+    const row = rowRectRef.current;
+    if (!row || !draggingNodeRect) return { ...transform, y: 0 };
+    return { ...transform, x: clampTabDragX(transform.x, draggingNodeRect, row), y: 0 };
+  };
+  const autoScroll = useMemo(
+    () => ({
+      threshold: { x: 0.15, y: 0 },
+      canScroll: (element: Element) => element === rowRef.current
+    }),
+    []
+  );
+  const startDrag = () => {
+    dragEndedAtRef.current = Date.now();
+    const rect = rowRef.current?.getBoundingClientRect();
+    rowRectRef.current = rect ? { left: rect.left, right: rect.right } : null;
+    setTabDragging(true);
+  };
+  const endDrag = () => {
+    dragEndedAtRef.current = Date.now();
+    rowRectRef.current = null;
+    setTabDragging(false);
+  };
+  // Leaving the Inbox mid-drag mustn't leave the window undraggable.
+  useEffect(() => () => setTabDragging(false), []);
+
   const moveTab = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || to >= tabIds.length) return;
     setSavedOrder(moveTabId(savedOrder, tabIds, from, to));
   };
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
-    dragEndedAtRef.current = Date.now();
+    endDrag();
     if (!over || active.id === over.id) return;
     moveTab(tabIds.indexOf(String(active.id)), tabIds.indexOf(String(over.id)));
   };
@@ -455,7 +495,9 @@ const InboxFilterTabs = React.memo(() => {
 
   const tabClass = (active: boolean) =>
     cn(
-      'relative shrink-0 whitespace-nowrap px-2 py-2.5 font-medium tracking-tight transition-colors',
+      // No focus box: Chromium drew its square outline round a tab after a
+      // click or a drop. From the keyboard, a soft tint shows where focus is.
+      'relative shrink-0 whitespace-nowrap rounded-md px-2 py-2.5 font-medium tracking-tight outline-none transition-colors focus-visible:bg-foreground/[0.06]',
       active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
     );
   const underline = (
@@ -465,85 +507,99 @@ const InboxFilterTabs = React.memo(() => {
   return (
     <nav
       aria-label={t('filter.inbox_filters')}
-      className="no-drag flex items-center gap-1 px-[10%] text-sm"
+      // The row keeps its height without the tabs, so the list doesn't jump.
+      className="no-drag flex min-h-10 items-center gap-1 px-[10%] text-sm"
     >
-      {/* The tabs scroll sideways when there are more labels than room. */}
-      <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          modifiers={[horizontalOnly]}
-          onDragStart={() => (dragEndedAtRef.current = Date.now())}
-          onDragEnd={onDragEnd}
-          onDragCancel={() => (dragEndedAtRef.current = Date.now())}
-        >
-          <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
-            {tabIds.map((id, index) => {
-              const label = labelsById.get(id);
-              const builtIn = label ? undefined : (id as BuiltInTabId);
-              const active = label ? mode === `label:${label.id}` : mode === id;
-              return (
-                <ContextMenu key={id}>
-                  <ContextMenuTrigger asChild>
-                    <SortableTab
-                      id={id}
-                      name={label ? label.name : builtInNames[builtIn!]}
-                      count={countByTab[id]}
-                      color={label?.color}
-                      moreToLoad={hasMore}
-                      className={tabClass(active)}
-                      active={active}
-                      underline={underline}
-                      onPick={() => (label ? pickLabel(label) : onPick(builtIn!))}
-                      onEdit={label ? () => setEditor({ open: true, label }) : undefined}
-                      ignoreClick={ignoreClick}
-                    />
-                  </ContextMenuTrigger>
-                  <ContextMenuContent className="dark w-44">
-                    {label && (
-                      <ContextMenuItem onSelect={() => setEditor({ open: true, label })}>
-                        <MonoIcon type="Edit" size={14} className="mr-2" />
-                        {t('filter.custom.edit', 'Edit label…')}
-                      </ContextMenuItem>
-                    )}
-                    {/* The same as dragging, for the keyboard. */}
-                    <ContextMenuItem
-                      disabled={index === 0}
-                      onSelect={() => moveTab(index, index - 1)}
-                    >
-                      <MonoIcon type="ArrowLeft" size={14} className="mr-2" />
-                      {t('filter.custom.move_left', 'Move left')}
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      disabled={index === tabIds.length - 1}
-                      onSelect={() => moveTab(index, index + 1)}
-                    >
-                      <MonoIcon type="ArrowRight" size={14} className="mr-2" />
-                      {t('filter.custom.move_right', 'Move right')}
-                    </ContextMenuItem>
-                    {label && (
-                      <ContextMenuItem onSelect={() => deleteLabel(label)}>
-                        <MonoIcon type="Trash" size={14} className="mr-2" />
-                        {t('filter.custom.delete', 'Delete label')}
-                      </ContextMenuItem>
-                    )}
-                  </ContextMenuContent>
-                </ContextMenu>
-              );
-            })}
-          </SortableContext>
-        </DndContext>
-      </div>
-      <Button
-        variant="ghost"
-        sizeVariant="sm"
-        tooltip={t('filter.custom.new_tooltip', 'New label')}
-        aria-label={t('filter.custom.new_tooltip', 'New label')}
-        className="h-7 w-7 shrink-0 bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
-        onClick={() => setEditor({ open: true })}
-      >
-        <MonoIcon type="Plus" size={14} />
-      </Button>
+      {/* The splits are the Inbox's: Starred, Sent, labels and searches show
+          their mail without them (Refresh and the filter menu stay). */}
+      {inInbox && (
+        <>
+          {/* The tabs scroll sideways when there are more labels than room. */}
+          <div
+            ref={rowRef}
+            className="flex min-w-0 select-none items-center gap-1 overflow-x-auto [scrollbar-width:none]"
+          >
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={[keepInRow]}
+              autoScroll={autoScroll}
+              // Focus stays where it was after a drop: putting it back on the tab
+              // lit the browser's focus box round it.
+              accessibility={{ restoreFocus: false }}
+              onDragStart={startDrag}
+              onDragEnd={onDragEnd}
+              onDragCancel={endDrag}
+            >
+              <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
+                {tabIds.map((id, index) => {
+                  const label = labelsById.get(id);
+                  const builtIn = label ? undefined : (id as BuiltInTabId);
+                  const active = label ? mode === `label:${label.id}` : mode === id;
+                  return (
+                    <ContextMenu key={id}>
+                      <ContextMenuTrigger asChild>
+                        <SortableTab
+                          id={id}
+                          name={label ? label.name : builtInNames[builtIn!]}
+                          count={countByTab[id]}
+                          color={label?.color}
+                          moreToLoad={hasMore}
+                          className={tabClass(active)}
+                          active={active}
+                          underline={underline}
+                          onPick={() => (label ? pickLabel(label) : onPick(builtIn!))}
+                          onEdit={label ? () => setEditor({ open: true, label }) : undefined}
+                          ignoreClick={ignoreClick}
+                        />
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="dark w-44">
+                        {label && (
+                          <ContextMenuItem onSelect={() => setEditor({ open: true, label })}>
+                            <MonoIcon type="Edit" size={14} className="mr-2" />
+                            {t('filter.custom.edit', 'Edit label…')}
+                          </ContextMenuItem>
+                        )}
+                        {/* The same as dragging, for the keyboard. */}
+                        <ContextMenuItem
+                          disabled={index === 0}
+                          onSelect={() => moveTab(index, index - 1)}
+                        >
+                          <MonoIcon type="ArrowLeft" size={14} className="mr-2" />
+                          {t('filter.custom.move_left', 'Move left')}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          disabled={index === tabIds.length - 1}
+                          onSelect={() => moveTab(index, index + 1)}
+                        >
+                          <MonoIcon type="ArrowRight" size={14} className="mr-2" />
+                          {t('filter.custom.move_right', 'Move right')}
+                        </ContextMenuItem>
+                        {label && (
+                          <ContextMenuItem onSelect={() => deleteLabel(label)}>
+                            <MonoIcon type="Trash" size={14} className="mr-2" />
+                            {t('filter.custom.delete', 'Delete label')}
+                          </ContextMenuItem>
+                        )}
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          </div>
+          <Button
+            variant="ghost"
+            sizeVariant="sm"
+            tooltip={t('filter.custom.new_tooltip', 'New label')}
+            aria-label={t('filter.custom.new_tooltip', 'New label')}
+            className="h-7 w-7 shrink-0 bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+            onClick={() => setEditor({ open: true })}
+          >
+            <MonoIcon type="Plus" size={14} />
+          </Button>
+        </>
+      )}
       {/* Refresh and advanced filters live at the end of the row, so they stay
           put while the list scrolls and remain reachable when nothing matches. */}
       <div className="ml-auto flex shrink-0 items-center gap-1 pr-3">
