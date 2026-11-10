@@ -156,6 +156,11 @@ module.exports = {
         sm: 'calc(var(--radius) - 4px)'
       },
       keyframes: {
+        // The quick reply opening out of its pill (ThreadReplyBar).
+        'quick-reply-open': {
+          from: { opacity: '0', transform: 'translateY(6px) scale(0.985)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' }
+        },
         'accordion-down': {
           from: { height: '0' },
           to: { height: 'var(--radix-accordion-content-height)' }
@@ -209,6 +214,7 @@ module.exports = {
       },
       animation: {
         tilt: 'tilt 3s linear infinite',
+        'quick-reply-open': 'quick-reply-open 180ms cubic-bezier(0.22, 1, 0.36, 1)',
         'accordion-down': 'accordion-down 0.2s ease-in-out',
         'accordion-up': 'accordion-up 0.2s ease-in-out',
         'collapsible-down': 'collapsible-down 0.2s ease-in-out',

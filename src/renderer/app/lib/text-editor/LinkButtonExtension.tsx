@@ -529,21 +529,21 @@ export const LinkButtonPopover: React.FC<LinkButtonPopoverProps> = ({ editor }) 
         console.error('Error creating Tippy instance:', error);
       }
 
-      // Set up the keyboard event handling
+      // Escape closes the popover. Only while it shows: hiding it doesn't
+      // destroy it, and a listener left behind cancelled every Escape in the
+      // app afterwards (the quick reply and compose stopped closing).
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          e.stopPropagation();
-          if (popup && popup[0]) {
-            popup[0].hide();
-          }
-          return true;
-        }
-        return false;
+        if (e.key !== 'Escape' || !popup?.[0]?.state.isVisible) return;
+        e.preventDefault();
+        e.stopPropagation();
+        popup[0].hide();
+        document.removeEventListener('keydown', handleKeyDown);
       };
 
-      // Attach the event handler
       document.addEventListener('keydown', handleKeyDown);
+      popup?.[0]?.setProps({
+        onHide: () => document.removeEventListener('keydown', handleKeyDown)
+      });
 
       // Clean up the event handler when the popup is destroyed
       if (popup && popup[0] && popup[0].popper && popup[0].popper._tippy) {

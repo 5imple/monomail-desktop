@@ -3,7 +3,7 @@ import { MonoMessage } from '@/main/models/message/MonoMessage';
 import { MonoThread } from '@/main/models/thread/MonoThread';
 import { generateUUID } from '@/main/utils';
 import {
-  escapeClosesCompose,
+  ESCAPE_OWNER_SELECTOR,
   findUnfilledVariables
 } from '@/renderer/app/components/card/compose/composeLifecycle';
 import { defaultSignatureId } from '@/renderer/app/components/card/compose/defaultSignature';
@@ -386,17 +386,34 @@ const ThreadReplyBar: FC<ThreadReplyBarProps> = ({ thread, className }) => {
         void sendRef.current();
         return true;
       }
-      if (event.key === 'Escape') {
-        // After everything else had it: the slash menu and link popovers
-        // close themselves on Escape first.
-        setTimeout(() => {
-          if (escapeClosesCompose(event, document)) fold();
-        }, 0);
-      }
       return false;
+    },
+    []
+  );
+
+  // Esc folds the box, from the text or any button in it. Decided as the key
+  // leaves the box, once the editor has had it: the slash menu takes its own
+  // Esc first (ProseMirror cancels the key). It used to wait until the key
+  // had been everywhere, so any listener that cancelled Esc on the way (a
+  // link popover's leftover one, for instance) kept the box open.
+  const handleBoxKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.nativeEvent.isComposing) {
+        return;
+      }
+      if (document.querySelector(ESCAPE_OWNER_SELECTOR)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      fold();
     },
     [fold]
   );
+
+  // The pill fades back in after a fold, not each time an email opens.
+  const [folded, setFolded] = useState(false);
+  useEffect(() => {
+    if (open) setFolded(true);
+  }, [open]);
 
   if (!latest) return null;
 
@@ -417,8 +434,13 @@ const ThreadReplyBar: FC<ThreadReplyBarProps> = ({ thread, className }) => {
     return (
       <div
         ref={boxRef}
+        data-quick-reply
+        onKeyDown={handleBoxKeyDown}
         className={cn(
           'overflow-hidden rounded-2xl border border-border bg-background shadow-sm focus-within:border-foreground/20',
+          // Opens out of the Reply pill: rises a few pixels, grows from its
+          // bottom edge and fades in, quick enough to type into at once.
+          'origin-bottom animate-quick-reply-open motion-reduce:animate-none',
           className
         )}
       >
@@ -472,16 +494,24 @@ const ThreadReplyBar: FC<ThreadReplyBarProps> = ({ thread, className }) => {
           }}
           onEditorKeyDown={handleEditorKeyDown}
         />
-        <div className="flex items-center gap-1 px-3 pb-3">
+        {/* The toolbar: a light divider under the text, Send with its keys
+            inside it, Discard beside it, and the Esc hint as a key chip. */}
+        <div className="flex items-center gap-1 border-t border-border/60 px-2.5 py-2">
           <Button
             sizeVariant="sm"
-            className="h-8 gap-2 rounded-full px-4 text-[13px] font-medium"
+            className={cn(
+              // Flat foreground pill (the default variant's gradient read as a
+              // heavy black slab here); inverted in dark themes by the tokens.
+              'h-8 gap-2.5 rounded-full bg-foreground bg-none pl-3.5 pr-1.5 text-[13px] font-medium text-background shadow-sm transition-colors',
+              'hover:bg-foreground/90 dark:bg-foreground dark:hover:bg-foreground/90'
+            )}
             onClick={() => void send()}
           >
             {t('message_card.send', { defaultValue: 'Send' })}
             <ShortcutKeyboard
-              variant="text"
-              className="gap-0 p-0 opacity-70"
+              variant="flat"
+              className="gap-px"
+              keyboardClassName="h-5 min-w-5 rounded-full bg-background/15 px-1.5 font-sans text-[11px] text-background/80"
               shortcut="MOD+ENTER"
             />
           </Button>
@@ -489,14 +519,16 @@ const ThreadReplyBar: FC<ThreadReplyBarProps> = ({ thread, className }) => {
             variant="ghost"
             sizeVariant="sm"
             typeVariant="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            className="h-8 w-8 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             tooltip={t('message_card.discard_reply', { defaultValue: 'Discard' })}
+            aria-label={t('message_card.discard_reply', { defaultValue: 'Discard' })}
             onClick={discard}
           >
             <MonoIcon type="Trash" className="h-4 w-4" />
           </Button>
-          <span className="ml-auto hidden pr-1 text-[12px] text-muted-foreground/80 sm:inline">
-            {t('message_card.quick_reply_hint', { defaultValue: 'Esc to close' })}
+          <span className="ml-auto hidden items-center gap-1.5 pr-1.5 text-[12px] text-muted-foreground sm:inline-flex">
+            <ShortcutKeyboard sizeVariant="sm" className="font-sans" shortcut="ESC" />
+            {t('message_card.quick_reply_hint_close', { defaultValue: 'to close' })}
           </span>
         </div>
       </div>
@@ -504,7 +536,13 @@ const ThreadReplyBar: FC<ThreadReplyBarProps> = ({ thread, className }) => {
   }
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div
+      className={cn(
+        'flex items-center gap-2',
+        folded && 'duration-150 animate-in fade-in-0 motion-reduce:animate-none',
+        className
+      )}
+    >
       <Button
         variant="outline"
         sizeVariant="sm"

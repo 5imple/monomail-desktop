@@ -1473,6 +1473,7 @@
     "quick_reply_one": "Only {{name}}",
     "quick_reply_draft": "Draft",
     "quick_reply_hint": "Esc to close",
+    "quick_reply_hint_close": "to close",
     "open_full_editor": "Open in full editor",
     "send": "Send",
     "discard_reply": "Discard",

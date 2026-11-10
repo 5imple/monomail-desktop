@@ -97,7 +97,10 @@ const AppLayout: FC<AppLayoutProps> = ({}) => {
         (el.tagName === 'INPUT' ||
           el.tagName === 'TEXTAREA' ||
           el.tagName === 'SELECT' ||
-          el.isContentEditable)
+          el.isContentEditable ||
+          // The quick reply folds on Escape itself (ThreadReplyBar), from
+          // its buttons too: it mustn't close the email instead.
+          el.closest('[data-quick-reply]'))
       ) {
         return;
       }
